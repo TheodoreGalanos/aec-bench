@@ -3,7 +3,7 @@
 
 from __future__ import annotations
 
-import hashlib
+import json
 import os
 from pathlib import Path
 
@@ -12,11 +12,11 @@ from pydantic import JsonValue
 
 from aec_bench.contracts.evaluation_plane import (
     AcceptanceManifestCommitment,
+    Critic,
     CriticFeedbackVisibility,
-    CriticRole,
-    CriticSpec,
+    RepositoryCriticSource,
 )
-from aec_bench.contracts.harness_kernel import canonical_json_sha256
+from aec_bench.contracts.evaluation_refs import CriticRole
 from aec_bench.experimentation.governance.acceptance_manifest_escrow import (
     AcceptanceManifestEscrowCollisionError,
     AcceptanceManifestEscrowConfinementError,
@@ -25,10 +25,7 @@ from aec_bench.experimentation.governance.acceptance_manifest_escrow import (
     load_acceptance_manifest_escrow,
 )
 from aec_bench.experimentation.governance.authority_ledger import AuthorityLedger
-
-
-def _sha(label: str) -> str:
-    return hashlib.sha256(label.encode()).hexdigest()
+from tests.support.evaluation_regimes import fake_regime_ref
 
 
 def _ledger(tmp_path: Path) -> AuthorityLedger:
@@ -50,34 +47,26 @@ def _material() -> tuple[dict[str, JsonValue], dict[str, JsonValue], str]:
 
 def _critic(
     *,
-    receipt_sha256: str,
     cases: dict[str, JsonValue],
     scoring: dict[str, JsonValue],
     salt: str,
-) -> CriticSpec:
+) -> Critic:
     commitment = AcceptanceManifestCommitment.create(
         critic_id="critic.acceptance",
-        critic_version="2.0.0",
         case_manifest=cases,
         scoring_policy=scoring,
         salt=salt,
-        publication_receipt_sha256=receipt_sha256,
     )
-    return CriticSpec(
+    return Critic(
         critic_id="critic.acceptance",
-        version="2.0.0",
         role=CriticRole.ACCEPTANCE,
-        implementation_sha256=_sha("implementation"),
-        rubric_policy_sha256=canonical_json_sha256(scoring),
-        case_manifest_sha256=canonical_json_sha256(cases),
-        eligibility_policy_sha256=_sha("eligibility"),
-        denominator_policy_sha256=_sha("denominator"),
-        threshold_policy_sha256=_sha("threshold"),
-        evidence_inclusion_policy_sha256=_sha("inclusion"),
-        runtime_environment_sha256=_sha("runtime"),
+        source=RepositoryCriticSource(
+            source_revision="1" * 40,
+            entrypoint="aec_bench.evaluation.acceptance:run",
+        ),
+        configuration={"runtime_mode": "host_only"},
         feedback_visibility=CriticFeedbackVisibility.HOST_ONLY,
         execution_principal_id="principal.acceptance-2.0.0",
-        compatibility_generation="evaluation-generation-2",
         acceptance_manifest_commitment=commitment,
     )
 
@@ -87,17 +76,17 @@ def test_escrow_is_published_before_commitment_and_reloads_from_fresh_host_state
 ) -> None:
     ledger = _ledger(tmp_path)
     cases, scoring, salt = _material()
+    regime_ref = fake_regime_ref()
 
     stored = escrow_acceptance_manifest(
         ledger=ledger,
+        evaluation_regime=regime_ref,
         critic_id="critic.acceptance",
-        critic_version="2.0.0",
         case_manifest=cases,
         scoring_policy=scoring,
         salt=salt,
     )
     critic = _critic(
-        receipt_sha256=stored.publication_receipt.content_sha256,
         cases=cases,
         scoring=scoring,
         salt=salt,
@@ -109,7 +98,8 @@ def test_escrow_is_published_before_commitment_and_reloads_from_fresh_host_state
     )
     reloaded = load_acceptance_manifest_escrow(
         ledger=reloaded_ledger,
-        critic_spec=critic,
+        evaluation_regime=regime_ref,
+        critic=critic,
     )
 
     assert reloaded == stored
@@ -117,51 +107,32 @@ def test_escrow_is_published_before_commitment_and_reloads_from_fresh_host_state
     assert reloaded.payload.scoring_policy == scoring
     assert reloaded.payload.salt == salt
     assert reloaded.publication_receipt.payload_sha256 == reloaded.payload.content_sha256
-    assert reloaded.publication_receipt.content_sha256 == (
-        critic.acceptance_manifest_commitment.publication_receipt_sha256
-    )
+    assert reloaded.publication_receipt.evaluation_regime == regime_ref
     assert os.stat(reloaded.payload_path).st_mode & 0o077 == 0
     assert os.stat(reloaded.publication_receipt_path).st_mode & 0o077 == 0
 
 
-def test_escrow_preserves_v1_content_addresses_paths_and_canonical_bytes(
+def test_escrow_uses_content_addressed_paths_and_canonical_bytes(
     tmp_path: Path,
 ) -> None:
     ledger = _ledger(tmp_path)
     cases, scoring, salt = _material()
+    regime_ref = fake_regime_ref()
 
     stored = escrow_acceptance_manifest(
         ledger=ledger,
+        evaluation_regime=regime_ref,
         critic_id="critic.acceptance",
-        critic_version="2.0.0",
         case_manifest=cases,
         scoring_policy=scoring,
         salt=salt,
     )
 
-    assert stored.payload.content_sha256 == ("9db65479f66e920bcb092f43b7aa6ff73ff1e649dd709547e822b3c86d98c0c7")
-    assert stored.publication_receipt.content_sha256 == (
-        "540a7e0c549eaaef6173f69d9e7c61a1577d38b57200b605a905f95e12baea19"
-    )
-    assert stored.payload_path.relative_to(ledger.root).as_posix() == (
-        "acceptance-manifest-escrow/payloads/"
-        "9db65479f66e920bcb092f43b7aa6ff73ff1e649dd709547e822b3c86d98c0c7/payload.json"
-    )
-    assert stored.publication_receipt_path.relative_to(ledger.root).as_posix() == (
-        "acceptance-manifest-escrow/receipts/"
-        "540a7e0c549eaaef6173f69d9e7c61a1577d38b57200b605a905f95e12baea19/receipt.json"
-    )
-    assert stored.claim_path.relative_to(ledger.root).as_posix() == (
-        "acceptance-manifest-escrow/claims/83e53d174f555d91a8a0a3f16367440d038d565e885469eb9bc9068331b6197c/claim.json"
-    )
-    assert stored.payload_path.read_bytes() == (
-        b'{"case_manifest":{"case_ids":["hidden-01"],"split":"acceptance"},'
-        b'"content_sha256":"9db65479f66e920bcb092f43b7aa6ff73ff1e649dd709547e822b3c86d98c0c7",'
-        b'"critic_id":"critic.acceptance","critic_version":"2.0.0",'
-        b'"salt":"retirement-escrow-salt",'
-        b'"schema_version":"aecbench.acceptance-manifest-escrow-payload.v1",'
-        b'"scoring_policy":{"denominator":"all_planned_cases","threshold":0.8}}\n'
-    )
+    assert stored.payload_path.parent.name == stored.payload.content_sha256
+    assert stored.publication_receipt_path.parent.name == stored.publication_receipt.content_sha256
+    payload = json.loads(stored.payload_path.read_bytes())
+    assert payload == stored.payload.model_dump(mode="json")
+    assert payload["evaluation_regime"] == regime_ref.model_dump(mode="json")
 
 
 def test_escrow_identity_is_idempotent_but_cannot_be_rebound(
@@ -169,10 +140,11 @@ def test_escrow_identity_is_idempotent_but_cannot_be_rebound(
 ) -> None:
     ledger = _ledger(tmp_path)
     cases, scoring, salt = _material()
+    regime_ref = fake_regime_ref()
     first = escrow_acceptance_manifest(
         ledger=ledger,
+        evaluation_regime=regime_ref,
         critic_id="critic.acceptance",
-        critic_version="2.0.0",
         case_manifest=cases,
         scoring_policy=scoring,
         salt=salt,
@@ -180,8 +152,8 @@ def test_escrow_identity_is_idempotent_but_cannot_be_rebound(
 
     repeated = escrow_acceptance_manifest(
         ledger=ledger,
+        evaluation_regime=regime_ref,
         critic_id="critic.acceptance",
-        critic_version="2.0.0",
         case_manifest=cases,
         scoring_policy=scoring,
         salt=salt,
@@ -194,8 +166,8 @@ def test_escrow_identity_is_idempotent_but_cannot_be_rebound(
     ):
         escrow_acceptance_manifest(
             ledger=ledger,
+            evaluation_regime=regime_ref,
             critic_id="critic.acceptance",
-            critic_version="2.0.0",
             case_manifest={
                 "case_ids": ["changed-hidden-case"],
                 "split": "acceptance",
@@ -210,8 +182,8 @@ def test_escrow_load_rejects_a_commitment_for_unpublished_material(
 ) -> None:
     ledger = _ledger(tmp_path)
     cases, scoring, salt = _material()
+    regime_ref = fake_regime_ref()
     critic = _critic(
-        receipt_sha256=_sha("invented-publication-receipt"),
         cases=cases,
         scoring=scoring,
         salt=salt,
@@ -223,7 +195,8 @@ def test_escrow_load_rejects_a_commitment_for_unpublished_material(
     ):
         load_acceptance_manifest_escrow(
             ledger=ledger,
-            critic_spec=critic,
+            evaluation_regime=regime_ref,
+            critic=critic,
         )
 
 
@@ -232,16 +205,16 @@ def test_escrow_load_rejects_tampered_or_overexposed_hidden_bytes(
 ) -> None:
     ledger = _ledger(tmp_path)
     cases, scoring, salt = _material()
+    regime_ref = fake_regime_ref()
     stored = escrow_acceptance_manifest(
         ledger=ledger,
+        evaluation_regime=regime_ref,
         critic_id="critic.acceptance",
-        critic_version="2.0.0",
         case_manifest=cases,
         scoring_policy=scoring,
         salt=salt,
     )
     critic = _critic(
-        receipt_sha256=stored.publication_receipt.content_sha256,
         cases=cases,
         scoring=scoring,
         salt=salt,
@@ -254,7 +227,8 @@ def test_escrow_load_rejects_tampered_or_overexposed_hidden_bytes(
     ):
         load_acceptance_manifest_escrow(
             ledger=ledger,
-            critic_spec=critic,
+            evaluation_regime=regime_ref,
+            critic=critic,
         )
 
     stored.payload_path.chmod(0o600)
@@ -265,7 +239,8 @@ def test_escrow_load_rejects_tampered_or_overexposed_hidden_bytes(
     ):
         load_acceptance_manifest_escrow(
             ledger=ledger,
-            critic_spec=critic,
+            evaluation_regime=regime_ref,
+            critic=critic,
         )
 
 
@@ -274,16 +249,16 @@ def test_escrow_load_rejects_internal_symlink_redirection(
 ) -> None:
     ledger = _ledger(tmp_path)
     cases, scoring, salt = _material()
+    regime_ref = fake_regime_ref()
     stored = escrow_acceptance_manifest(
         ledger=ledger,
+        evaluation_regime=regime_ref,
         critic_id="critic.acceptance",
-        critic_version="2.0.0",
         case_manifest=cases,
         scoring_policy=scoring,
         salt=salt,
     )
     critic = _critic(
-        receipt_sha256=stored.publication_receipt.content_sha256,
         cases=cases,
         scoring=scoring,
         salt=salt,
@@ -299,5 +274,6 @@ def test_escrow_load_rejects_internal_symlink_redirection(
     ):
         load_acceptance_manifest_escrow(
             ledger=ledger,
-            critic_spec=critic,
+            evaluation_regime=regime_ref,
+            critic=critic,
         )

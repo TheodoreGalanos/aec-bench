@@ -10,7 +10,6 @@ import pytest
 from pydantic import TypeAdapter, ValidationError
 
 from aec_bench.contracts.authority import OperatorRole, operator_authority_for
-from aec_bench.contracts.evaluation_plane import EvaluationPlanRef
 from aec_bench.contracts.execution_program import (
     ActionNode,
     CompiledExecutionProgram,
@@ -112,6 +111,7 @@ from aec_bench.contracts.proposal_session_verifier import (
     verify_proposal_session_receipt,
 )
 from aec_bench.contracts.stage_execution import StageResourceEvidence
+from tests.support.evaluation_regimes import fake_regime_ref
 
 
 def _sha(label: str) -> str:
@@ -436,11 +436,7 @@ def _freeze(
     )
     return ProposalFreeze(
         freeze_id="freeze.drainage",
-        evaluation_plan_ref=EvaluationPlanRef(
-            plan_id="plan.phase9",
-            evaluation_generation="generation-1",
-        ),
-        evaluation_plan_candidate_manifest_sha256=manifest.content_sha256,
+        evaluation_regime_ref=fake_regime_ref(regime_id="plan.phase9"),
         structural_split_sha256=_sha("structural-split"),
         selected_structural_item_sha256=_sha("structural-item"),
         selected_review_lineage_id=_sha("review-lineage"),

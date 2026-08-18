@@ -1,5 +1,5 @@
 # ABOUTME: Tests typed origin, basis, authority, taint, and closed operator capabilities.
-# ABOUTME: Proves candidate and red-team artifacts cannot grant trust or change critic generations.
+# ABOUTME: Proves candidate and red-team artifacts cannot grant trust or replace published regimes.
 
 from __future__ import annotations
 
@@ -17,8 +17,6 @@ from aec_bench.contracts.authority import (
     BasisKind,
     BasisReference,
     CriticEvaluationOutcomeIdentity,
-    CriticGenerationIdentity,
-    EvaluationPlanIdentity,
     HumanAuthorityApproval,
     MotifPromotionQualification,
     OperatorCapability,
@@ -28,7 +26,9 @@ from aec_bench.contracts.authority import (
     derive_origin_stamp,
     operator_authority_for,
 )
+from aec_bench.contracts.evaluation_refs import CriticRef, CriticRole
 from aec_bench.contracts.harness_kernel import KernelRef, kernel_abi_commitment
+from tests.support.evaluation_regimes import fake_regime_ref
 
 
 def _sha(label: str) -> str:
@@ -60,13 +60,13 @@ def _event(
         subject_sha256=_sha("candidate-1"),
         basis=(_basis(),),
         kernel_ref=KernelRef(kernel_id="aec-bench", version="1.0.0"),
-        critic_generation=CriticGenerationIdentity(
+        critic=CriticRef(
+            regime=fake_regime_ref(),
             critic_id="critic.acceptance",
-            version="1",
-            compatibility_generation="evaluation-generation.1",
+            role=CriticRole.ACCEPTANCE,
         ),
         reasons=("all_integrity_gates_passed",),
-        revalidation_triggers=("critic_generation_change",),
+        revalidation_triggers=("critic_change",),
     )
 
 
@@ -156,8 +156,8 @@ def test_untrusted_or_non_authoritative_principals_cannot_grant_promotion(
 @pytest.mark.parametrize(
     "action",
     [
-        AuthorityAction.RELEASE_CRITIC_GENERATION,
-        AuthorityAction.RETIRE_CRITIC_GENERATION,
+        AuthorityAction.RELEASE_CRITIC,
+        AuthorityAction.RETIRE_CRITIC,
         AuthorityAction.REVEAL_ACCEPTANCE_MANIFEST,
         AuthorityAction.RELEASE_EVALUATION_COHORT,
         AuthorityAction.RETIRE_EVALUATION_COHORT,
@@ -184,11 +184,11 @@ def test_human_approval_binds_the_exact_principal_action_and_subject() -> None:
             principal_id="human.theo",
             kind=AuthorityPrincipalKind.HUMAN,
         ),
-        action=AuthorityAction.RELEASE_CRITIC_GENERATION,
+        action=AuthorityAction.RELEASE_CRITIC,
         subject_id="critic.acceptance.v2",
         subject_sha256=_sha("critic.acceptance.v2"),
         approved=True,
-        reason="approved exact acceptance critic generation",
+        reason="approved exact acceptance regime critic",
     )
 
     assert HumanAuthorityApproval.model_validate(approval.model_dump(mode="json")) == approval
@@ -200,7 +200,7 @@ def test_human_approval_binds_the_exact_principal_action_and_subject() -> None:
                 principal_id="host.policy",
                 kind=AuthorityPrincipalKind.HOST_POLICY,
             ),
-            action=AuthorityAction.RELEASE_CRITIC_GENERATION,
+            action=AuthorityAction.RELEASE_CRITIC,
             subject_id="critic.acceptance.v2",
             subject_sha256=_sha("critic.acceptance.v2"),
             approved=True,
@@ -209,18 +209,15 @@ def test_human_approval_binds_the_exact_principal_action_and_subject() -> None:
 
 
 def test_motif_promotion_qualification_binds_the_exact_provisional_candidate() -> None:
-    evaluation_plan = EvaluationPlanIdentity(
-        plan_id="evaluation-plan",
-        evaluation_generation="evaluation-generation.1",
-    )
-    critic_generation = CriticGenerationIdentity(
+    evaluation_regime = fake_regime_ref(regime_id="evaluation-plan")
+    critic = CriticRef(
+        regime=evaluation_regime,
         critic_id="critic.acceptance",
-        version="1",
-        compatibility_generation="evaluation-generation.1",
+        role=CriticRole.ACCEPTANCE,
     )
     critic_outcome = CriticEvaluationOutcomeIdentity(
-        evaluation_plan=evaluation_plan,
-        critic_generation=critic_generation,
+        evaluation_regime=evaluation_regime,
+        critic=critic,
         candidate_sha256=_sha("provisional-motif"),
     )
     kernel_ref = KernelRef(kernel_id="aec-bench", version="1.0.0")
@@ -233,9 +230,9 @@ def test_motif_promotion_qualification_binds_the_exact_provisional_candidate() -
         promotion_lineage_sha256=_sha("promotion-lineage"),
         promotion_monitor_attestation_sha256=_sha("promotion-monitor"),
         monitor_report_sha256=_sha("monitor-report"),
-        evaluation_plan=evaluation_plan,
+        evaluation_regime=evaluation_regime,
         critic_release_authority_event_sha256=_sha("critic-release"),
-        critic_generation=critic_generation,
+        critic=critic,
         kernel_ref=kernel_ref,
         kernel_abi_sha256=kernel_abi_commitment(kernel_ref),
     )

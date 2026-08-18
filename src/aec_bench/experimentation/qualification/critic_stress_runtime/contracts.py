@@ -18,6 +18,7 @@ from aec_bench.contracts.evaluation_outcome import (
     CriticGapDecomposition,
     NonNegativeFiniteFloat,
 )
+from aec_bench.contracts.evaluation_refs import CriticRef
 from aec_bench.contracts.harness_kernel import (
     FrozenStrictModel,
     validate_sha256,
@@ -123,39 +124,31 @@ class CriticStressMeasurement(LegacyContentAddressedModel):
         "aecbench.adaptive-critic-stress-measurement.v1"
     )
     measurement_id: NonEmptyStr
-    critic_generation_sha256: str
+    critic: CriticRef
     gap: CriticGapDecomposition
     acceptance_grounding: AcceptanceGrounding
 
-    @field_validator("critic_generation_sha256")
-    @classmethod
-    def validate_generation_hash(cls, value: str) -> str:
-        return validate_sha256(value)
-
 
 class CriticStressClassificationPolicy(LegacyContentAddressedModel):
-    """Preregistered residual threshold and exact generation transition."""
+    """Preregistered residual threshold and exact regime transition."""
 
     schema_version: Literal["aecbench.critic-stress-classification-policy.v1"] = (
         "aecbench.critic-stress-classification-policy.v1"
     )
     policy_id: NonEmptyStr
-    current_critic_generation_sha256: str
-    next_critic_generation_sha256: str
+    current_critic: CriticRef
+    next_critic: CriticRef
     minimum_null_adjusted_residual: NonNegativeFiniteFloat
 
-    @field_validator(
-        "current_critic_generation_sha256",
-        "next_critic_generation_sha256",
-    )
-    @classmethod
-    def validate_generation_hashes(cls, value: str) -> str:
-        return validate_sha256(value)
-
     @model_validator(mode="after")
-    def validate_generation_transition(self) -> Self:
-        if self.current_critic_generation_sha256 == self.next_critic_generation_sha256:
-            raise ValueError("critic-stress policy requires a distinct next critic generation")
+    def validate_regime_transition(self) -> Self:
+        if self.current_critic == self.next_critic:
+            raise ValueError("critic-stress policy requires a distinct next regime critic")
+        if (
+            self.current_critic.critic_id != self.next_critic.critic_id
+            or self.current_critic.role is not self.next_critic.role
+        ):
+            raise ValueError("critic-stress policy must keep the stable critic ID and role")
         return self
 
 
@@ -166,15 +159,13 @@ class VRedChallengeEvidence(LegacyContentAddressedModel):
     challenge_id: NonEmptyStr
     artifact_sha256: str
     origin: OriginStamp
-    source_critic_generation_sha256: str
-    eligible_critic_generation_sha256: str
-    effect_scope: Literal["next_critic_generation_only"] = "next_critic_generation_only"
+    source_critic: CriticRef
+    eligible_critic: CriticRef
+    effect_scope: Literal["next_critic_only"] = "next_critic_only"
     current_promotion_basis_permitted: Literal[False] = False
 
     @field_validator(
         "artifact_sha256",
-        "source_critic_generation_sha256",
-        "eligible_critic_generation_sha256",
     )
     @classmethod
     def validate_hashes(cls, value: str) -> str:
@@ -188,8 +179,13 @@ class VRedChallengeEvidence(LegacyContentAddressedModel):
             raise ValueError("Vred challenge requires red-team producer provenance")
         if TaintLabel.RUNTIME_OBSERVED not in self.origin.taint_labels:
             raise ValueError("Vred challenge requires runtime-observed provenance")
-        if self.source_critic_generation_sha256 == self.eligible_critic_generation_sha256:
-            raise ValueError("Vred challenge cannot affect its source critic generation")
+        if self.source_critic == self.eligible_critic:
+            raise ValueError("Vred challenge cannot affect its source regime critic")
+        if (
+            self.source_critic.critic_id != self.eligible_critic.critic_id
+            or self.source_critic.role is not self.eligible_critic.role
+        ):
+            raise ValueError("Vred challenge must keep the stable critic ID and role")
         return self
 
 
@@ -284,23 +280,21 @@ class CriticStressFinding(LegacyContentAddressedModel):
 
 
 class CriticRegressionCase(LegacyContentAddressedModel):
-    """Immutable grounded case available only to the next critic generation."""
+    """Immutable grounded case available only to the next regime critic."""
 
     schema_version: Literal["aecbench.critic-regression-case.v1"] = "aecbench.critic-regression-case.v1"
     case_id: NonEmptyStr
     finding_sha256: str
     measurement_sha256: str
-    source_critic_generation_sha256: str
-    target_critic_generation_sha256: str
+    source_critic: CriticRef
+    target_critic: CriticRef
     evidence_sha256s: tuple[str, ...]
-    effect_scope: Literal["next_critic_generation_only"] = "next_critic_generation_only"
+    effect_scope: Literal["next_critic_only"] = "next_critic_only"
     current_promotion_basis_permitted: Literal[False] = False
 
     @field_validator(
         "finding_sha256",
         "measurement_sha256",
-        "source_critic_generation_sha256",
-        "target_critic_generation_sha256",
     )
     @classmethod
     def validate_hashes(cls, value: str) -> str:
@@ -321,14 +315,19 @@ class CriticRegressionCase(LegacyContentAddressedModel):
         return tuple(sorted(value))
 
     @model_validator(mode="after")
-    def validate_generation_scope(self) -> Self:
-        if self.source_critic_generation_sha256 == self.target_critic_generation_sha256:
-            raise ValueError("critic regression case cannot affect its source generation")
+    def validate_regime_scope(self) -> Self:
+        if self.source_critic == self.target_critic:
+            raise ValueError("critic regression case cannot affect its source regime critic")
+        if (
+            self.source_critic.critic_id != self.target_critic.critic_id
+            or self.source_critic.role is not self.target_critic.role
+        ):
+            raise ValueError("critic regression case must keep the stable critic ID and role")
         return self
 
 
 class CriticStressReport(LegacyContentAddressedModel):
-    """Provider-free causal classification and next-generation regression output."""
+    """Provider-free causal classification and next-regime regression output."""
 
     schema_version: Literal["aecbench.adaptive-critic-stress-report.v1"] = "aecbench.adaptive-critic-stress-report.v1"
     policy: CriticStressClassificationPolicy
@@ -340,7 +339,6 @@ class CriticStressReport(LegacyContentAddressedModel):
     regression_case: CriticRegressionCase | None = None
     limitations: tuple[CriticStressLimitation, ...] = ()
     current_promotion_basis_sha256s: tuple[str, ...] = ()
-    next_generation_challenge_sha256s: tuple[str, ...] = ()
     provider_calls: Literal[0] = 0
     provider_cost_usd: NonNegativeFiniteFloat = 0.0
 
@@ -367,7 +365,6 @@ class CriticStressReport(LegacyContentAddressedModel):
 
     @field_validator(
         "current_promotion_basis_sha256s",
-        "next_generation_challenge_sha256s",
     )
     @classmethod
     def canonicalize_hashes(cls, value: tuple[str, ...]) -> tuple[str, ...]:
@@ -397,8 +394,8 @@ class CriticStressReport(LegacyContentAddressedModel):
 
 
 def _validate_measurement_bindings(report: CriticStressReport) -> None:
-    if report.measurement.critic_generation_sha256 != report.policy.current_critic_generation_sha256:
-        raise ValueError("critic-stress measurement does not bind the current critic generation")
+    if report.measurement.critic != report.policy.current_critic:
+        raise ValueError("critic-stress measurement does not bind the current regime critic")
     if any(item.measurement_sha256 != report.measurement.content_sha256 for item in report.causal_seam_evidence) or any(
         item.measurement_sha256 != report.measurement.content_sha256 for item in report.replayed_boundary_evidence
     ):
@@ -412,14 +409,11 @@ def _validate_challenge_scope(report: CriticStressReport) -> None:
     if any(evidence.challenge_artifact_sha256 not in challenge_artifacts for evidence in report.causal_seam_evidence):
         raise ValueError("causal seam evidence requires a provenance-bound Vred challenge")
     if any(
-        challenge.source_critic_generation_sha256 != report.policy.current_critic_generation_sha256
-        or challenge.eligible_critic_generation_sha256 != report.policy.next_critic_generation_sha256
+        challenge.source_critic != report.policy.current_critic
+        or challenge.eligible_critic != report.policy.next_critic
         for challenge in report.vred_challenges
     ):
-        raise ValueError("Vred challenges can affect only the next critic generation")
-    expected_next_challenges = {challenge.content_sha256 for challenge in report.vred_challenges}
-    if set(report.next_generation_challenge_sha256s) != expected_next_challenges:
-        raise ValueError("next-generation challenge references do not cover every Vred challenge")
+        raise ValueError("Vred challenges can affect only the next regime critic")
     forbidden_current_basis = {
         digest
         for challenge in report.vred_challenges

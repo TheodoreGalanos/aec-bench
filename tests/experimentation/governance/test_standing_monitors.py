@@ -11,8 +11,8 @@ from pydantic import JsonValue
 from aec_bench.contracts.authority import (
     AuthorityPrincipal,
     AuthorityPrincipalKind,
-    EvaluationPlanIdentity,
 )
+from aec_bench.contracts.evaluation_refs import EvaluationRegimeRef
 from aec_bench.experimentation.governance.standing_monitors import (
     BasisReplayObservation,
     BasisReplayRequirement,
@@ -36,17 +36,15 @@ from aec_bench.experimentation.governance.standing_monitors import (
     run_production_cycle_monitors,
     run_standing_monitors,
 )
+from tests.support.evaluation_regimes import fake_regime_ref
 
 
 def _sha(label: str) -> str:
     return hashlib.sha256(label.encode()).hexdigest()
 
 
-def _evaluation_plan() -> EvaluationPlanIdentity:
-    return EvaluationPlanIdentity(
-        plan_id="evaluation-plan",
-        evaluation_generation="evaluation-generation.1",
-    )
+def _evaluation_regime() -> EvaluationRegimeRef:
+    return fake_regime_ref()
 
 
 def _canaries() -> tuple[CanaryCommitment, CanaryCommitment]:
@@ -112,7 +110,7 @@ def _plan(
     return StandingMonitorPlan(
         monitor_id="monitor.governed-cycle",
         version="1.0.0",
-        evaluation_plan=_evaluation_plan(),
+        evaluation_regime=_evaluation_regime(),
         canaries=_canaries(),
         forbidden_flow_rules=default_forbidden_flow_rules(),
         basis_replay_requirements=replay_requirements,
@@ -138,7 +136,7 @@ def _cycle_plan(
     return CycleMonitorPlan(
         cycle_id="cycle.009",
         cycle_index=9,
-        evaluation_plan=_evaluation_plan(),
+        evaluation_regime=_evaluation_regime(),
         standing_policy_sha256=policy.content_sha256,
         assurance_snapshot_sha256=_sha("assurance-snapshot"),
         basis_replay_requirements=replay_requirements,
@@ -323,12 +321,12 @@ def test_static_policy_requires_both_canary_kinds_and_every_baseline_flow_rule()
         )
 
     policy = _policy()
-    assert "evaluation_plan_sha256" not in type(policy).model_fields
+    assert "evaluation_regime_sha256" not in type(policy).model_fields
     assert "basis_replay_requirements" not in type(policy).model_fields
 
     cycle_plan = _cycle_plan(policy)
     assert cycle_plan.standing_policy_sha256 == policy.content_sha256
-    assert cycle_plan.evaluation_plan == _evaluation_plan()
+    assert cycle_plan.evaluation_regime == _evaluation_regime()
     assert cycle_plan.assurance_snapshot_sha256 == _sha("assurance-snapshot")
 
 
@@ -351,7 +349,7 @@ def test_production_cycle_requires_complete_host_collection_coverage() -> None:
     assert_current_production_cycle_monitor_envelope(
         clean,
         policy=policy,
-        evaluation_plan=_evaluation_plan(),
+        evaluation_regime=_evaluation_regime(),
         cycle_id="cycle.009",
         cycle_index=9,
         assurance_snapshot_sha256=_sha("assurance-snapshot"),
@@ -384,7 +382,7 @@ def test_production_cycle_requires_complete_host_collection_coverage() -> None:
             assert_current_production_cycle_monitor_envelope(
                 incident,
                 policy=policy,
-                evaluation_plan=_evaluation_plan(),
+                evaluation_regime=_evaluation_regime(),
                 cycle_id="cycle.009",
                 cycle_index=9,
                 assurance_snapshot_sha256=_sha("assurance-snapshot"),

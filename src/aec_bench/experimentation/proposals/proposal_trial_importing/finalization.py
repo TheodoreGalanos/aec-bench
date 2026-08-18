@@ -7,18 +7,18 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
 
-from aec_bench.contracts.evaluation_plane import EvaluationPlan
+from aec_bench.contracts.evaluation_plane import EvaluationRegime
 from aec_bench.contracts.harness_kernel import canonical_json_sha256
 from aec_bench.contracts.proposal_execution_types import ProposalSessionStatus
 from aec_bench.contracts.trial_record import (
     ArtifactReference,
-    EvaluationRegimeRef,
     MetaHarnessTrialProvenance,
     ProposalSessionTrialProvenance,
     RunManifest,
     TrialOutput,
     TrialRecord,
 )
+from aec_bench.evaluation.regime import expected_evaluation_regime_ref
 from aec_bench.experimentation.governance.authority_ledger import (
     AuthorityLedger,
     AuthorityLedgerError,
@@ -305,9 +305,13 @@ def _persist_static_proposal_artifacts(
     resolve_unique_event_model(
         ledger=ledger,
         event=authorization.freeze_authority_event,
-        model_type=EvaluationPlan,
-        matches_expected=lambda candidate: candidate.ref == freeze.evaluation_plan_ref,
-        label="evaluation plan",
+        model_type=EvaluationRegime,
+        matches_expected=lambda candidate: expected_evaluation_regime_ref(
+            candidate,
+            artifact_id=freeze.evaluation_regime_ref.artifact.artifact_id,
+        )
+        == freeze.evaluation_regime_ref,
+        label="evaluation regime",
     )
     return PersistedProposalArtifacts(
         candidate_manifest=persist_model_artifact(
@@ -563,7 +567,7 @@ def _build_complete_trial_record(
         repetition=authorization.dispatch.evaluation_coordinate.repetition,
         execution_seed=authorization.dispatch.evaluation_coordinate.seed,
         candidate_manifest=persisted.candidate_manifest,
-        evaluation_plan_ref=freeze.evaluation_plan_ref,
+        evaluation_regime_ref=freeze.evaluation_regime_ref,
         proposal_session=proposal_provenance,
     )
     run_manifest = RunManifest.model_validate(
@@ -574,10 +578,7 @@ def _build_complete_trial_record(
                 **imported.environment.model_dump(mode="python"),
                 "tool_versions": bound_tool_versions(record=imported, authorization=authorization),
             },
-            "evaluation_regime": EvaluationRegimeRef(
-                regime_id=freeze.evaluation_plan_ref.plan_id,
-                generation=freeze.evaluation_plan_ref.evaluation_generation,
-            ),
+            "evaluation_regime": freeze.evaluation_regime_ref,
         }
     )
     output = TrialOutput.model_validate(imported.outputs.model_dump(mode="python")).bind_runtime_paths(

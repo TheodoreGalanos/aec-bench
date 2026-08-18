@@ -12,7 +12,7 @@ from pydantic import Field, field_validator, model_validator
 from aec_bench.contracts.evaluation_generation.cohort import (
     EvaluationCohortRetirement,
 )
-from aec_bench.contracts.evaluation_plane import CriticRole
+from aec_bench.contracts.evaluation_refs import CriticRef, CriticRole
 from aec_bench.contracts.harness_kernel import (
     FrozenStrictModel,
     validate_sha256,
@@ -239,17 +239,13 @@ EvaluationGenerationClosure = Annotated[
 
 
 class EvaluationCriticRetirementRef(FrozenStrictModel):
-    """Exact retirement evidence for one critic generation."""
+    """Exact retirement evidence for one regime-scoped critic."""
 
-    role: CriticRole
-    critic_generation_sha256: str
+    critic: CriticRef
     retirement_authority_event_sha256: str
     evidence: EvaluationGenerationEvidenceRef
 
-    @field_validator(
-        "critic_generation_sha256",
-        "retirement_authority_event_sha256",
-    )
+    @field_validator("retirement_authority_event_sha256")
     @classmethod
     def validate_hashes(cls, value: str) -> str:
         return validate_sha256(value)
@@ -302,12 +298,12 @@ class EvaluationGenerationRetirementClosure(LegacyContentAddressedModel):
         cls,
         value: tuple[EvaluationCriticRetirementRef, ...],
     ) -> tuple[EvaluationCriticRetirementRef, ...]:
-        roles = tuple(item.role for item in value)
+        roles = tuple(item.critic.role for item in value)
         if len(roles) != len(set(roles)):
             raise ValueError(
                 "evaluation-generation critic retirements must have unique roles",
             )
-        return tuple(sorted(value, key=lambda item: _critic_role_order(item.role)))
+        return tuple(sorted(value, key=lambda item: _critic_role_order(item.critic.role)))
 
     @model_validator(mode="after")
     def validate_retirement_join(self) -> Self:
@@ -319,7 +315,7 @@ class EvaluationGenerationRetirementClosure(LegacyContentAddressedModel):
             raise ValueError(
                 "evaluation-generation retirement requires acceptance-manifest reveal evidence",
             )
-        observed_roles = tuple(item.role for item in self.critic_retirements)
+        observed_roles = tuple(item.critic.role for item in self.critic_retirements)
         if observed_roles != self.required_critic_roles:
             raise ValueError(
                 "evaluation-generation retirement critic roles differ from the required critic roles",

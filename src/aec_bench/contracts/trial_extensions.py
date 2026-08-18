@@ -11,7 +11,7 @@ from pydantic import (
     model_validator,
 )
 
-from aec_bench.contracts.evaluation_plane import EvaluationPlanRef
+from aec_bench.contracts.evaluation_refs import EvaluationRegimeRef
 from aec_bench.contracts.validators import NonEmptyStr, StrictModel, ensure_non_empty_string
 
 
@@ -268,7 +268,7 @@ class MetaHarnessTrialProvenance(StrictModel):
     harness_program_plan: ArtifactReference | None = None
     repair_decision: ArtifactReference | None = None
     motif_ids: tuple[NonEmptyStr, ...] = ()
-    evaluation_plan_ref: EvaluationPlanRef | None = None
+    evaluation_regime_ref: EvaluationRegimeRef | None = None
     proposal_session: ProposalSessionTrialProvenance | None = None
 
     @field_validator(

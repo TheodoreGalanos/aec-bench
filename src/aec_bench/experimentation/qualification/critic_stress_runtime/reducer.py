@@ -62,7 +62,6 @@ def reduce_critic_stress(
         regression_case=regression_case,
         limitations=limitations,
         current_promotion_basis_sha256s=current_promotion_basis_sha256s,
-        next_generation_challenge_sha256s=tuple(challenge.content_sha256 for challenge in selected_challenges),
     )
 
 
@@ -123,8 +122,8 @@ def derive_classification(
         case_id=f"critic-regression.{measurement.measurement_id}.{kind.value}",
         finding_sha256=finding.content_sha256,
         measurement_sha256=measurement.content_sha256,
-        source_critic_generation_sha256=policy.current_critic_generation_sha256,
-        target_critic_generation_sha256=policy.next_critic_generation_sha256,
+        source_critic=policy.current_critic,
+        target_critic=policy.next_critic,
         evidence_sha256s=finding.evidence_sha256s,
     )
 

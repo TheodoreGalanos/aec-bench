@@ -11,7 +11,6 @@ from aec_bench.contracts.authority import (
     AuthorityEvent,
     AuthorityPrincipalKind,
     BasisKind,
-    EvaluationPlanIdentity,
     MotifPromotionAssurance,
     MotifPromotionQualification,
     PromotionMonitorAttestation,
@@ -19,7 +18,7 @@ from aec_bench.contracts.authority import (
     TaintLabel,
 )
 from aec_bench.contracts.evaluation_outcome import CriticEvaluationOutcome
-from aec_bench.contracts.evaluation_plane import CriticRole
+from aec_bench.contracts.evaluation_refs import CriticRole, EvaluationRegimeRef
 from aec_bench.experimentation.governance.authority_ledger import (
     _HOST_PRINCIPAL_KINDS,
     AuthorityLedger,
@@ -178,11 +177,8 @@ def _validated_acceptance_critic(
         or not outcome.promotion_eligible
     ):
         raise AuthorityLedgerIntegrityError("acceptance outcome is not promotion eligible")
-    if (
-        event.kernel_ref != critic_outcome.kernel_ref
-        or event.critic_generation != critic_outcome.critic.authority_identity
-    ):
-        raise AuthorityLedgerIntegrityError("promotion event does not bind the outcome kernel and critic generation")
+    if event.kernel_ref != critic_outcome.kernel_ref or event.critic != critic_outcome.critic.authority_identity:
+        raise AuthorityLedgerIntegrityError("promotion event does not bind the outcome kernel and regime critic")
     return critic_basis, critic_outcome
 
 
@@ -201,9 +197,9 @@ def _validated_critic_release(
     if (
         release.content_sha256 != critic_outcome.critic_release_authority_event_sha256
         or release.event_id != critic_outcome.critic_release_authority_event_id
-        or release.action is not AuthorityAction.RELEASE_CRITIC_GENERATION
+        or release.action is not AuthorityAction.RELEASE_CRITIC
         or release.decision is not AuthorityDecision.GRANTED
-        or release.critic_generation != critic_outcome.critic.authority_identity
+        or release.critic != critic_outcome.critic.authority_identity
     ):
         raise AuthorityLedgerIntegrityError("promotion does not bind the exact released acceptance critic")
     if (
@@ -270,7 +266,7 @@ def _validated_promotion_monitor(
         ledger=ledger,
         monitor_basis=monitor_basis,
         attestation=monitor_attestation,
-        evaluation_plan=critic_outcome.evaluation_plan_ref.authority_identity,
+        evaluation_regime=critic_outcome.evaluation_regime_ref.authority_identity,
     )
     return monitor_basis, monitor_attestation_basis, monitor_attestation
 
@@ -298,9 +294,9 @@ def _validate_motif_promotion_qualification(
         promotion_lineage_sha256=evidence.lineage.content_sha256,
         promotion_monitor_attestation_sha256=evidence.monitor_attestation.content_sha256,
         monitor_report_sha256=evidence.monitor_attestation.monitor_report_sha256,
-        evaluation_plan=evidence.critic_outcome.evaluation_plan_ref.authority_identity,
+        evaluation_regime=evidence.critic_outcome.evaluation_regime_ref.authority_identity,
         critic_release_authority_event_sha256=evidence.release.content_sha256,
-        critic_generation=evidence.critic_outcome.critic.authority_identity,
+        critic=evidence.critic_outcome.critic.authority_identity,
         kernel_ref=evidence.critic_outcome.kernel_ref,
         kernel_abi_sha256=qualification.kernel_abi_sha256,
     )
@@ -366,7 +362,7 @@ def _validate_promotion_monitor_attestation(
     ledger: AuthorityLedger,
     monitor_basis: StoredBasis,
     attestation: PromotionMonitorAttestation,
-    evaluation_plan: EvaluationPlanIdentity,
+    evaluation_regime: EvaluationRegimeRef,
 ) -> None:
     from aec_bench.experimentation.governance.standing_monitors import (
         CycleMonitorReport,
@@ -391,15 +387,15 @@ def _validate_promotion_monitor_attestation(
         )
     if isinstance(report_model, ProductionCycleMonitorEnvelope):
         report = report_model.report
-        report_evaluation_plan = report_model.cycle_plan.evaluation_plan
+        report_evaluation_regime = report_model.cycle_plan.evaluation_regime
     else:
         report = report_model
-        report_evaluation_plan = evaluation_plan
+        report_evaluation_regime = evaluation_regime
     if (
         attestation.monitor_basis_sha256 != monitor_basis.reference.artifact_sha256
         or attestation.monitor_report_sha256 != monitor_basis.reference.artifact_sha256
-        or attestation.evaluation_plan != evaluation_plan
-        or report_evaluation_plan != evaluation_plan
+        or attestation.evaluation_regime != evaluation_regime
+        or report_evaluation_regime != evaluation_regime
         or attestation.assurance_snapshot_sha256 != report.assurance_snapshot_sha256
         or attestation.cycle_id != report.cycle_id
         or attestation.cycle_index != report.cycle_index

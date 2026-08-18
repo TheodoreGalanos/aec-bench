@@ -1,5 +1,5 @@
 # ABOUTME: Validates, persists, authorizes, and immediately replays one exact proposal freeze.
-# ABOUTME: Keeps full plan and proposal bytes ledger-confined before candidate evaluation begins.
+# ABOUTME: Keeps regime, assignment, and proposal bytes ledger-confined before evaluation begins.
 
 from __future__ import annotations
 
@@ -14,7 +14,8 @@ from aec_bench.contracts.authority import (
 )
 from aec_bench.contracts.evaluation_plane import (
     CandidateManifestScope,
-    EvaluationPlan,
+    EvaluationAssignment,
+    EvaluationRegime,
 )
 from aec_bench.contracts.harness_instance import CompiledHarnessInstance
 from aec_bench.contracts.program_proposal.candidate import CandidateGenerationManifest, ProgramCandidateRef
@@ -58,8 +59,9 @@ def issue_governed_proposal_freeze(
     event_id: str,
     replay_id: str,
     due_cycle_index: int,
-    evaluation_plan: EvaluationPlan,
-    evaluation_plan_candidate_scope: CandidateManifestScope | None = None,
+    evaluation_regime: EvaluationRegime,
+    evaluation_assignment: EvaluationAssignment,
+    evaluation_assignment_candidate_scope: CandidateManifestScope | None = None,
     operator_authority: OperatorAuthority,
     structural_split: StructuralSplitManifest,
     split: OptimizationSplit,
@@ -78,14 +80,17 @@ def issue_governed_proposal_freeze(
     """Validate, persist, authorize, and immediately replay one exact proposal freeze."""
 
     try:
-        plan = EvaluationPlan.model_validate(
-            evaluation_plan.model_dump(mode="python"),
+        regime = EvaluationRegime.model_validate(
+            evaluation_regime.model_dump(mode="python"),
+        )
+        assignment = EvaluationAssignment.model_validate(
+            evaluation_assignment.model_dump(mode="python"),
         )
         candidate_scope = (
             None
-            if evaluation_plan_candidate_scope is None
+            if evaluation_assignment_candidate_scope is None
             else CandidateManifestScope.model_validate(
-                evaluation_plan_candidate_scope.model_dump(mode="python"),
+                evaluation_assignment_candidate_scope.model_dump(mode="python"),
             )
         )
         operator = OperatorAuthority.model_validate(
@@ -166,8 +171,9 @@ def issue_governed_proposal_freeze(
             "proposal execution profile requires a different fixed-harness kernel",
         )
     selected_task = validate_frozen_bindings(
-        evaluation_plan=plan,
-        evaluation_plan_candidate_scope=candidate_scope,
+        evaluation_regime=regime,
+        evaluation_assignment=assignment,
+        evaluation_assignment_candidate_scope=candidate_scope,
         structural_split=structural,
         split=split,
         leakage_audit=audit,
@@ -184,9 +190,8 @@ def issue_governed_proposal_freeze(
     try:
         freeze = ProposalFreeze(
             freeze_id=freeze_id,
-            evaluation_plan_ref=plan.ref,
-            evaluation_plan_candidate_manifest_sha256=(plan.candidate_manifest_sha256),
-            evaluation_plan_candidate_scope=candidate_scope,
+            evaluation_regime_ref=assignment.regime,
+            evaluation_assignment_candidate_scope=candidate_scope,
             structural_split_sha256=structural.content_sha256,
             selected_structural_item_sha256=selected_task.content_sha256,
             selected_review_lineage_id=selected_task.review_lineage_id,
@@ -214,8 +219,9 @@ def issue_governed_proposal_freeze(
         observed = observe_input_basis(
             ledger=ledger,
             scope=scope,
-            evaluation_plan=plan,
-            evaluation_plan_candidate_scope=candidate_scope,
+            evaluation_regime=regime,
+            evaluation_assignment=assignment,
+            evaluation_assignment_candidate_scope=candidate_scope,
             operator=operator,
             structural_split=structural,
             leakage_audit=audit,
@@ -244,8 +250,9 @@ def issue_governed_proposal_freeze(
             operation_taint=(TaintLabel.RUNTIME_OBSERVED,),
         )
         complete_basis = ProposalFreezeBasis(
-            evaluation_plan=observed.evaluation_plan,
-            evaluation_plan_candidate_scope=(observed.evaluation_plan_candidate_scope),
+            evaluation_regime=observed.evaluation_regime,
+            evaluation_assignment=observed.evaluation_assignment,
+            evaluation_assignment_candidate_scope=(observed.evaluation_assignment_candidate_scope),
             operator_authority=observed.operator_authority,
             structural_split=observed.structural_split,
             leakage_audit=observed.leakage_audit,
@@ -267,12 +274,13 @@ def issue_governed_proposal_freeze(
             subject_id=freeze.freeze_id,
             subject_sha256=freeze.content_sha256,
             basis=complete_basis.references,
-            kernel_ref=plan.kernel_ref,
+            kernel_ref=assignment.kernel_ref,
             reasons=("host policy froze the exact preregistered proposal set before evaluation",),
             revalidation_triggers=(
                 "basis_replay_due",
                 "candidate_manifest_change",
-                "evaluation_plan_change",
+                "evaluation_regime_change",
+                "evaluation_assignment_change",
                 "fixed_harness_change",
                 "structural_split_change",
                 *(("execution_profile_change",) if profile is not None else ()),

@@ -303,7 +303,7 @@ def record_import_authority(
         reasons=("exact complete proposal TrialRecord and non-circular import receipt persisted",),
         revalidation_triggers=(
             "basis_replay_due",
-            "evaluation_plan_change",
+            "evaluation_regime_change",
             "proposal_execution_evidence_change",
         ),
     )

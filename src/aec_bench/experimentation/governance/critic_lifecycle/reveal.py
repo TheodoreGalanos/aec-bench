@@ -1,7 +1,6 @@
 # ABOUTME: Prepares, authorizes, reloads, and closes retirement-bound acceptance-manifest reveals.
 # ABOUTME: Enforces escrow recovery, exact historical coverage, and eventual auditability.
 
-
 from __future__ import annotations
 
 from pydantic import JsonValue
@@ -14,9 +13,10 @@ from aec_bench.contracts.authority import (
 )
 from aec_bench.contracts.evaluation_plane import (
     AcceptanceManifestReveal,
-    CriticSpec,
+    Critic,
     acceptance_manifest_reveal_commitment,
 )
+from aec_bench.contracts.evaluation_refs import EvaluationRegimeRef
 from aec_bench.contracts.harness_kernel import KernelRef, canonical_json_sha256
 from aec_bench.experimentation.governance.acceptance_manifest_escrow import (
     load_acceptance_manifest_escrow,
@@ -38,7 +38,7 @@ from .evidence import (
     _find_evidence_model,
     _load_exact_retirement,
     _observe_authority_event_basis,
-    _observe_critic_spec,
+    _observe_critic,
     _observe_governance_evidence,
     _require_acceptance_critic,
     _require_event_human_authority,
@@ -54,7 +54,8 @@ from .evidence import (
 def prepare_acceptance_manifest_reveal(
     *,
     ledger: AuthorityLedger,
-    critic_spec: CriticSpec,
+    evaluation_regime: EvaluationRegimeRef,
+    critic: Critic,
     retirement_authority: StoredAuthorityEvent,
     case_manifest: JsonValue | None = None,
     scoring_policy: JsonValue | None = None,
@@ -63,10 +64,11 @@ def prepare_acceptance_manifest_reveal(
     promotion_authority_events: tuple[StoredAuthorityEvent, ...],
 ) -> AcceptanceManifestReveal:
     """Construct a reveal from durable escrow after exact retirement and history resolve."""
-    selected = _require_acceptance_critic(critic_spec)
+    selected = _require_acceptance_critic(critic)
     escrow = load_acceptance_manifest_escrow(
         ledger=ledger,
-        critic_spec=selected,
+        evaluation_regime=evaluation_regime,
+        critic=selected,
     )
     supplied_material = (
         case_manifest is not None,
@@ -84,7 +86,8 @@ def prepare_acceptance_manifest_reveal(
         ledger=ledger,
         stored=retirement_authority,
     )
-    _require_retirement_for_critic(retired.retirement, selected)
+    critic_ref = selected.ref(evaluation_regime)
+    _require_retirement_for_critic(retired.retirement, selected, critic_ref)
     _, outcome_sha256s = _resolve_evaluation_outcomes(
         ledger=ledger,
         references=evaluation_outcomes,
@@ -92,7 +95,7 @@ def prepare_acceptance_manifest_reveal(
     _, promotion_sha256s = _resolve_promotion_authorities(
         ledger=ledger,
         events=promotion_authority_events,
-        critic_spec=selected,
+        critic_ref=critic_ref,
     )
     _require_historical_coverage(
         retirement=retired.retirement,
@@ -100,7 +103,8 @@ def prepare_acceptance_manifest_reveal(
         promotion_authority_event_sha256s=promotion_sha256s,
     )
     return AcceptanceManifestReveal.create(
-        critic_spec=selected,
+        evaluation_regime=evaluation_regime,
+        critic=selected,
         case_manifest=selected_case_manifest,
         scoring_policy=selected_scoring_policy,
         salt=selected_salt,
@@ -125,7 +129,8 @@ def reveal_retired_acceptance_manifest(
     selected_reveal = AcceptanceManifestReveal.model_validate(reveal.model_dump(mode="python"))
     expected = prepare_acceptance_manifest_reveal(
         ledger=ledger,
-        critic_spec=selected_reveal.critic_spec,
+        evaluation_regime=selected_reveal.evaluation_regime,
+        critic=selected_reveal.critic,
         retirement_authority=retirement_authority,
         case_manifest=selected_reveal.case_manifest,
         scoring_policy=selected_reveal.scoring_policy,
@@ -141,7 +146,8 @@ def reveal_retired_acceptance_manifest(
     )
     if retired.authority_event.event.kernel_ref != kernel_ref:
         raise AuthorityLedgerIntegrityError("acceptance reveal kernel does not match retirement authority")
-    subject_id = _reveal_subject_id(selected_reveal.critic_spec)
+    critic_ref = selected_reveal.critic.ref(selected_reveal.evaluation_regime)
+    subject_id = _reveal_subject_id(critic_ref)
     approval = _resolve_human_approval(
         ledger=ledger,
         reference=human_approval,
@@ -150,9 +156,9 @@ def reveal_retired_acceptance_manifest(
         subject_sha256=canonical_json_sha256(selected_reveal.model_dump(mode="json")),
         mismatch_message="human approval does not match the exact acceptance manifest reveal",
     )
-    critic_basis = _observe_critic_spec(
+    critic_basis = _observe_critic(
         ledger=ledger,
-        critic_spec=selected_reveal.critic_spec,
+        critic=selected_reveal.critic,
         event_id=event_id,
         operation_id="reveal-acceptance-manifest",
     )
@@ -170,7 +176,7 @@ def reveal_retired_acceptance_manifest(
     promotions, _ = _resolve_promotion_authorities(
         ledger=ledger,
         events=promotion_authority_events,
-        critic_spec=selected_reveal.critic_spec,
+        critic_ref=critic_ref,
     )
     promotion_bases = tuple(
         _observe_authority_event_basis(
@@ -208,7 +214,7 @@ def reveal_retired_acceptance_manifest(
             ]
         ),
         kernel_ref=kernel_ref,
-        critic_generation=selected_reveal.critic_spec.ref.authority_identity,
+        critic=critic_ref,
         reasons=("human revealed exact retired acceptance manifest and complete historical coverage",),
         revalidation_triggers=("historical_acceptance_replay_due",),
     )
@@ -244,11 +250,12 @@ def load_acceptance_manifest_reveal(
         model_type=AcceptanceManifestReveal,
         label="acceptance manifest reveal",
     )
-    subject_id = _reveal_subject_id(reveal.critic_spec)
+    critic_ref = reveal.critic.ref(reveal.evaluation_regime)
+    subject_id = _reveal_subject_id(critic_ref)
     if (
         event.subject_id != subject_id
         or event.subject_sha256 != acceptance_manifest_reveal_commitment(reveal)
-        or event.critic_generation != reveal.critic_spec.ref.authority_identity
+        or event.critic != critic_ref
     ):
         raise AuthorityLedgerIntegrityError("reveal authority does not match the exact acceptance critic subject")
     _require_event_human_authority(
@@ -266,7 +273,7 @@ def load_acceptance_manifest_reveal(
         expected=retired.authority_event.event,
     ):
         raise AuthorityLedgerIntegrityError("reveal authority is missing its exact retirement authority basis")
-    _require_retirement_for_critic(retired.retirement, reveal.critic_spec)
+    _require_retirement_for_critic(retired.retirement, reveal.critic, critic_ref)
     outcome_bases, outcome_sha256s = _event_evaluation_outcomes(
         ledger=ledger,
         event=event,
@@ -275,7 +282,7 @@ def load_acceptance_manifest_reveal(
     promotion_events, promotion_sha256s = _event_promotion_authorities(
         ledger=ledger,
         event=event,
-        critic_spec=reveal.critic_spec,
+        critic_ref=critic_ref,
     )
     del promotion_events
     _require_historical_coverage(
@@ -304,14 +311,14 @@ def assert_acceptance_audit_closed(
     retirement_authority: StoredAuthorityEvent,
     reveal_authority: StoredAuthorityEvent | None,
 ) -> AcceptanceAuditClosure:
-    """Fail closed unless one exact retired acceptance generation has been revealed."""
+    """Fail closed unless one exact retired acceptance critic has been revealed."""
     retirement = _load_exact_retirement(
         ledger=ledger,
         stored=retirement_authority,
     )
     if reveal_authority is None:
         raise AuthorityLedgerIntegrityError(
-            "retired acceptance generation is unrevealed and its audit lifecycle is not closed"
+            "retired acceptance critic is unrevealed and its audit lifecycle is not closed"
         )
     reveal = load_acceptance_manifest_reveal(
         ledger=ledger,

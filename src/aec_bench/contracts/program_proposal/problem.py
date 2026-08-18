@@ -190,8 +190,8 @@ class DecompositionLeakageAudit(LegacyContentAddressedModel):
 _KEY_SEPARATOR = re.compile(r"[^a-z0-9]+")
 _PRIVILEGED_EXACT_KEYS = frozenset(
     {
-        "evaluation_plan",
-        "evaluation_plan_ref",
+        "evaluation_regime",
+        "evaluation_regime_ref",
         "graph",
         "world",
         "world_json",

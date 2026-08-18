@@ -13,11 +13,7 @@ from aec_bench.contracts.evaluation_outcome import (
     EvaluationDisposition,
     EvaluationOutcome,
 )
-from aec_bench.contracts.evaluation_plane import (
-    CriticRef,
-    CriticRole,
-    EvaluationPlanRef,
-)
+from aec_bench.contracts.evaluation_refs import CriticRef, CriticRole, EvaluationRegimeRef
 from aec_bench.contracts.harness_instance import HarnessBudget, HarnessInstanceRef
 from aec_bench.contracts.harness_kernel import (
     KernelRef,
@@ -65,7 +61,7 @@ class DecompositionExecutionSchedule(LegacyContentAddressedModel):
     schedule_id: NonEmptyStr
     kernel_ref: KernelRef
     fixed_harness_ref: HarnessInstanceRef
-    evaluation_plan_ref: EvaluationPlanRef
+    evaluation_regime_ref: EvaluationRegimeRef
     proposal_freeze: ProposalFreeze
     aggregate_budget: HarnessBudget
     incumbent_candidate: ProgramCandidateRef
@@ -141,8 +137,8 @@ def _validate_schedule_authority_bindings(
         raise ValueError("schedule kernel does not match the frozen H0 projection")
     if schedule.fixed_harness_ref != schedule.proposal_freeze.fixed_harness_ref:
         raise ValueError("schedule fixed H0 does not match the proposal freeze")
-    if schedule.evaluation_plan_ref != schedule.proposal_freeze.evaluation_plan_ref:
-        raise ValueError("schedule evaluation plan does not match the proposal freeze")
+    if schedule.evaluation_regime_ref != schedule.proposal_freeze.evaluation_regime_ref:
+        raise ValueError("schedule evaluation regime does not match the proposal freeze")
     if schedule.aggregate_budget != projection.aggregate_budget:
         raise ValueError("schedule aggregate budget does not match frozen H0")
 
@@ -226,7 +222,7 @@ class DevelopmentSelectionRegime(LegacyContentAddressedModel):
     """Exact Vdev critic and frozen rule allowed to select an optimization candidate."""
 
     schema_version: Literal["aecbench.development-selection-regime.v1"] = "aecbench.development-selection-regime.v1"
-    evaluation_plan_ref: EvaluationPlanRef
+    evaluation_regime_ref: EvaluationRegimeRef
     development_critic: CriticRef
     selection_rule_sha256: str
     split: Literal[OptimizationSplit.DEVELOPMENT] = OptimizationSplit.DEVELOPMENT
@@ -240,10 +236,8 @@ class DevelopmentSelectionRegime(LegacyContentAddressedModel):
     def validate_development_binding(self) -> Self:
         if self.development_critic.role is not CriticRole.DEVELOPMENT:
             raise ValueError("development selection requires a development critic")
-        if self.development_critic.compatibility_generation != self.evaluation_plan_ref.evaluation_generation:
-            raise ValueError(
-                "development critic differs from the evaluation generation",
-            )
+        if self.development_critic.regime != self.evaluation_regime_ref:
+            raise ValueError("development critic differs from the evaluation regime")
         return self
 
 
@@ -307,8 +301,8 @@ class DevelopmentSelectionResult(LegacyContentAddressedModel):
     @model_validator(mode="after")
     def validate_development_selection(self) -> Self:
         result = self.optimization_result
-        if result.schedule.evaluation_plan_ref != self.selection_regime.evaluation_plan_ref:
-            raise ValueError("development selection does not bind the exact evaluation plan")
+        if result.schedule.evaluation_regime_ref != self.selection_regime.evaluation_regime_ref:
+            raise ValueError("development selection does not bind the exact evaluation regime")
         if result.selection_rule.content_sha256 != self.selection_regime.selection_rule_sha256:
             raise ValueError("development selection does not bind the exact frozen selection rule")
         if result.schedule.proposal_freeze.split is not self.selection_regime.split:
@@ -328,7 +322,7 @@ def build_decomposition_execution_schedule(
     coordinates: tuple[MatchedEvaluationCoordinate, ...],
     kernel_ref: KernelRef,
     fixed_harness_ref: HarnessInstanceRef,
-    evaluation_plan_ref: EvaluationPlanRef,
+    evaluation_regime_ref: EvaluationRegimeRef,
     aggregate_budget: HarnessBudget,
 ) -> DecompositionExecutionSchedule:
     """Freeze the full execution matrix without accepting validity, score, or outcome input."""
@@ -345,7 +339,7 @@ def build_decomposition_execution_schedule(
         schedule_id=schedule_id,
         kernel_ref=kernel_ref,
         fixed_harness_ref=fixed_harness_ref,
-        evaluation_plan_ref=evaluation_plan_ref,
+        evaluation_regime_ref=evaluation_regime_ref,
         proposal_freeze=proposal_freeze,
         aggregate_budget=aggregate_budget,
         incumbent_candidate=incumbent_candidate,
@@ -365,7 +359,7 @@ def complete_program_candidate_study(
         study_id=study_id,
         kernel_ref=schedule.kernel_ref,
         fixed_harness_ref=schedule.fixed_harness_ref,
-        evaluation_plan_ref=schedule.evaluation_plan_ref,
+        evaluation_regime_ref=schedule.evaluation_regime_ref,
         proposal_freeze=schedule.proposal_freeze,
         aggregate_budget=schedule.aggregate_budget,
         incumbent_candidate=schedule.incumbent_candidate,
@@ -386,7 +380,7 @@ def complete_decomposition_optimization_cycle(
     """Resolve exact outcomes and apply a frozen selection rule without repair semantics."""
     _validate_development_critic(
         development_critic,
-        evaluation_plan_ref=schedule.evaluation_plan_ref,
+        evaluation_regime_ref=schedule.evaluation_regime_ref,
     )
     _validate_study_against_schedule(schedule, study)
     _validate_selection_rule(
@@ -414,7 +408,7 @@ def complete_decomposition_optimization_cycle(
     )
     return DevelopmentSelectionResult(
         selection_regime=DevelopmentSelectionRegime(
-            evaluation_plan_ref=schedule.evaluation_plan_ref,
+            evaluation_regime_ref=schedule.evaluation_regime_ref,
             development_critic=development_critic,
             selection_rule_sha256=selection_rule.content_sha256,
         ),
@@ -441,14 +435,12 @@ def load_decomposition_optimization_result(
 def _validate_development_critic(
     critic: CriticRef,
     *,
-    evaluation_plan_ref: EvaluationPlanRef,
+    evaluation_regime_ref: EvaluationRegimeRef,
 ) -> None:
     if critic.role is not CriticRole.DEVELOPMENT:
         raise OptimizationExperimentError("optimization selection requires a development critic")
-    if critic.compatibility_generation != evaluation_plan_ref.evaluation_generation:
-        raise OptimizationExperimentError(
-            "development critic differs from the evaluation generation",
-        )
+    if critic.regime != evaluation_regime_ref:
+        raise OptimizationExperimentError("development critic differs from the evaluation regime")
 
 
 def _validate_study_against_schedule(

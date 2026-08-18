@@ -12,8 +12,8 @@ from aec_bench.contracts.authority import (
     AuthorityAction,
     AuthorityEvent,
     BasisKind,
-    CriticGenerationIdentity,
 )
+from aec_bench.contracts.evaluation_refs import CriticRef, CriticRole
 from aec_bench.contracts.harness_kernel import KernelRef
 from aec_bench.experimentation.governance.authority_ledger import (
     AuthorityLedger,
@@ -30,6 +30,7 @@ from aec_bench.experimentation.governance.motif_assurance import (
 from aec_bench.experimentation.governance.motifs import HarnessProgramMotif, MotifStatus
 from aec_bench.experimentation.governance.standing_monitors import CycleMonitorReport
 from tests.experimentation.governance.test_motif_library import _motif
+from tests.support.evaluation_regimes import fake_regime_ref
 from tests.support.governed_promotion import issue_test_governed_promotion
 
 
@@ -65,10 +66,10 @@ def _promotion_event(
     ).promotion.event
 
 
-_DEFAULT_CRITIC_GENERATION = CriticGenerationIdentity(
+_DEFAULT_CRITIC = CriticRef(
+    regime=fake_regime_ref(),
     critic_id="critic.acceptance",
-    version="1",
-    compatibility_generation="critic-generation",
+    role=CriticRole.ACCEPTANCE,
 )
 
 
@@ -77,7 +78,7 @@ def _lifecycle_event(
     motif_subject_sha256: str,
     authority_event_sha256: str,
     kernel_abi_sha256: str = _sha("kernel"),
-    critic_generation: CriticGenerationIdentity | None = _DEFAULT_CRITIC_GENERATION,
+    critic: CriticRef | None = _DEFAULT_CRITIC,
 ) -> MotifLifecycleEvent:
     return MotifLifecycleEvent(
         event_id="motif-lifecycle.activate",
@@ -87,11 +88,11 @@ def _lifecycle_event(
         authority_event_sha256=authority_event_sha256,
         kernel_ref=KernelRef(kernel_id="test-kernel", version="1.0.0"),
         kernel_abi_sha256=kernel_abi_sha256,
-        critic_generation=critic_generation,
+        critic=critic,
         model_generation_sha256=_sha("model-generation"),
         tool_generation_sha256=_sha("tool-generation"),
         applicability_sha256=_sha("applicability"),
-        revalidation_triggers=("critic_generation_change",),
+        revalidation_triggers=("critic_change",),
     )
 
 
@@ -110,7 +111,7 @@ def test_motif_can_be_activated_only_from_a_resolvable_scoped_promotion(
         motif_subject_sha256=subject_sha256,
         authority_event_sha256=promotion.content_sha256,
         kernel_abi_sha256=motif.kernel_abi_sha256,
-        critic_generation=promotion.critic_generation,
+        critic=promotion.critic,
     )
 
     assurance = append_authorized_motif_event(
@@ -154,7 +155,7 @@ def test_unresolvable_or_wrong_subject_authority_cannot_activate_a_motif(
         motif_subject_sha256=subject_sha256,
         authority_event_sha256=wrong_subject.content_sha256,
         kernel_abi_sha256=motif.kernel_abi_sha256,
-        critic_generation=wrong_subject.critic_generation,
+        critic=wrong_subject.critic,
     )
     with pytest.raises(MotifAssuranceAuthorityError, match="subject"):
         append_authorized_motif_event(

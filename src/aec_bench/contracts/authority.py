@@ -8,6 +8,7 @@ from typing import Literal, Self
 
 from pydantic import Field, field_validator, model_validator
 
+from aec_bench.contracts.evaluation_refs import CriticRef, EvaluationRegimeRef
 from aec_bench.contracts.harness_kernel import FrozenStrictModel, KernelRef, validate_sha256
 from aec_bench.contracts.legacy_content_address import LegacyContentAddressedModel
 from aec_bench.contracts.validators import NonEmptyStr
@@ -41,8 +42,8 @@ class AuthorityAction(StrEnum):
     POLICY_PROMOTION = "policy_promotion"
     MOTIF_PROMOTION = "motif_promotion"
     MOTIF_STATE_CHANGE = "motif_state_change"
-    RELEASE_CRITIC_GENERATION = "release_critic_generation"
-    RETIRE_CRITIC_GENERATION = "retire_critic_generation"
+    RELEASE_CRITIC = "release_critic"
+    RETIRE_CRITIC = "retire_critic"
     REVEAL_ACCEPTANCE_MANIFEST = "reveal_acceptance_manifest"
     RELEASE_EVALUATION_COHORT = "release_evaluation_cohort"
     RETIRE_EVALUATION_COHORT = "retire_evaluation_cohort"
@@ -62,7 +63,7 @@ class BasisKind(StrEnum):
 
     ORIGIN = "origin"
     EVIDENCE = "evidence"
-    CRITIC_SPEC = "critic_spec"
+    CRITIC = "critic"
     EVALUATION_OUTCOME = "evaluation_outcome"
     CRITIC_EVALUATION_OUTCOME = "critic_evaluation_outcome"
     MONITOR_REPORT = "monitor_report"
@@ -95,26 +96,11 @@ class AuthorityPrincipal(FrozenStrictModel):
     kind: AuthorityPrincipalKind
 
 
-class EvaluationPlanIdentity(FrozenStrictModel):
-    """Stable evaluation-plan identity used by authority records."""
-
-    plan_id: NonEmptyStr
-    evaluation_generation: NonEmptyStr
-
-
-class CriticGenerationIdentity(FrozenStrictModel):
-    """Stable critic-generation identity without hidden configuration digests."""
-
-    critic_id: NonEmptyStr
-    version: NonEmptyStr
-    compatibility_generation: NonEmptyStr
-
-
 class CriticEvaluationOutcomeIdentity(FrozenStrictModel):
-    """Stable authority identity for one plan, critic, and candidate result."""
+    """Stable authority identity for one regime, critic, and candidate result."""
 
-    evaluation_plan: EvaluationPlanIdentity
-    critic_generation: CriticGenerationIdentity
+    evaluation_regime: EvaluationRegimeRef
+    critic: CriticRef
     candidate_sha256: str
 
     @field_validator("candidate_sha256")
@@ -238,9 +224,9 @@ class MotifPromotionQualification(LegacyContentAddressedModel):
     promotion_lineage_sha256: str
     promotion_monitor_attestation_sha256: str
     monitor_report_sha256: str
-    evaluation_plan: EvaluationPlanIdentity
+    evaluation_regime: EvaluationRegimeRef
     critic_release_authority_event_sha256: str
-    critic_generation: CriticGenerationIdentity
+    critic: CriticRef
     kernel_ref: KernelRef
     kernel_abi_sha256: str
     qualified: Literal[True] = True
@@ -272,7 +258,7 @@ class PromotionMonitorAttestation(LegacyContentAddressedModel):
     schema_version: Literal["aecbench.promotion-monitor-attestation.v1"] = "aecbench.promotion-monitor-attestation.v1"
     monitor_basis_sha256: str
     monitor_report_sha256: str
-    evaluation_plan: EvaluationPlanIdentity
+    evaluation_regime: EvaluationRegimeRef
     assurance_snapshot_sha256: str
     cycle_id: NonEmptyStr
     cycle_index: int = Field(ge=0)
@@ -352,7 +338,7 @@ class AuthorityEvent(LegacyContentAddressedModel):
     subject_sha256: str
     basis: tuple[BasisReference, ...] = Field(min_length=1)
     kernel_ref: KernelRef
-    critic_generation: CriticGenerationIdentity | None = None
+    critic: CriticRef | None = None
     reasons: tuple[NonEmptyStr, ...] = Field(min_length=1)
     revalidation_triggers: tuple[NonEmptyStr, ...] = ()
 
@@ -385,8 +371,8 @@ class AuthorityEvent(LegacyContentAddressedModel):
             if self.action in _HUMAN_ONLY_ACTIONS:
                 raise ValueError(f"{self.action.value} requires a human principal")
             raise ValueError(f"{self.principal.kind.value} principal cannot grant {self.action.value}")
-        if self.action in _CRITIC_GENERATION_ACTIONS and self.critic_generation is None:
-            raise ValueError("critic generation transitions require an exact critic generation identity")
+        if self.action in _CRITIC_ACTIONS and self.critic is None:
+            raise ValueError("critic transitions require an exact regime-scoped critic reference")
         return self
 
 
@@ -437,9 +423,9 @@ class OperatorAuthority(LegacyContentAddressedModel):
         return self
 
 
-_CRITIC_GENERATION_ACTIONS = {
-    AuthorityAction.RELEASE_CRITIC_GENERATION,
-    AuthorityAction.RETIRE_CRITIC_GENERATION,
+_CRITIC_ACTIONS = {
+    AuthorityAction.RELEASE_CRITIC,
+    AuthorityAction.RETIRE_CRITIC,
     AuthorityAction.REVEAL_ACCEPTANCE_MANIFEST,
 }
 _EVALUATION_COHORT_ACTIONS = {
@@ -447,7 +433,7 @@ _EVALUATION_COHORT_ACTIONS = {
     AuthorityAction.RETIRE_EVALUATION_COHORT,
 }
 _HUMAN_ONLY_ACTIONS = {
-    *_CRITIC_GENERATION_ACTIONS,
+    *_CRITIC_ACTIONS,
     *_EVALUATION_COHORT_ACTIONS,
     AuthorityAction.CHANGE_KERNEL_VERSION,
 }
@@ -513,8 +499,8 @@ _GRANT_AUTHORITY: dict[AuthorityAction, frozenset[AuthorityPrincipalKind]] = {
             AuthorityPrincipalKind.HUMAN,
         }
     ),
-    AuthorityAction.RELEASE_CRITIC_GENERATION: frozenset({AuthorityPrincipalKind.HUMAN}),
-    AuthorityAction.RETIRE_CRITIC_GENERATION: frozenset({AuthorityPrincipalKind.HUMAN}),
+    AuthorityAction.RELEASE_CRITIC: frozenset({AuthorityPrincipalKind.HUMAN}),
+    AuthorityAction.RETIRE_CRITIC: frozenset({AuthorityPrincipalKind.HUMAN}),
     AuthorityAction.REVEAL_ACCEPTANCE_MANIFEST: frozenset({AuthorityPrincipalKind.HUMAN}),
     AuthorityAction.RELEASE_EVALUATION_COHORT: frozenset({AuthorityPrincipalKind.HUMAN}),
     AuthorityAction.RETIRE_EVALUATION_COHORT: frozenset({AuthorityPrincipalKind.HUMAN}),

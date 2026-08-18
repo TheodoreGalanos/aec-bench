@@ -19,7 +19,6 @@ from aec_bench.contracts.authority import (
     AuthorityPrincipal,
     AuthorityPrincipalKind,
     BasisKind,
-    EvaluationPlanIdentity,
     TaintLabel,
 )
 from aec_bench.contracts.harness_kernel import KernelRef
@@ -53,6 +52,7 @@ from aec_bench.experimentation.governance.standing_monitors import (
     default_forbidden_flow_rules,
     schedule_basis_replay,
 )
+from tests.support.evaluation_regimes import fake_regime_ref
 
 
 def _sha(label: str) -> str:
@@ -107,10 +107,7 @@ def _cycle(
     return CycleMonitorPlan(
         cycle_id="cycle.009",
         cycle_index=9,
-        evaluation_plan=EvaluationPlanIdentity(
-            plan_id="evaluation-plan",
-            evaluation_generation="evaluation-generation.1",
-        ),
+        evaluation_regime=fake_regime_ref(),
         standing_policy_sha256=policy.content_sha256,
         assurance_snapshot_sha256=_sha(assurance),
         basis_replay_requirements=replay_requirements,

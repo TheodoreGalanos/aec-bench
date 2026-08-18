@@ -20,9 +20,9 @@ from aec_bench.contracts.evaluation_generation.spec import (
 )
 from aec_bench.contracts.evaluation_plane import (
     CandidateManifestScope,
-    EvaluationPlanAuthorityScope,
-    EvaluationPlanRef,
+    EvaluationRegimeAuthorityScope,
 )
+from aec_bench.contracts.evaluation_refs import EvaluationRegimeRef
 from aec_bench.contracts.harness_instance import HarnessBudget, HarnessInstanceRef
 from aec_bench.contracts.harness_kernel import KernelRef, validate_sha256
 from aec_bench.contracts.legacy_content_address import LegacyContentAddressedModel
@@ -74,8 +74,8 @@ class PreparedEvaluationGeneration(LegacyContentAddressedModel):
     candidate_manifest_scope: CandidateManifestScope
     kernel_ref: KernelRef
     fixed_harness_ref: HarnessInstanceRef
-    evaluation_plan_ref: EvaluationPlanRef
-    evaluation_authority_scope: EvaluationPlanAuthorityScope
+    evaluation_regime_ref: EvaluationRegimeRef
+    evaluation_authority_scope: EvaluationRegimeAuthorityScope
     proposal_policy: ProposalGenerationPolicy
     candidate_manifest_proposal_policy_sha256: str
     compilation_policies_sha256: str
@@ -145,13 +145,9 @@ class PreparedEvaluationGeneration(LegacyContentAddressedModel):
     @model_validator(mode="after")
     def validate_generation_bindings(self) -> Self:
         validate_cohort_binding(self.cohort, self.cohort_binding)
-        if self.evaluation_authority_scope.evaluation_plan_ref != self.evaluation_plan_ref:
+        if self.evaluation_authority_scope.regime != self.evaluation_regime_ref:
             raise ValueError(
-                "prepared generation critic authority differs from its evaluation plan",
-            )
-        if self.cohort.evaluation_generation != self.evaluation_plan_ref.evaluation_generation:
-            raise ValueError(
-                "prepared generation cohort differs from its evaluation generation",
+                "prepared generation critic authority differs from its evaluation regime",
             )
         if len(self.task_inputs) != self.spec.task_count:
             raise ValueError(

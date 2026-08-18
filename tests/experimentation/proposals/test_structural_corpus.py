@@ -268,7 +268,7 @@ def test_manifest_keeps_family_and_review_lineage_separate_and_records_distance(
 
 
 def test_task_manifest_projection_binds_exact_public_and_sealed_packages_not_manifest_label() -> None:
-    """EvaluationPlan gets a stable exact task-set identity distinct from split-manifest identity."""
+    """EvaluationRegime gets a stable exact task-set identity distinct from split-manifest identity."""
     manifest = build_structural_split_manifest(
         manifest_id="phase9.structural.v1",
         train=_split("train", _chain_item("train-1", "drainage", "review-train", 3)),

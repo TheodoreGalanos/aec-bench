@@ -6,8 +6,8 @@ from __future__ import annotations
 import pytest
 
 from aec_bench.contracts.evaluation_plane import (
+    EvaluationBudget,
     EvaluationBudgetPartition,
-    EvaluationBudgetPlan,
 )
 from aec_bench.experimentation.qualification.improvement_trajectory import (
     EvaluationAccountingPlane,
@@ -27,15 +27,15 @@ def _partition(**updates: int | float) -> EvaluationBudgetPartition:
         "max_wall_time_seconds": 1_000.0,
     }
     values.update(updates)
-    return EvaluationBudgetPartition(**values)
+    return EvaluationBudgetPartition.model_validate(values)
 
 
 def _budgets(
     *,
     execution: EvaluationBudgetPartition | None = None,
-) -> EvaluationBudgetPlan:
+) -> EvaluationBudget:
     default = _partition()
-    return EvaluationBudgetPlan(
+    return EvaluationBudget(
         proposal=default,
         execution=execution or default,
         development=default,
@@ -181,8 +181,8 @@ def test_generation_accounting_deduplicates_shared_receipts_and_exposes_cost_vie
 
     report = GenerationEvaluationAccounting.create(
         generation_id="evaluation-generation-1",
-        budget_plan=_budgets(),
-        plane_receipt_batches=batches,
+        budget=_budgets(),
+        plane_receipts=batches,
     )
 
     assert tuple(receipt.receipt_id for receipt in report.receipts) == (
@@ -221,8 +221,8 @@ def test_generation_accounting_deduplicates_shared_receipts_and_exposes_cost_vie
 
     reordered = GenerationEvaluationAccounting.create(
         generation_id="evaluation-generation-1",
-        budget_plan=_budgets(),
-        plane_receipt_batches=tuple(reversed(batches)),
+        budget=_budgets(),
+        plane_receipts=tuple(reversed(batches)),
     )
     assert reordered.content_sha256 == report.content_sha256
 
@@ -252,8 +252,8 @@ def test_generation_accounting_rejects_duplicate_and_conflicting_receipt_identit
     with pytest.raises(ValueError, match="conflicting receipt identity"):
         GenerationEvaluationAccounting.create(
             generation_id="evaluation-generation-1",
-            budget_plan=_budgets(),
-            plane_receipt_batches=tuple(batches),
+            budget=_budgets(),
+            plane_receipts=tuple(batches),
         )
 
 
@@ -265,8 +265,8 @@ def test_generation_accounting_requires_explicit_coverage_for_every_plane() -> N
     with pytest.raises(ValueError, match="missing plane coverage"):
         GenerationEvaluationAccounting.create(
             generation_id="evaluation-generation-1",
-            budget_plan=_budgets(),
-            plane_receipt_batches=incomplete,
+            budget=_budgets(),
+            plane_receipts=incomplete,
         )
 
 
@@ -298,6 +298,6 @@ def test_generation_accounting_rejects_every_budget_dimension_overrun(
     ):
         GenerationEvaluationAccounting.create(
             generation_id="evaluation-generation-1",
-            budget_plan=_budgets(execution=_partition(**budget_updates)),
-            plane_receipt_batches=_complete_batches(candidate_receipts=(candidate,)),
+            budget=_budgets(execution=_partition(**budget_updates)),
+            plane_receipts=_complete_batches(candidate_receipts=(candidate,)),
         )

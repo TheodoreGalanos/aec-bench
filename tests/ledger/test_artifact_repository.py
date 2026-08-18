@@ -139,3 +139,15 @@ def test_publish_bytes_is_idempotent_and_rejects_empty_artifacts(tmp_path: Path)
     assert second == first
     with pytest.raises(ValueError, match="must not be empty"):
         repository.publish_bytes(data=b"", media_type="application/octet-stream")
+
+
+def test_resolve_ref_accepts_only_a_verified_canonical_artifact_id(tmp_path: Path) -> None:
+    repository = ArtifactRepository(tmp_path / "artifacts")
+    published = repository.publish_bytes(data=b"published regime\n", media_type="application/json")
+
+    assert repository.resolve_ref(artifact_id=published.artifact_id, media_type=published.media_type) == published
+    with pytest.raises(ImmutableArtifactIntegrityError, match="canonical SHA-256 locator"):
+        repository.resolve_ref(
+            artifact_id=f"mirror/{published.sha256}",
+            media_type=published.media_type,
+        )

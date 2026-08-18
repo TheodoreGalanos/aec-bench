@@ -7,7 +7,7 @@ import hashlib
 
 import pytest
 
-from aec_bench.contracts.authority import CriticGenerationIdentity
+from aec_bench.contracts.evaluation_refs import CriticRef
 from aec_bench.contracts.harness_kernel import KernelRef
 from aec_bench.experimentation.governance.motif_assurance import (
     MotifAssuranceBoundary,
@@ -30,6 +30,7 @@ from aec_bench.experimentation.governance.motifs import (
     apply_motif_promotion,
     decide_motif_promotion,
 )
+from tests.support.evaluation_regimes import fake_regime_ref
 
 
 def _sha(label: str) -> str:
@@ -80,15 +81,15 @@ def _event(
         revalidation_basis_sha256=revalidation_basis_sha256,
         kernel_ref=KernelRef(kernel_id="test-kernel", version="1.0.0"),
         kernel_abi_sha256=_sha("kernel-generation"),
-        critic_generation=CriticGenerationIdentity(
+        critic=CriticRef(
+            regime=fake_regime_ref(),
             critic_id="critic.acceptance",
-            version="1",
-            compatibility_generation="critic-generation",
+            role="acceptance",
         ),
         model_generation_sha256=_sha("model-generation"),
         tool_generation_sha256=_sha("tool-generation"),
         applicability_sha256=_sha("applicability-generation"),
-        revalidation_triggers=("critic_generation_change",),
+        revalidation_triggers=("critic_change",),
     )
 
 

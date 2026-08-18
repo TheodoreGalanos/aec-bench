@@ -35,6 +35,7 @@ readable.
 | Finite lifecycle execution | Lifecycle task and host | Stage-specific task evidence and actor results become one bounded host-controlled progression | Internal package and runtime contract; persisted accepted evidence is current-format only | [`EvidenceLifecycleSpec`](../src/aec_bench/contracts/evidence_lifecycle.py) and the [staged evidence protocol](protocols/staged-evidence-and-publication.md) | Packaged task, runtime state, and persisted accepted evidence |
 | Experiment manifest | Experiment orchestration | User configuration becomes an executable plan | Internal, except documented CLI/config behavior | [`ExperimentManifest`](../src/aec_bench/contracts/experiment_manifest.py) | Persisted configuration |
 | Trial and episode record | Harness and ledger | Execution, verifier, and authority evidence becomes reportable benchmark evidence | Protected schema 2; no historical reader | [`RunManifest` and `TrialRecord`](../src/aec_bench/contracts/trial_record.py) plus the owning episode or world protocol | Persisted and exportable |
+| Evaluation regime | Evaluation | Observable evaluation policy becomes one independently published compatibility identity | Envelope schema 1; legacy component plans migrate only when all inputs resolve | [`EvaluationRegimeEnvelope`](../src/aec_bench/contracts/evaluation_plane.py), `EvaluationRegimeRef`, and [`regime.py`](../src/aec_bench/evaluation/regime.py) | Persisted and independently publishable |
 | Evaluation result | Evaluation | Verifier output and review evidence become reward, validity, and diagnostics | Protected as part of a persisted trial or published result | [`EvaluationResult`](../src/aec_bench/contracts/evaluation_result.py) | Persisted and externally reported |
 | Lifecycle verification | Lifecycle verification and evaluation | Canonical accepted lifecycle evidence becomes gates and optional semantic diagnostics | Internal until carried by a protected trial or published result | [`LifecycleVerificationResult`](../src/aec_bench/contracts/lifecycle_evaluation.py) | Internal result; persisted when referenced by trial evidence |
 | Dataset manifest and identity | Dataset generation and storage | A semantic task selection resolves to one exact Git source or detached bundle | Protected schema 2 and immutable references | [`DatasetManifest`, `RepositoryDatasetRef`, and `BundleDatasetRef`](../src/aec_bench/contracts/dataset.py) | Persisted and publishable |
@@ -220,6 +221,38 @@ header, and the reader does not select or decode historical versions. Ordinary
 adapter runs use it as the ordered interaction authority. Exact provider or
 sealed transcripts remain separate only when their producing boundary needs
 them.
+
+## Evaluation regimes
+
+`EvaluationRegimeEnvelope` schema 1 contains one `EvaluationRegime`. The
+published envelope receives one `ArtifactRef`. Its artifact digest is the only
+compatibility identity. Repository-specific artifact IDs can differ; equal
+verified bytes remain compatible.
+
+The regime embeds its budget and outcome-affecting policies as plain values.
+These nested policies do not carry schema versions or self-digests. A critic
+has one stable critic ID, embedded configuration, and either an exact Git
+revision plus repository entry point or one external `ArtifactRef`. It does not
+have separate version, generation, implementation-hash, or policy-hash
+identities. A semantic change to a critic, budget, or policy changes the
+canonical envelope bytes. Local paths, publication labels, comments, and event
+times are not regime content.
+
+Hidden acceptance cases and scoring policy stay outside the public regime.
+The regime contains only their salted named commitment. Current authoring can
+generate a 256-bit random salt, which stays in the authority-owned escrow with
+the exact hidden manifest. Retirement-time reveal must verify that commitment.
+Candidate, split, and task-verifier assignments use a separate
+`EvaluationAssignment`; they do not change public policy.
+
+Worlds continue to own state transitions and domain evaluation evidence. An
+evaluation regime can define eligibility, scoring, aggregation, and acceptance
+for that evidence. It does not copy World state or transition authority.
+
+The legacy migration reader resolves and verifies every component before it
+publishes a regime. A missing or mismatched component leaves the source plan
+read-only. `aec-bench evaluation regime show` and `diff` resolve published
+artifacts and report semantic policy paths.
 
 ## Evaluation results
 

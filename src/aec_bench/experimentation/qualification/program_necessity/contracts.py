@@ -9,7 +9,7 @@ from typing import Literal, Self
 
 from pydantic import Field, FiniteFloat, field_validator, model_validator
 
-from aec_bench.contracts.evaluation_plane import EvaluationPlanRef
+from aec_bench.contracts.evaluation_refs import EvaluationRegimeRef
 from aec_bench.contracts.harness_instance import HarnessBudget
 from aec_bench.contracts.harness_kernel import (
     canonical_json_sha256,
@@ -338,7 +338,7 @@ class ProgramNecessityExecutionScheduleRef(LegacyContentAddressedModel):
     schedule_sha256: str
     kernel_sha256: str
     fixed_harness_sha256: str
-    evaluation_plan_ref: EvaluationPlanRef
+    evaluation_regime_ref: EvaluationRegimeRef
     review_lineage_id: str
     candidate_ref_sha256s: tuple[str, ...] = Field(
         min_length=3,
@@ -378,7 +378,7 @@ class ProgramNecessityStudyRef(LegacyContentAddressedModel):
     study_id: NonEmptyStr
     study_sha256: str
     execution_schedule_ref_sha256: str
-    evaluation_plan_ref: EvaluationPlanRef
+    evaluation_regime_ref: EvaluationRegimeRef
     review_lineage_id: str
     candidate_ref_sha256s: tuple[str, ...] = Field(
         min_length=3,
@@ -524,7 +524,7 @@ class ProgramNecessityLineagePlan(LegacyContentAddressedModel):
         study = self.study_ref
         if (
             study.execution_schedule_ref_sha256 != schedule.content_sha256
-            or study.evaluation_plan_ref != schedule.evaluation_plan_ref
+            or study.evaluation_regime_ref != schedule.evaluation_regime_ref
             or study.review_lineage_id != self.review_lineage_id
             or study.candidate_ref_sha256s != candidate_sha256s
             or study.coordinate_sha256s != coordinate_sha256s
@@ -794,7 +794,7 @@ class ProgramNecessityStudyPlan(LegacyContentAddressedModel):
     study_id: NonEmptyStr
     kernel_sha256: str
     fixed_harness_sha256: str
-    evaluation_plan_ref: EvaluationPlanRef
+    evaluation_regime_ref: EvaluationRegimeRef
     monitor_policy_sha256: str
     monitor_cycle_plan_sha256: str
     monitor_instrumentation_sha256: str
@@ -867,8 +867,8 @@ class ProgramNecessityStudyPlan(LegacyContentAddressedModel):
                 if (
                     schedule.kernel_sha256 != self.kernel_sha256
                     or schedule.fixed_harness_sha256 != self.fixed_harness_sha256
-                    or schedule.evaluation_plan_ref != self.evaluation_plan_ref
-                    or study.evaluation_plan_ref != self.evaluation_plan_ref
+                    or schedule.evaluation_regime_ref != self.evaluation_regime_ref
+                    or study.evaluation_regime_ref != self.evaluation_regime_ref
                 ):
                     raise ValueError(
                         "lineage schedule or study does not bind the preregistered kernel, H0, or evaluation",
@@ -885,7 +885,7 @@ class ProgramNecessityPreregistration(LegacyContentAddressedModel):
     preregistration_id: NonEmptyStr
     kernel_sha256: str
     fixed_harness_sha256: str
-    evaluation_plan_ref: EvaluationPlanRef
+    evaluation_regime_ref: EvaluationRegimeRef
     monitor_policy_sha256: str
     monitor_cycle_plan_sha256: str
     monitor_instrumentation_sha256: str
@@ -946,8 +946,8 @@ class ProgramNecessityPreregistration(LegacyContentAddressedModel):
                 if (
                     schedule.kernel_sha256 != self.kernel_sha256
                     or schedule.fixed_harness_sha256 != self.fixed_harness_sha256
-                    or schedule.evaluation_plan_ref != self.evaluation_plan_ref
-                    or study.evaluation_plan_ref != self.evaluation_plan_ref
+                    or schedule.evaluation_regime_ref != self.evaluation_regime_ref
+                    or study.evaluation_regime_ref != self.evaluation_regime_ref
                 ):
                     raise ValueError(
                         "lineage schedule or study does not bind the preregistered kernel, H0, or evaluation",
@@ -966,7 +966,7 @@ class ProgramNecessityObservation(LegacyContentAddressedModel):
     arm: ProgramNecessityArm
     candidate: ProgramCandidateRef
     study_ref_sha256: str
-    evaluation_plan_ref: EvaluationPlanRef
+    evaluation_regime_ref: EvaluationRegimeRef
     matched_evidence_ref: MatchedCandidateEvidenceRef
     utility: FiniteFloat
     validity_passed: bool

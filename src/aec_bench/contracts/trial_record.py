@@ -14,6 +14,7 @@ from aec_bench.contracts.agent_output import AgentOutput
 from aec_bench.contracts.artifacts import ArtifactRef
 from aec_bench.contracts.authority_evidence import AuthorityEvidenceKind, AuthorityEvidenceRef
 from aec_bench.contracts.dataset import DatasetRef, dataset_reference_key
+from aec_bench.contracts.evaluation_refs import EvaluationRegimeRef
 from aec_bench.contracts.evaluation_result import EvaluationResult
 from aec_bench.contracts.task_definition import Visibility
 from aec_bench.contracts.trial_extensions import (
@@ -111,11 +112,6 @@ EnvironmentSnapshot = ExecutionEnvironmentRef
 class ProviderRoute(FrozenStrictModel):
     provider: NonEmptyStr
     route: NonEmptyStr
-
-
-class EvaluationRegimeRef(FrozenStrictModel):
-    regime_id: NonEmptyStr
-    generation: NonEmptyStr
 
 
 class AuthorityExpectation(FrozenStrictModel):

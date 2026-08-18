@@ -151,7 +151,7 @@ def validate_freeze_compilation_join(
         or execution_schedule.kernel_ref != bundle.compilation.kernel_ref
         or execution_schedule.fixed_harness_ref != bundle.fixed_harness.ref
         or execution_schedule.aggregate_budget != bundle.fixed_harness.budget
-        or execution_schedule.evaluation_plan_ref != governed_freeze.freeze.evaluation_plan_ref
+        or execution_schedule.evaluation_regime_ref != governed_freeze.freeze.evaluation_regime_ref
     ):
         raise ProposalDispatchGovernanceError(
             "execution schedule differs from the exact governed freeze, K9, H0, or budget",

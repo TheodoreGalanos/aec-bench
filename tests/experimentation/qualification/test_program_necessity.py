@@ -8,7 +8,7 @@ import hashlib
 import pytest
 from pydantic import ValidationError
 
-from aec_bench.contracts.evaluation_plane import EvaluationPlanRef
+from aec_bench.contracts.evaluation_refs import EvaluationRegimeRef
 from aec_bench.contracts.harness_instance import HarnessBudget
 from aec_bench.contracts.harness_kernel import canonical_json_sha256
 from aec_bench.contracts.program_proposal.candidate import ProgramCandidateRef
@@ -42,6 +42,7 @@ from aec_bench.experimentation.qualification.program_necessity import (
     evaluate_program_necessity_study,
 )
 from aec_bench.harness.compilation.task_snapshot import graph_hidden_task_snapshot_sha256
+from tests.support.evaluation_regimes import fake_regime_ref
 
 
 def _sha(label: str) -> str:
@@ -61,11 +62,8 @@ def _budget() -> HarnessBudget:
     )
 
 
-def _evaluation_plan() -> EvaluationPlanRef:
-    return EvaluationPlanRef(
-        plan_id="program-necessity-evaluation",
-        evaluation_generation="phase9.1b",
-    )
+def _evaluation_regime() -> EvaluationRegimeRef:
+    return fake_regime_ref(regime_id="program-necessity-evaluation")
 
 
 def _arm_templates(family_id: str) -> tuple[ProgramNecessityArmTemplateRef, ...]:
@@ -178,7 +176,7 @@ def _lineage(
         schedule_sha256=_sha(f"{family_id}.lineage-{lineage_index}.schedule"),
         kernel_sha256=_sha("fixed-kernel"),
         fixed_harness_sha256=_sha("fixed-h0"),
-        evaluation_plan_ref=_evaluation_plan(),
+        evaluation_regime_ref=_evaluation_regime(),
         review_lineage_id=review_lineage_id,
         candidate_ref_sha256s=candidate_sha256s,
         coordinate_sha256s=coordinate_sha256s,
@@ -187,7 +185,7 @@ def _lineage(
         study_id=f"{family_id}.lineage-{lineage_index}.study",
         study_sha256=_sha(f"{family_id}.lineage-{lineage_index}.study"),
         execution_schedule_ref_sha256=schedule.content_sha256,
-        evaluation_plan_ref=_evaluation_plan(),
+        evaluation_regime_ref=_evaluation_regime(),
         review_lineage_id=review_lineage_id,
         candidate_ref_sha256s=candidate_sha256s,
         coordinate_sha256s=coordinate_sha256s,
@@ -271,7 +269,7 @@ def _preregistration(
         preregistration_id="program-necessity.phase9.1b",
         kernel_sha256=_sha("fixed-kernel"),
         fixed_harness_sha256=_sha("fixed-h0"),
-        evaluation_plan_ref=_evaluation_plan(),
+        evaluation_regime_ref=_evaluation_regime(),
         monitor_policy_sha256=_sha("standing-monitor-policy"),
         monitor_cycle_plan_sha256=_sha("standing-monitor-cycle-plan"),
         monitor_instrumentation_sha256=_sha("standing-monitor-instrumentation"),
@@ -319,7 +317,7 @@ def _observations(
                         arm=arm,
                         candidate=candidate,
                         study_ref_sha256=lineage.study_ref.content_sha256,
-                        evaluation_plan_ref=_evaluation_plan(),
+                        evaluation_regime_ref=_evaluation_regime(),
                         matched_evidence_ref=evidence,
                         utility=utilities[arm],
                         validity_passed=True,
@@ -353,7 +351,7 @@ def test_family_uses_arm_templates_and_exact_lineage_specific_candidates() -> No
         schedule_sha256=original.execution_schedule_ref.schedule_sha256,
         kernel_sha256=original.execution_schedule_ref.kernel_sha256,
         fixed_harness_sha256=(original.execution_schedule_ref.fixed_harness_sha256),
-        evaluation_plan_ref=original.execution_schedule_ref.evaluation_plan_ref,
+        evaluation_regime_ref=original.execution_schedule_ref.evaluation_regime_ref,
         review_lineage_id=original.review_lineage_id,
         candidate_ref_sha256s=candidate_sha256s,
         coordinate_sha256s=tuple(coordinate.content_sha256 for coordinate in original.coordinates),
@@ -362,7 +360,7 @@ def test_family_uses_arm_templates_and_exact_lineage_specific_candidates() -> No
         study_id=original.study_ref.study_id,
         study_sha256=original.study_ref.study_sha256,
         execution_schedule_ref_sha256=schedule.content_sha256,
-        evaluation_plan_ref=original.study_ref.evaluation_plan_ref,
+        evaluation_regime_ref=original.study_ref.evaluation_regime_ref,
         review_lineage_id=original.review_lineage_id,
         candidate_ref_sha256s=candidate_sha256s,
         coordinate_sha256s=tuple(coordinate.content_sha256 for coordinate in original.coordinates),
@@ -511,7 +509,7 @@ def test_observation_must_bind_exact_lineage_candidate_study_and_evaluation() ->
         mode="json",
         exclude={"content_sha256"},
     )
-    wrong_evaluation["evaluation_plan_ref"]["plan_id"] = "unrelated-evaluation"
+    wrong_evaluation["evaluation_regime_ref"]["regime_id"] = "unrelated-evaluation"
     observations[0] = ProgramNecessityObservation.model_validate(
         wrong_evaluation,
     )
@@ -549,7 +547,7 @@ def test_preregistration_freezes_six_families_24_lineages_and_all_planes() -> No
     assert sum(len(family.lineage_plans) for family in preregistration.family_plans) == 24
     assert preregistration.kernel_sha256 == _sha("fixed-kernel")
     assert preregistration.fixed_harness_sha256 == _sha("fixed-h0")
-    assert preregistration.evaluation_plan_ref == _evaluation_plan()
+    assert preregistration.evaluation_regime_ref == _evaluation_regime()
     assert preregistration.monitor_instrumentation_sha256 == _sha(
         "standing-monitor-instrumentation",
     )
@@ -569,7 +567,7 @@ def test_preregistration_freezes_six_families_24_lineages_and_all_planes() -> No
             preregistration_id=preregistration.preregistration_id,
             kernel_sha256=_sha("other-kernel"),
             fixed_harness_sha256=preregistration.fixed_harness_sha256,
-            evaluation_plan_ref=preregistration.evaluation_plan_ref,
+            evaluation_regime_ref=preregistration.evaluation_regime_ref,
             monitor_policy_sha256=preregistration.monitor_policy_sha256,
             monitor_cycle_plan_sha256=(preregistration.monitor_cycle_plan_sha256),
             monitor_instrumentation_sha256=(preregistration.monitor_instrumentation_sha256),
@@ -595,9 +593,9 @@ def test_program_necessity_review_lineage_hashes_remain_stable() -> None:
         family_results=results,
     )
 
-    assert preregistration.content_sha256 == ("8c73498f38b40d7916b10acaab5dde13b8efec2f76558d01a3c838da2402e3a5")
-    assert results[0].content_sha256 == ("53233342ec034027016239cec8c3791af43535717ef5b1835f3d3e7acc1ceedf")
-    assert gate.content_sha256 == ("6a0d7feba9ef89e54aaf8b6cac41b0a556623ab87afc6682a9093482fbd424be")
+    assert preregistration.content_sha256 == ("503dc816a922d17ea691f29d1b82dfa8573db28b3ac4e91740d19d92f85f23f8")
+    assert results[0].content_sha256 == ("6f6bb93ce57799472240b3352ddc751f72a0b6bdb3d7d911f17b92910bdebcf8")
+    assert gate.content_sha256 == ("a1dc6a5399e8f0c084e1f386a4da4f02ebedd8d0ed323c0f655fdcd66558a817")
 
 
 def test_program_necessity_design_owns_cardinality_and_gate_thresholds() -> None:
@@ -632,7 +630,7 @@ def test_program_necessity_design_owns_cardinality_and_gate_thresholds() -> None
         study_id="program-necessity.generic-design",
         kernel_sha256=_sha("fixed-kernel"),
         fixed_harness_sha256=_sha("fixed-h0"),
-        evaluation_plan_ref=_evaluation_plan(),
+        evaluation_regime_ref=_evaluation_regime(),
         monitor_policy_sha256=_sha("standing-monitor-policy"),
         monitor_cycle_plan_sha256=_sha("standing-monitor-cycle-plan"),
         monitor_instrumentation_sha256=_sha("standing-monitor-instrumentation"),

@@ -11,12 +11,10 @@ from pydantic import JsonValue
 
 from aec_bench.contracts.authority import (
     AuthorityAction,
-    AuthorityDecision,
     AuthorityEvent,
     AuthorityPrincipal,
     AuthorityPrincipalKind,
     BasisKind,
-    EvaluationPlanIdentity,
     HumanAuthorityApproval,
     MotifPromotionQualification,
     PromotionMonitorAttestation,
@@ -34,19 +32,17 @@ from aec_bench.contracts.evaluation_outcome import (
     UtilityEvaluation,
     ValidityEvaluation,
 )
-from aec_bench.contracts.evaluation_plane import (
-    AcceptanceManifestCommitment,
-    CriticRef,
-    CriticRole,
-    EvaluationPlanRef,
-)
-from aec_bench.contracts.harness_kernel import KernelRef, canonical_json_sha256
+from aec_bench.contracts.evaluation_refs import CriticRef, CriticRole, EvaluationRegimeRef
+from aec_bench.contracts.harness_kernel import KernelRef
 from aec_bench.evaluation.integrity_gate import evaluate_with_integrity_gate
+from aec_bench.evaluation.regime import expected_evaluation_regime_ref
+from aec_bench.experimentation.governance.acceptance_manifest_escrow import escrow_acceptance_manifest
 from aec_bench.experimentation.governance.authority_ledger import (
     AuthorityLedger,
     AuthorityLedgerIntegrityError,
     StoredBasis,
 )
+from aec_bench.experimentation.governance.critic_lifecycle import release_critic
 from aec_bench.experimentation.governance.governance_gate import (
     GovernedPromotionError,
     issue_governed_production_promotion,
@@ -88,6 +84,7 @@ from aec_bench.experimentation.governance.standing_monitors import (
     run_standing_monitors,
 )
 from tests.experimentation.governance.test_motif_library import _motif, _policy, _transfer
+from tests.support.evaluation_regimes import make_regime
 
 
 def _sha(label: str) -> str:
@@ -98,11 +95,8 @@ def _kernel_ref() -> KernelRef:
     return KernelRef(kernel_id="aec-bench.adaptive-harness", version="1.6.0")
 
 
-def _evaluation_plan_identity() -> EvaluationPlanIdentity:
-    return EvaluationPlanIdentity(
-        plan_id="evaluation-plan",
-        evaluation_generation="evaluation-generation.1",
-    )
+def _evaluation_regime_identity() -> EvaluationRegimeRef:
+    return expected_evaluation_regime_ref(make_regime())
 
 
 def _zero_costs() -> EvaluationCostBreakdown:
@@ -155,39 +149,23 @@ def _recorded_critic_outcome(
 ) -> tuple[StoredBasis, CriticEvaluationOutcome]:
     outcome = _accepted_outcome(candidate_sha256=candidate_sha256)
     selected_suffix = suffix or role.value
-    critic_id = f"critic.{role.value}"
-    critic = CriticRef(
-        critic_id=critic_id,
-        version="1",
-        role=role,
-        compatibility_generation="evaluation-generation.1",
-        acceptance_manifest_commitment=(
-            AcceptanceManifestCommitment.create(
-                critic_id=critic_id,
-                critic_version="1",
-                case_manifest={"case": "acceptance"},
-                scoring_policy={"threshold": 0.9},
-                salt="governance-test-salt",
-                publication_receipt_sha256=_sha("acceptance-manifest-commitment"),
-            )
-            if role is CriticRole.ACCEPTANCE
-            else None
-        ),
-    )
-    critic_commitment = canonical_json_sha256(critic.model_dump(mode="json"))
+    regime = make_regime()
+    regime_ref = expected_evaluation_regime_ref(regime)
+    critic_spec = regime.critic(role)
+    critic = critic_spec.ref(regime_ref)
     human = AuthorityPrincipal(
         principal_id="human.theo",
         kind=AuthorityPrincipalKind.HUMAN,
     )
-    subject_id = f"{critic_id}@1"
+    subject_id = f"{regime_ref.regime_id}:{critic.critic_id}"
     approval = HumanAuthorityApproval(
         approval_id=f"approval.release.{selected_suffix}",
         principal=human,
-        action=AuthorityAction.RELEASE_CRITIC_GENERATION,
+        action=AuthorityAction.RELEASE_CRITIC,
         subject_id=subject_id,
-        subject_sha256=critic_commitment,
+        subject_sha256=regime_ref.artifact.sha256,
         approved=True,
-        reason="release exact critic generation for governed evaluation",
+        reason="release exact regime critic for governed evaluation",
     )
     approval_basis = ledger.observe_model_basis(
         kind=BasisKind.HUMAN_APPROVAL,
@@ -200,28 +178,30 @@ def _recorded_critic_outcome(
             kind=AuthorityPrincipalKind.HOST_RUNTIME,
         ),
         channel="human-approval",
-        operation_id="release-critic-generation",
+        operation_id="release-critic",
         invocation_id=approval.approval_id,
         operation_taint=(TaintLabel.HUMAN_AUTHORITY,),
     )
-    release = AuthorityEvent(
+    if role is CriticRole.ACCEPTANCE:
+        escrow_acceptance_manifest(
+            ledger=ledger,
+            evaluation_regime=regime_ref,
+            critic_id=critic.critic_id,
+            case_manifest={"case_ids": ["hidden-01", "hidden-02"]},
+            scoring_policy={"threshold": 0.8},
+            salt="test-acceptance-salt",
+        )
+    stored_release = release_critic(
+        ledger=ledger,
+        evaluation_regime=regime,
+        evaluation_regime_ref=regime_ref,
+        critic=critic_spec,
+        human_approval=approval_basis.reference,
         event_id=f"authority.release.{selected_suffix}",
-        principal=human,
-        action=AuthorityAction.RELEASE_CRITIC_GENERATION,
-        decision=AuthorityDecision.GRANTED,
-        subject_id=subject_id,
-        subject_sha256=critic_commitment,
-        basis=(approval_basis.reference,),
         kernel_ref=_kernel_ref(),
-        critic_generation=critic.authority_identity,
-        reasons=("human approved exact critic generation",),
     )
-    stored_release = ledger.issue_authority_event(release)
     bound = CriticEvaluationOutcome(
-        evaluation_plan_ref=EvaluationPlanRef(
-            plan_id="evaluation-plan",
-            evaluation_generation="evaluation-generation.1",
-        ),
+        evaluation_regime_ref=regime_ref,
         critic=critic,
         execution_principal_id=f"critic-runtime.{role.value}",
         critic_release_authority_event_id=stored_release.event.event_id,
@@ -274,7 +254,7 @@ def _monitor_plan() -> StandingMonitorPlan:
     return StandingMonitorPlan(
         monitor_id="monitor.governed-cycle",
         version="1.0.0",
-        evaluation_plan=_evaluation_plan_identity(),
+        evaluation_regime=_evaluation_regime_identity(),
         canaries=(motif, ordinary_ledger),
         forbidden_flow_rules=default_forbidden_flow_rules(),
         report_validity_cycles=1,
@@ -347,7 +327,7 @@ def _production_cycle(
     cycle_plan = CycleMonitorPlan(
         cycle_id="cycle.010",
         cycle_index=10,
-        evaluation_plan=_evaluation_plan_identity(),
+        evaluation_regime=_evaluation_regime_identity(),
         standing_policy_sha256=policy.content_sha256,
         assurance_snapshot_sha256=_sha("assurance-snapshot"),
     )
@@ -461,7 +441,7 @@ def test_raw_ledger_rejects_monitor_attestation_for_a_different_report(
     bad_attestation = PromotionMonitorAttestation(
         monitor_basis_sha256=original_attestation.monitor_basis_sha256,
         monitor_report_sha256=_sha("different-monitor-report"),
-        evaluation_plan=original_attestation.evaluation_plan,
+        evaluation_regime=original_attestation.evaluation_regime,
         assurance_snapshot_sha256=original_attestation.assurance_snapshot_sha256,
         cycle_id=original_attestation.cycle_id,
         cycle_index=original_attestation.cycle_index,
@@ -496,7 +476,7 @@ def test_raw_ledger_rejects_monitor_attestation_for_a_different_report(
             for reference in promoted.event.basis
         ),
         kernel_ref=promoted.event.kernel_ref,
-        critic_generation=promoted.event.critic_generation,
+        critic=promoted.event.critic,
         reasons=promoted.event.reasons,
         revalidation_triggers=promoted.event.revalidation_triggers,
     )
@@ -572,7 +552,7 @@ def test_first_motif_promotion_derives_independent_qualification_without_assuran
     assert qualification.promotion_lineage_sha256 == lineage.content_sha256
     assert qualification.promotion_monitor_attestation_sha256 == monitor.content_sha256
     assert qualification.critic_release_authority_event_sha256 == critic_outcome.critic_release_authority_event_sha256
-    assert qualification.critic_generation == critic_outcome.critic.authority_identity
+    assert qualification.critic == critic_outcome.critic.authority_identity
     assert qualification.kernel_ref == _kernel_ref()
     assert qualification.kernel_abi_sha256 == provisional.kernel_abi_sha256
     assert qualification_basis.origin.parent_origin_sha256s == tuple(
@@ -672,7 +652,7 @@ def test_candidate_authored_motif_qualification_cannot_authorize_promotion(
             for reference in promoted.event.basis
         ),
         kernel_ref=promoted.event.kernel_ref,
-        critic_generation=promoted.event.critic_generation,
+        critic=promoted.event.critic,
         reasons=promoted.event.reasons,
         revalidation_triggers=promoted.event.revalidation_triggers,
     )
@@ -710,7 +690,7 @@ def test_candidate_authored_motif_qualification_cannot_authorize_promotion(
             for reference in promoted.event.basis
         ),
         kernel_ref=promoted.event.kernel_ref,
-        critic_generation=promoted.event.critic_generation,
+        critic=promoted.event.critic,
         reasons=promoted.event.reasons,
         revalidation_triggers=promoted.event.revalidation_triggers,
     )
@@ -768,7 +748,7 @@ def test_motif_state_change_requires_current_assurance_and_complete_authority_ch
             authority_event_sha256=promotion.event.content_sha256,
             kernel_ref=_kernel_ref(),
             kernel_abi_sha256=provisional.kernel_abi_sha256,
-            critic_generation=promotion.event.critic_generation,
+            critic=promotion.event.critic,
             applicability_sha256=_sha("motif-applicability"),
         ),
         authority_ledger=ledger,
@@ -808,13 +788,13 @@ def test_motif_state_change_requires_current_assurance_and_complete_authority_ch
         **{
             **assurance_entry.model_dump(
                 mode="python",
-                exclude={"critic_generation"},
+                exclude={"critic"},
             ),
-            "critic_generation": {
-                "critic_id": "critic.different",
-                "version": "1",
-                "compatibility_generation": "evaluation-generation.1",
-            },
+            "critic": CriticRef(
+                regime=_evaluation_regime_identity(),
+                critic_id="critic.different",
+                role=CriticRole.ACCEPTANCE,
+            ),
         }
     )
     mismatched_snapshot = MotifAssuranceSnapshot(
@@ -838,7 +818,7 @@ def test_motif_state_change_requires_current_assurance_and_complete_authority_ch
     )
     with pytest.raises(
         GovernedPromotionError,
-        match="assurance does not bind the transition kernel and critic generation",
+        match="assurance does not bind the transition kernel and regime critic",
     ):
         issue_governed_promotion(
             ledger=ledger,
@@ -904,7 +884,7 @@ def test_motif_state_change_requires_current_assurance_and_complete_authority_ch
         subject_sha256=state_change.event.subject_sha256,
         basis=tuple(item for item in state_change.event.basis if item.kind is not BasisKind.MOTIF_ASSURANCE),
         kernel_ref=state_change.event.kernel_ref,
-        critic_generation=state_change.event.critic_generation,
+        critic=state_change.event.critic,
         reasons=state_change.event.reasons,
         revalidation_triggers=state_change.event.revalidation_triggers,
     )

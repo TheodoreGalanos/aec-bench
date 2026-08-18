@@ -4,6 +4,10 @@ schema_version = 1
 from_prefix = "aec_bench.contracts.trial_record."
 to_prefix = "aec_bench.contracts.trial_extensions."
 
+[[legacy_relocation]]
+from_prefix = "aec_bench.contracts.evaluation_plane."
+to_prefix = "aec_bench.evaluation.legacy_regime."
+
 [[manifest]]
 contract = "aec-bench/actor-invocation-evidence/1"
 sink = "aec_bench.harness.world_actor.authority.ActorInvocationAuthority._append_evidence"
@@ -729,27 +733,6 @@ exception_reason = "Legacy promotion schemas carry candidate_sha256 beside the n
 removal_milestone = "promotion evidence moves to an owning schema without repeated candidate commitments"
 
 [[field]]
-symbol = "aec_bench.contracts.authority.CriticGenerationIdentity.version"
-surface = "pydantic_model"
-wire_name = "version"
-category = "compatibility"
-domain_owner = "evaluation"
-authority = "critic_release_authority"
-authoritative = true
-exposure = "persisted"
-status = "current"
-payload_contract = "released critic implementation and policy version"
-canonicalization = "non-empty critic version copied from CriticRef"
-consumer = "evaluation and promotion authority matching"
-validation_behavior = "Critic references and authority identities must compare as exact values"
-mismatch_behavior = "reject_critic_authority"
-retention = "critic_generation_lifetime"
-rationale = "A critic identifier can have multiple incompatible released generations."
-duplication = "unique"
-compatibility_behavior = "require the exact released critic version"
-compatibility_kind = "protocol"
-
-[[field]]
 symbol = "aec_bench.contracts.authority.MotifPromotionQualification.kernel_abi_sha256"
 aliases = ["aec_bench.experimentation.governance.motif_assurance.MotifAssuranceEntry.kernel_abi_sha256", "aec_bench.experimentation.governance.motif_assurance.MotifLifecycleEvent.kernel_abi_sha256"]
 surface = "pydantic_model"
@@ -856,7 +839,7 @@ duplication = "unique"
 format = "lowercase 40-character Git commit"
 
 [[field]]
-symbol = "aec_bench.contracts.evaluation_plane.CriticRef.acceptance_manifest_commitment"
+symbol = "aec_bench.contracts.evaluation_plane.Critic.acceptance_manifest_commitment"
 surface = "pydantic_model"
 wire_name = "acceptance_manifest_commitment"
 category = "semantic_commitment"
@@ -870,12 +853,163 @@ canonicalization = "AcceptanceManifestCommitment.create over salted hidden cases
 consumer = "acceptance escrow, reveal, audit, and critic release"
 validation_behavior = "Acceptance critics require the commitment and non-acceptance critics reject it"
 mismatch_behavior = "reject_acceptance_critic_or_reveal"
-retention = "acceptance_critic_generation_lifetime"
-rationale = "The public critic reference must bind the hidden acceptance material without exposing it."
+retention = "evaluation_regime_artifact_lifetime"
+rationale = "The public regime critic must bind the hidden acceptance material without exposing it."
 duplication = "claim_binding"
 algorithm = "sha256"
 canonicalizer = "aec_bench.contracts.evaluation_plane.AcceptanceManifestCommitment.create"
 fail_closed = true
+
+[[field]]
+symbol = "aec_bench.contracts.evaluation_plane.EvaluationAssignment.candidate_manifest_commitment"
+surface = "pydantic_model"
+wire_name = "candidate_manifest_commitment"
+category = "semantic_commitment"
+domain_owner = "evaluation"
+authority = "candidate_manifest_owner"
+authoritative = false
+exposure = "persisted"
+status = "current"
+payload_contract = "exact task candidate manifest or canonical multi-task CandidateManifestScope"
+canonicalization = "CandidateGenerationManifest content identity or candidate_manifest_scope_commitment"
+consumer = "proposal freeze and evaluation assignment validation"
+validation_behavior = "freezing compares the commitment with the selected task manifest or exact candidate scope"
+mismatch_behavior = "reject_evaluation_assignment"
+retention = "evaluation_assignment_lifetime"
+rationale = "Hidden task assignment must bind the exact candidate population without adding it to the public regime."
+duplication = "claim_binding"
+algorithm = "sha256"
+canonicalizer = "aec_bench.contracts.evaluation_plane.candidate_manifest_scope_commitment"
+fail_closed = true
+
+[[field]]
+symbol = "aec_bench.contracts.evaluation_plane.EvaluationAssignment.harness_policy_commitment"
+surface = "pydantic_model"
+wire_name = "harness_policy_commitment"
+category = "semantic_commitment"
+domain_owner = "evaluation"
+authority = "compiled_harness"
+authoritative = false
+exposure = "persisted"
+status = "current"
+payload_contract = "exact fixed-harness policy selected for the assignment"
+canonicalization = "the fixed harness policy SHA-256 supplied by the compiled problem view"
+consumer = "proposal freeze validation"
+validation_behavior = "freezing compares the commitment with DecompositionProblemView.fixed_harness.harness_policy_sha256"
+mismatch_behavior = "reject_evaluation_assignment"
+retention = "evaluation_assignment_lifetime"
+rationale = "The hidden assignment must bind its fixed harness without moving harness policy into the public regime."
+duplication = "claim_binding"
+algorithm = "sha256"
+canonicalizer = "compiled harness policy owner"
+fail_closed = true
+
+[[field]]
+symbol = "aec_bench.contracts.evaluation_plane.EvaluationAssignment.split_manifest_commitment"
+surface = "pydantic_model"
+wire_name = "split_manifest_commitment"
+category = "semantic_commitment"
+domain_owner = "evaluation"
+authority = "structural_split_owner"
+authoritative = false
+exposure = "persisted"
+status = "current"
+payload_contract = "exact structural split selected for the hidden assignment"
+canonicalization = "StructuralSplitSelection content identity"
+consumer = "proposal freeze validation"
+validation_behavior = "freezing compares the commitment with the selected structural split"
+mismatch_behavior = "reject_evaluation_assignment"
+retention = "evaluation_assignment_lifetime"
+rationale = "Split-specific hidden material stays outside the public regime but remains exact."
+duplication = "claim_binding"
+algorithm = "sha256"
+canonicalizer = "structural split owner"
+fail_closed = true
+
+[[field]]
+symbol = "aec_bench.contracts.evaluation_plane.EvaluationAssignment.task_manifest_commitment"
+surface = "pydantic_model"
+wire_name = "task_manifest_commitment"
+category = "semantic_commitment"
+domain_owner = "evaluation"
+authority = "structural_task_manifest_owner"
+authoritative = false
+exposure = "persisted"
+status = "current"
+payload_contract = "exact task manifest selected by the structural split"
+canonicalization = "StructuralSplitSelection.task_manifest_sha256"
+consumer = "proposal freeze validation"
+validation_behavior = "freezing compares the commitment with the selected structural task manifest"
+mismatch_behavior = "reject_evaluation_assignment"
+retention = "evaluation_assignment_lifetime"
+rationale = "Task assignment stays outside the public regime and remains bound to its owner."
+duplication = "claim_binding"
+algorithm = "sha256"
+canonicalizer = "structural task manifest owner"
+fail_closed = true
+
+[[field]]
+symbol = "aec_bench.contracts.evaluation_plane.EvaluationAssignment.task_verifier_commitment"
+surface = "pydantic_model"
+wire_name = "task_verifier_commitment"
+category = "semantic_commitment"
+domain_owner = "evaluation"
+authority = "task_verifier_owner"
+authoritative = false
+exposure = "persisted"
+status = "current"
+payload_contract = "canonical task-verifier surface selected for the hidden assignment"
+canonicalization = "task_verifier_surface_commitment over one TaskVerifierSurface or TaskVerifierSurfaceScope"
+consumer = "evaluation execution authorization"
+validation_behavior = "preflight compares the commitment with the exact verifier scope"
+mismatch_behavior = "reject_evaluation_assignment"
+retention = "evaluation_assignment_lifetime"
+rationale = "Verifier-only material remains task-owned and outside the public regime."
+duplication = "claim_binding"
+algorithm = "sha256"
+canonicalizer = "aec_bench.contracts.evaluation_plane.task_verifier_surface_commitment"
+fail_closed = true
+
+[[field]]
+symbol = "aec_bench.contracts.evaluation_plane.EvaluationRegimeEnvelope.schema_version"
+surface = "pydantic_model"
+wire_name = "schema_version"
+category = "compatibility"
+domain_owner = "evaluation"
+authority = "evaluation_regime_reader"
+authoritative = true
+exposure = "persisted"
+status = "current"
+payload_contract = "AEC-Bench evaluation-regime envelope schema 1"
+canonicalization = "fixed integer literal 1"
+consumer = "evaluation-regime publication, loading, and semantic inspection"
+validation_behavior = "EvaluationRegimeEnvelope rejects any schema_version other than 1"
+mismatch_behavior = "reject_evaluation_regime"
+retention = "evaluation_regime_artifact_lifetime"
+rationale = "Independent regime readers need one envelope version without nested policy versions."
+duplication = "unique"
+compatibility_behavior = "current readers accept schema 1; legacy component plans require explicit verified migration"
+compatibility_kind = "external_schema"
+
+[[field]]
+symbol = "aec_bench.contracts.evaluation_plane.RepositoryCriticSource.source_revision"
+surface = "pydantic_model"
+wire_name = "source_revision"
+category = "source_identity"
+domain_owner = "evaluation"
+authority = "git_repository"
+authoritative = true
+exposure = "public"
+status = "current"
+payload_contract = "exact Git commit containing the repository-managed critic implementation"
+canonicalization = "lowercase full Git commit supplied when the evaluation regime is authored"
+consumer = "evaluation-regime publication and critic execution"
+validation_behavior = "RepositoryCriticSource requires a lowercase 40-character Git commit"
+mismatch_behavior = "reject_evaluation_regime"
+retention = "evaluation_regime_artifact_lifetime"
+rationale = "The regime digest must change when repository-managed critic code changes."
+duplication = "unique"
+format = "lowercase 40-character Git commit"
 
 [[field]]
 symbol = "aec_bench.contracts.harness_instance.HarnessRecipeRef.version"
@@ -1290,6 +1424,93 @@ retention = "trial_record_lifetime"
 rationale = "The time records when the real trial execution started."
 duplication = "unique"
 event = "trial execution started"
+
+[[field]]
+symbol = "aec_bench.experimentation.governance.critic_lifecycle.contracts.CriticRetirement.evaluation_outcome_sha256s"
+surface = "pydantic_model"
+wire_name = "evaluation_outcome_sha256s"
+category = "semantic_commitment"
+domain_owner = "evaluation_governance"
+authority = "authority_ledger"
+authoritative = false
+exposure = "persisted"
+status = "current"
+payload_contract = "complete set of governed evaluation outcomes for one retiring regime critic"
+canonicalization = "validated SHA-256 values sorted lexicographically"
+consumer = "critic retirement and acceptance reveal validation"
+validation_behavior = "retirement preparation resolves the outcome records and replay compares the exact sorted set"
+mismatch_behavior = "reject_critic_retirement"
+retention = "critic_retirement_evidence_lifetime"
+rationale = "Retirement must bind every governed result produced by the exact regime critic."
+duplication = "claim_binding"
+algorithm = "sha256"
+canonicalizer = "aec_bench.experimentation.governance.critic_lifecycle.evidence._resolve_evaluation_outcomes"
+fail_closed = true
+
+[[field]]
+symbol = "aec_bench.experimentation.governance.critic_lifecycle.contracts.CriticRetirement.promotion_authority_event_sha256s"
+surface = "pydantic_model"
+wire_name = "promotion_authority_event_sha256s"
+category = "semantic_commitment"
+domain_owner = "evaluation_governance"
+authority = "authority_ledger"
+authoritative = false
+exposure = "persisted"
+status = "current"
+payload_contract = "complete promotion-authority history for one retiring regime critic"
+canonicalization = "validated authority-event SHA-256 values sorted lexicographically"
+consumer = "critic retirement and acceptance reveal validation"
+validation_behavior = "retirement preparation resolves promotion events and replay compares the exact sorted set"
+mismatch_behavior = "reject_critic_retirement"
+retention = "critic_retirement_evidence_lifetime"
+rationale = "Retirement and later reveal must cover the promotions authorized by this exact critic."
+duplication = "claim_binding"
+algorithm = "sha256"
+canonicalizer = "aec_bench.experimentation.governance.critic_lifecycle.evidence._resolve_promotion_authorities"
+fail_closed = true
+
+[[field]]
+symbol = "aec_bench.experimentation.governance.critic_lifecycle.contracts.CriticRetirement.release_authority_event_sha256"
+surface = "pydantic_model"
+wire_name = "release_authority_event_sha256"
+category = "semantic_commitment"
+domain_owner = "evaluation_governance"
+authority = "authority_ledger"
+authoritative = false
+exposure = "persisted"
+status = "current"
+payload_contract = "authority event that released the exact regime critic"
+canonicalization = "AuthorityEvent content SHA-256"
+consumer = "critic retirement replay"
+validation_behavior = "retirement preparation and replay resolve and compare the exact release authority event"
+mismatch_behavior = "reject_critic_retirement"
+retention = "critic_retirement_evidence_lifetime"
+rationale = "A retirement is valid only for the release authority of the same regime-scoped critic."
+duplication = "claim_binding"
+algorithm = "sha256"
+canonicalizer = "aec_bench.experimentation.governance.authority_ledger.AuthorityLedger.resolve_authority_event"
+fail_closed = true
+
+[[field]]
+symbol = "aec_bench.experimentation.governance.critic_lifecycle.contracts.CriticRetirement.schema_version"
+surface = "pydantic_model"
+wire_name = "schema_version"
+category = "compatibility"
+domain_owner = "evaluation_governance"
+authority = "critic_retirement_reader"
+authoritative = true
+exposure = "persisted"
+status = "current"
+payload_contract = "AEC-Bench critic-retirement schema v2"
+canonicalization = "fixed string literal aecbench.critic-retirement.v2"
+consumer = "critic retirement and acceptance reveal readers"
+validation_behavior = "CriticRetirement rejects any other schema version"
+mismatch_behavior = "reject_critic_retirement"
+retention = "critic_retirement_evidence_lifetime"
+rationale = "Persisted retirement evidence needs one explicit reader contract independent of regime schema."
+duplication = "unique"
+compatibility_behavior = "accept only critic-retirement v2"
+compatibility_kind = "external_schema"
 
 [[field]]
 symbol = "aec_bench.generation.replay.GenerationManifest.schema_version"

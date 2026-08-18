@@ -10,12 +10,9 @@ from pydantic import JsonValue
 
 from aec_bench.contracts.authority import (
     AuthorityAction,
-    AuthorityDecision,
-    AuthorityEvent,
     AuthorityPrincipal,
     AuthorityPrincipalKind,
     BasisKind,
-    EvaluationPlanIdentity,
     HumanAuthorityApproval,
     PromotionSubjectLineage,
     TaintLabel,
@@ -33,14 +30,13 @@ from aec_bench.contracts.evaluation_outcome import (
     UtilityEvaluation,
     ValidityEvaluation,
 )
-from aec_bench.contracts.evaluation_plane import (
-    AcceptanceManifestCommitment,
-    CriticRef,
-    CriticRole,
-    EvaluationPlanRef,
-)
-from aec_bench.contracts.harness_kernel import KernelRef, canonical_json_sha256
+from aec_bench.contracts.evaluation_plane import Critic, EvaluationRegime
+from aec_bench.contracts.evaluation_refs import CriticRef, CriticRole, EvaluationRegimeRef
+from aec_bench.contracts.harness_kernel import KernelRef
+from aec_bench.evaluation.regime import expected_evaluation_regime_ref
+from aec_bench.experimentation.governance.acceptance_manifest_escrow import escrow_acceptance_manifest
 from aec_bench.experimentation.governance.authority_ledger import AuthorityLedger, StoredAuthorityEvent
+from aec_bench.experimentation.governance.critic_lifecycle import release_acceptance_critic
 from aec_bench.experimentation.governance.governance_gate import issue_governed_promotion
 from aec_bench.experimentation.governance.motif_assurance import (
     MotifAssurancePin,
@@ -56,6 +52,7 @@ from aec_bench.experimentation.governance.standing_monitors import (
     StandingMonitorPlan,
     run_standing_monitors,
 )
+from tests.support.evaluation_regimes import make_regime
 
 
 def _sha(label: str) -> str:
@@ -104,27 +101,26 @@ def issue_test_governed_promotion(
         if motif is not None:
             raise ValueError("policy promotion fixture cannot carry a motif")
         candidate_digest = candidate_sha256 or subject_sha256
-    critic_ref = critic or CriticRef(
-        critic_id=f"critic.acceptance.{event_id}",
-        version="1",
-        role=CriticRole.ACCEPTANCE,
-        compatibility_generation=f"evaluation-generation.{event_id}",
-        acceptance_manifest_commitment=AcceptanceManifestCommitment.create(
-            critic_id=f"critic.acceptance.{event_id}",
-            critic_version="1",
-            case_manifest={"event_id": event_id},
-            scoring_policy={"threshold": 1.0},
-            salt=f"salt.{event_id}",
-            publication_receipt_sha256=_sha(f"acceptance-manifest:{event_id}"),
-        ),
-    )
+    if critic is None:
+        regime = make_regime(regime_id=f"evaluation-regime.{event_id}")
+        critic_spec = regime.critic(CriticRole.ACCEPTANCE)
+        critic_ref = critic_spec.ref(expected_evaluation_regime_ref(regime))
+    else:
+        if critic_release is None:
+            raise ValueError("a supplied critic reference requires its exact release authority")
+        critic_ref = critic
     execution_principal_id = critic_execution_principal_id or f"critic-runtime.{event_id}"
-    release = critic_release or _release_critic(
-        ledger=ledger,
-        critic=critic_ref,
-        event_id=event_id,
-        kernel_ref=kernel_ref,
-    )
+    if critic_release is None:
+        release = _release_critic(
+            ledger=ledger,
+            regime=regime,
+            critic=critic_spec,
+            critic_ref=critic_ref,
+            event_id=event_id,
+            kernel_ref=kernel_ref,
+        )
+    else:
+        release = critic_release
     outcome = EvaluationOutcome(
         candidate_sha256=candidate_digest,
         evidence_set_sha256=_sha(f"evidence-set:{event_id}"),
@@ -150,10 +146,7 @@ def issue_test_governed_promotion(
         reasons=("provider-free governance fixture passed",),
     )
     bound_outcome = CriticEvaluationOutcome(
-        evaluation_plan_ref=EvaluationPlanRef(
-            plan_id=f"evaluation-plan.{event_id}",
-            evaluation_generation=critic_ref.compatibility_generation,
-        ),
+        evaluation_regime_ref=critic_ref.regime,
         critic=critic_ref,
         execution_principal_id=execution_principal_id,
         critic_release_authority_event_id=release.event.event_id,
@@ -189,14 +182,14 @@ def issue_test_governed_promotion(
     )
     monitor_plan, monitor_report = _passing_monitor(
         event_id=event_id,
-        evaluation_plan=bound_outcome.evaluation_plan_ref.authority_identity,
+        evaluation_regime=bound_outcome.evaluation_regime_ref.authority_identity,
         assurance_snapshot_sha256=assurance_snapshot_sha256,
     )
     lineage = None
     if motif is None and candidate_digest != subject_sha256:
         lineage = PromotionSubjectLineage(
             action=action,
-            critic_evaluation_outcome_sha256=bound_outcome.content_sha256,
+            critic_evaluation_outcome=bound_outcome.authority_identity,
             candidate_sha256=candidate_digest,
             subject_id=subject_id,
             subject_sha256=subject_sha256,
@@ -232,7 +225,9 @@ def issue_test_governed_promotion(
 def _release_critic(
     *,
     ledger: AuthorityLedger,
-    critic: CriticRef,
+    regime: EvaluationRegime,
+    critic: Critic,
+    critic_ref: CriticRef,
     event_id: str,
     kernel_ref: KernelRef,
 ) -> StoredAuthorityEvent:
@@ -240,14 +235,13 @@ def _release_critic(
         principal_id="human.theo",
         kind=AuthorityPrincipalKind.HUMAN,
     )
-    subject_id = f"{critic.critic_id}@{critic.version}"
-    critic_commitment = canonical_json_sha256(critic.model_dump(mode="json"))
+    subject_id = f"{critic_ref.regime.regime_id}:{critic_ref.critic_id}"
     approval = HumanAuthorityApproval(
         approval_id=f"approval.release.{event_id}",
         principal=human,
-        action=AuthorityAction.RELEASE_CRITIC_GENERATION,
+        action=AuthorityAction.RELEASE_CRITIC,
         subject_id=subject_id,
-        subject_sha256=critic_commitment,
+        subject_sha256=critic_ref.regime.artifact.sha256,
         approved=True,
         reason="release the exact provider-free acceptance critic fixture",
     )
@@ -262,30 +256,33 @@ def _release_critic(
             kind=AuthorityPrincipalKind.HOST_RUNTIME,
         ),
         channel="human-approval",
-        operation_id="release-critic-generation",
+        operation_id="release-critic",
         invocation_id=event_id,
         operation_taint=(TaintLabel.HUMAN_AUTHORITY,),
     )
-    return ledger.issue_authority_event(
-        AuthorityEvent(
-            event_id=f"authority.release.{event_id}",
-            principal=human,
-            action=AuthorityAction.RELEASE_CRITIC_GENERATION,
-            decision=AuthorityDecision.GRANTED,
-            subject_id=subject_id,
-            subject_sha256=critic_commitment,
-            basis=(approval_basis.reference,),
-            kernel_ref=kernel_ref,
-            critic_generation=critic.authority_identity,
-            reasons=("human released the exact acceptance critic fixture",),
-        )
+    escrow_acceptance_manifest(
+        ledger=ledger,
+        evaluation_regime=critic_ref.regime,
+        critic_id=critic.critic_id,
+        case_manifest={"case_ids": ["hidden-01", "hidden-02"]},
+        scoring_policy={"threshold": 0.8},
+        salt="test-acceptance-salt",
+    )
+    return release_acceptance_critic(
+        ledger=ledger,
+        evaluation_regime=regime,
+        evaluation_regime_ref=critic_ref.regime,
+        critic=critic,
+        human_approval=approval_basis.reference,
+        event_id=f"authority.release.{event_id}",
+        kernel_ref=kernel_ref,
     )
 
 
 def _passing_monitor(
     *,
     event_id: str,
-    evaluation_plan: EvaluationPlanIdentity,
+    evaluation_regime: EvaluationRegimeRef,
     assurance_snapshot_sha256: str,
 ) -> tuple[StandingMonitorPlan, CycleMonitorReport]:
     payload: dict[str, JsonValue] = {
@@ -300,7 +297,7 @@ def _passing_monitor(
     plan = StandingMonitorPlan(
         monitor_id=f"monitor.{event_id}",
         version="1",
-        evaluation_plan=evaluation_plan,
+        evaluation_regime=evaluation_regime,
         canaries=(canary,),
     )
     report = run_standing_monitors(

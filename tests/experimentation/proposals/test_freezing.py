@@ -22,13 +22,21 @@ from aec_bench.contracts.authority import (
 )
 from aec_bench.contracts.evaluation_plane import (
     AcceptanceManifestCommitment,
+    AcceptancePolicy,
     CandidateManifestScope,
+    Critic,
     CriticFeedbackVisibility,
     CriticRole,
-    CriticSpec,
+    DenominatorPolicy,
+    EligibilityPolicy,
+    EvaluationAssignment,
+    EvaluationBudget,
     EvaluationBudgetPartition,
-    EvaluationBudgetPlan,
-    EvaluationPlan,
+    EvaluationRegime,
+    EvidencePolicy,
+    MonitoringPolicy,
+    RepositoryCriticSource,
+    StoppingPolicy,
     candidate_manifest_scope_commitment,
 )
 from aec_bench.contracts.harness_instance import CompiledHarnessInstance
@@ -53,6 +61,7 @@ from aec_bench.contracts.proposal_execution_profile import (
 )
 from aec_bench.contracts.run_bundle import TaskReviewSnapshotRef, TaskSnapshotRef
 from aec_bench.contracts.task_definition import Visibility
+from aec_bench.evaluation.regime import expected_evaluation_regime_ref
 from aec_bench.experimentation.governance.authority_ledger import (
     AuthorityLedger,
     AuthorityLedgerIntegrityError,
@@ -119,7 +128,8 @@ def _execution_profile(fixture: _Fixture) -> ProposalExecutionProfile:
 @dataclass(frozen=True)
 class _Fixture:
     ledger: AuthorityLedger
-    evaluation_plan: EvaluationPlan
+    evaluation_regime: EvaluationRegime
+    evaluation_assignment: EvaluationAssignment
     structural_split: StructuralSplitManifest
     task_snapshot: TaskSnapshotRef
     leakage_audit: DecompositionLeakageAudit
@@ -141,7 +151,7 @@ def test_governed_freeze_persists_complete_basis_and_immediately_replays_it(
     result = _issue(fixture)
 
     assert result.freeze.fixed_harness_ref == fixture.fixed_harness.ref
-    assert result.freeze.evaluation_plan_ref == fixture.evaluation_plan.ref
+    assert result.freeze.evaluation_regime_ref == fixture.evaluation_assignment.regime
     selected_item = fixture.structural_split.dev.items[0]
     assert result.freeze.selected_structural_item_sha256 == canonical_json_sha256(selected_item.model_dump(mode="json"))
     assert result.freeze.selected_review_lineage_id == selected_item.review_lineage_id
@@ -230,25 +240,25 @@ def test_governed_freeze_observes_a_multitask_candidate_scope(
             _sha("candidate-manifest.other-task"),
         ),
     )
-    plan = _mutate_plan(
-        fixture.evaluation_plan,
-        candidate_manifest_sha256=candidate_manifest_scope_commitment(scope),
+    assignment = _mutate_assignment(
+        fixture.evaluation_assignment,
+        candidate_manifest_commitment=candidate_manifest_scope_commitment(scope),
     )
 
     result = _issue(
-        replace(fixture, evaluation_plan=plan),
-        evaluation_plan_candidate_scope=scope,
+        replace(fixture, evaluation_assignment=assignment),
+        evaluation_assignment_candidate_scope=scope,
     )
 
-    assert result.freeze.evaluation_plan_candidate_scope == scope
-    assert result.basis.evaluation_plan_candidate_scope is not None
+    assert result.freeze.evaluation_assignment_candidate_scope == scope
+    assert result.basis.evaluation_assignment_candidate_scope is not None
     stored_scope = CandidateManifestScope.model_validate_json(
         fixture.ledger.resolve_basis(
-            result.basis.evaluation_plan_candidate_scope,
+            result.basis.evaluation_assignment_candidate_scope,
         ).content_path.read_bytes()
     )
     assert stored_scope == scope
-    assert result.basis.evaluation_plan_candidate_scope in result.authority_event.basis
+    assert result.basis.evaluation_assignment_candidate_scope in result.authority_event.basis
     assert_proposal_freeze_authority(ledger=fixture.ledger, result=result)
 
 
@@ -260,12 +270,10 @@ def test_public_freeze_result_does_not_expose_acceptance_or_critic_configuration
     result = _issue(fixture)
     public_result = json.dumps(result.model_dump(mode="json"), sort_keys=True)
 
-    assert fixture.evaluation_plan.acceptance_critic.case_manifest_sha256 not in public_result
-    assert fixture.evaluation_plan.acceptance_critic.rubric_policy_sha256 not in public_result
-    assert fixture.evaluation_plan.development_critic.case_manifest_sha256 not in public_result
+    assert "hidden-1" not in public_result
     assert "acceptance_critic" not in public_result
     assert "development_critic" not in public_result
-    assert result.freeze.evaluation_plan_ref.plan_id in public_result
+    assert result.freeze.evaluation_regime_ref.regime_id in public_result
 
 
 def _pre_execution_spec() -> PreExecutionProtocolSpec:
@@ -359,9 +367,7 @@ def test_pre_execution_protocol_report_does_not_publish_hidden_critic_configurat
     )
     public_report = result.path.read_text(encoding="utf-8")
 
-    assert fixture.evaluation_plan.acceptance_critic.case_manifest_sha256 not in public_report
-    assert fixture.evaluation_plan.acceptance_critic.rubric_policy_sha256 not in public_report
-    assert fixture.evaluation_plan.development_critic.case_manifest_sha256 not in public_report
+    assert "hidden-1" not in public_report
     assert "acceptance_critic" not in public_report
     assert "development_critic" not in public_report
 
@@ -395,8 +401,8 @@ def test_pre_execution_protocol_loader_fails_closed_when_authority_basis_disappe
         ("task_manifest", "task manifest"),
         ("kernel", "kernel"),
         ("harness_policy", "harness policy"),
-        ("stopping_policy", "stopping policy"),
-        ("selection_policy", "utility policy"),
+        ("stopping_policy", "evaluation regime reference"),
+        ("selection_policy", "evaluation regime reference"),
         ("policy_bytes", "proposal policy"),
         ("checkpoint_bytes", "policy checkpoint"),
         ("proposal_bytes", "proposal artifact"),
@@ -412,34 +418,34 @@ def test_freeze_rejects_exact_binding_or_byte_mismatches(
     if mutation == "plan_ref":
         fixture = replace(
             fixture,
-            evaluation_plan=_mutate_plan(
-                fixture.evaluation_plan,
-                candidate_manifest_sha256=_sha("different-candidate-manifest"),
+            evaluation_assignment=_mutate_assignment(
+                fixture.evaluation_assignment,
+                candidate_manifest_commitment=_sha("different-candidate-manifest"),
             ),
         )
     elif mutation == "split":
         fixture = replace(
             fixture,
-            evaluation_plan=_mutate_plan(
-                fixture.evaluation_plan,
-                split_manifest_sha256=_sha("different-structural-split"),
+            evaluation_assignment=_mutate_assignment(
+                fixture.evaluation_assignment,
+                split_manifest_commitment=_sha("different-structural-split"),
             ),
         )
     elif mutation == "task_manifest":
         fixture = replace(
             fixture,
-            evaluation_plan=_mutate_plan(
-                fixture.evaluation_plan,
-                task_manifest_sha256=_sha("different-task-manifest"),
+            evaluation_assignment=_mutate_assignment(
+                fixture.evaluation_assignment,
+                task_manifest_commitment=_sha("different-task-manifest"),
             ),
         )
     elif mutation == "kernel":
         fixture = replace(
             fixture,
-            evaluation_plan=_mutate_plan(
-                fixture.evaluation_plan,
+            evaluation_assignment=_mutate_assignment(
+                fixture.evaluation_assignment,
                 kernel_ref=KernelRef(
-                    kernel_id=fixture.evaluation_plan.kernel_ref.kernel_id,
+                    kernel_id=fixture.evaluation_assignment.kernel_ref.kernel_id,
                     version="different-kernel-version",
                 ),
             ),
@@ -447,25 +453,31 @@ def test_freeze_rejects_exact_binding_or_byte_mismatches(
     elif mutation == "harness_policy":
         fixture = replace(
             fixture,
-            evaluation_plan=_mutate_plan(
-                fixture.evaluation_plan,
-                harness_policy_sha256=_sha("different-harness-policy"),
+            evaluation_assignment=_mutate_assignment(
+                fixture.evaluation_assignment,
+                harness_policy_commitment=_sha("different-harness-policy"),
             ),
         )
     elif mutation == "stopping_policy":
         fixture = replace(
             fixture,
-            evaluation_plan=_mutate_plan(
-                fixture.evaluation_plan,
-                stopping_policy_sha256=_sha("different-stopping-policy"),
+            evaluation_regime=_mutate_plan(
+                fixture.evaluation_regime,
+                stopping_policy=StoppingPolicy(
+                    policy_id="stopping.changed",
+                    configuration={"max_candidates": 3},
+                ),
             ),
         )
     elif mutation == "selection_policy":
         fixture = replace(
             fixture,
-            evaluation_plan=_mutate_plan(
-                fixture.evaluation_plan,
-                utility_policy_sha256=_sha("different-selection-policy"),
+            evaluation_regime=_mutate_plan(
+                fixture.evaluation_regime,
+                acceptance_policy=AcceptancePolicy(
+                    policy_id="acceptance.changed",
+                    configuration={"minimum_utility_delta": 0.1},
+                ),
             ),
         )
     elif mutation == "policy_bytes":
@@ -500,17 +512,17 @@ def test_freeze_recomputes_task_normalized_policy_from_the_actual_compiled_h0(
     manifest_payload = fixture.candidate_manifest.model_dump(mode="json", exclude={"content_sha256"})
     manifest_payload["problem_view_sha256"] = forged_view.content_sha256
     forged_manifest = CandidateGenerationManifest.model_validate(manifest_payload)
-    forged_plan = _mutate_plan(
-        fixture.evaluation_plan,
-        candidate_manifest_sha256=forged_manifest.content_sha256,
-        harness_policy_sha256=forged_policy_sha256,
+    forged_assignment = _mutate_assignment(
+        fixture.evaluation_assignment,
+        candidate_manifest_commitment=forged_manifest.content_sha256,
+        harness_policy_commitment=forged_policy_sha256,
     )
     forged_fixture = replace(
         fixture,
         problem_view=forged_view,
         leakage_audit=forged_audit,
         candidate_manifest=forged_manifest,
-        evaluation_plan=forged_plan,
+        evaluation_assignment=forged_assignment,
     )
 
     with pytest.raises(GovernedProposalFreezeError, match="actual compiled fixed harness"):
@@ -567,10 +579,10 @@ def test_freeze_rejects_unrelated_or_mismatched_selected_structural_item(
     unrelated_fixture = replace(
         fixture,
         structural_split=unrelated,
-        evaluation_plan=_mutate_plan(
-            fixture.evaluation_plan,
-            split_manifest_sha256=unrelated.content_sha256,
-            task_manifest_sha256=unrelated.task_manifest_sha256,
+        evaluation_assignment=_mutate_assignment(
+            fixture.evaluation_assignment,
+            split_manifest_commitment=unrelated.content_sha256,
+            task_manifest_commitment=unrelated.task_manifest_sha256,
         ),
     )
 
@@ -589,10 +601,10 @@ def test_freeze_rejects_unrelated_or_mismatched_selected_structural_item(
     mismatched_fixture = replace(
         fixture,
         structural_split=mismatched,
-        evaluation_plan=_mutate_plan(
-            fixture.evaluation_plan,
-            split_manifest_sha256=mismatched.content_sha256,
-            task_manifest_sha256=mismatched.task_manifest_sha256,
+        evaluation_assignment=_mutate_assignment(
+            fixture.evaluation_assignment,
+            split_manifest_commitment=mismatched.content_sha256,
+            task_manifest_commitment=mismatched.task_manifest_sha256,
         ),
     )
 
@@ -793,7 +805,7 @@ def _schedule(
         coordinates=coordinates,
         kernel_ref=fixture.fixed_harness.kernel_ref,
         fixed_harness_ref=fixture.fixed_harness.ref,
-        evaluation_plan_ref=fixture.evaluation_plan.ref,
+        evaluation_regime_ref=fixture.evaluation_assignment.regime,
         aggregate_budget=fixture.fixed_harness.budget,
     )
 
@@ -808,7 +820,8 @@ def _issue(
         "event_id": "authority.freeze.phase9.dev",
         "replay_id": "replay.freeze.phase9.dev",
         "due_cycle_index": 0,
-        "evaluation_plan": fixture.evaluation_plan,
+        "evaluation_regime": fixture.evaluation_regime,
+        "evaluation_assignment": fixture.evaluation_assignment,
         "operator_authority": operator_authority_for(
             "operator.performance",
             OperatorRole.PERFORMANCE_OPTIMIZATION,
@@ -912,14 +925,12 @@ def _fixture(
         ),
         stopping_policy_sha256=_sha("two-candidates-then-stop"),
     )
-    evaluation_plan = _evaluation_plan(
+    evaluation_regime, evaluation_assignment = _evaluation_surface(
         kernel_ref=fixed_harness.kernel_ref,
         harness_policy_sha256=view_result.problem_view.fixed_harness.harness_policy_sha256,
         candidate_manifest_sha256=candidate_manifest.content_sha256,
         task_manifest_sha256=structural_split.task_manifest_sha256,
         split_manifest_sha256=structural_split.content_sha256,
-        stopping_policy_sha256=candidate_manifest.stopping_policy_sha256,
-        utility_policy_sha256=selection_rule.content_sha256,
     )
     model = AuthorityPrincipal(
         principal_id="model.proposal-generator",
@@ -944,7 +955,8 @@ def _fixture(
             tmp_path / "authority",
             candidate_roots=(candidate_root,),
         ),
-        evaluation_plan=evaluation_plan,
+        evaluation_regime=evaluation_regime,
+        evaluation_assignment=evaluation_assignment,
         structural_split=structural_split,
         task_snapshot=public_snapshot,
         leakage_audit=view_result.audit,
@@ -998,59 +1010,76 @@ def _proposal_artifact(
     )
 
 
-def _evaluation_plan(
+def _evaluation_surface(
     *,
     kernel_ref: KernelRef,
     harness_policy_sha256: str,
     candidate_manifest_sha256: str,
     task_manifest_sha256: str,
     split_manifest_sha256: str,
-    stopping_policy_sha256: str,
-    utility_policy_sha256: str,
-) -> EvaluationPlan:
+) -> tuple[EvaluationRegime, EvaluationAssignment]:
     commitment = AcceptanceManifestCommitment.create(
         critic_id="critic.acceptance",
-        critic_version="1.0.0",
         case_manifest={"case_ids": ["hidden-1"], "split": "acceptance"},
         scoring_policy={"threshold": 0.8},
         salt="retirement-only-salt",
-        publication_receipt_sha256=_sha("acceptance-publication"),
     )
-    return EvaluationPlan(
-        plan_id="evaluation-plan.phase9",
-        evaluation_generation="evaluation-generation-1",
+    regime = EvaluationRegime(
+        regime_id="evaluation-regime.phase9",
+        critics=(
+            _critic(
+                CriticRole.DEVELOPMENT,
+                case_label="development-cases",
+                principal="principal.dev",
+            ),
+            _critic(
+                CriticRole.ACCEPTANCE,
+                case_label="acceptance-cases",
+                principal="principal.accept",
+                commitment=commitment,
+            ),
+            _critic(
+                CriticRole.RED_TEAM,
+                case_label="red-team-cases",
+                principal="principal.red",
+            ),
+        ),
+        budget=_budgets(),
+        acceptance_policy=AcceptancePolicy(
+            policy_id="acceptance.phase9",
+            configuration={"minimum_utility_delta": 0.05},
+        ),
+        eligibility_policy=EligibilityPolicy(
+            policy_id="eligibility.phase9",
+            configuration={"integrity": "required"},
+        ),
+        denominator_policy=DenominatorPolicy(
+            policy_id="denominator.phase9",
+            configuration={"population": "all_planned"},
+        ),
+        evidence_policy=EvidencePolicy(
+            policy_id="evidence.phase9",
+            configuration={"authority_owned": True},
+        ),
+        stopping_policy=StoppingPolicy(
+            policy_id="stopping.phase9",
+            configuration={"max_candidates": 2},
+        ),
+        monitoring_policy=MonitoringPolicy(
+            policy_id="monitoring.phase9",
+            configuration={"enabled": True},
+        ),
+    )
+    regime_ref = expected_evaluation_regime_ref(regime)
+    return regime, EvaluationAssignment(
+        assignment_id="evaluation-assignment.phase9",
+        regime=regime_ref,
         kernel_ref=kernel_ref,
-        harness_policy_sha256=harness_policy_sha256,
-        candidate_manifest_sha256=candidate_manifest_sha256,
-        task_manifest_sha256=task_manifest_sha256,
-        split_manifest_sha256=split_manifest_sha256,
-        task_verifier_sha256=_sha("task-verifier"),
-        development_critic=_critic(
-            CriticRole.DEVELOPMENT,
-            case_label="development-cases",
-            principal="principal.dev",
-        ),
-        acceptance_critic=_critic(
-            CriticRole.ACCEPTANCE,
-            case_label="acceptance-cases",
-            principal="principal.accept",
-            commitment=commitment,
-        ),
-        red_team_critic=_critic(
-            CriticRole.RED_TEAM,
-            case_label="red-team-cases",
-            principal="principal.red",
-        ),
-        budgets=_budgets(),
-        integrity_policy_sha256=_sha("integrity-policy"),
-        utility_policy_sha256=utility_policy_sha256,
-        selection_null_protocol_sha256=_sha("selection-null"),
-        anchor_calibration_policy_sha256=_sha("anchor-calibration"),
-        monitor_plan_sha256=_sha("monitor-plan"),
-        opening_policy_sha256=_sha("opening-policy"),
-        stopping_policy_sha256=stopping_policy_sha256,
-        confirmatory_suite_sha256=_sha("confirmatory-suite"),
-        challenge_suite_sha256=_sha("challenge-suite"),
+        harness_policy_commitment=harness_policy_sha256,
+        candidate_manifest_commitment=candidate_manifest_sha256,
+        task_manifest_commitment=task_manifest_sha256,
+        split_manifest_commitment=split_manifest_sha256,
+        task_verifier_commitment=_sha("task-verifier"),
     )
 
 
@@ -1060,29 +1089,25 @@ def _critic(
     case_label: str,
     principal: str,
     commitment: AcceptanceManifestCommitment | None = None,
-) -> CriticSpec:
-    return CriticSpec(
+) -> Critic:
+    return Critic(
         critic_id=f"critic.{role.value}",
-        version="1.0.0",
         role=role,
-        implementation_sha256=_sha("shared-scoring"),
-        rubric_policy_sha256=_sha(f"rubric:{role.value}"),
-        case_manifest_sha256=_sha(case_label),
-        eligibility_policy_sha256=_sha("complete-evidence-only"),
-        denominator_policy_sha256=_sha("all-planned-cases"),
-        threshold_policy_sha256=_sha("threshold"),
-        evidence_inclusion_policy_sha256=_sha("inclusion"),
-        runtime_environment_sha256=_sha("runtime"),
+        source=RepositoryCriticSource(source_revision="1" * 40, entrypoint="tests.evaluation:score"),
+        configuration=(
+            {"runtime_mode": "host_only"}
+            if role is CriticRole.ACCEPTANCE
+            else {"rubric": _sha(f"rubric:{role.value}"), "cases": _sha(case_label)}
+        ),
         feedback_visibility=(
             CriticFeedbackVisibility.VISIBLE if role is CriticRole.DEVELOPMENT else CriticFeedbackVisibility.HOST_ONLY
         ),
         execution_principal_id=principal,
-        compatibility_generation="evaluation-generation-1",
         acceptance_manifest_commitment=commitment,
     )
 
 
-def _budgets() -> EvaluationBudgetPlan:
+def _budgets() -> EvaluationBudget:
     partition = EvaluationBudgetPartition(
         case_count=2,
         max_attempts=4,
@@ -1091,7 +1116,7 @@ def _budgets() -> EvaluationBudgetPlan:
         max_cost_usd=1.0,
         max_wall_time_seconds=600,
     )
-    return EvaluationBudgetPlan(
+    return EvaluationBudget(
         proposal=partition,
         execution=partition,
         development=partition,
@@ -1102,10 +1127,16 @@ def _budgets() -> EvaluationBudgetPlan:
     )
 
 
-def _mutate_plan(plan: EvaluationPlan, **updates: object) -> EvaluationPlan:
-    payload = plan.model_dump(mode="json", exclude={"content_sha256"})
+def _mutate_plan(plan: EvaluationRegime, **updates: object) -> EvaluationRegime:
+    payload = plan.model_dump(mode="json")
     payload.update(updates)
-    return EvaluationPlan.model_validate(payload)
+    return EvaluationRegime.model_validate(payload)
+
+
+def _mutate_assignment(assignment: EvaluationAssignment, **updates: object) -> EvaluationAssignment:
+    payload = assignment.model_dump(mode="json")
+    payload.update(updates)
+    return EvaluationAssignment.model_validate(payload)
 
 
 def _structural_manifest(

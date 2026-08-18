@@ -19,6 +19,7 @@ from aec_bench.contracts.evaluation_outcome import (
     CriticGapDecomposition,
     SelectionNullEstimate,
 )
+from aec_bench.contracts.evaluation_refs import CriticRef, CriticRole
 from aec_bench.experimentation.qualification.critic_stress_runtime import (
     AcceptanceGrounding,
     AcceptanceGroundingKind,
@@ -33,6 +34,7 @@ from aec_bench.experimentation.qualification.critic_stress_runtime import (
     VRedChallengeEvidence,
     reduce_critic_stress,
 )
+from tests.support.evaluation_regimes import fake_regime_ref
 
 
 def _sha(label: str) -> str:
@@ -78,6 +80,14 @@ def _grounding(
     )
 
 
+def _critic(label: str) -> CriticRef:
+    return CriticRef(
+        regime=fake_regime_ref(label=label),
+        critic_id="critic.acceptance",
+        role=CriticRole.ACCEPTANCE,
+    )
+
+
 def _measurement(
     gap: CriticGapDecomposition,
     *,
@@ -85,7 +95,7 @@ def _measurement(
 ) -> CriticStressMeasurement:
     return CriticStressMeasurement(
         measurement_id="critic-stress.measurement-001",
-        critic_generation_sha256=_sha("critic-generation-current"),
+        critic=_critic("critic-current"),
         gap=gap,
         acceptance_grounding=grounding or _grounding(),
     )
@@ -94,8 +104,8 @@ def _measurement(
 def _policy() -> CriticStressClassificationPolicy:
     return CriticStressClassificationPolicy(
         policy_id="critic-stress.policy-001",
-        current_critic_generation_sha256=_sha("critic-generation-current"),
-        next_critic_generation_sha256=_sha("critic-generation-next"),
+        current_critic=_critic("critic-current"),
+        next_critic=_critic("critic-next"),
         minimum_null_adjusted_residual=0.10,
     )
 
@@ -103,7 +113,7 @@ def _policy() -> CriticStressClassificationPolicy:
 def _challenge(
     policy: CriticStressClassificationPolicy,
     *,
-    target_generation_sha256: str | None = None,
+    target_critic: CriticRef | None = None,
 ) -> VRedChallengeEvidence:
     artifact_sha256 = _sha("vred-challenge-artifact")
     challenge_id = "vred.challenge-001"
@@ -128,8 +138,8 @@ def _challenge(
         challenge_id=challenge_id,
         artifact_sha256=artifact_sha256,
         origin=origin,
-        source_critic_generation_sha256=policy.current_critic_generation_sha256,
-        eligible_critic_generation_sha256=(target_generation_sha256 or policy.next_critic_generation_sha256),
+        source_critic=policy.current_critic,
+        eligible_critic=(target_critic or policy.next_critic),
     )
 
 
@@ -211,7 +221,7 @@ def test_residual_requires_causal_seam_evidence_before_becoming_a_regression() -
 
     assert grounded.finding.kind is CriticStressFindingKind.DIFFERENTIAL_SEAM
     assert grounded.regression_case is not None
-    assert grounded.regression_case.target_critic_generation_sha256 == policy.next_critic_generation_sha256
+    assert grounded.regression_case.target_critic == policy.next_critic
     assert not grounded.regression_case.current_promotion_basis_permitted
     with pytest.raises(ValueError, match="forbidden as current promotion basis"):
         reduce_critic_stress(
@@ -300,7 +310,7 @@ def test_hidden_rubric_acceptance_records_the_conditional_gap_limitation() -> No
     assert report.finding.kind is CriticStressFindingKind.SELECTION_NOISE
 
 
-def test_vred_challenge_cannot_support_current_promotion_or_skip_a_generation() -> None:
+def test_vred_challenge_cannot_support_current_promotion_or_skip_a_regime() -> None:
     policy = _policy()
     measurement = _measurement(
         _gap(
@@ -321,9 +331,9 @@ def test_vred_challenge_cannot_support_current_promotion_or_skip_a_generation() 
 
     later_challenge = _challenge(
         policy,
-        target_generation_sha256=_sha("critic-generation-after-next"),
+        target_critic=_critic("critic-after-next"),
     )
-    with pytest.raises(ValueError, match="next critic generation"):
+    with pytest.raises(ValueError, match="next regime critic"):
         reduce_critic_stress(
             policy=policy,
             measurement=measurement,

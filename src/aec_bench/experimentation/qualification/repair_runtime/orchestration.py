@@ -902,7 +902,7 @@ class RepairRuntime:
             reasons=("accepted paired repair and terminal evidence persisted",),
             revalidation_triggers=(
                 "basis_replay_due",
-                "critic_generation_change",
+                "critic_change",
                 "kernel_version_change",
             ),
         )

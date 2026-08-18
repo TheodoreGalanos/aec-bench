@@ -111,11 +111,11 @@ def _active_assurance(
         authority_event_sha256=authority_event.content_sha256,
         kernel_ref=authority_event.kernel_ref,
         kernel_abi_sha256=motif.kernel_abi_sha256,
-        critic_generation=authority_event.critic_generation,
+        critic=authority_event.critic,
         model_generation_sha256=_sha("model-generation"),
         tool_generation_sha256=_sha("tool-generation"),
         applicability_sha256=_sha("applicability-generation"),
-        revalidation_triggers=("critic_generation_change",),
+        revalidation_triggers=("critic_change",),
     )
     assurance = append_authorized_motif_event(
         MotifAssuranceLedger.create(),

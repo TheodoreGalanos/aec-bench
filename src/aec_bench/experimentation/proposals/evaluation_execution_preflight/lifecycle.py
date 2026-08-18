@@ -7,14 +7,14 @@ from typing import Literal, Self
 
 from pydantic import Field, field_validator, model_validator
 
-from aec_bench.contracts.authority import EvaluationPlanIdentity
 from aec_bench.contracts.evaluation_generation.batch import EvaluationBatchPlan
 from aec_bench.contracts.evaluation_plane import (
-    EvaluationPlan,
-    EvaluationPlanRef,
+    EvaluationAssignment,
+    EvaluationRegime,
     TaskVerifierSurfaceScope,
     task_verifier_surface_commitment,
 )
+from aec_bench.contracts.evaluation_refs import EvaluationRegimeRef
 from aec_bench.contracts.harness_instance import HarnessBudget, HarnessInstanceRef
 from aec_bench.contracts.harness_kernel import (
     KernelRef,
@@ -26,6 +26,7 @@ from aec_bench.contracts.program_proposal.types import ProgramCandidateKind
 from aec_bench.contracts.proposal_execution.compilation import ProposalCompilationRejection
 from aec_bench.contracts.proposal_execution_types import ProposalCompilationStatus
 from aec_bench.contracts.validators import NonEmptyStr
+from aec_bench.evaluation.regime import validate_evaluation_regime_ref
 from aec_bench.experimentation.governance.authority_ledger import AuthorityLedger
 from aec_bench.experimentation.governance.motif_assurance import MotifAssuranceSnapshot
 from aec_bench.experimentation.governance.standing_monitors import (
@@ -212,7 +213,7 @@ class CompilationResultRef(LegacyContentAddressedModel):
     proposal_freeze_sha256: str
     kernel_ref: KernelRef
     fixed_harness_ref: HarnessInstanceRef
-    evaluation_plan_ref: EvaluationPlanRef
+    evaluation_regime_ref: EvaluationRegimeRef
     aggregate_budget: HarnessBudget
     status: ProposalCompilationStatus
     compilation_sha256: str
@@ -250,7 +251,7 @@ class CompilationResultRef(LegacyContentAddressedModel):
             or self.proposal_freeze_sha256 != rejection.proposal_freeze.content_sha256
             or self.kernel_ref != rejection.kernel_ref
             or self.fixed_harness_ref != rejection.fixed_harness_ref
-            or self.evaluation_plan_ref != rejection.proposal_freeze.evaluation_plan_ref
+            or self.evaluation_regime_ref != rejection.proposal_freeze.evaluation_regime_ref
             or self.aggregate_budget != rejection.proposal_freeze.problem_view.fixed_harness.aggregate_budget
         ):
             raise ValueError(
@@ -281,7 +282,7 @@ class CompilationResultRef(LegacyContentAddressedModel):
             proposal_freeze_sha256=freeze.content_sha256,
             kernel_ref=selected.kernel_ref,
             fixed_harness_ref=selected.fixed_harness_ref,
-            evaluation_plan_ref=freeze.evaluation_plan_ref,
+            evaluation_regime_ref=freeze.evaluation_regime_ref,
             aggregate_budget=freeze.problem_view.fixed_harness.aggregate_budget,
             status=ProposalCompilationStatus.REJECTED,
             compilation_sha256=selected.content_sha256,
@@ -312,7 +313,7 @@ class CompilationResultRef(LegacyContentAddressedModel):
             proposal_freeze_sha256=freeze.content_sha256,
             kernel_ref=compilation.kernel_ref,
             fixed_harness_ref=compilation.fixed_harness_ref,
-            evaluation_plan_ref=freeze.evaluation_plan_ref,
+            evaluation_regime_ref=freeze.evaluation_regime_ref,
             aggregate_budget=compilation.budget_plan.aggregate_budget,
             status=ProposalCompilationStatus.COMPILED,
             compilation_sha256=compilation.content_sha256,
@@ -379,7 +380,7 @@ class MonitorReadiness(LegacyContentAddressedModel):
 
     schema_version: Literal["aecbench.monitor-readiness.v1"] = "aecbench.monitor-readiness.v1"
     source_batch_sha256: str
-    evaluation_plan: EvaluationPlanIdentity
+    evaluation_regime: EvaluationRegimeRef
     policy: StandingMonitorPolicy
     policy_sha256: str
     cycle_plan: CycleMonitorPlan
@@ -404,7 +405,7 @@ class MonitorReadiness(LegacyContentAddressedModel):
             self.policy_sha256 != self.policy.content_sha256
             or self.cycle_plan_sha256 != self.cycle_plan.content_sha256
             or self.assurance_snapshot_sha256 != self.assurance_snapshot.content_sha256
-            or self.cycle_plan.evaluation_plan != self.evaluation_plan
+            or self.cycle_plan.evaluation_regime != self.evaluation_regime
             or self.cycle_plan.standing_policy_sha256 != self.policy_sha256
             or self.cycle_plan.assurance_snapshot_sha256 != self.assurance_snapshot_sha256
         ):
@@ -711,7 +712,8 @@ def close_compilation_batch(
 def verify_monitor_readiness(
     *,
     source_batch: EvaluationBatchPlan,
-    evaluation_plan: EvaluationPlan,
+    evaluation_regime: EvaluationRegime,
+    evaluation_assignment: EvaluationAssignment,
     policy: StandingMonitorPolicy,
     cycle_plan: CycleMonitorPlan,
     assurance_snapshot: MotifAssuranceSnapshot,
@@ -723,8 +725,11 @@ def verify_monitor_readiness(
         selected_policy = StandingMonitorPolicy.model_validate(
             policy.model_dump(mode="python"),
         )
-        selected_evaluation_plan = EvaluationPlan.model_validate(
-            evaluation_plan.model_dump(mode="python"),
+        selected_evaluation_regime = EvaluationRegime.model_validate(
+            evaluation_regime.model_dump(mode="python"),
+        )
+        selected_assignment = EvaluationAssignment.model_validate(
+            evaluation_assignment.model_dump(mode="python"),
         )
         selected_cycle = CycleMonitorPlan.model_validate(
             cycle_plan.model_dump(mode="python"),
@@ -740,21 +745,28 @@ def verify_monitor_readiness(
         raise EvaluationExecutionPreflightError(
             "standing monitor policy identity differs from the source batch",
         )
-    if selected_evaluation_plan.ref != batch.evaluation_plan_ref:
+    if selected_assignment.regime != batch.evaluation_regime_ref:
         raise EvaluationExecutionPreflightError(
-            "full evaluation plan identity differs from the source batch",
+            "evaluation assignment regime differs from the source batch",
         )
-    if selected_evaluation_plan.monitor_plan_sha256 != selected_policy.content_sha256:
+    try:
+        validate_evaluation_regime_ref(selected_evaluation_regime, selected_assignment.regime)
+    except ValueError as error:
         raise EvaluationExecutionPreflightError(
-            "evaluation plan monitor identity differs from the standing monitor policy",
+            str(error),
+        ) from error
+    monitoring = selected_evaluation_regime.monitoring_policy
+    if monitoring is None or monitoring.configuration.get("standing_policy") != selected_policy.model_dump(mode="json"):
+        raise EvaluationExecutionPreflightError(
+            "evaluation regime monitoring policy differs from the standing monitor policy",
         )
     if selected_assurance.content_sha256 != batch.motif_assurance_snapshot_sha256:
         raise EvaluationExecutionPreflightError(
             "motif assurance snapshot identity differs from the source batch",
         )
-    if selected_cycle.evaluation_plan != batch.evaluation_plan_ref.authority_identity:
+    if selected_cycle.evaluation_regime != batch.evaluation_regime_ref:
         raise EvaluationExecutionPreflightError(
-            "cycle monitor plan differs from the batch evaluation plan",
+            "cycle monitor plan differs from the batch evaluation regime",
         )
     if selected_cycle.standing_policy_sha256 != selected_policy.content_sha256:
         raise EvaluationExecutionPreflightError(
@@ -770,7 +782,7 @@ def verify_monitor_readiness(
         )
     return MonitorReadiness(
         source_batch_sha256=batch.content_sha256,
-        evaluation_plan=batch.evaluation_plan_ref.authority_identity,
+        evaluation_regime=batch.evaluation_regime_ref,
         policy=selected_policy,
         policy_sha256=selected_policy.content_sha256,
         cycle_plan=selected_cycle,
@@ -787,7 +799,8 @@ def prepare_execution_batch(
     schedule_closure: ScheduleClosure,
     compilation_closure: CompilationBatchClosure,
     monitor_closure: MonitorReadiness,
-    evaluation_plan: EvaluationPlan,
+    evaluation_regime: EvaluationRegime,
+    evaluation_assignment: EvaluationAssignment,
     task_verifier_scope: TaskVerifierSurfaceScope,
     ledger: AuthorityLedger,
     authorizations: tuple[GovernedProposalDispatchAuthorization, ...],
@@ -804,7 +817,8 @@ def prepare_execution_batch(
         schedule_closure=schedule_closure,
         compilation_closure=compilation_closure,
         monitor_closure=monitor_closure,
-        evaluation_plan=evaluation_plan,
+        evaluation_regime=evaluation_regime,
+        evaluation_assignment=evaluation_assignment,
         task_verifier_scope=task_verifier_scope,
         ledger=ledger,
         authorizations=authorizations,
@@ -955,7 +969,7 @@ def _normalize_monitor_closure(
         or selected.policy_sha256 != batch.monitor_policy_sha256
         or selected.cycle_plan_sha256 != batch.monitor_cycle_plan_sha256
         or selected.assurance_snapshot_sha256 != batch.motif_assurance_snapshot_sha256
-        or selected.evaluation_plan != batch.evaluation_plan_ref.authority_identity
+        or selected.evaluation_regime != batch.evaluation_regime_ref
     ):
         raise EvaluationExecutionPreflightError(
             "monitor closure differs from the source batch",
