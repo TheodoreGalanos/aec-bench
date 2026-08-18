@@ -101,7 +101,7 @@ def _evidence_set(
     return MissingPrimitiveEvidenceSet(
         evidence_set_id="distributed-join-recurrence",
         source_kernel_ref=registry.manifest.ref,
-        requested_capability_sha256=_requested_capability().content_sha256,
+        requested_capability_ref=_requested_capability().ref,
         selection_basis=EvidenceSelectionBasis.CAPABILITY_RECURRENCE,
         minimum_distinct_task_families=2,
         evidence_refs=tuple(item.ref for item in evidence),
@@ -121,7 +121,7 @@ def _approval(
         approved_by="aec-bench-kernel-owner",
         approved=approved,
         source_kernel_ref=registry.manifest.ref,
-        requested_capability_sha256=_requested_capability().content_sha256,
+        requested_capability_ref=_requested_capability().ref,
         evidence_set_sha256=evidence_set.content_sha256,
         target_kernel_version=resolved_target_version,
         artifact_sha256=_sha("signed-human-approval"),
@@ -140,7 +140,7 @@ def _regression(
         regression_id="kernel-regression-suite",
         suite_id="adaptive-kernel-regression",
         source_kernel_ref=registry.manifest.ref,
-        requested_capability_sha256=_requested_capability().content_sha256,
+        requested_capability_ref=_requested_capability().ref,
         evidence_set_sha256=evidence_set.content_sha256,
         target_kernel_version=resolved_target_version,
         passed=passed,
@@ -254,7 +254,7 @@ def test_frozen_evidence_set_rejects_duplicate_references_and_reward_selection_f
         MissingPrimitiveEvidenceSet(
             evidence_set_id="duplicates",
             source_kernel_ref=registry.manifest.ref,
-            requested_capability_sha256=_requested_capability().content_sha256,
+            requested_capability_ref=_requested_capability().ref,
             evidence_refs=(evidence.ref, evidence.ref),
         )
 

@@ -9,7 +9,7 @@ from typing import Literal, Self
 
 from pydantic import Field, field_validator, model_validator
 
-from aec_bench.contracts.harness_kernel import ContentAddressedModel
+from aec_bench.contracts.legacy_content_address import LegacyContentAddressedModel
 from aec_bench.contracts.validators import NonEmptyStr
 from aec_bench.experimentation.qualification.program_necessity.contracts import (
     ProgramNecessityArm,
@@ -23,7 +23,7 @@ from aec_bench.experimentation.qualification.program_necessity.contracts import 
 )
 
 
-class ProgramNecessityFamilyResult(ContentAddressedModel):
+class ProgramNecessityFamilyResult(LegacyContentAddressedModel):
     """Complete family distribution with development and fresh replication."""
 
     schema_version: Literal["aecbench.program-necessity-family-result.v2"] = (
@@ -109,7 +109,7 @@ class ProgramNecessityFamilyResult(ContentAddressedModel):
         return self
 
 
-class ProgramNecessityStudyResult(ContentAddressedModel):
+class ProgramNecessityStudyResult(LegacyContentAddressedModel):
     """Complete phase-neutral study result under its explicit design."""
 
     schema_version: Literal["aecbench.program-necessity-study-result.v1"] = "aecbench.program-necessity-study-result.v1"
@@ -167,7 +167,7 @@ class ProgramNecessityStudyResult(ContentAddressedModel):
         return self
 
 
-class ProgramNecessityGateResult(ContentAddressedModel):
+class ProgramNecessityGateResult(LegacyContentAddressedModel):
     """Historical complete campaign result with exact six-family cardinality."""
 
     schema_version: Literal["aecbench.program-necessity-gate-result.v2"] = "aecbench.program-necessity-gate-result.v2"

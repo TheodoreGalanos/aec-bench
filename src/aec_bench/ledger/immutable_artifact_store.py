@@ -14,7 +14,11 @@ from typing import Generic, TypeVar
 
 from pydantic import JsonValue, TypeAdapter
 
-from aec_bench.contracts.harness_kernel import ContentAddressedModel, validate_sha256
+from aec_bench.contracts.harness_kernel import validate_sha256
+from aec_bench.contracts.legacy_content_address import (
+    LegacyContentAddressedModel,
+    read_legacy_content_addressed_model,
+)
 from aec_bench.ledger.immutable_byte_store import ImmutableArtifact as ImmutableArtifact
 from aec_bench.ledger.immutable_byte_store import (
     ImmutableArtifactCollisionError as ImmutableArtifactCollisionError,
@@ -34,7 +38,7 @@ from aec_bench.ledger.immutable_byte_store import (
 )
 
 ModelT = TypeVar("ModelT")
-ContentModelT = TypeVar("ContentModelT", bound=ContentAddressedModel)
+ContentModelT = TypeVar("ContentModelT", bound=LegacyContentAddressedModel)
 LogicalIdentity = Mapping[str, JsonValue] | str
 
 
@@ -108,6 +112,20 @@ class ImmutableArtifactStore(ImmutableByteStore):
         if not self.exists(relative_path):
             return None
         return self.load_model(relative_path, adapter)
+
+    def load_legacy_model(
+        self,
+        relative_path: str,
+        adapter: TypeAdapter[ModelT],
+    ) -> ModelT:
+        """Validate one old embedded digest and return a plain current model."""
+
+        try:
+            return read_legacy_content_addressed_model(self.load_bytes(relative_path), adapter)
+        except ValueError as error:
+            raise ImmutableArtifactIntegrityError(
+                f"legacy immutable model is invalid at {relative_path}: {error}",
+            ) from error
 
 
 class EvidenceRepository(ImmutableArtifactStore):

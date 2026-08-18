@@ -15,9 +15,10 @@ from typing import Literal, Protocol
 from pydantic import TypeAdapter, field_validator
 
 from aec_bench.contracts.harness_kernel import (
-    ContentAddressedModel,
+    FrozenStrictModel,
     validate_sha256,
 )
+from aec_bench.contracts.legacy_content_address import LegacyContentAddressedModel
 from aec_bench.contracts.validators import NonEmptyStr
 from aec_bench.experimentation.governance.standing_monitors import ForbiddenFlowRule
 from aec_bench.ledger.immutable_artifact_store import (
@@ -63,7 +64,7 @@ class _RuntimeManifestIdentity(Protocol):
         """Return the cycle identity carried by a runtime manifest."""
 
 
-class _RuntimeManifestClaim(ContentAddressedModel):
+class _RuntimeManifestClaim(LegacyContentAddressedModel):
     """Exclusive cycle identity binding to one runtime manifest."""
 
     schema_version: Literal["aecbench.monitor-runtime-manifest-claim.v1"] = "aecbench.monitor-runtime-manifest-claim.v1"
@@ -76,7 +77,7 @@ class _RuntimeManifestClaim(ContentAddressedModel):
         return validate_sha256(value)
 
 
-class _RuntimeFlowClaim(ContentAddressedModel):
+class _RuntimeFlowClaim(LegacyContentAddressedModel):
     """Exclusive flow_id binding to one durable runtime observation."""
 
     schema_version: Literal["aecbench.monitor-runtime-flow-claim.v1"] = "aecbench.monitor-runtime-flow-claim.v1"
@@ -90,7 +91,7 @@ class _RuntimeFlowClaim(ContentAddressedModel):
         return validate_sha256(value)
 
 
-class _CanaryReferenceClaim(ContentAddressedModel):
+class _CanaryReferenceClaim(LegacyContentAddressedModel):
     """Exclusive reference_id binding to one canary-reference event."""
 
     schema_version: Literal["aecbench.monitor-canary-reference-claim.v1"] = "aecbench.monitor-canary-reference-claim.v1"
@@ -104,7 +105,7 @@ class _CanaryReferenceClaim(ContentAddressedModel):
         return validate_sha256(value)
 
 
-class _CanarySurfaceActivationClaim(ContentAddressedModel):
+class _CanarySurfaceActivationClaim(LegacyContentAddressedModel):
     """Exclusive canary commitment binding to one verified surface activation."""
 
     schema_version: Literal["aecbench.canary-surface-activation-claim.v1"] = (
@@ -124,7 +125,7 @@ class _CanarySurfaceActivationClaim(ContentAddressedModel):
         return validate_sha256(value)
 
 
-class _FlowCollectorActivationClaim(ContentAddressedModel):
+class _FlowCollectorActivationClaim(LegacyContentAddressedModel):
     """Exclusive forbidden-flow rule binding to one verified collector activation."""
 
     schema_version: Literal["aecbench.flow-collector-activation-claim.v1"] = (
@@ -140,7 +141,7 @@ class _FlowCollectorActivationClaim(ContentAddressedModel):
         return validate_sha256(value)
 
 
-class _CheckpointClaim(ContentAddressedModel):
+class _CheckpointClaim(LegacyContentAddressedModel):
     """Exclusive checkpoint-stage binding to one immutable checkpoint."""
 
     schema_version: Literal["aecbench.monitor-runtime-checkpoint-claim.v1"] = (
@@ -156,7 +157,7 @@ class _CheckpointClaim(ContentAddressedModel):
         return validate_sha256(value)
 
 
-class _EffectPermitClaim(ContentAddressedModel):
+class _EffectPermitClaim(LegacyContentAddressedModel):
     """Exclusive cycle binding to one pre-effect permit."""
 
     schema_version: Literal["aecbench.monitor-effect-permit-claim.v1"] = "aecbench.monitor-effect-permit-claim.v1"
@@ -169,7 +170,7 @@ class _EffectPermitClaim(ContentAddressedModel):
         return validate_sha256(value)
 
 
-class _RuntimeClosureClaim(ContentAddressedModel):
+class _RuntimeClosureClaim(LegacyContentAddressedModel):
     """Exclusive cycle binding to one incident-preserving closure."""
 
     schema_version: Literal["aecbench.monitor-runtime-closure-claim.v1"] = "aecbench.monitor-runtime-closure-claim.v1"
@@ -232,7 +233,7 @@ def _translate_repository_errors(
         raise MonitorRuntimeIntegrityError(f"{label}: {error}") from error
 
 
-def _store_monitor_model[ModelT: ContentAddressedModel](
+def _store_monitor_model[ModelT: FrozenStrictModel](
     repository: EvidenceRepository,
     path: Path,
     model: ModelT,
@@ -248,7 +249,7 @@ def _store_monitor_model[ModelT: ContentAddressedModel](
         ).model
 
 
-def _load_monitor_model[ModelT: ContentAddressedModel](
+def _load_monitor_model[ModelT: FrozenStrictModel](
     repository: EvidenceRepository,
     path: Path,
     model_type: type[ModelT],
@@ -262,7 +263,7 @@ def _load_monitor_model[ModelT: ContentAddressedModel](
         ).model
 
 
-def _bind_monitor_claim[ModelT: ContentAddressedModel](
+def _bind_monitor_claim[ModelT: FrozenStrictModel](
     repository: EvidenceRepository,
     path: Path,
     claim: ModelT,

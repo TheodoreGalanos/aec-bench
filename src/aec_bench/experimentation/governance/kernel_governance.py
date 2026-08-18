@@ -16,7 +16,7 @@ from aec_bench.contracts.authority import (
     HumanAuthorityApproval,
     TaintLabel,
 )
-from aec_bench.contracts.harness_kernel import ContentAddressedModel
+from aec_bench.contracts.harness_kernel import FrozenStrictModel
 from aec_bench.experimentation.governance.authority_ledger import (
     AuthorityLedger,
     StoredAuthorityEvent,
@@ -183,7 +183,7 @@ def issue_kernel_change_authority(
             decision_basis.reference,
             proposal_basis.reference,
         ),
-        kernel_sha256=selected_request.source_kernel_ref.content_sha256,
+        kernel_ref=selected_request.source_kernel_ref,
         reasons=("human approved exact recomputed kernel proposal after recurrence and regression gates",),
         revalidation_triggers=(
             "human_authority_revocation",
@@ -199,7 +199,7 @@ def _observe_external_model(
     ledger: AuthorityLedger,
     kind: BasisKind,
     artifact_id: str,
-    model: ContentAddressedModel,
+    model: FrozenStrictModel,
     producer: AuthorityPrincipal,
     observed_by: AuthorityPrincipal,
     operation_id: str,

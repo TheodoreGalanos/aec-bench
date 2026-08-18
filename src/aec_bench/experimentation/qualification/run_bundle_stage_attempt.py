@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, cast
 
-from aec_bench.contracts.harness_kernel import canonical_content_sha256
+from aec_bench.contracts.harness_kernel import canonical_json_sha256
 from aec_bench.contracts.run_bundle import RunBundle
 from aec_bench.contracts.stage_execution import (
     KernelInstructionOverride,
@@ -152,7 +152,6 @@ def execute_governed_stage_attempt(
     expected_backend = _backend_receipt(
         inputs=inputs,
         attempt_id=replay.dispatch_intent.attempt_id,
-        dispatch_intent_sha256=(replay.dispatch_intent.content_sha256),
         dispatch_key_sha256=(replay.dispatch_intent.dispatch_key_sha256),
         stage_receipt=stage_receipt,
     )
@@ -174,8 +173,7 @@ class _StageBudgetPort:
     ) -> GovernedAttemptBudgetReservation:
         return GovernedAttemptBudgetReservation(
             attempt_id=preflight.attempt_id,
-            preflight_sha256=preflight.content_sha256,
-            reservation_id=f"run-bundle-stage-budget:{preflight.content_sha256}",
+            reservation_id=f"run-bundle-stage-budget:{preflight.attempt_id}",
             maximum_usage=preflight.maximum_usage,
         )
 
@@ -188,9 +186,9 @@ class _StageBudgetPort:
     ) -> GovernedAttemptBudgetClosure:
         return GovernedAttemptBudgetClosure(
             attempt_id=reservation.attempt_id,
-            reservation_sha256=reservation.content_sha256,
-            dispatch_receipt_sha256=dispatch_receipt.content_sha256,
-            import_receipt_sha256=import_receipt.content_sha256,
+            reservation_id=reservation.reservation_id,
+            backend_receipt_id=dispatch_receipt.backend_receipt_id,
+            import_id=import_receipt.import_id,
             observed_usage=import_receipt.observed_usage,
             effect_evidence_sha256s=(import_receipt.source_effect_evidence_sha256s),
         )
@@ -206,9 +204,8 @@ class _StageMonitorPort:
     ) -> GovernedAttemptMonitorPermit:
         return GovernedAttemptMonitorPermit(
             attempt_id=preflight.attempt_id,
-            preflight_sha256=preflight.content_sha256,
-            reservation_sha256=reservation.content_sha256,
-            permit_id=f"run-bundle-stage-integrity:{preflight.content_sha256}",
+            reservation_id=reservation.reservation_id,
+            permit_id=f"run-bundle-stage-integrity:{preflight.attempt_id}",
         )
 
     def close(
@@ -221,10 +218,9 @@ class _StageMonitorPort:
     ) -> GovernedAttemptMonitorClosure:
         return GovernedAttemptMonitorClosure(
             attempt_id=permit.attempt_id,
-            permit_sha256=permit.content_sha256,
-            dispatch_receipt_sha256=dispatch_receipt.content_sha256,
-            import_receipt_sha256=import_receipt.content_sha256,
-            budget_closure_sha256=budget_closure.content_sha256,
+            permit_id=permit.permit_id,
+            backend_receipt_id=dispatch_receipt.backend_receipt_id,
+            import_id=import_receipt.import_id,
             observed_usage=import_receipt.observed_usage,
             effect_evidence_sha256s=(import_receipt.source_effect_evidence_sha256s),
             closure_permitted=True,
@@ -264,7 +260,6 @@ class _StageBackendPort:
         return _backend_receipt(
             inputs=self.inputs,
             attempt_id=intent.attempt_id,
-            dispatch_intent_sha256=intent.content_sha256,
             dispatch_key_sha256=intent.dispatch_key_sha256,
             stage_receipt=stored,
         )
@@ -280,7 +275,6 @@ class _StageBackendPort:
         return _backend_receipt(
             inputs=self.inputs,
             attempt_id=intent.attempt_id,
-            dispatch_intent_sha256=intent.content_sha256,
             dispatch_key_sha256=intent.dispatch_key_sha256,
             stage_receipt=stored,
         )
@@ -313,7 +307,6 @@ class _StageImportExtension:
         expected = _backend_receipt(
             inputs=self.inputs,
             attempt_id=preflight.attempt_id,
-            dispatch_intent_sha256=(dispatch_receipt.dispatch_intent_sha256),
             dispatch_key_sha256=(dispatch_receipt.dispatch_key_sha256),
             stage_receipt=stored,
         )
@@ -323,7 +316,7 @@ class _StageImportExtension:
             )
         return GovernedAttemptImportReceipt(
             attempt_id=preflight.attempt_id,
-            dispatch_receipt_sha256=dispatch_receipt.content_sha256,
+            backend_receipt_id=dispatch_receipt.backend_receipt_id,
             import_id=f"run-bundle-stage-import:{stored.reference.sha256}",
             observed_usage=dispatch_receipt.observed_usage,
             source_effect_evidence_sha256s=(dispatch_receipt.effect_evidence_sha256s),
@@ -337,7 +330,7 @@ def _preflight(
     dispatch_payload_sha256: str,
 ) -> GovernedAttemptPreflight:
     coordinate = {
-        "bundle_sha256": inputs.bundle.content_sha256,
+        "bundle_id": inputs.bundle.bundle_id,
         "run_id": inputs.run_id,
         "program_node_id": inputs.context.node_id,
         "attempt": inputs.context.attempt_index,
@@ -350,18 +343,18 @@ def _preflight(
             {
                 dispatch_payload_sha256,
                 inputs.context_manifest_reference.sha256,
-                inputs.instruction_override.content_sha256,
                 *(stage_receipt_reference(receipt).sha256 for receipt in inputs.upstream_receipts),
             }
         )
     )
     return GovernedAttemptPreflight(
-        attempt_id=("run-bundle-stage." + canonical_content_sha256(coordinate)),
-        workload_sha256=canonical_content_sha256(
+        attempt_id=("run-bundle-stage." + canonical_json_sha256(coordinate)),
+        workload_sha256=canonical_json_sha256(
             {
                 **coordinate,
-                "program_sha256": inputs.bundle.program.content_sha256,
-                "context_manifest_sha256": (inputs.context_manifest.content_sha256),
+                "program_ref": inputs.bundle.program.ref.model_dump(mode="json"),
+                "context_manifest": inputs.context_manifest_reference.model_dump(mode="json"),
+                "instruction_override": inputs.instruction_override.model_dump(mode="json"),
             }
         ),
         dispatch_payload_sha256=dispatch_payload_sha256,
@@ -379,14 +372,12 @@ def _backend_receipt(
     *,
     inputs: _StageAttemptInputs,
     attempt_id: str,
-    dispatch_intent_sha256: str,
     dispatch_key_sha256: str,
     stage_receipt: StoredStageExecutionReceipt,
 ) -> GovernedAttemptBackendReceipt:
     receipt = stage_receipt.receipt
     return GovernedAttemptBackendReceipt(
         attempt_id=attempt_id,
-        dispatch_intent_sha256=dispatch_intent_sha256,
         dispatch_key_sha256=dispatch_key_sha256,
         backend_receipt_id=(f"stage-execution:{stage_receipt.reference.sha256}"),
         observed_usage=_exact_usage(
@@ -470,9 +461,7 @@ def _effect_evidence(
             {
                 _dispatch_payload_sha256(inputs),
                 inputs.context_manifest_reference.sha256,
-                inputs.instruction_override.content_sha256,
                 stored.reference.sha256,
-                receipt.content_sha256,
                 receipt.raw_output.sha256,
                 receipt.parsed_output.sha256,
                 receipt.agent_result.sha256,
@@ -489,7 +478,6 @@ def _imported_evidence(
     return tuple(
         sorted(
             {
-                receipt.content_sha256,
                 receipt.context_manifest.sha256,
                 receipt.raw_output.sha256,
                 receipt.parsed_output.sha256,
@@ -503,7 +491,11 @@ def _resolve_stage_receipt(
     inputs: _StageAttemptInputs,
 ) -> StoredStageExecutionReceipt | None:
     receipts_root = (
-        inputs.artifacts_root / inputs.bundle.content_sha256 / "runs" / _safe_segment(inputs.run_id) / "stage-receipts"
+        inputs.artifacts_root
+        / _safe_segment(inputs.bundle.bundle_id)
+        / "runs"
+        / _safe_segment(inputs.run_id)
+        / "stage-receipts"
     )
     if not receipts_root.exists():
         return None
@@ -536,11 +528,10 @@ def _matches_inputs(
 ) -> bool:
     return (
         receipt.bundle_id == inputs.bundle.bundle_id
-        and receipt.bundle_sha256 == inputs.bundle.content_sha256
         and receipt.run_id == inputs.run_id
-        and receipt.program_sha256 == inputs.bundle.program.content_sha256
+        and receipt.program_ref == inputs.bundle.program.ref
         and receipt.program_node_id == inputs.context.node_id
-        and receipt.operation_sha256 == inputs.context.operation_ref.content_sha256
+        and receipt.operation_ref == inputs.context.operation_ref
         and receipt.attempt == inputs.context.attempt_index
         and receipt.task_id == inputs.task_id
         and receipt.stage_id == inputs.stage_id
@@ -552,9 +543,9 @@ def _matches_inputs(
 def _dispatch_payload_sha256(
     inputs: _StageAttemptInputs,
 ) -> str:
-    return canonical_content_sha256(
+    return canonical_json_sha256(
         {
-            "bundle_sha256": inputs.bundle.content_sha256,
+            "bundle_id": inputs.bundle.bundle_id,
             "run_id": inputs.run_id,
             "operation_context": {
                 "node_id": inputs.context.node_id,
@@ -598,7 +589,7 @@ def _validate_inputs(inputs: _StageAttemptInputs) -> None:
     if (
         inputs.instruction_override.task_id != inputs.task_id
         or inputs.instruction_override.stage_id != inputs.stage_id
-        or inputs.instruction_override.context_manifest_sha256 != inputs.context_manifest.content_sha256
+        or inputs.instruction_override.context_manifest != inputs.context_manifest_reference
         or inputs.context_manifest_reference.sha256 != _file_sha256(Path(inputs.context_manifest_reference.path))
     ):
         raise RunBundleStageAttemptError(

@@ -16,21 +16,24 @@ from pydantic import Field, field_validator, model_validator
 from aec_bench.contracts.execution_program import (
     ActionNode,
     BranchNode,
+    ExecutionProgramRef,
     FanoutNode,
     JoinNode,
     VerifyNode,
 )
 from aec_bench.contracts.harness_instance import (
     ContextBindingConfig,
+    HarnessInstanceRef,
     HarnessRecipe,
     TaskSourceBindingConfig,
     ToolBindingConfig,
 )
 from aec_bench.contracts.harness_kernel import (
-    ContentAddressedModel,
-    canonical_content_sha256,
+    canonical_json_sha256,
+    kernel_abi_commitment,
     validate_sha256,
 )
+from aec_bench.contracts.legacy_content_address import LegacyContentAddressedModel
 from aec_bench.contracts.trial_record import ArtifactReference
 from aec_bench.contracts.validators import NonEmptyStr
 from aec_bench.evolution.paired_repair import RepairTrialOutcome, decide_repair
@@ -95,26 +98,22 @@ from aec_bench.harness.kernel_catalogue import KernelRuntimeRegistry
 SelectionSplit = Literal["discovery", "calibration"]
 
 
-class AcceptedRepairEvidence(ContentAddressedModel):
+class AcceptedRepairEvidence(LegacyContentAddressedModel):
     """Accepted paired-repair evidence pinned to its persisted terminal artifact and child Hx/px."""
 
     schema_version: Literal["aecbench.accepted-repair-evidence.v1"] = "aecbench.accepted-repair-evidence.v1"
     terminal: ArtifactReference
     decision_sha256: str
     parent_candidate_id: NonEmptyStr
-    parent_harness_sha256: str
-    parent_program_sha256: str
+    parent_harness_ref: HarnessInstanceRef
+    parent_program_ref: ExecutionProgramRef
     child_candidate_id: NonEmptyStr
-    child_harness_sha256: str
-    child_program_sha256: str
+    child_harness_ref: HarnessInstanceRef
+    child_program_ref: ExecutionProgramRef
     references: tuple[PairedRepairEvidenceReference, ...] = Field(min_length=1)
 
     @field_validator(
         "decision_sha256",
-        "parent_harness_sha256",
-        "parent_program_sha256",
-        "child_harness_sha256",
-        "child_program_sha256",
     )
     @classmethod
     def validate_hashes(cls, value: str) -> str:
@@ -129,7 +128,7 @@ class AcceptedRepairEvidence(ContentAddressedModel):
         return self
 
 
-class MotifLearningReport(ContentAddressedModel):
+class MotifLearningReport(LegacyContentAddressedModel):
     """Causal audit record for candidate creation and every attempted promotion edge."""
 
     schema_version: Literal["aecbench.motif-learning-report.v3"] = "aecbench.motif-learning-report.v3"
@@ -183,7 +182,7 @@ class MotifLearningResult:
     report: MotifLearningReport
 
 
-class MotifTransferPlan(ContentAddressedModel):
+class MotifTransferPlan(LegacyContentAddressedModel):
     """Frozen pre-holdout selection and target-specific Hx/px materialization plan."""
 
     schema_version: Literal["aecbench.motif-transfer-plan.v1"] = "aecbench.motif-transfer-plan.v1"
@@ -216,7 +215,7 @@ class MotifTransferPlan(ContentAddressedModel):
         return self
 
 
-class GovernedMotifTransferPlan(ContentAddressedModel):
+class GovernedMotifTransferPlan(LegacyContentAddressedModel):
     """Selection-time assurance bound to one exact transfer plan."""
 
     schema_version: Literal["aecbench.governed-motif-transfer-plan.v2"] = "aecbench.governed-motif-transfer-plan.v2"
@@ -263,7 +262,7 @@ class GovernedMotifTransferPlan(ContentAddressedModel):
         )
 
 
-class MotifTransferPromotionReport(ContentAddressedModel):
+class MotifTransferPromotionReport(LegacyContentAddressedModel):
     """Auditable holdout evidence and governed transfer-promotion outcome."""
 
     schema_version: Literal["aecbench.motif-transfer-promotion-report.v1"] = (
@@ -405,7 +404,7 @@ def capture_accepted_repair_evidence(
     assert result.child_verification is not None
     assert result.attempt is not None
     assert result.child_candidate_id is not None
-    decision_sha256 = canonical_content_sha256(result.decision.model_dump(mode="json"))
+    decision_sha256 = canonical_json_sha256(result.decision.model_dump(mode="json"))
     references = _build_paired_repair_references(
         execution=execution,
         decision_sha256=decision_sha256,
@@ -414,11 +413,11 @@ def capture_accepted_repair_evidence(
         terminal=execution.terminal.reference,
         decision_sha256=decision_sha256,
         parent_candidate_id=result.parent_candidate_id,
-        parent_harness_sha256=result.parent_verification.harness_sha256,
-        parent_program_sha256=result.parent_verification.program_sha256,
+        parent_harness_ref=result.parent_verification.harness_ref,
+        parent_program_ref=result.parent_verification.program_ref,
         child_candidate_id=result.child_candidate_id,
-        child_harness_sha256=result.child_verification.harness_sha256,
-        child_program_sha256=result.child_verification.program_sha256,
+        child_harness_ref=result.child_verification.harness_ref,
+        child_program_ref=result.child_verification.program_ref,
         references=references,
     )
 
@@ -656,7 +655,7 @@ def _build_motif_candidate(
     attestation = source_stage_report.applicability
     candidate = HarnessProgramMotif.create(
         status=MotifStatus.CANDIDATE,
-        kernel_abi_sha256=source_stage_report.kernel_ref.content_sha256,
+        kernel_abi_sha256=kernel_abi_commitment(source_stage_report.kernel_ref),
         hx_template=hx_template,
         px_template=px_template,
         applicability=attestation.descriptor,
@@ -728,7 +727,7 @@ def _select_and_materialize_motif(
     selection_request = MotifSelectionRequest.create(
         archive_sha256=frozen_library.archive_sha256,
         archive_frozen=True,
-        kernel_abi_sha256=request.kernel_ref.content_sha256,
+        kernel_abi_sha256=kernel_abi_commitment(request.kernel_ref),
         applicability=target.descriptor,
         selection_split=selection_split,
         target_review_lineage_ids=target.review_lineage_ids,
@@ -927,15 +926,15 @@ def _validate_repaired_candidate(
         harness=harness,
         registry=registry,
     )
-    if harness.content_sha256 != repair.child_harness_sha256 or program.content_sha256 != repair.child_program_sha256:
+    if harness.ref != repair.child_harness_ref or program.ref != repair.child_program_ref:
         raise ValueError("repaired candidate sources do not compile to the accepted child Hx/px")
     parent_cells = [
         cell
         for evidence in stage_report.candidates
         for cell in evidence.cells
         if cell.cell is HarnessProgramCell.HX_PX
-        and cell.compiled_harness_sha256 == repair.parent_harness_sha256
-        and cell.compiled_program_sha256 == repair.parent_program_sha256
+        and cell.compiled_harness_ref == repair.parent_harness_ref
+        and cell.compiled_program_ref == repair.parent_program_ref
     ]
     if not parent_cells:
         raise ValueError("accepted repair parent does not match a harness-program-study learned Hx/px candidate")
@@ -966,7 +965,7 @@ def _stage_quality_evidence(
         ],
     }
     return QualityEvidenceReference.create(
-        evaluation_sha256=canonical_content_sha256(evaluation_payload),
+        evaluation_sha256=canonical_json_sha256(evaluation_payload),
         subject_hx_template_sha256=harness_program_evidence.subject_hx_template_sha256,
         subject_px_template_sha256=harness_program_evidence.subject_px_template_sha256,
         review_lineage_ids=report.review_lineage_ids,

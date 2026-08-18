@@ -24,8 +24,9 @@ from aec_bench.contracts.evaluation_plane import (
     TaskVerifierSurface,
     TaskVerifierSurfaceScope,
     assert_acceptance_compatible,
+    task_verifier_surface_commitment,
 )
-from aec_bench.contracts.harness_kernel import canonical_content_sha256
+from aec_bench.contracts.harness_kernel import KernelRef, canonical_json_sha256
 
 
 def _sha(label: str) -> str:
@@ -123,7 +124,7 @@ def _plan(
     return EvaluationPlan(
         plan_id="evaluation-plan.stage-9",
         evaluation_generation="evaluation-generation-1",
-        kernel_sha256=_sha("kernel"),
+        kernel_ref=KernelRef(kernel_id="kernel.fixed", version="1.0.0"),
         harness_policy_sha256=_sha("harness-policy"),
         candidate_manifest_sha256=_sha("candidate-manifest"),
         task_manifest_sha256=_sha("task-manifest"),
@@ -225,7 +226,7 @@ def test_acceptance_identity_changes_for_denominator_policy_and_comparison_fails
         )
     )
 
-    assert original.acceptance_critic.content_sha256 != changed.acceptance_critic.content_sha256
+    assert original.acceptance_critic != changed.acceptance_critic
     with pytest.raises(ValueError, match="acceptance critic identity"):
         assert_acceptance_compatible(original, changed)
 
@@ -243,7 +244,14 @@ def test_acceptance_identity_changes_for_denominator_policy_and_comparison_fails
         ("runtime_environment_sha256", _sha("different-runtime")),
         ("execution_principal_id", "principal.accept.replacement"),
         ("compatibility_generation", "evaluation-generation-2"),
-        ("parent_critic_sha256", _sha("parent-critic")),
+        (
+            "parent_critic_ref",
+            _critic(
+                CriticRole.DEVELOPMENT,
+                case_label="parent-cases",
+                principal="principal.parent",
+            ).ref.model_dump(mode="json"),
+        ),
     ],
 )
 def test_every_acceptance_relevant_spec_change_creates_a_new_identity(
@@ -251,12 +259,12 @@ def test_every_acceptance_relevant_spec_change_creates_a_new_identity(
     changed_value: str,
 ) -> None:
     original = _plan().acceptance_critic
-    payload = original.model_dump(mode="json", exclude={"content_sha256"})
+    payload = original.model_dump(mode="json")
     payload[field_name] = changed_value
 
     changed = CriticSpec.model_validate(payload)
 
-    assert changed.content_sha256 != original.content_sha256
+    assert changed != original
 
 
 def test_retired_acceptance_manifest_reveal_verifies_every_escrow_component() -> None:
@@ -266,8 +274,8 @@ def test_retired_acceptance_manifest_reveal_verifies_every_escrow_component() ->
         case_label="acceptance-cases",
         principal="principal.accept",
         commitment=commitment,
-        case_manifest_sha256=canonical_content_sha256(cases),
-        rubric_policy_sha256=canonical_content_sha256(scoring),
+        case_manifest_sha256=canonical_json_sha256(cases),
+        rubric_policy_sha256=canonical_json_sha256(scoring),
     )
     reveal = AcceptanceManifestReveal.create(
         critic_spec=acceptance,
@@ -279,7 +287,7 @@ def test_retired_acceptance_manifest_reveal_verifies_every_escrow_component() ->
         promotion_sha256s=(_sha("promotion-1"),),
     )
 
-    assert reveal.commitment_sha256 == commitment.content_sha256
+    assert reveal.critic_spec.acceptance_manifest_commitment == commitment
     assert reveal.evaluation_outcome_sha256s == tuple(sorted((_sha("outcome-1"), _sha("outcome-2"))))
 
     with pytest.raises(ValidationError, match="salted commitment"):
@@ -316,13 +324,13 @@ def test_retired_acceptance_manifest_reveal_verifies_every_escrow_component() ->
         )
 
 
-def test_evaluation_plan_and_budget_partitions_are_content_addressed() -> None:
+def test_evaluation_plan_and_budget_partitions_are_plain_immutable_values() -> None:
     plan = _plan()
     rebuilt = EvaluationPlan.model_validate(plan.model_dump(mode="json"))
 
     assert rebuilt == plan
     assert rebuilt.budgets.acceptance.case_count == 8
-    assert rebuilt.content_sha256
+    assert "content_sha256" not in rebuilt.model_dump(mode="json")
 
 
 def test_evaluation_authority_scope_binds_replayable_role_specific_critic_releases() -> None:
@@ -440,7 +448,7 @@ def test_task_verifier_surface_canonically_binds_only_verifier_file_inventory() 
         "tests/test.sh",
     )
     assert rebuilt == surface
-    assert rebuilt.content_sha256 == surface.content_sha256
+    assert task_verifier_surface_commitment(rebuilt) == task_verifier_surface_commitment(surface)
 
     with pytest.raises(ValidationError, match="sealed verifier files"):
         TaskVerifierSurface(
@@ -482,7 +490,8 @@ def test_task_verifier_scope_is_order_independent_and_rejects_duplicate_tasks() 
         "civil/drainage/beta",
     )
     assert rebuilt == scope
-    assert _plan(task_verifier_sha256=scope.content_sha256).task_verifier_sha256 == scope.content_sha256
+    scope_commitment = task_verifier_surface_commitment(scope)
+    assert _plan(task_verifier_sha256=scope_commitment).task_verifier_sha256 == scope_commitment
 
     with pytest.raises(ValidationError, match="task identities must be unique"):
         TaskVerifierSurfaceScope(

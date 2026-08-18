@@ -21,7 +21,7 @@ from aec_bench.contracts.authority import (
     TaintLabel,
 )
 from aec_bench.contracts.harness_kernel import (
-    ContentAddressedModel,
+    FrozenStrictModel,
 )
 from aec_bench.contracts.run_bundle import RunBundle
 from aec_bench.contracts.stage_execution import KernelInstructionOverride
@@ -308,8 +308,7 @@ class _ScoredBudgetPort:
         self.ensure_reserved()
         return GovernedAttemptBudgetReservation(
             attempt_id=preflight.attempt_id,
-            preflight_sha256=preflight.content_sha256,
-            reservation_id=f"run-bundle-budget:{preflight.content_sha256}",
+            reservation_id=f"run-bundle-budget:{preflight.attempt_id}",
             maximum_usage=preflight.maximum_usage,
         )
 
@@ -325,9 +324,9 @@ class _ScoredBudgetPort:
         self._account(self.materialization.records)
         return GovernedAttemptBudgetClosure(
             attempt_id=reservation.attempt_id,
-            reservation_sha256=reservation.content_sha256,
-            dispatch_receipt_sha256=dispatch_receipt.content_sha256,
-            import_receipt_sha256=import_receipt.content_sha256,
+            reservation_id=reservation.reservation_id,
+            backend_receipt_id=dispatch_receipt.backend_receipt_id,
+            import_id=import_receipt.import_id,
             observed_usage=dispatch_receipt.observed_usage,
             effect_evidence_sha256s=dispatch_receipt.effect_evidence_sha256s,
         )
@@ -394,15 +393,14 @@ class _ScoredMonitorPort:
                 preflight_basis.reference,
                 reservation_basis.reference,
             ),
-            kernel_sha256=self.bundle.kernel_ref.content_sha256,
+            kernel_ref=self.bundle.kernel_ref,
             reasons=("exact preflight and real Hx budget reservation passed",),
             revalidation_triggers=("governed_attempt_replay",),
         )
         stored = self._ledger.issue_authority_event(event)
         return GovernedAttemptMonitorPermit(
             attempt_id=preflight.attempt_id,
-            preflight_sha256=preflight.content_sha256,
-            reservation_sha256=reservation.content_sha256,
+            reservation_id=reservation.reservation_id,
             permit_id=stored.event.event_id,
         )
 
@@ -431,10 +429,9 @@ class _ScoredMonitorPort:
         )
         return GovernedAttemptMonitorClosure(
             attempt_id=permit.attempt_id,
-            permit_sha256=permit.content_sha256,
-            dispatch_receipt_sha256=dispatch_receipt.content_sha256,
-            import_receipt_sha256=import_receipt.content_sha256,
-            budget_closure_sha256=budget_closure.content_sha256,
+            permit_id=permit.permit_id,
+            backend_receipt_id=dispatch_receipt.backend_receipt_id,
+            import_id=import_receipt.import_id,
             observed_usage=dispatch_receipt.observed_usage,
             effect_evidence_sha256s=dispatch_receipt.effect_evidence_sha256s,
             closure_permitted=True,
@@ -490,7 +487,7 @@ class _ScoredMonitorPort:
             stored is None
             or stored.event.action is not AuthorityAction.PROVIDER_DISPATCH
             or stored.event.decision is not AuthorityDecision.GRANTED
-            or stored.event.kernel_sha256 != self.bundle.kernel_ref.content_sha256
+            or stored.event.kernel_ref != self.bundle.kernel_ref
             or (dispatch_payload_sha256 is not None and stored.event.subject_sha256 != dispatch_payload_sha256)
         ):
             raise AuthorityLedgerError(
@@ -660,7 +657,6 @@ class _ScoredBackendPort:
     ) -> GovernedAttemptBackendReceipt:
         return GovernedAttemptBackendReceipt(
             attempt_id=intent.attempt_id,
-            dispatch_intent_sha256=intent.content_sha256,
             dispatch_key_sha256=intent.dispatch_key_sha256,
             backend_receipt_id=f"harbor-invocation:{materialization.receipt.reference.sha256}",
             observed_usage=aggregate_governed_trial_usage(
@@ -706,7 +702,7 @@ class _ScoredImportExtension:
         )
         return GovernedAttemptImportReceipt(
             attempt_id=preflight.attempt_id,
-            dispatch_receipt_sha256=dispatch_receipt.content_sha256,
+            backend_receipt_id=dispatch_receipt.backend_receipt_id,
             import_id=f"run-bundle-import:{materialization.receipt.reference.sha256}",
             observed_usage=dispatch_receipt.observed_usage,
             source_effect_evidence_sha256s=dispatch_receipt.effect_evidence_sha256s,
@@ -758,7 +754,11 @@ def _resolve_materialization(
     lowered: LoweredHarborRun,
 ) -> ScoredInvocationMaterialization | None:
     receipts_root = (
-        inputs.artifacts_root / inputs.bundle.content_sha256 / "runs" / _safe_segment(inputs.study.run_id) / "receipts"
+        inputs.artifacts_root
+        / _safe_segment(inputs.bundle.bundle_id)
+        / "runs"
+        / _safe_segment(inputs.study.run_id)
+        / "receipts"
     )
     if not receipts_root.is_dir():
         return None
@@ -766,7 +766,7 @@ def _resolve_materialization(
     for path in sorted(receipts_root.glob("*/harbor-invocation-receipt.json")):
         receipt = load_harbor_invocation_receipt(path)
         if (
-            receipt.bundle_sha256 == inputs.bundle.content_sha256
+            receipt.bundle_id == inputs.bundle.bundle_id
             and receipt.run_id == inputs.study.run_id
             and receipt.program_node_id == inputs.context.node_id
             and receipt.attempt == inputs.context.attempt_index
@@ -887,10 +887,10 @@ def _monitor_report_bytes(
             {
                 "schema_version": "aecbench.run-bundle-standing-monitor-report.v1",
                 "attempt_id": permit.attempt_id,
-                "permit_sha256": permit.content_sha256,
-                "dispatch_receipt_sha256": dispatch_receipt.content_sha256,
-                "import_receipt_sha256": import_receipt.content_sha256,
-                "budget_closure_sha256": budget_closure.content_sha256,
+                "permit_id": permit.permit_id,
+                "backend_receipt_id": dispatch_receipt.backend_receipt_id,
+                "import_id": import_receipt.import_id,
+                "reservation_id": budget_closure.reservation_id,
                 "effect_evidence_sha256s": dispatch_receipt.effect_evidence_sha256s,
                 "observed_usage": dispatch_receipt.observed_usage.model_dump(mode="json"),
                 "status": "passed",
@@ -902,7 +902,7 @@ def _monitor_report_bytes(
     ).encode("utf-8")
 
 
-def _canonical_model_bytes(model: ContentAddressedModel) -> bytes:
+def _canonical_model_bytes(model: FrozenStrictModel) -> bytes:
     return (
         json.dumps(
             model.model_dump(mode="json"),

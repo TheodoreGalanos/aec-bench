@@ -1,4 +1,4 @@
-# ABOUTME: Defines content-addressed critic, evaluation, budget, and acceptance-escrow contracts.
+# ABOUTME: Defines critic, evaluation, budget, and acceptance-escrow contracts.
 # ABOUTME: Separates visible development feedback from hidden, independently governed promotion evidence.
 
 from __future__ import annotations
@@ -9,11 +9,16 @@ from typing import Literal, Self
 
 from pydantic import Field, FiniteFloat, JsonValue, NonNegativeInt, field_validator, model_validator
 
-from aec_bench.contracts.authority import BasisKind, BasisReference
+from aec_bench.contracts.authority import (
+    BasisKind,
+    BasisReference,
+    CriticGenerationIdentity,
+    EvaluationPlanIdentity,
+)
 from aec_bench.contracts.harness_kernel import (
-    ContentAddressedModel,
     FrozenStrictModel,
-    canonical_content_sha256,
+    KernelRef,
+    canonical_json_sha256,
     validate_sha256,
 )
 from aec_bench.contracts.validators import NonEmptyStr
@@ -46,7 +51,7 @@ class ExecutableAnchorCalibrationCadence(StrEnum):
     EVERY_CRITIC_RELEASE = "every_critic_release"
 
 
-class ExecutableAnchorCalibrationPolicy(ContentAddressedModel):
+class ExecutableAnchorCalibrationPolicy(FrozenStrictModel):
     """Typed policy whose digest is already frozen by an EvaluationPlan."""
 
     schema_version: Literal["aecbench.executable-anchor-calibration-policy.v1"] = (
@@ -66,15 +71,23 @@ class ExecutableAnchorCalibrationPolicy(ContentAddressedModel):
         return tuple(sorted(value, key=order.__getitem__))
 
 
-class ExecutableAnchorCalibrationEvidence(ContentAddressedModel):
+def executable_anchor_calibration_policy_commitment(
+    policy: ExecutableAnchorCalibrationPolicy,
+) -> str:
+    """Return the named compatibility commitment frozen by an evaluation plan."""
+
+    return canonical_json_sha256(policy.model_dump(mode="json"))
+
+
+class ExecutableAnchorCalibrationEvidence(FrozenStrictModel):
     """Completed release-time comparison of one exact critic against executable anchors."""
 
     schema_version: Literal["aecbench.executable-anchor-calibration-evidence.v1"] = (
         "aecbench.executable-anchor-calibration-evidence.v1"
     )
     calibration_id: NonEmptyStr
-    evaluation_plan_sha256: str
-    critic_generation_sha256: str
+    evaluation_plan: EvaluationPlanIdentity
+    critic_generation: CriticGenerationIdentity
     anchor_calibration_policy_sha256: str
     executable_anchor_sha256s: tuple[str, ...] = Field(min_length=1)
     evaluation_outcomes: tuple[BasisReference, ...] = Field(min_length=1)
@@ -82,8 +95,6 @@ class ExecutableAnchorCalibrationEvidence(ContentAddressedModel):
     passed: bool
 
     @field_validator(
-        "evaluation_plan_sha256",
-        "critic_generation_sha256",
         "anchor_calibration_policy_sha256",
     )
     @classmethod
@@ -119,7 +130,7 @@ class ExecutableAnchorCalibrationEvidence(ContentAddressedModel):
         return self
 
 
-class AcceptanceManifestCommitment(ContentAddressedModel):
+class AcceptanceManifestCommitment(FrozenStrictModel):
     """Public salted commitment to one hidden acceptance manifest and scoring policy."""
 
     schema_version: Literal["aecbench.acceptance-manifest-commitment.v1"] = "aecbench.acceptance-manifest-commitment.v1"
@@ -171,26 +182,28 @@ class CriticRef(FrozenStrictModel):
     version: NonEmptyStr
     role: CriticRole
     compatibility_generation: NonEmptyStr
-    content_sha256: str
-    acceptance_manifest_commitment_sha256: str | None = None
-
-    @field_validator("content_sha256", "acceptance_manifest_commitment_sha256")
-    @classmethod
-    def validate_ref_hashes(cls, value: str | None) -> str | None:
-        if value is None:
-            return None
-        return validate_sha256(value)
+    acceptance_manifest_commitment: AcceptanceManifestCommitment | None = None
 
     @model_validator(mode="after")
     def validate_role_contract(self) -> Self:
-        if self.role is CriticRole.ACCEPTANCE and self.acceptance_manifest_commitment_sha256 is None:
+        if self.role is CriticRole.ACCEPTANCE and self.acceptance_manifest_commitment is None:
             raise ValueError("acceptance critic requires an acceptance manifest commitment")
-        if self.role is not CriticRole.ACCEPTANCE and self.acceptance_manifest_commitment_sha256 is not None:
+        if self.role is not CriticRole.ACCEPTANCE and self.acceptance_manifest_commitment is not None:
             raise ValueError("only acceptance critics may bind an acceptance manifest commitment")
         return self
 
+    @property
+    def authority_identity(self) -> CriticGenerationIdentity:
+        """Return the public critic identity used by authority records."""
 
-class CriticSpec(ContentAddressedModel):
+        return CriticGenerationIdentity(
+            critic_id=self.critic_id,
+            version=self.version,
+            compatibility_generation=self.compatibility_generation,
+        )
+
+
+class CriticSpec(FrozenStrictModel):
     """Host-only critic configuration whose ref reveals no live case identity."""
 
     schema_version: Literal["aecbench.critic-spec.v1"] = "aecbench.critic-spec.v1"
@@ -208,7 +221,7 @@ class CriticSpec(ContentAddressedModel):
     feedback_visibility: CriticFeedbackVisibility
     execution_principal_id: NonEmptyStr
     compatibility_generation: NonEmptyStr
-    parent_critic_sha256: str | None = None
+    parent_critic_ref: CriticRef | None = None
     acceptance_manifest_commitment: AcceptanceManifestCommitment | None = None
 
     @field_validator(
@@ -220,7 +233,6 @@ class CriticSpec(ContentAddressedModel):
         "threshold_policy_sha256",
         "evidence_inclusion_policy_sha256",
         "runtime_environment_sha256",
-        "parent_critic_sha256",
     )
     @classmethod
     def validate_hashes(cls, value: str | None) -> str | None:
@@ -254,21 +266,21 @@ class CriticSpec(ContentAddressedModel):
             version=self.version,
             role=self.role,
             compatibility_generation=self.compatibility_generation,
-            content_sha256=self.content_sha256,
-            acceptance_manifest_commitment_sha256=(
-                None
-                if self.acceptance_manifest_commitment is None
-                else self.acceptance_manifest_commitment.content_sha256
-            ),
+            acceptance_manifest_commitment=self.acceptance_manifest_commitment,
         )
 
 
-class AcceptanceManifestReveal(ContentAddressedModel):
+def critic_spec_commitment(spec: CriticSpec) -> str:
+    """Return the named host-only commitment used for critic release authority."""
+
+    return canonical_json_sha256(spec.model_dump(mode="json"))
+
+
+class AcceptanceManifestReveal(FrozenStrictModel):
     """Retirement-time reveal that verifies the host-only spec and public commitment."""
 
     schema_version: Literal["aecbench.acceptance-manifest-reveal.v1"] = "aecbench.acceptance-manifest-reveal.v1"
     critic_spec: CriticSpec
-    commitment_sha256: str
     case_manifest: JsonValue
     scoring_policy: JsonValue
     salt: NonEmptyStr
@@ -276,7 +288,7 @@ class AcceptanceManifestReveal(ContentAddressedModel):
     evaluation_outcome_sha256s: tuple[str, ...] = ()
     promotion_sha256s: tuple[str, ...] = ()
 
-    @field_validator("commitment_sha256", "retirement_authority_event_sha256")
+    @field_validator("retirement_authority_event_sha256")
     @classmethod
     def validate_required_hashes(cls, value: str) -> str:
         return validate_sha256(value)
@@ -295,11 +307,9 @@ class AcceptanceManifestReveal(ContentAddressedModel):
         commitment = self.critic_spec.acceptance_manifest_commitment
         if self.critic_spec.role is not CriticRole.ACCEPTANCE or commitment is None:
             raise ValueError("acceptance reveal requires an acceptance critic spec")
-        if self.commitment_sha256 != commitment.content_sha256:
-            raise ValueError("acceptance reveal commitment_sha256 does not match its critic spec")
-        if canonical_content_sha256(self.case_manifest) != self.critic_spec.case_manifest_sha256:
+        if canonical_json_sha256(self.case_manifest) != self.critic_spec.case_manifest_sha256:
             raise ValueError("acceptance reveal case manifest does not match its critic spec")
-        if canonical_content_sha256(self.scoring_policy) != self.critic_spec.rubric_policy_sha256:
+        if canonical_json_sha256(self.scoring_policy) != self.critic_spec.rubric_policy_sha256:
             raise ValueError("acceptance reveal scoring policy does not match its critic spec")
         expected = _salted_manifest_sha256(
             case_manifest=self.case_manifest,
@@ -328,7 +338,6 @@ class AcceptanceManifestReveal(ContentAddressedModel):
             raise ValueError("acceptance reveal requires a committed acceptance critic")
         return cls(
             critic_spec=critic_spec,
-            commitment_sha256=commitment.content_sha256,
             case_manifest=case_manifest,
             scoring_policy=scoring_policy,
             salt=salt,
@@ -336,6 +345,12 @@ class AcceptanceManifestReveal(ContentAddressedModel):
             evaluation_outcome_sha256s=evaluation_outcome_sha256s,
             promotion_sha256s=promotion_sha256s,
         )
+
+
+def acceptance_manifest_reveal_commitment(reveal: AcceptanceManifestReveal) -> str:
+    """Return the named commitment used for retirement-time reveal authority."""
+
+    return canonical_json_sha256(reveal.model_dump(mode="json"))
 
 
 class EvaluationBudgetPartition(FrozenStrictModel):
@@ -349,7 +364,7 @@ class EvaluationBudgetPartition(FrozenStrictModel):
     max_wall_time_seconds: FiniteFloat = Field(ge=0)
 
 
-class EvaluationBudgetPlan(ContentAddressedModel):
+class EvaluationBudgetPlan(FrozenStrictModel):
     """Separate candidate and critic-plane budget partitions."""
 
     schema_version: Literal["aecbench.evaluation-budget-plan.v1"] = "aecbench.evaluation-budget-plan.v1"
@@ -362,7 +377,7 @@ class EvaluationBudgetPlan(ContentAddressedModel):
     audit: EvaluationBudgetPartition
 
 
-class CandidateManifestScope(ContentAddressedModel):
+class CandidateManifestScope(FrozenStrictModel):
     """One evaluation commitment over one or more task-scoped candidate manifests."""
 
     schema_version: Literal["aecbench.candidate-manifest-scope.v1"] = "aecbench.candidate-manifest-scope.v1"
@@ -380,6 +395,12 @@ class CandidateManifestScope(ContentAddressedModel):
         if len(value) != len(set(value)):
             raise ValueError("candidate manifest scope identities must be unique")
         return tuple(sorted(value))
+
+
+def candidate_manifest_scope_commitment(scope: CandidateManifestScope) -> str:
+    """Return the named evaluation commitment for a candidate-manifest scope."""
+
+    return canonical_json_sha256(scope.model_dump(mode="json"))
 
 
 class TaskVerifierFileInventoryEntry(FrozenStrictModel):
@@ -404,7 +425,7 @@ class TaskVerifierFileInventoryEntry(FrozenStrictModel):
         return validate_sha256(value)
 
 
-class TaskVerifierSurface(ContentAddressedModel):
+class TaskVerifierSurface(FrozenStrictModel):
     """Task-specific inventory of verifier-only and sealed-verifier-only files."""
 
     schema_version: Literal["aecbench.task-verifier-surface.v1"] = "aecbench.task-verifier-surface.v1"
@@ -444,7 +465,7 @@ class TaskVerifierSurface(ContentAddressedModel):
         return self
 
 
-class TaskVerifierSurfaceScope(ContentAddressedModel):
+class TaskVerifierSurfaceScope(FrozenStrictModel):
     """One evaluation commitment over one or more task-specific verifier surfaces."""
 
     schema_version: Literal["aecbench.task-verifier-surface-scope.v1"] = "aecbench.task-verifier-surface-scope.v1"
@@ -468,18 +489,29 @@ class TaskVerifierSurfaceScope(ContentAddressedModel):
         )
 
 
+def task_verifier_surface_commitment(
+    surface: TaskVerifierSurface | TaskVerifierSurfaceScope,
+) -> str:
+    """Return the named evaluation commitment for a verifier surface."""
+
+    return canonical_json_sha256(surface.model_dump(mode="json"))
+
+
 class EvaluationPlanRef(FrozenStrictModel):
     """Opaque evaluation-plan identity safe to attach to candidate-derived provenance."""
 
     schema_version: Literal["aecbench.evaluation-plan-ref.v1"] = "aecbench.evaluation-plan-ref.v1"
     plan_id: NonEmptyStr
     evaluation_generation: NonEmptyStr
-    content_sha256: str
 
-    @field_validator("content_sha256")
-    @classmethod
-    def validate_plan_hash(cls, value: str) -> str:
-        return validate_sha256(value)
+    @property
+    def authority_identity(self) -> EvaluationPlanIdentity:
+        """Return the stable plan identity used by authority records."""
+
+        return EvaluationPlanIdentity(
+            plan_id=self.plan_id,
+            evaluation_generation=self.evaluation_generation,
+        )
 
 
 class CriticReleaseAuthorityRef(FrozenStrictModel):
@@ -496,7 +528,7 @@ class CriticReleaseAuthorityRef(FrozenStrictModel):
         return validate_sha256(value)
 
 
-class EvaluationPlanAuthorityScope(ContentAddressedModel):
+class EvaluationPlanAuthorityScope(FrozenStrictModel):
     """Authority evidence released after an evaluation plan and outside its digest."""
 
     schema_version: Literal["aecbench.evaluation-plan-authority-scope.v1"] = (
@@ -518,8 +550,8 @@ class EvaluationPlanAuthorityScope(ContentAddressedModel):
         required = {CriticRole.DEVELOPMENT, CriticRole.ACCEPTANCE}
         if not required.issubset(roles):
             raise ValueError("evaluation authority requires development and acceptance critic releases")
-        critic_hashes = tuple(item.critic.content_sha256 for item in value)
-        if len(critic_hashes) != len(set(critic_hashes)):
+        critic_ids = tuple((item.critic.critic_id, item.critic.version) for item in value)
+        if len(critic_ids) != len(set(critic_ids)):
             raise ValueError("critic generation identities must be unique")
         event_ids = tuple(item.authority_event_id for item in value)
         event_hashes = tuple(item.authority_event_sha256 for item in value)
@@ -537,7 +569,7 @@ class EvaluationPlanAuthorityScope(ContentAddressedModel):
         return self
 
 
-class EvaluationPlan(ContentAddressedModel):
+class EvaluationPlan(FrozenStrictModel):
     """Host-side preregistration binding critics, evidence surfaces, budgets, and gates.
 
     The candidate-manifest digest binds either one task-scoped manifest directly
@@ -549,7 +581,7 @@ class EvaluationPlan(ContentAddressedModel):
     schema_version: Literal["aecbench.evaluation-plan.v1"] = "aecbench.evaluation-plan.v1"
     plan_id: NonEmptyStr
     evaluation_generation: NonEmptyStr
-    kernel_sha256: str
+    kernel_ref: KernelRef
     harness_policy_sha256: str
     candidate_manifest_sha256: str
     task_manifest_sha256: str
@@ -570,7 +602,6 @@ class EvaluationPlan(ContentAddressedModel):
     challenge_suite_sha256: str
 
     @field_validator(
-        "kernel_sha256",
         "harness_policy_sha256",
         "candidate_manifest_sha256",
         "task_manifest_sha256",
@@ -623,7 +654,6 @@ class EvaluationPlan(ContentAddressedModel):
         return EvaluationPlanRef(
             plan_id=self.plan_id,
             evaluation_generation=self.evaluation_generation,
-            content_sha256=self.content_sha256,
         )
 
 
@@ -631,12 +661,12 @@ def assert_acceptance_compatible(left: EvaluationPlan, right: EvaluationPlan) ->
     """Fail closed when two candidate plans do not share one exact acceptance regime."""
     left_identity = (
         left.evaluation_generation,
-        left.kernel_sha256,
+        left.kernel_ref,
         left.harness_policy_sha256,
         left.task_manifest_sha256,
         left.split_manifest_sha256,
         left.task_verifier_sha256,
-        left.acceptance_critic.content_sha256,
+        left.acceptance_critic,
         left.budgets.acceptance.model_dump(mode="json"),
         left.integrity_policy_sha256,
         left.utility_policy_sha256,
@@ -648,12 +678,12 @@ def assert_acceptance_compatible(left: EvaluationPlan, right: EvaluationPlan) ->
     )
     right_identity = (
         right.evaluation_generation,
-        right.kernel_sha256,
+        right.kernel_ref,
         right.harness_policy_sha256,
         right.task_manifest_sha256,
         right.split_manifest_sha256,
         right.task_verifier_sha256,
-        right.acceptance_critic.content_sha256,
+        right.acceptance_critic,
         right.budgets.acceptance.model_dump(mode="json"),
         right.integrity_policy_sha256,
         right.utility_policy_sha256,
@@ -673,7 +703,7 @@ def _salted_manifest_sha256(
     scoring_policy: JsonValue,
     salt: str,
 ) -> str:
-    return canonical_content_sha256(
+    return canonical_json_sha256(
         {
             "domain": "aecbench.acceptance-manifest-commitment.v1",
             "salt": salt,

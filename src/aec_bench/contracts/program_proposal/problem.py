@@ -10,10 +10,11 @@ from pydantic import Field, field_validator, model_validator
 
 from aec_bench.contracts.harness_instance import HarnessBudget
 from aec_bench.contracts.harness_kernel import (
-    ContentAddressedModel,
     FrozenStrictModel,
+    KernelRef,
     validate_sha256,
 )
+from aec_bench.contracts.legacy_content_address import LegacyContentAddressedModel
 from aec_bench.contracts.output_completion import OutputCompletionContract
 from aec_bench.contracts.program_proposal._canonical import (
     canonical_unique_models,
@@ -22,7 +23,7 @@ from aec_bench.contracts.program_proposal._canonical import (
 from aec_bench.contracts.validators import NonEmptyStr
 
 
-class PublicSourceRef(ContentAddressedModel):
+class PublicSourceRef(LegacyContentAddressedModel):
     """Path-free public source identity exposed through an opaque proposer handle."""
 
     schema_version: Literal["aecbench.public-source-ref.v1"] = "aecbench.public-source-ref.v1"
@@ -60,19 +61,18 @@ class PublicAuthorityBoundary(FrozenStrictModel):
     statement: NonEmptyStr
 
 
-class FixedHarnessCapabilityProjection(ContentAddressedModel):
+class FixedHarnessCapabilityProjection(LegacyContentAddressedModel):
     """Safe H0 projection containing identities, allowlisted capabilities, and one budget."""
 
     schema_version: Literal["aecbench.fixed-harness-capability-projection.v1"] = (
         "aecbench.fixed-harness-capability-projection.v1"
     )
-    kernel_sha256: str
+    kernel_ref: KernelRef
     harness_policy_sha256: str
     capability_ids: tuple[NonEmptyStr, ...] = Field(min_length=1)
     aggregate_budget: HarnessBudget
 
     @field_validator(
-        "kernel_sha256",
         "harness_policy_sha256",
     )
     @classmethod
@@ -85,7 +85,7 @@ class FixedHarnessCapabilityProjection(ContentAddressedModel):
         return canonical_unique_strings(value, label="capability ids")
 
 
-class DecompositionProblemView(ContentAddressedModel):
+class DecompositionProblemView(LegacyContentAddressedModel):
     """Reward-blind public task surface from which a proposer may create a program."""
 
     schema_version: Literal["aecbench.decomposition-problem-view.v1"] = "aecbench.decomposition-problem-view.v1"
@@ -148,7 +148,7 @@ class DecompositionProblemView(ContentAddressedModel):
         )
 
 
-class DecompositionLeakageAudit(ContentAddressedModel):
+class DecompositionLeakageAudit(LegacyContentAddressedModel):
     """Host audit that either binds a safe view or records preconstruction rejection."""
 
     schema_version: Literal["aecbench.decomposition-leakage-audit.v1"] = "aecbench.decomposition-leakage-audit.v1"

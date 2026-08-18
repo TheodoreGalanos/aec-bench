@@ -32,14 +32,19 @@ classifies provenance fields and controls how contributors add them.
 
 ## Current scope
 
-The current guardrail classifies fields before later simplification work
-removes or migrates them. A field in the legacy baseline is known migration
-debt. Its presence in that baseline is not approval of its design.
+The guardrail classifies fields while owning formats complete their
+migrations. A field in the legacy baseline is known migration debt. Its
+presence in that baseline is not approval of its design.
 
 This policy does not state that later provenance work is complete. In
 particular:
 
-- `ContentAddressedModel` and current self-addressed contracts still exist;
+- ordinary Kernel, Harness, execution-program, evaluation, stage, and
+  run-bundle contracts are plain immutable models with stable references;
+- schemas awaiting an owning-format migration use
+  `LegacyContentAddressedModel` as explicit compatibility debt; its reader
+  validates and removes `content_sha256` before it returns a plain migrated
+  model;
 - `ArtifactRef` is the universal exact-byte store reference, while the
   protected `TrialRecord` still uses `ArtifactReference` until its owning
   migration;
@@ -378,7 +383,8 @@ fields.
 uses the Python AST. It inspects persisted or public fields declared through
 Pydantic models, dataclasses, typed dictionaries, computed serializers,
 manifest-building code, and Python Web schemas. It also identifies inherited
-`ContentAddressedModel.content_sha256` fields as legacy occurrences.
+`ContentAddressedModel.content_sha256` and
+`LegacyContentAddressedModel.content_sha256` fields as legacy occurrences.
 
 Run:
 

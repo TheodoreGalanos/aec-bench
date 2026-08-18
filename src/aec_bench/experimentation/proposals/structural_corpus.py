@@ -9,11 +9,11 @@ from typing import Literal, Self
 from pydantic import Field, NonNegativeInt, PositiveInt, field_validator, model_validator
 
 from aec_bench.contracts.harness_kernel import (
-    ContentAddressedModel,
     FrozenStrictModel,
-    canonical_content_sha256,
+    canonical_json_sha256,
     validate_sha256,
 )
+from aec_bench.contracts.legacy_content_address import LegacyContentAddressedModel
 from aec_bench.contracts.run_bundle import TaskSnapshotRef
 from aec_bench.contracts.task_definition import Visibility
 from aec_bench.contracts.validators import NonEmptyStr
@@ -23,7 +23,7 @@ StructuralSplitName = Literal["train", "dev", "holdout"]
 DirectedEdge = tuple[str, str]
 
 
-class TopologyShapeRef(ContentAddressedModel):
+class TopologyShapeRef(LegacyContentAddressedModel):
     """Name-independent identity and descriptive metrics for one dependency DAG."""
 
     schema_version: Literal["aecbench.topology-shape.v1"] = "aecbench.topology-shape.v1"
@@ -218,7 +218,7 @@ class NearStructureDistance(FrozenStrictModel):
         return self
 
 
-class StructuralSplitManifest(ContentAddressedModel):
+class StructuralSplitManifest(LegacyContentAddressedModel):
     """Immutable structural split with exact full and reduced isomorphism exclusion."""
 
     schema_version: Literal["aecbench.structural-split.v2"] = "aecbench.structural-split.v2"
@@ -284,7 +284,7 @@ class StructuralSplitManifest(ContentAddressedModel):
     @property
     def task_manifest_sha256(self) -> str:
         """Project exact task and review identities separately from topology split policy."""
-        return canonical_content_sha256(
+        return canonical_json_sha256(
             {
                 "schema_version": "aecbench.structural-task-manifest-projection.v1",
                 "items": [
@@ -427,7 +427,7 @@ def _canonical_unlabeled_signature(
         )
         for ordering in permutations(range(node_count))
     )
-    return canonical_content_sha256(
+    return canonical_json_sha256(
         {
             "kind": "unlabeled_directed_graph",
             "node_count": node_count,

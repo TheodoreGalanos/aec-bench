@@ -140,6 +140,7 @@ _ACTOR_REQUEST_FINGERPRINT_EXPRESSIONS = {
     "decision_id": "request.decision_id",
     "semantics": "ACTOR_INVOCATION_SEMANTICS",
 }
+_CONTENT_ADDRESSED_BASE_NAMES = {"ContentAddressedModel", "LegacyContentAddressedModel"}
 _SELF_PATH = "scripts/check_provenance_fields.py"
 
 
@@ -790,9 +791,11 @@ def _resolve_class_kinds(classes: Mapping[str, _ClassInfo]) -> None:
             item.kind = "typed_dict"
         elif "dataclass" in decorator_tails:
             item.kind = "dataclass"
-        elif base_tails & (_MODEL_BASE_NAMES | {"ContentAddressedModel"}):
+        elif base_tails & (_MODEL_BASE_NAMES | _CONTENT_ADDRESSED_BASE_NAMES):
             item.kind = "pydantic"
-        item.content_addressed = "ContentAddressedModel" in base_tails and item.node.name != "ContentAddressedModel"
+        item.content_addressed = bool(base_tails & _CONTENT_ADDRESSED_BASE_NAMES) and (
+            item.node.name not in _CONTENT_ADDRESSED_BASE_NAMES
+        )
 
     changed = True
     while changed:
@@ -806,9 +809,9 @@ def _resolve_class_kinds(classes: Mapping[str, _ClassInfo]) -> None:
                     item.kind = parent.kind
                     changed = True
                 if not item.content_addressed and (
-                    parent.content_addressed or parent.node.name == "ContentAddressedModel"
+                    parent.content_addressed or parent.node.name in _CONTENT_ADDRESSED_BASE_NAMES
                 ):
-                    item.content_addressed = item.node.name != "ContentAddressedModel"
+                    item.content_addressed = item.node.name not in _CONTENT_ADDRESSED_BASE_NAMES
                     changed = True
 
 
@@ -1713,7 +1716,7 @@ def _semantic_violations(
                     code="PROV010",
                     message=f"{candidate.symbol} inherits a new ambient content address.",
                     remediation=(
-                        "Remove ContentAddressedModel inheritance, or add a reviewed registry entry that names "
+                        "Remove legacy content-addressing inheritance, or add a reviewed registry entry that names "
                         "the exact payload, authority, consumer, and mismatch behavior."
                     ),
                     symbols=(candidate.symbol,),
@@ -1723,7 +1726,7 @@ def _semantic_violations(
         if candidate.field_name in {"content_hash", "content_sha", "content_sha256"} and not candidate.inherited:
             category = item.category if item is not None else None
             owner_name = candidate.owner.rsplit(".", maxsplit=1)[-1]
-            if category != "artifact_integrity" and owner_name != "ContentAddressedModel":
+            if category != "artifact_integrity" and owner_name not in _CONTENT_ADDRESSED_BASE_NAMES:
                 violations.append(
                     Violation(
                         code="PROV006",

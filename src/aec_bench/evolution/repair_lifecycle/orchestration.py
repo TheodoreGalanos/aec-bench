@@ -296,7 +296,7 @@ def _compile_candidate(
             message="compiled candidate must preserve source candidate lineage",
             candidate_id=candidate.candidate_id,
         )
-    if compiled.harness.source_recipe_sha256 != candidate.harness_request.recipe.content_sha256:
+    if compiled.harness.source_recipe_ref != candidate.harness_request.recipe.ref:
         _fail(
             stage=RepairLoopStage.COMPILE,
             code="compiled_harness_source_mismatch",
@@ -304,7 +304,7 @@ def _compile_candidate(
             candidate_id=candidate.candidate_id,
         )
     expected_program = candidate.program_template.bind(compiled.harness.ref)
-    if compiled.program.source_program_sha256 != expected_program.content_sha256:
+    if compiled.program.source_program_ref != expected_program.ref:
         _fail(
             stage=RepairLoopStage.COMPILE,
             code="compiled_program_source_mismatch",
@@ -403,14 +403,14 @@ def _verify_candidate(
             message="verification must preserve the exact paired run identity",
             candidate_id=candidate.candidate_id,
         )
-    if verification.harness_sha256 != candidate.harness.content_sha256:
+    if verification.harness_ref != candidate.harness.ref:
         _fail(
             stage=RepairLoopStage.VERIFY,
             code="verification_harness_mismatch",
             message="verification must identify the current compiled harness",
             candidate_id=candidate.candidate_id,
         )
-    if verification.program_sha256 != candidate.program.content_sha256:
+    if verification.program_ref != candidate.program.ref:
         _fail(
             stage=RepairLoopStage.VERIFY,
             code="verification_program_mismatch",

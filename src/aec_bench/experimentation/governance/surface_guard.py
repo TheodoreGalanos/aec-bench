@@ -19,9 +19,10 @@ from aec_bench.contracts.authority import (
     AuthorityPrincipalKind,
 )
 from aec_bench.contracts.harness_kernel import (
-    ContentAddressedModel,
+    FrozenStrictModel,
     validate_sha256,
 )
+from aec_bench.contracts.legacy_content_address import LegacyContentAddressedModel
 from aec_bench.contracts.validators import NonEmptyStr
 from aec_bench.experimentation.governance.standing_monitors import (
     FlowAction,
@@ -64,7 +65,7 @@ class SurfaceAccessDenied(SurfaceGuardError):
         super().__init__(f"surface access denied for {attempt_id}; receipt {receipt_sha256}")
 
 
-class SurfaceGuardConfiguration(ContentAddressedModel):
+class SurfaceGuardConfiguration(LegacyContentAddressedModel):
     """Exact standing policy and filesystem confinement for one guard instance."""
 
     schema_version: Literal["aecbench.surface-guard-configuration.v1"] = "aecbench.surface-guard-configuration.v1"
@@ -101,7 +102,7 @@ class SurfaceGuardConfiguration(ContentAddressedModel):
         return self
 
 
-class SurfaceAccessAttempt(ContentAddressedModel):
+class SurfaceAccessAttempt(LegacyContentAddressedModel):
     """One exact principal, surface, action, and copied evidence identity."""
 
     schema_version: Literal["aecbench.surface-access-attempt.v1"] = "aecbench.surface-access-attempt.v1"
@@ -118,7 +119,7 @@ class SurfaceAccessAttempt(ContentAddressedModel):
         return validate_sha256(value)
 
 
-class SurfaceAccessAuditReceipt(ContentAddressedModel):
+class SurfaceAccessAuditReceipt(LegacyContentAddressedModel):
     """Durable decision proving one exact attempt was captured before its effect."""
 
     schema_version: Literal["aecbench.surface-access-audit-receipt.v1"] = "aecbench.surface-access-audit-receipt.v1"
@@ -154,7 +155,7 @@ class SurfaceAccessAuditReceipt(ContentAddressedModel):
         return self
 
 
-class _SurfaceGuardConfigurationClaim(ContentAddressedModel):
+class _SurfaceGuardConfigurationClaim(LegacyContentAddressedModel):
     """Exclusive binding from one guard identity to one configuration."""
 
     schema_version: Literal["aecbench.surface-guard-configuration-claim.v1"] = (
@@ -169,7 +170,7 @@ class _SurfaceGuardConfigurationClaim(ContentAddressedModel):
         return validate_sha256(value)
 
 
-class _SurfaceAccessAttemptClaim(ContentAddressedModel):
+class _SurfaceAccessAttemptClaim(LegacyContentAddressedModel):
     """Exclusive binding from one attempt identity to one audit receipt."""
 
     schema_version: Literal["aecbench.surface-access-attempt-claim.v1"] = "aecbench.surface-access-attempt-claim.v1"
@@ -528,7 +529,7 @@ def _prepare_root(
     return normalized_root, normalized_candidates
 
 
-def _publish_claim[ModelT: ContentAddressedModel](
+def _publish_claim[ModelT: FrozenStrictModel](
     *,
     root: Path,
     path: Path,
@@ -611,7 +612,7 @@ def _mkdir_private(path: Path) -> None:
         fsync_directory(directory.parent)
 
 
-def _load_model[ModelT: ContentAddressedModel](
+def _load_model[ModelT: FrozenStrictModel](
     *,
     root: Path,
     path: Path,
@@ -721,7 +722,7 @@ def _attempt_claim_path(
     return root / "claims" / "attempts" / hashlib.sha256(logical).hexdigest() / "claim.json"
 
 
-def _canonical_model_bytes(model: ContentAddressedModel) -> bytes:
+def _canonical_model_bytes(model: FrozenStrictModel) -> bytes:
     return (
         json.dumps(
             model.model_dump(mode="json"),

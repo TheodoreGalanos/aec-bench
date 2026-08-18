@@ -16,6 +16,7 @@ from aec_bench.contracts.authority import (
     AuthorityPrincipal,
     AuthorityPrincipalKind,
     BasisKind,
+    EvaluationPlanIdentity,
     HumanAuthorityApproval,
     MotifPromotionQualification,
     PromotionMonitorAttestation,
@@ -34,10 +35,12 @@ from aec_bench.contracts.evaluation_outcome import (
     ValidityEvaluation,
 )
 from aec_bench.contracts.evaluation_plane import (
+    AcceptanceManifestCommitment,
     CriticRef,
     CriticRole,
     EvaluationPlanRef,
 )
+from aec_bench.contracts.harness_kernel import KernelRef, canonical_json_sha256
 from aec_bench.evaluation.integrity_gate import evaluate_with_integrity_gate
 from aec_bench.experimentation.governance.authority_ledger import (
     AuthorityLedger,
@@ -91,6 +94,17 @@ def _sha(label: str) -> str:
     return hashlib.sha256(label.encode()).hexdigest()
 
 
+def _kernel_ref() -> KernelRef:
+    return KernelRef(kernel_id="aec-bench.adaptive-harness", version="1.6.0")
+
+
+def _evaluation_plan_identity() -> EvaluationPlanIdentity:
+    return EvaluationPlanIdentity(
+        plan_id="evaluation-plan",
+        evaluation_generation="evaluation-generation.1",
+    )
+
+
 def _zero_costs() -> EvaluationCostBreakdown:
     zero = ResourceCost(
         provider_calls=0,
@@ -112,7 +126,6 @@ def _zero_costs() -> EvaluationCostBreakdown:
 
 def _accepted_outcome(*, candidate_sha256: str | None = None) -> EvaluationOutcome:
     return evaluate_with_integrity_gate(
-        evaluation_plan_sha256=_sha("evaluation-plan"),
         candidate_sha256=candidate_sha256 or _sha("candidate"),
         evidence_set_sha256=_sha("evidence"),
         integrity_checks=(IntegrityCheck(check_id="runtime-integrity", passed=True),),
@@ -138,14 +151,30 @@ def _recorded_critic_outcome(
     *,
     role: CriticRole = CriticRole.ACCEPTANCE,
     candidate_sha256: str | None = None,
-    kernel_sha256: str | None = None,
     suffix: str | None = None,
 ) -> tuple[StoredBasis, CriticEvaluationOutcome]:
     outcome = _accepted_outcome(candidate_sha256=candidate_sha256)
-    selected_kernel_sha256 = kernel_sha256 or _sha("kernel")
     selected_suffix = suffix or role.value
     critic_id = f"critic.{role.value}"
-    critic_sha256 = _sha(critic_id)
+    critic = CriticRef(
+        critic_id=critic_id,
+        version="1",
+        role=role,
+        compatibility_generation="evaluation-generation.1",
+        acceptance_manifest_commitment=(
+            AcceptanceManifestCommitment.create(
+                critic_id=critic_id,
+                critic_version="1",
+                case_manifest={"case": "acceptance"},
+                scoring_policy={"threshold": 0.9},
+                salt="governance-test-salt",
+                publication_receipt_sha256=_sha("acceptance-manifest-commitment"),
+            )
+            if role is CriticRole.ACCEPTANCE
+            else None
+        ),
+    )
+    critic_commitment = canonical_json_sha256(critic.model_dump(mode="json"))
     human = AuthorityPrincipal(
         principal_id="human.theo",
         kind=AuthorityPrincipalKind.HUMAN,
@@ -156,7 +185,7 @@ def _recorded_critic_outcome(
         principal=human,
         action=AuthorityAction.RELEASE_CRITIC_GENERATION,
         subject_id=subject_id,
-        subject_sha256=critic_sha256,
+        subject_sha256=critic_commitment,
         approved=True,
         reason="release exact critic generation for governed evaluation",
     )
@@ -181,34 +210,23 @@ def _recorded_critic_outcome(
         action=AuthorityAction.RELEASE_CRITIC_GENERATION,
         decision=AuthorityDecision.GRANTED,
         subject_id=subject_id,
-        subject_sha256=critic_sha256,
+        subject_sha256=critic_commitment,
         basis=(approval_basis.reference,),
-        kernel_sha256=selected_kernel_sha256,
-        critic_generation_sha256=critic_sha256,
+        kernel_ref=_kernel_ref(),
+        critic_generation=critic.authority_identity,
         reasons=("human approved exact critic generation",),
     )
     stored_release = ledger.issue_authority_event(release)
-    critic = CriticRef(
-        critic_id=critic_id,
-        version="1",
-        role=role,
-        compatibility_generation="evaluation-generation.1",
-        content_sha256=critic_sha256,
-        acceptance_manifest_commitment_sha256=(
-            _sha("acceptance-manifest-commitment") if role is CriticRole.ACCEPTANCE else None
-        ),
-    )
     bound = CriticEvaluationOutcome(
         evaluation_plan_ref=EvaluationPlanRef(
             plan_id="evaluation-plan",
             evaluation_generation="evaluation-generation.1",
-            content_sha256=outcome.evaluation_plan_sha256,
         ),
         critic=critic,
         execution_principal_id=f"critic-runtime.{role.value}",
         critic_release_authority_event_id=stored_release.event.event_id,
         critic_release_authority_event_sha256=(stored_release.event.content_sha256),
-        kernel_sha256=selected_kernel_sha256,
+        kernel_ref=_kernel_ref(),
         outcome=outcome,
     )
     stored = ledger.observe_model_basis(
@@ -256,7 +274,7 @@ def _monitor_plan() -> StandingMonitorPlan:
     return StandingMonitorPlan(
         monitor_id="monitor.governed-cycle",
         version="1.0.0",
-        evaluation_plan_sha256=_sha("evaluation-plan"),
+        evaluation_plan=_evaluation_plan_identity(),
         canaries=(motif, ordinary_ledger),
         forbidden_flow_rules=default_forbidden_flow_rules(),
         report_validity_cycles=1,
@@ -329,7 +347,7 @@ def _production_cycle(
     cycle_plan = CycleMonitorPlan(
         cycle_id="cycle.010",
         cycle_index=10,
-        evaluation_plan_sha256=_sha("evaluation-plan"),
+        evaluation_plan=_evaluation_plan_identity(),
         standing_policy_sha256=policy.content_sha256,
         assurance_snapshot_sha256=_sha("assurance-snapshot"),
     )
@@ -378,7 +396,8 @@ def test_promotion_authority_requires_current_monitor_and_accepted_evaluation(
         event_id="authority.promote-policy-001",
         subject_id="candidate",
         subject_sha256=critic_outcome.outcome.candidate_sha256,
-        kernel_sha256=_sha("kernel"),
+        kernel_ref=_kernel_ref(),
+        kernel_abi_sha256=_sha("kernel"),
         evaluation_outcome=outcome_basis.reference,
         monitor_plan=plan,
         monitor_report=report,
@@ -425,7 +444,8 @@ def test_raw_ledger_rejects_monitor_attestation_for_a_different_report(
         event_id="authority.monitor-join.valid",
         subject_id="candidate",
         subject_sha256=critic_outcome.outcome.candidate_sha256,
-        kernel_sha256=_sha("kernel"),
+        kernel_ref=_kernel_ref(),
+        kernel_abi_sha256=_sha("kernel"),
         evaluation_outcome=outcome_basis.reference,
         monitor_plan=plan,
         monitor_report=report,
@@ -441,7 +461,7 @@ def test_raw_ledger_rejects_monitor_attestation_for_a_different_report(
     bad_attestation = PromotionMonitorAttestation(
         monitor_basis_sha256=original_attestation.monitor_basis_sha256,
         monitor_report_sha256=_sha("different-monitor-report"),
-        evaluation_plan_sha256=original_attestation.evaluation_plan_sha256,
+        evaluation_plan=original_attestation.evaluation_plan,
         assurance_snapshot_sha256=original_attestation.assurance_snapshot_sha256,
         cycle_id=original_attestation.cycle_id,
         cycle_index=original_attestation.cycle_index,
@@ -475,8 +495,8 @@ def test_raw_ledger_rejects_monitor_attestation_for_a_different_report(
             bad_basis.reference if reference.kind is BasisKind.PROMOTION_MONITOR else reference
             for reference in promoted.event.basis
         ),
-        kernel_sha256=promoted.event.kernel_sha256,
-        critic_generation_sha256=promoted.event.critic_generation_sha256,
+        kernel_ref=promoted.event.kernel_ref,
+        critic_generation=promoted.event.critic_generation,
         reasons=promoted.event.reasons,
         revalidation_triggers=promoted.event.revalidation_triggers,
     )
@@ -495,7 +515,6 @@ def test_first_motif_promotion_derives_independent_qualification_without_assuran
     outcome_basis, critic_outcome = _recorded_critic_outcome(
         ledger,
         candidate_sha256=provisional.motif_sha256,
-        kernel_sha256=provisional.kernel_abi_sha256,
     )
     monitor_state_sha256 = _sha("pre-promotion-monitor-state")
     report = run_standing_monitors(
@@ -514,7 +533,8 @@ def test_first_motif_promotion_derives_independent_qualification_without_assuran
         event_id="authority.promote-motif-001",
         subject_id="motif.review-first",
         subject_sha256=subject_sha256,
-        kernel_sha256=provisional.kernel_abi_sha256,
+        kernel_ref=_kernel_ref(),
+        kernel_abi_sha256=provisional.kernel_abi_sha256,
         evaluation_outcome=outcome_basis.reference,
         monitor_plan=plan,
         monitor_report=report,
@@ -548,12 +568,13 @@ def test_first_motif_promotion_derives_independent_qualification_without_assuran
 
     assert qualification.provisional_motif_sha256 == provisional.motif_sha256
     assert qualification.motif_subject_sha256 == subject_sha256
-    assert qualification.critic_evaluation_outcome_sha256 == critic_outcome.content_sha256
+    assert qualification.critic_evaluation_outcome == critic_outcome.authority_identity
     assert qualification.promotion_lineage_sha256 == lineage.content_sha256
     assert qualification.promotion_monitor_attestation_sha256 == monitor.content_sha256
     assert qualification.critic_release_authority_event_sha256 == critic_outcome.critic_release_authority_event_sha256
-    assert qualification.critic_generation_sha256 == critic_outcome.critic.content_sha256
-    assert qualification.kernel_sha256 == provisional.kernel_abi_sha256
+    assert qualification.critic_generation == critic_outcome.critic.authority_identity
+    assert qualification.kernel_ref == _kernel_ref()
+    assert qualification.kernel_abi_sha256 == provisional.kernel_abi_sha256
     assert qualification_basis.origin.parent_origin_sha256s == tuple(
         sorted(
             ledger.resolve_basis(reference).origin.content_sha256
@@ -584,7 +605,6 @@ def test_candidate_authored_motif_qualification_cannot_authorize_promotion(
     outcome_basis, _ = _recorded_critic_outcome(
         ledger,
         candidate_sha256=provisional.motif_sha256,
-        kernel_sha256=provisional.kernel_abi_sha256,
     )
     monitor_state_sha256 = _sha("candidate-qualification-monitor-state")
     report = run_standing_monitors(
@@ -602,7 +622,8 @@ def test_candidate_authored_motif_qualification_cannot_authorize_promotion(
         event_id="authority.promote-motif-candidate-qualification",
         subject_id="motif.review-first",
         subject_sha256=subject_sha256,
-        kernel_sha256=provisional.kernel_abi_sha256,
+        kernel_ref=_kernel_ref(),
+        kernel_abi_sha256=provisional.kernel_abi_sha256,
         evaluation_outcome=outcome_basis.reference,
         monitor_plan=plan,
         monitor_report=report,
@@ -650,8 +671,8 @@ def test_candidate_authored_motif_qualification_cannot_authorize_promotion(
             candidate_qualification.reference if reference.kind is BasisKind.MOTIF_QUALIFICATION else reference
             for reference in promoted.event.basis
         ),
-        kernel_sha256=promoted.event.kernel_sha256,
-        critic_generation_sha256=promoted.event.critic_generation_sha256,
+        kernel_ref=promoted.event.kernel_ref,
+        critic_generation=promoted.event.critic_generation,
         reasons=promoted.event.reasons,
         revalidation_triggers=promoted.event.revalidation_triggers,
     )
@@ -688,8 +709,8 @@ def test_candidate_authored_motif_qualification_cannot_authorize_promotion(
             caller_asserted_qualification.reference if reference.kind is BasisKind.MOTIF_QUALIFICATION else reference
             for reference in promoted.event.basis
         ),
-        kernel_sha256=promoted.event.kernel_sha256,
-        critic_generation_sha256=promoted.event.critic_generation_sha256,
+        kernel_ref=promoted.event.kernel_ref,
+        critic_generation=promoted.event.critic_generation,
         reasons=promoted.event.reasons,
         revalidation_triggers=promoted.event.revalidation_triggers,
     )
@@ -709,7 +730,6 @@ def test_motif_state_change_requires_current_assurance_and_complete_authority_ch
     promotion_outcome_basis, _ = _recorded_critic_outcome(
         ledger,
         candidate_sha256=provisional.motif_sha256,
-        kernel_sha256=provisional.kernel_abi_sha256,
         suffix="motif-initial",
     )
     initial_monitor_state = _sha("initial-monitor-state")
@@ -728,7 +748,8 @@ def test_motif_state_change_requires_current_assurance_and_complete_authority_ch
         event_id="authority.motif-initial",
         subject_id="motif.review-first",
         subject_sha256=subject_sha256,
-        kernel_sha256=provisional.kernel_abi_sha256,
+        kernel_ref=_kernel_ref(),
+        kernel_abi_sha256=provisional.kernel_abi_sha256,
         evaluation_outcome=promotion_outcome_basis.reference,
         monitor_plan=plan,
         monitor_report=initial_report,
@@ -745,8 +766,9 @@ def test_motif_state_change_requires_current_assurance_and_complete_authority_ch
             state=MotifAssuranceState.ACTIVE,
             cause="governed_promotion",
             authority_event_sha256=promotion.event.content_sha256,
-            kernel_sha256=provisional.kernel_abi_sha256,
-            critic_generation_sha256=promotion.event.critic_generation_sha256,
+            kernel_ref=_kernel_ref(),
+            kernel_abi_sha256=provisional.kernel_abi_sha256,
+            critic_generation=promotion.event.critic_generation,
             applicability_sha256=_sha("motif-applicability"),
         ),
         authority_ledger=ledger,
@@ -779,7 +801,6 @@ def test_motif_state_change_requires_current_assurance_and_complete_authority_ch
     state_outcome_basis, _ = _recorded_critic_outcome(
         ledger,
         candidate_sha256=enriched.motif_sha256,
-        kernel_sha256=enriched.kernel_abi_sha256,
         suffix="motif-state-change",
     )
     assurance_entry = snapshot.require(subject_sha256)
@@ -787,9 +808,13 @@ def test_motif_state_change_requires_current_assurance_and_complete_authority_ch
         **{
             **assurance_entry.model_dump(
                 mode="python",
-                exclude={"critic_generation_sha256"},
+                exclude={"critic_generation"},
             ),
-            "critic_generation_sha256": _sha("different-critic-generation"),
+            "critic_generation": {
+                "critic_id": "critic.different",
+                "version": "1",
+                "compatibility_generation": "evaluation-generation.1",
+            },
         }
     )
     mismatched_snapshot = MotifAssuranceSnapshot(
@@ -821,7 +846,8 @@ def test_motif_state_change_requires_current_assurance_and_complete_authority_ch
             event_id="authority.motif-state-change.mismatched-critic",
             subject_id="motif.review-first",
             subject_sha256=subject_sha256,
-            kernel_sha256=enriched.kernel_abi_sha256,
+            kernel_ref=_kernel_ref(),
+            kernel_abi_sha256=enriched.kernel_abi_sha256,
             evaluation_outcome=state_outcome_basis.reference,
             monitor_plan=plan,
             monitor_report=mismatched_report,
@@ -848,7 +874,8 @@ def test_motif_state_change_requires_current_assurance_and_complete_authority_ch
         event_id="authority.motif-state-change",
         subject_id="motif.review-first",
         subject_sha256=subject_sha256,
-        kernel_sha256=enriched.kernel_abi_sha256,
+        kernel_ref=_kernel_ref(),
+        kernel_abi_sha256=enriched.kernel_abi_sha256,
         evaluation_outcome=state_outcome_basis.reference,
         monitor_plan=plan,
         monitor_report=state_report,
@@ -876,8 +903,8 @@ def test_motif_state_change_requires_current_assurance_and_complete_authority_ch
         subject_id=state_change.event.subject_id,
         subject_sha256=state_change.event.subject_sha256,
         basis=tuple(item for item in state_change.event.basis if item.kind is not BasisKind.MOTIF_ASSURANCE),
-        kernel_sha256=state_change.event.kernel_sha256,
-        critic_generation_sha256=state_change.event.critic_generation_sha256,
+        kernel_ref=state_change.event.kernel_ref,
+        critic_generation=state_change.event.critic_generation,
         reasons=state_change.event.reasons,
         revalidation_triggers=state_change.event.revalidation_triggers,
     )
@@ -911,7 +938,8 @@ def test_governance_rejects_subject_unrelated_to_evaluated_candidate_or_lineage(
             event_id="authority.unrelated-subject",
             subject_id="motif.unrelated",
             subject_sha256=unrelated_subject_sha256,
-            kernel_sha256=_sha("kernel"),
+            kernel_ref=_kernel_ref(),
+            kernel_abi_sha256=_sha("kernel"),
             evaluation_outcome=outcome_basis.reference,
             monitor_plan=plan,
             monitor_report=report,
@@ -949,7 +977,8 @@ def test_governance_cannot_relabel_development_outcome_as_acceptance_evidence(
             event_id="authority.development-outcome",
             subject_id="candidate",
             subject_sha256=development_outcome.outcome.candidate_sha256,
-            kernel_sha256=_sha("kernel"),
+            kernel_ref=_kernel_ref(),
+            kernel_abi_sha256=_sha("kernel"),
             evaluation_outcome=development_basis.reference,
             monitor_plan=plan,
             monitor_report=report,
@@ -995,7 +1024,8 @@ def test_red_team_promotion_flow_raises_incident_and_leaves_promotion_absent(
             event_id="authority.blocked-promotion",
             subject_id="motif.poisoned-canary",
             subject_sha256=critic_outcome.outcome.candidate_sha256,
-            kernel_sha256=_sha("kernel"),
+            kernel_ref=_kernel_ref(),
+            kernel_abi_sha256=_sha("kernel"),
             evaluation_outcome=outcome_basis.reference,
             monitor_plan=plan,
             monitor_report=report,
@@ -1026,7 +1056,8 @@ def test_production_promotion_persists_the_complete_monitor_envelope(
         event_id="authority.promote-policy-002",
         subject_id="candidate",
         subject_sha256=critic_outcome.outcome.candidate_sha256,
-        kernel_sha256=_sha("kernel"),
+        kernel_ref=_kernel_ref(),
+        kernel_abi_sha256=_sha("kernel"),
         evaluation_outcome=outcome_basis.reference,
         monitor_policy=policy,
         monitor_envelope=envelope,
@@ -1060,7 +1091,8 @@ def test_production_promotion_rejects_incomplete_monitor_collection(
             event_id="authority.blocked-production-promotion",
             subject_id="motif.review-first",
             subject_sha256=critic_outcome.outcome.candidate_sha256,
-            kernel_sha256=_sha("kernel"),
+            kernel_ref=_kernel_ref(),
+            kernel_abi_sha256=_sha("kernel"),
             evaluation_outcome=outcome_basis.reference,
             monitor_policy=policy,
             monitor_envelope=envelope,

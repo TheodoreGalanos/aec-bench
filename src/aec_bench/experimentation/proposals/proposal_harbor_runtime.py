@@ -19,11 +19,11 @@ from pydantic import Field, field_validator, model_validator
 
 from aec_bench.contracts.authority import BasisKind, TaintLabel
 from aec_bench.contracts.harness_kernel import (
-    ContentAddressedModel,
     FrozenStrictModel,
-    canonical_content_sha256,
+    canonical_json_sha256,
     validate_sha256,
 )
+from aec_bench.contracts.legacy_content_address import LegacyContentAddressedModel
 from aec_bench.contracts.trial_record import ArtifactReference
 from aec_bench.contracts.validators import NonEmptyStr
 from aec_bench.experimentation.governance.authority_ledger import AuthorityLedger, StoredBasis
@@ -84,7 +84,7 @@ ProposalHarborFailureCode = Literal[
 ]
 
 
-class ProposalHarborExecutionReceipt(ContentAddressedModel):
+class ProposalHarborExecutionReceipt(LegacyContentAddressedModel):
     """Immutable observation of one and only one authorized Harbor dispatch attempt."""
 
     schema_version: Literal["aecbench.proposal-harbor-execution-receipt.v1"] = (
@@ -197,7 +197,7 @@ class ProposalHarborExecution:
     replayed: bool
 
 
-class ProposalProviderOperationCoordinate(ContentAddressedModel):
+class ProposalProviderOperationCoordinate(LegacyContentAddressedModel):
     """Ledger-global identity of one exact authority-approved provider operation."""
 
     schema_version: Literal["aecbench.proposal-provider-operation-coordinate.v1"] = (
@@ -217,7 +217,7 @@ class ProposalProviderOperationCoordinate(ContentAddressedModel):
         return validate_sha256(value)
 
 
-class ProposalProviderOperationStart(ContentAddressedModel):
+class ProposalProviderOperationStart(LegacyContentAddressedModel):
     """Durable consumed-operation evidence published before provider execution."""
 
     schema_version: Literal["aecbench.proposal-provider-operation-start.v1"] = (
@@ -280,7 +280,7 @@ class ProposalProviderOperationStart(ContentAddressedModel):
         return self
 
 
-class ProposalProviderOperationTerminal(ContentAddressedModel):
+class ProposalProviderOperationTerminal(LegacyContentAddressedModel):
     """Ledger-global terminal pointer for a completed or failed provider attempt."""
 
     schema_version: Literal["aecbench.proposal-provider-operation-terminal.v1"] = (
@@ -746,7 +746,7 @@ def _provider_operation_terminal_id(
     return f"proposal-provider-operation.{coordinate.content_sha256}.terminal"
 
 
-def _load_ledger_model[ModelT: ContentAddressedModel](
+def _load_ledger_model[ModelT: FrozenStrictModel](
     *,
     basis: StoredBasis,
     model_type: type[ModelT],
@@ -803,7 +803,7 @@ def load_proposal_harbor_execution(
     config = yaml.safe_load(config_bytes)
     if (
         not isinstance(config, dict)
-        or canonical_content_sha256(config) != receipt.harbor_job_config_sha256
+        or canonical_json_sha256(config) != receipt.harbor_job_config_sha256
         or config
         != json.loads(
             replayed_authorization.dispatch.harbor_job_config_json,
@@ -966,7 +966,7 @@ def _write_new_file(path: Path, content: bytes) -> None:
         os.close(directory_descriptor)
 
 
-def _canonical_model_bytes(model: ContentAddressedModel) -> bytes:
+def _canonical_model_bytes(model: FrozenStrictModel) -> bytes:
     return (
         json.dumps(
             model.model_dump(mode="json"),
@@ -977,7 +977,7 @@ def _canonical_model_bytes(model: ContentAddressedModel) -> bytes:
     ).encode("utf-8")
 
 
-def _ledger_model_bytes(model: ContentAddressedModel) -> bytes:
+def _ledger_model_bytes(model: FrozenStrictModel) -> bytes:
     return (
         json.dumps(
             model.model_dump(mode="json"),

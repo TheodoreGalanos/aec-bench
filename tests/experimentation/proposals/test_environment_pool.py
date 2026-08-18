@@ -12,7 +12,7 @@ from typing import Any
 
 import pytest
 
-from aec_bench.contracts.harness_kernel import canonical_content_sha256
+from aec_bench.contracts.harness_kernel import canonical_json_sha256
 from aec_bench.contracts.proposal_execution_types import ProposalSessionStatus
 from aec_bench.experimentation.proposals.environment_pool import (
     IsolatedProposalEnvironmentIdentity,
@@ -273,7 +273,7 @@ class _ManagedBranchEnvironment(_BranchOrderingEnvironment):
             "environment_session_id": self.session_id,
             "delete_requested": delete,
         }
-        payload["content_sha256"] = canonical_content_sha256(payload)
+        payload["content_sha256"] = canonical_json_sha256(payload)
         self.cleanup_receipt_path.parent.mkdir(parents=True, exist_ok=True)
         self.cleanup_receipt_path.write_text(
             json.dumps(payload, indent=2, sort_keys=True) + "\n",
@@ -305,7 +305,7 @@ class _ManagedBranchEnvironment(_BranchOrderingEnvironment):
         payload = json.loads(transition.receipt_path.read_text(encoding="utf-8"))
         payload.pop("content_sha256")
         payload["current_container_identity"] = current_identity
-        payload["content_sha256"] = canonical_content_sha256(payload)
+        payload["content_sha256"] = canonical_json_sha256(payload)
         transition.receipt_path.write_text(
             json.dumps(payload, indent=2, sort_keys=True) + "\n",
             encoding="utf-8",
@@ -322,5 +322,5 @@ class _ManagedBranchEnvironment(_BranchOrderingEnvironment):
 def _assert_content_addressed_json(path: Path) -> bool:
     payload = json.loads(path.read_text(encoding="utf-8"))
     observed = payload.pop("content_sha256")
-    assert observed == canonical_content_sha256(payload)
+    assert observed == canonical_json_sha256(payload)
     return True

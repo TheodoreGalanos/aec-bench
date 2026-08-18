@@ -8,7 +8,8 @@ from typing import Literal, TypeVar
 
 from pydantic import Field, field_validator
 
-from aec_bench.contracts.harness_kernel import ContentAddressedModel, FrozenStrictModel, validate_sha256
+from aec_bench.contracts.harness_kernel import FrozenStrictModel, validate_sha256
+from aec_bench.contracts.legacy_content_address import LegacyContentAddressedModel
 from aec_bench.contracts.proposal_execution_types import NodeInstructionVisibility
 from aec_bench.contracts.validators import NonEmptyStr
 
@@ -57,7 +58,7 @@ class ScopedSourceMaterialization(FrozenStrictModel):
         return value
 
 
-class CompiledNodeContextScope(ContentAddressedModel):
+class CompiledNodeContextScope(LegacyContentAddressedModel):
     """Exact sources, handoffs, and instruction mode materialized for one node."""
 
     schema_version: Literal["aecbench.compiled-node-context-scope.v1"] = "aecbench.compiled-node-context-scope.v1"
@@ -72,7 +73,7 @@ class CompiledNodeContextScope(ContentAddressedModel):
         return _canonical_unique_strings(value, label="node context scope ids")
 
 
-class ProposalSourceScopeManifest(ContentAddressedModel):
+class ProposalSourceScopeManifest(LegacyContentAddressedModel):
     """Host-owned source materialization and per-node context scopes."""
 
     schema_version: Literal["aecbench.proposal-source-scope-manifest.v1"] = "aecbench.proposal-source-scope-manifest.v1"

@@ -15,11 +15,11 @@ from typing import Literal, Self
 from pydantic import Field, field_validator, model_validator
 
 from aec_bench.contracts.harness_kernel import (
-    ContentAddressedModel,
     FrozenStrictModel,
-    canonical_content_sha256,
+    canonical_json_sha256,
     validate_sha256,
 )
+from aec_bench.contracts.legacy_content_address import LegacyContentAddressedModel
 from aec_bench.contracts.proposal_execution.graph import FinalSynthesisSpec, SemanticSubtaskSpec
 from aec_bench.contracts.proposal_execution_context import CompiledNodeContextScope, ScopedSourceMaterialization
 from aec_bench.contracts.proposal_execution_types import NodeInstructionVisibility
@@ -93,7 +93,7 @@ class PersistedProposalHandoffArtifact(FrozenStrictModel):
         return value
 
 
-class ProposalNodeContextArtifact(ContentAddressedModel):
+class ProposalNodeContextArtifact(LegacyContentAddressedModel):
     """One exact file materialized into the node-visible workspace."""
 
     schema_version: Literal["aecbench.proposal-node-context-artifact.v1"] = "aecbench.proposal-node-context-artifact.v1"
@@ -117,7 +117,7 @@ class ProposalNodeContextArtifact(ContentAddressedModel):
         return validate_sha256(value)
 
 
-class ProposalNodeContextManifest(ContentAddressedModel):
+class ProposalNodeContextManifest(LegacyContentAddressedModel):
     """Content-addressed inventory of one least-privilege node workspace."""
 
     schema_version: Literal["aecbench.proposal-node-context-manifest.v1"] = "aecbench.proposal-node-context-manifest.v1"
@@ -316,7 +316,7 @@ def materialize_proposal_node_context(
         source_scope_manifest_sha256=(exact_bundle.compilation.source_scope_manifest.content_sha256),
         source_task_package_sha256=exact_bundle.task_snapshot.package_sha256,
         node_id=node_id,
-        node_spec_sha256=canonical_content_sha256(node.model_dump(mode="json")),
+        node_spec_sha256=canonical_json_sha256(node.model_dump(mode="json")),
         node_scope_sha256=node_scope.content_sha256,
         instruction_visibility=node_scope.instruction_visibility,
         artifacts=tuple(artifact for artifact, _ in materialized),

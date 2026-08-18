@@ -9,13 +9,13 @@ from typing import Literal, Self
 from pydantic import field_validator, model_validator
 
 from aec_bench.contracts.harness_kernel import (
-    ContentAddressedModel,
     FrozenStrictModel,
     KernelCapabilityRef,
     KernelRef,
-    canonical_content_sha256,
+    canonical_json_sha256,
     validate_sha256,
 )
+from aec_bench.contracts.legacy_content_address import LegacyContentAddressedModel
 from aec_bench.contracts.run_bundle import TaskSnapshotRef
 from aec_bench.contracts.validators import NonEmptyStr
 from aec_bench.experimentation.governance.motifs import MotifApplicabilityDescriptor
@@ -58,7 +58,7 @@ class TaskApplicabilityProjection(FrozenStrictModel):
         return self
 
 
-class MotifApplicabilityAttestation(ContentAddressedModel):
+class MotifApplicabilityAttestation(LegacyContentAddressedModel):
     """Kernel-derived reward-blind applicability statement frozen before execution."""
 
     schema_version: Literal["aecbench.motif-applicability-attestation.v3"] = (
@@ -108,12 +108,12 @@ class MotifApplicabilityAttestation(ContentAddressedModel):
     def validate_attestation(self) -> Self:
         if self.profiler_ref.capability_id != PROFILER_CAPABILITY_ID:
             raise ValueError("applicability attestation does not use the fixed-K profiler")
-        expected_snapshot = canonical_content_sha256(
+        expected_snapshot = canonical_json_sha256(
             [projection.snapshot.model_dump(mode="json") for projection in self.projections]
         )
         if self.source_snapshot_sha256 != expected_snapshot:
             raise ValueError("applicability snapshot hash does not bind its task projections")
-        expected_profile = canonical_content_sha256(_profile_input_payload(self.projections))
+        expected_profile = canonical_json_sha256(_profile_input_payload(self.projections))
         if self.profile_input_sha256 != expected_profile:
             raise ValueError("applicability profile hash does not bind its reward-blind inputs")
         expected_lineages = tuple(sorted({projection.review_lineage_sha256 for projection in self.projections}))
@@ -162,10 +162,10 @@ def profile_task_applicability(
     return MotifApplicabilityAttestation(
         kernel_ref=registry.manifest.ref,
         profiler_ref=profiler.ref,
-        source_snapshot_sha256=canonical_content_sha256(
+        source_snapshot_sha256=canonical_json_sha256(
             [projection.snapshot.model_dump(mode="json") for projection in ordered]
         ),
-        profile_input_sha256=canonical_content_sha256(_profile_input_payload(ordered)),
+        profile_input_sha256=canonical_json_sha256(_profile_input_payload(ordered)),
         review_lineage_ids=tuple(projection.review_lineage_sha256 for projection in ordered),
         topology_bases=tuple(projection.surface.topology_basis for projection in ordered),
         projections=ordered,

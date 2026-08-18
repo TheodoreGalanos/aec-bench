@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Protocol
 
 from aec_bench.contracts.evaluation_plane import EvaluationPlan
+from aec_bench.contracts.harness_kernel import canonical_json_sha256
 from aec_bench.contracts.proposal_execution_types import ProposalSessionStatus
 from aec_bench.contracts.trial_record import (
     ArtifactReference,
@@ -303,7 +304,7 @@ def _persist_static_proposal_artifacts(
         ledger=ledger,
         event=authorization.freeze_authority_event,
         model_type=EvaluationPlan,
-        expected_content_sha256=freeze.evaluation_plan_ref.content_sha256,
+        matches_expected=lambda candidate: candidate.ref == freeze.evaluation_plan_ref,
         label="evaluation plan",
     )
     return PersistedProposalArtifacts(
@@ -543,16 +544,16 @@ def _build_complete_trial_record(
         run_id=authorization.dispatch.dispatch_id,
         policy_id=freeze.candidate_manifest.manifest_id,
         kernel_id=bundle.fixed_harness.kernel_ref.kernel_id,
-        kernel_sha256=bundle.fixed_harness.kernel_ref.content_sha256,
+        kernel_sha256=canonical_json_sha256(bundle.fixed_harness.kernel_ref.model_dump(mode="json")),
         harness_id=bundle.fixed_harness.instance_id,
-        harness_sha256=bundle.fixed_harness.content_sha256,
+        harness_sha256=canonical_json_sha256(bundle.fixed_harness.model_dump(mode="json")),
         program_id=bundle.compilation.compiled_program.program_id,
-        program_sha256=bundle.compilation.compiled_program.content_sha256,
+        program_sha256=canonical_json_sha256(bundle.compilation.compiled_program.model_dump(mode="json")),
         bundle_id=bundle.bundle_id,
-        bundle_sha256=bundle.content_sha256,
+        bundle_sha256=canonical_json_sha256(bundle.model_dump(mode="json")),
         review_sidecar_sha256=task_review.review_sidecar_sha256,
         declared_surface_sha256=task_review.declared_surface_sha256,
-        harness_generator_sha256=bundle.fixed_harness.source_recipe_sha256,
+        harness_generator_sha256=canonical_json_sha256(bundle.fixed_harness.source_recipe_ref.model_dump(mode="json")),
         program_generator_sha256=program_generator_sha256(authorization),
         split=meta_split(freeze.split),
         repetition=authorization.dispatch.evaluation_coordinate.repetition,

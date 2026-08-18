@@ -8,7 +8,13 @@ from pathlib import Path
 
 import pytest
 
-from aec_bench.contracts.authority import AuthorityAction, AuthorityEvent, BasisKind
+from aec_bench.contracts.authority import (
+    AuthorityAction,
+    AuthorityEvent,
+    BasisKind,
+    CriticGenerationIdentity,
+)
+from aec_bench.contracts.harness_kernel import KernelRef
 from aec_bench.experimentation.governance.authority_ledger import (
     AuthorityLedger,
     AuthorityLedgerIntegrityError,
@@ -53,17 +59,25 @@ def _promotion_event(
         event_id=event_id,
         subject_id="motif.review-first",
         subject_sha256=motif_subject_sha256(motif),
-        kernel_sha256=motif.kernel_abi_sha256,
+        kernel_ref=KernelRef(kernel_id="test-kernel", version="1.0.0"),
+        kernel_abi_sha256=motif.kernel_abi_sha256,
         motif=motif,
     ).promotion.event
+
+
+_DEFAULT_CRITIC_GENERATION = CriticGenerationIdentity(
+    critic_id="critic.acceptance",
+    version="1",
+    compatibility_generation="critic-generation",
+)
 
 
 def _lifecycle_event(
     *,
     motif_subject_sha256: str,
     authority_event_sha256: str,
-    kernel_sha256: str = _sha("kernel"),
-    critic_generation_sha256: str | None = _sha("critic-generation"),
+    kernel_abi_sha256: str = _sha("kernel"),
+    critic_generation: CriticGenerationIdentity | None = _DEFAULT_CRITIC_GENERATION,
 ) -> MotifLifecycleEvent:
     return MotifLifecycleEvent(
         event_id="motif-lifecycle.activate",
@@ -71,8 +85,9 @@ def _lifecycle_event(
         state=MotifAssuranceState.ACTIVE,
         cause="governed_promotion",
         authority_event_sha256=authority_event_sha256,
-        kernel_sha256=kernel_sha256,
-        critic_generation_sha256=critic_generation_sha256,
+        kernel_ref=KernelRef(kernel_id="test-kernel", version="1.0.0"),
+        kernel_abi_sha256=kernel_abi_sha256,
+        critic_generation=critic_generation,
         model_generation_sha256=_sha("model-generation"),
         tool_generation_sha256=_sha("tool-generation"),
         applicability_sha256=_sha("applicability"),
@@ -94,8 +109,8 @@ def test_motif_can_be_activated_only_from_a_resolvable_scoped_promotion(
     lifecycle = _lifecycle_event(
         motif_subject_sha256=subject_sha256,
         authority_event_sha256=promotion.content_sha256,
-        kernel_sha256=motif.kernel_abi_sha256,
-        critic_generation_sha256=promotion.critic_generation_sha256,
+        kernel_abi_sha256=motif.kernel_abi_sha256,
+        critic_generation=promotion.critic_generation,
     )
 
     assurance = append_authorized_motif_event(
@@ -116,7 +131,7 @@ def test_unresolvable_or_wrong_subject_authority_cannot_activate_a_motif(
     untrusted = _lifecycle_event(
         motif_subject_sha256=subject_sha256,
         authority_event_sha256=_sha("candidate-authored-approval-shaped-bytes"),
-        kernel_sha256=motif.kernel_abi_sha256,
+        kernel_abi_sha256=motif.kernel_abi_sha256,
     )
 
     with pytest.raises(AuthorityLedgerIntegrityError, match="missing"):
@@ -138,8 +153,8 @@ def test_unresolvable_or_wrong_subject_authority_cannot_activate_a_motif(
     mismatched = _lifecycle_event(
         motif_subject_sha256=subject_sha256,
         authority_event_sha256=wrong_subject.content_sha256,
-        kernel_sha256=motif.kernel_abi_sha256,
-        critic_generation_sha256=wrong_subject.critic_generation_sha256,
+        kernel_abi_sha256=motif.kernel_abi_sha256,
+        critic_generation=wrong_subject.critic_generation,
     )
     with pytest.raises(MotifAssuranceAuthorityError, match="subject"):
         append_authorized_motif_event(

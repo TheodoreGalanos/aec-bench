@@ -10,7 +10,7 @@ from typing import Any
 
 import pytest
 
-from aec_bench.contracts.harness_kernel import canonical_content_sha256
+from aec_bench.contracts.harness_kernel import canonical_json_sha256
 from aec_bench.contracts.run_bundle import TaskReviewSnapshotRef
 from aec_bench.harness.compilation.task_snapshot import (
     TaskSnapshotError,
@@ -52,7 +52,7 @@ def test_graph_hidden_snapshot_identity_rejects_a_task_review_package(tmp_path: 
         tasks_root=tasks_root,
     )
 
-    assert graph_hidden_task_snapshot_sha256(snapshot) == canonical_content_sha256(
+    assert graph_hidden_task_snapshot_sha256(snapshot) == canonical_json_sha256(
         {
             "task_id": snapshot.task_id,
             "definition_sha256": snapshot.definition_sha256,

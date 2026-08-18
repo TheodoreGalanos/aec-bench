@@ -7,7 +7,7 @@ import re
 import unicodedata
 from collections import Counter
 
-from aec_bench.contracts.harness_kernel import canonical_content_sha256
+from aec_bench.contracts.harness_kernel import canonical_json_sha256
 from aec_bench.worlds.stewardship.wastewater_pump_station.temporal_evidence.access_models import (
     IssuedTemporalReference,
     TemporalAccessContext,
@@ -54,7 +54,7 @@ class TemporalEvidenceGateway:
         """Return an ordered actor-visible result after host-owned frontier filtering."""
 
         normalized = _normalize_query(query)
-        request_content_id = canonical_content_sha256(
+        request_content_id = canonical_json_sha256(
             {
                 "kind": TemporalEvidenceAccessKind.SEARCH.value,
                 "request_id": request_id,
@@ -130,7 +130,7 @@ class TemporalEvidenceGateway:
     ) -> TemporalAccessDecision:
         """Fetch content only for a reference already supplied to this tenure."""
 
-        request_content_id = canonical_content_sha256(
+        request_content_id = canonical_json_sha256(
             {
                 "kind": TemporalEvidenceAccessKind.FETCH.value,
                 "request_id": request_id,
@@ -236,7 +236,7 @@ class TemporalEvidenceGateway:
             truncated=truncated,
             visible_cost=consumed,
         )
-        frontier_fingerprint = canonical_content_sha256(
+        frontier_fingerprint = canonical_json_sha256(
             {
                 "world_instance_id": context.world_instance_id,
                 "world_branch_id": context.world_branch_id,
@@ -250,7 +250,7 @@ class TemporalEvidenceGateway:
                 "retrieval_policy_id": self._bundle.retrieval_policy.content_sha256,
             }
         )
-        access_context_id = canonical_content_sha256(
+        access_context_id = canonical_json_sha256(
             {
                 "knowledge_frontier_fingerprint": frontier_fingerprint,
                 "agent_tenure_id": context.agent_tenure_id,
@@ -259,10 +259,10 @@ class TemporalEvidenceGateway:
                 "remaining_budget": state.remaining_budget.model_dump(mode="json"),
             }
         )
-        eligible_fingerprint = canonical_content_sha256(
+        eligible_fingerprint = canonical_json_sha256(
             [item.content_sha256 for item in sorted(eligible, key=lambda item: item.version_id)]
         )
-        ranking_fingerprint = canonical_content_sha256(
+        ranking_fingerprint = canonical_json_sha256(
             {
                 "normalized_query": normalized_query,
                 "versions": [item.content_sha256 for item in ranking_versions],
@@ -428,7 +428,7 @@ class TemporalEvidenceGateway:
         state: TemporalRetrievalState,
         query: str,
     ) -> TemporalEvidenceVisibleReference:
-        opaque_reference = canonical_content_sha256(
+        opaque_reference = canonical_json_sha256(
             {
                 "reference_namespace_id": state.reference_namespace_id,
                 "evidence_content_id": version.content_sha256,

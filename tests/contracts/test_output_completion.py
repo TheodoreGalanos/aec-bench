@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from aec_bench.contracts.harness_kernel import canonical_content_sha256
+from aec_bench.contracts.harness_kernel import canonical_json_sha256
 from aec_bench.contracts.output_completion import (
     OutputCommitAttestation,
     OutputCompletionContract,
@@ -186,7 +186,7 @@ def test_output_commit_attestation_binds_complete_artifact_and_contract() -> Non
     contract = OutputCompletionContract.model_validate(_contract_payload())
     output_text = _complete_markdown()
     evaluation = evaluate_output_completion(contract, output_text)
-    contract_sha256 = canonical_content_sha256(contract.model_dump(mode="json"))
+    contract_sha256 = canonical_json_sha256(contract.model_dump(mode="json"))
 
     attestation = OutputCommitAttestation(
         schema_version="aecbench.output-commit-attestation.v1",

@@ -113,7 +113,7 @@ def _verify_bound_candidate_artifacts(
                 label="candidate manifest",
             )
             bundle = RunBundle.model_validate(payload.get("bundle"))
-            if bundle.content_sha256 != cell.bundle_sha256:
+            if bundle.bundle_id != cell.bundle_id:
                 raise ValueError(
                     "candidate manifest bundle identity does not match harness-program-study report",
                 )
@@ -198,12 +198,12 @@ def _validate_trial_record_lineage(
         provenance is None
         or provenance.run_id != trial.trial.trial_id
         or provenance.execution_seed != trial.execution_seed
-        or provenance.bundle_sha256 != trial.bundle_sha256
+        or provenance.bundle_id != trial.bundle_id
         or provenance.harness_program_cell != trial.trial.cell.value
         or provenance.paired_block_id != trial.trial.block_id
         or provenance.harness_program_plan != report.plan_artifact
-        or provenance.kernel_sha256 != report.kernel_ref.content_sha256
-        or provenance.harness_sha256 != trial.candidate_reference.harness_sha256
+        or provenance.kernel_id != report.kernel_ref.kernel_id
+        or provenance.harness_id != trial.candidate_reference.harness_ref.instance_id
     ):
         raise ValueError(
             "harness-program-study TrialRecord lineage does not match report evidence",

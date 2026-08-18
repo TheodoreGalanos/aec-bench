@@ -17,10 +17,10 @@ from aec_bench.contracts.evaluation_plane import (
     CriticSpec,
 )
 from aec_bench.contracts.harness_kernel import (
-    ContentAddressedModel,
-    canonical_content_sha256,
+    canonical_json_sha256,
     validate_sha256,
 )
+from aec_bench.contracts.legacy_content_address import LegacyContentAddressedModel
 from aec_bench.contracts.validators import NonEmptyStr
 from aec_bench.experimentation.governance.authority_ledger import AuthorityLedger
 from aec_bench.ledger.immutable_artifact_store import (
@@ -48,7 +48,7 @@ class AcceptanceManifestEscrowIntegrityError(AcceptanceManifestEscrowError):
     """Raised when persisted escrow bytes do not verify against their commitment."""
 
 
-class AcceptanceManifestEscrowPayload(ContentAddressedModel):
+class AcceptanceManifestEscrowPayload(LegacyContentAddressedModel):
     """Host-only recoverable material needed to reveal one retired acceptance critic."""
 
     schema_version: Literal["aecbench.acceptance-manifest-escrow-payload.v1"] = (
@@ -61,7 +61,7 @@ class AcceptanceManifestEscrowPayload(ContentAddressedModel):
     salt: NonEmptyStr
 
 
-class AcceptanceManifestEscrowPublicationReceipt(ContentAddressedModel):
+class AcceptanceManifestEscrowPublicationReceipt(LegacyContentAddressedModel):
     """Publicly safe proof identity for one durably published hidden payload."""
 
     schema_version: Literal["aecbench.acceptance-manifest-escrow-publication.v1"] = (
@@ -78,7 +78,7 @@ class AcceptanceManifestEscrowPublicationReceipt(ContentAddressedModel):
         return validate_sha256(value)
 
 
-class _AcceptanceManifestEscrowClaim(ContentAddressedModel):
+class _AcceptanceManifestEscrowClaim(LegacyContentAddressedModel):
     """Exclusive logical binding from one critic generation to its escrow receipt."""
 
     schema_version: Literal["aecbench.acceptance-manifest-escrow-claim.v1"] = (
@@ -208,11 +208,11 @@ def load_acceptance_manifest_escrow(
     )
     if expected_commitment != commitment:
         raise AcceptanceManifestEscrowIntegrityError("persisted acceptance escrow does not match the critic commitment")
-    if canonical_content_sha256(stored.payload.case_manifest) != selected.case_manifest_sha256:
+    if canonical_json_sha256(stored.payload.case_manifest) != selected.case_manifest_sha256:
         raise AcceptanceManifestEscrowIntegrityError(
             "persisted acceptance case manifest does not match the critic spec"
         )
-    if canonical_content_sha256(stored.payload.scoring_policy) != selected.rubric_policy_sha256:
+    if canonical_json_sha256(stored.payload.scoring_policy) != selected.rubric_policy_sha256:
         raise AcceptanceManifestEscrowIntegrityError(
             "persisted acceptance scoring policy does not match the critic spec"
         )

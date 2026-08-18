@@ -7,6 +7,8 @@ import hashlib
 
 import pytest
 
+from aec_bench.contracts.authority import CriticGenerationIdentity
+from aec_bench.contracts.harness_kernel import KernelRef
 from aec_bench.experimentation.governance.motif_assurance import (
     MotifAssuranceBoundary,
     MotifAssuranceDriftError,
@@ -76,8 +78,13 @@ def _event(
         parent_event_sha256=parent_event_sha256,
         authority_event_sha256=_sha(f"authority.{label}"),
         revalidation_basis_sha256=revalidation_basis_sha256,
-        kernel_sha256=_sha("kernel-generation"),
-        critic_generation_sha256=_sha("critic-generation"),
+        kernel_ref=KernelRef(kernel_id="test-kernel", version="1.0.0"),
+        kernel_abi_sha256=_sha("kernel-generation"),
+        critic_generation=CriticGenerationIdentity(
+            critic_id="critic.acceptance",
+            version="1",
+            compatibility_generation="critic-generation",
+        ),
         model_generation_sha256=_sha("model-generation"),
         tool_generation_sha256=_sha("tool-generation"),
         applicability_sha256=_sha("applicability-generation"),

@@ -17,6 +17,7 @@ from aec_bench.contracts.authority import (
 from aec_bench.contracts.evaluation_outcome import CriticEvaluationOutcome
 from aec_bench.contracts.execution_program import ProgramLimits
 from aec_bench.contracts.harness_instance import HarnessBudget
+from aec_bench.contracts.harness_kernel import kernel_abi_commitment
 from aec_bench.experimentation.governance.applicability import profile_task_applicability
 from aec_bench.experimentation.governance.authority_ledger import AuthorityLedger
 from aec_bench.experimentation.governance.motif_assurance import (
@@ -98,7 +99,8 @@ def _active_assurance(
         event_id="authority.motif-selection",
         subject_id="motif.selection-subject",
         subject_sha256=subject_sha256,
-        kernel_sha256=motif.kernel_abi_sha256,
+        kernel_ref=default_kernel_registry().manifest.ref,
+        kernel_abi_sha256=motif.kernel_abi_sha256,
         motif=provisional,
     ).promotion.event
     lifecycle = MotifLifecycleEvent(
@@ -107,8 +109,9 @@ def _active_assurance(
         state=MotifAssuranceState.ACTIVE,
         cause="governed_promotion",
         authority_event_sha256=authority_event.content_sha256,
-        kernel_sha256=motif.kernel_abi_sha256,
-        critic_generation_sha256=authority_event.critic_generation_sha256,
+        kernel_ref=authority_event.kernel_ref,
+        kernel_abi_sha256=motif.kernel_abi_sha256,
+        critic_generation=authority_event.critic_generation,
         model_generation_sha256=_sha("model-generation"),
         tool_generation_sha256=_sha("tool-generation"),
         applicability_sha256=_sha("applicability-generation"),
@@ -153,7 +156,7 @@ def _governed_plan(
     source_program = _fanout_program("assured-source-px", limits)
     motif = HarnessProgramMotif.create(
         status=MotifStatus.REUSABLE,
-        kernel_abi_sha256=registry.manifest.content_sha256,
+        kernel_abi_sha256=kernel_abi_commitment(registry.manifest.ref),
         hx_template=encode_harness_motif_template(source_recipe),
         px_template=encode_program_motif_template(source_program),
         applicability=applicability.descriptor,
@@ -167,7 +170,7 @@ def _governed_plan(
         selection_split="calibration",
         request=MotifHarnessProgramInstantiationRequest(
             candidate_set_id="assured-transfer",
-            world_id="assured-world",
+            task_set_id="assured-task-set",
             experiment_id="assured-experiment",
             kernel_ref=registry.manifest.ref,
             task_refs=(task_ref,),
@@ -291,7 +294,8 @@ def test_governed_transfer_validation_requires_exact_state_change_authority_and_
         event_id="authority.motif-transfer-validated",
         subject_id="motif.selection-subject",
         subject_sha256=motif_subject_sha256(selected),
-        kernel_sha256=selected.kernel_abi_sha256,
+        kernel_ref=first_outcome.kernel_ref,
+        kernel_abi_sha256=selected.kernel_abi_sha256,
         critic=first_outcome.critic,
         critic_execution_principal_id=first_outcome.execution_principal_id,
         critic_release=critic_release,
@@ -408,7 +412,8 @@ def test_governed_transfer_rejects_snapshot_drift_and_stale_authority_basis(
                 state=MotifAssuranceState.ACTIVE,
                 cause="unrelated_activation",
                 authority_event_sha256=_sha("unrelated-authority"),
-                kernel_sha256=_sha("kernel-generation"),
+                kernel_ref=default_kernel_registry().manifest.ref,
+                kernel_abi_sha256=_sha("kernel-generation"),
                 applicability_sha256=_sha("unrelated-applicability"),
             )
         )

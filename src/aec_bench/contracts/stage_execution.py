@@ -1,4 +1,4 @@
-# ABOUTME: Defines content-addressed declared-stage graphs and intermediate execution receipts.
+# ABOUTME: Defines directly referenced declared-stage graphs and intermediate execution receipts.
 # ABOUTME: Binds deterministic artifact routing, parsed outputs, resource usage, and physical evidence.
 
 from __future__ import annotations
@@ -8,8 +8,9 @@ from typing import Any, Literal, Self
 
 from pydantic import Field, JsonValue, field_validator, model_validator
 
+from aec_bench.contracts.execution_program import ExecutionProgramRef
+from aec_bench.contracts.harness_instance import ProgramOperationRef
 from aec_bench.contracts.harness_kernel import (
-    ContentAddressedModel,
     FrozenStrictModel,
     validate_sha256,
 )
@@ -70,7 +71,7 @@ class DeclaredStageRoute(FrozenStrictModel):
         return value
 
 
-class DeclaredStageGraph(ContentAddressedModel):
+class DeclaredStageGraph(FrozenStrictModel):
     """Content-pinned executable projection of a task-review profile's declared stage graph."""
 
     schema_version: Literal["aecbench.declared-stage-graph.v2"] = "aecbench.declared-stage-graph.v2"
@@ -138,6 +139,15 @@ class DeclaredStageGraph(ContentAddressedModel):
         """Resolve one declared stage by id."""
         return next((stage for stage in self.stages if stage.stage_id == stage_id), None)
 
+    @property
+    def ref(self) -> DeclaredStageGraphRef:
+        """Return the stable task and review-sidecar identity for this graph."""
+
+        return DeclaredStageGraphRef(
+            task_id=self.task_id,
+            review_sidecar_sha256=self.review_sidecar_sha256,
+        )
+
     def predecessor_stage_ids(self, stage_id: str) -> tuple[str, ...]:
         """Return all internal producers required by one declared stage."""
         if self.stage(stage_id) is None:
@@ -200,7 +210,19 @@ class DeclaredStageGraph(ContentAddressedModel):
         return tuple(order)
 
 
-class KernelInstructionOverride(ContentAddressedModel):
+class DeclaredStageGraphRef(FrozenStrictModel):
+    """Stable reference to the stage graph declared by one reviewed task."""
+
+    task_id: NonEmptyStr
+    review_sidecar_sha256: str
+
+    @field_validator("review_sidecar_sha256")
+    @classmethod
+    def validate_review_sidecar_sha256(cls, value: str) -> str:
+        return validate_sha256(value)
+
+
+class KernelInstructionOverride(FrozenStrictModel):
     """Kernel-owned effective request bound to the original task instruction bytes."""
 
     schema_version: Literal["aecbench.kernel-instruction-override.v1"] = "aecbench.kernel-instruction-override.v1"
@@ -209,9 +231,9 @@ class KernelInstructionOverride(ContentAddressedModel):
     original_instruction_sha256: str
     effective_instruction: NonEmptyStr
     stage_id: NonEmptyStr | None = None
-    context_manifest_sha256: str | None = None
+    context_manifest: ArtifactReference | None = None
 
-    @field_validator("original_instruction_sha256", "context_manifest_sha256")
+    @field_validator("original_instruction_sha256")
     @classmethod
     def validate_sha256_fields(cls, value: str | None) -> str | None:
         return validate_sha256(value) if value is not None else None
@@ -219,10 +241,12 @@ class KernelInstructionOverride(ContentAddressedModel):
     @model_validator(mode="after")
     def validate_mode_shape(self) -> Self:
         if self.mode == "declared_stage":
-            if self.stage_id is None or self.context_manifest_sha256 is None:
-                raise ValueError("declared-stage override requires stage_id and context_manifest_sha256")
-        elif self.stage_id is not None or self.context_manifest_sha256 is not None:
-            raise ValueError("task-finalization override cannot carry stage_id or context_manifest_sha256")
+            if self.stage_id is None or self.context_manifest is None:
+                raise ValueError("declared-stage override requires stage_id and context_manifest")
+            if self.context_manifest.kind != "stage-context-manifest":
+                raise ValueError("declared-stage override requires a stage-context-manifest artifact")
+        elif self.stage_id is not None or self.context_manifest is not None:
+            raise ValueError("task-finalization override cannot carry stage_id or context_manifest")
         return self
 
 
@@ -240,18 +264,18 @@ class StageContextRoute(FrozenStrictModel):
         return self
 
 
-class StageContextManifest(ContentAddressedModel):
+class StageContextManifest(FrozenStrictModel):
     """Deterministic rendered context and exact upstream lineage for one stage call."""
 
     schema_version: Literal["aecbench.stage-context-manifest.v1"] = "aecbench.stage-context-manifest.v1"
     task_id: NonEmptyStr
-    stage_graph_sha256: str
+    stage_graph_ref: DeclaredStageGraphRef
     consumer_stage_id: NonEmptyStr
     base_context_sha256: str
     routes: tuple[StageContextRoute, ...] = ()
     rendered_context: ArtifactReference
 
-    @field_validator("stage_graph_sha256", "base_context_sha256")
+    @field_validator("base_context_sha256")
     @classmethod
     def validate_sha256_fields(cls, value: str) -> str:
         return validate_sha256(value)
@@ -266,7 +290,7 @@ class StageContextManifest(ContentAddressedModel):
         return self
 
 
-class StageOutput(ContentAddressedModel):
+class StageOutput(FrozenStrictModel):
     """Parsed terminal payload emitted by one declared stage."""
 
     schema_version: Literal["aecbench.stage-output.v1"] = "aecbench.stage-output.v1"
@@ -315,21 +339,19 @@ class StageResourceEvidence(FrozenStrictModel):
     tool_calls: int | None = Field(default=None, ge=0)
 
 
-class StageExecutionReceipt(ContentAddressedModel):
+class StageExecutionReceipt(FrozenStrictModel):
     """Tamper-evident intermediate execution result kept outside the TrialRecord ledger."""
 
     schema_version: Literal["aecbench.stage-execution-receipt.v2"] = "aecbench.stage-execution-receipt.v2"
     bundle_id: NonEmptyStr
-    bundle_sha256: str
     run_id: NonEmptyStr
-    program_sha256: str
+    program_ref: ExecutionProgramRef
     program_node_id: NonEmptyStr
-    operation_sha256: str
+    operation_ref: ProgramOperationRef
     attempt: int = Field(ge=1)
     task_id: NonEmptyStr
     task_package_sha256: str
-    review_sidecar_sha256: str
-    stage_graph_sha256: str
+    stage_graph_ref: DeclaredStageGraphRef
     stage_id: NonEmptyStr
     context_manifest: ArtifactReference
     upstream_receipts: tuple[ArtifactReference, ...] = ()
@@ -341,12 +363,7 @@ class StageExecutionReceipt(ContentAddressedModel):
     resources: StageResourceEvidence
 
     @field_validator(
-        "bundle_sha256",
-        "program_sha256",
-        "operation_sha256",
         "task_package_sha256",
-        "review_sidecar_sha256",
-        "stage_graph_sha256",
     )
     @classmethod
     def validate_sha256_fields(cls, value: str) -> str:

@@ -25,10 +25,10 @@ def verify_schedule(
             f"task plan {task_plan.task_plan_id} schedule identity differs from its reference",
         )
     if (
-        schedule.kernel_sha256 != reference.kernel_sha256
-        or schedule.kernel_sha256 != task_plan.kernel_sha256
-        or schedule.fixed_harness_sha256 != reference.fixed_harness_sha256
-        or schedule.fixed_harness_sha256 != task_plan.fixed_harness_sha256
+        schedule.kernel_ref != reference.kernel_ref
+        or schedule.kernel_ref != task_plan.kernel_ref
+        or schedule.fixed_harness_ref != reference.fixed_harness_ref
+        or schedule.fixed_harness_ref != task_plan.fixed_harness_ref
         or schedule.evaluation_plan_ref != reference.evaluation_plan_ref
         or schedule.evaluation_plan_ref != task_plan.evaluation_plan_ref
         or schedule.proposal_freeze.content_sha256 != reference.proposal_freeze_sha256

@@ -190,7 +190,7 @@ def issue_governed_proposal_freeze(
             structural_split_sha256=structural.content_sha256,
             selected_structural_item_sha256=selected_task.content_sha256,
             selected_review_lineage_id=selected_task.review_lineage_id,
-            fixed_harness_sha256=harness.content_sha256,
+            fixed_harness_ref=harness.ref,
             execution_profile_sha256=(None if profile is None else profile.content_sha256),
             operator_authority=operator,
             split=split,
@@ -267,7 +267,7 @@ def issue_governed_proposal_freeze(
             subject_id=freeze.freeze_id,
             subject_sha256=freeze.content_sha256,
             basis=complete_basis.references,
-            kernel_sha256=plan.kernel_sha256,
+            kernel_ref=plan.kernel_ref,
             reasons=("host policy froze the exact preregistered proposal set before evaluation",),
             revalidation_triggers=(
                 "basis_replay_due",

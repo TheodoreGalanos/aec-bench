@@ -23,11 +23,12 @@ from aec_bench.contracts.harness_instance import (
     TaskSourceBindingConfig,
 )
 from aec_bench.contracts.harness_kernel import (
-    ContentAddressedModel,
     FrozenStrictModel,
     KernelRef,
+    kernel_abi_commitment,
     validate_sha256,
 )
+from aec_bench.contracts.legacy_content_address import LegacyContentAddressedModel
 from aec_bench.contracts.validators import NonEmptyStr
 from aec_bench.experimentation.governance.motifs import (
     MotifLibrary,
@@ -57,7 +58,7 @@ class ProgramMotifTemplatePayload(FrozenStrictModel):
     factor: ProgramFactorTemplate
 
 
-class MotifHarnessProgramInstantiationRequest(ContentAddressedModel):
+class MotifHarnessProgramInstantiationRequest(LegacyContentAddressedModel):
     """Target-world controls used to instantiate one selected motif beside H0/p0."""
 
     candidate_set_id: NonEmptyStr
@@ -87,7 +88,7 @@ class MotifHarnessProgramInstantiationRequest(ContentAddressedModel):
         return self
 
 
-class InstantiatedMotifFactors(ContentAddressedModel):
+class InstantiatedMotifFactors(LegacyContentAddressedModel):
     """Auditable selected-motif lineage plus the genuine matched candidate request it produced."""
 
     selected_motif_sha256: str
@@ -137,7 +138,7 @@ def instantiate_selected_motif_factors(
     selected = resolve_motif_selection(library, selection_request, selection_decision)
     if selected is None or selection_decision.outcome is not MotifSelectionOutcome.SELECTED:
         raise ValueError("motif selection did not select a motif")
-    if selected.kernel_abi_sha256 != request.kernel_ref.content_sha256:
+    if selected.kernel_abi_sha256 != kernel_abi_commitment(request.kernel_ref):
         raise ValueError("selected motif does not target the requested fixed-kernel ABI")
 
     source_recipe = _decode_harness_template(selected.hx_template)

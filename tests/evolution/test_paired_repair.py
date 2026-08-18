@@ -9,6 +9,7 @@ from typing import Literal
 import pytest
 from pydantic import ValidationError
 
+from aec_bench.contracts.harness_kernel import KernelRef
 from aec_bench.evolution.paired_repair import (
     PairedRepairAttempt,
     RepairAcceptancePolicy,
@@ -134,7 +135,7 @@ def test_repair_rejection_reasons_have_stable_policy_order() -> None:
 
 def test_repair_rejects_kernel_drifted_evidence() -> None:
     drifted = list(_outcomes((0.5, 0.7), candidate_id="candidate.child"))
-    drifted[0] = drifted[0].model_copy(update={"kernel_sha256": _sha("other-kernel")})
+    drifted[0] = drifted[0].model_copy(update={"kernel_ref": KernelRef(kernel_id="other-kernel", version="1.0.0")})
 
     with pytest.raises(ValidationError, match="kernel"):
         _attempt_with_evidence(child=tuple(drifted))
@@ -330,7 +331,7 @@ def _outcome(
         repetition=1,
         split=split,
         candidate_id=candidate_id,
-        kernel_sha256=_sha("kernel"),
+        kernel_ref=KernelRef(kernel_id="kernel", version="1.0.0"),
         resource_sha256=_sha("resource"),
         review_lineage_sha256=_sha(f"review:{block_id}"),
         reward=reward,

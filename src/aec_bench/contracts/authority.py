@@ -8,7 +8,8 @@ from typing import Literal, Self
 
 from pydantic import Field, field_validator, model_validator
 
-from aec_bench.contracts.harness_kernel import ContentAddressedModel, FrozenStrictModel, validate_sha256
+from aec_bench.contracts.harness_kernel import FrozenStrictModel, KernelRef, validate_sha256
+from aec_bench.contracts.legacy_content_address import LegacyContentAddressedModel
 from aec_bench.contracts.validators import NonEmptyStr
 
 
@@ -94,7 +95,35 @@ class AuthorityPrincipal(FrozenStrictModel):
     kind: AuthorityPrincipalKind
 
 
-class HumanAuthorityApproval(ContentAddressedModel):
+class EvaluationPlanIdentity(FrozenStrictModel):
+    """Stable evaluation-plan identity used by authority records."""
+
+    plan_id: NonEmptyStr
+    evaluation_generation: NonEmptyStr
+
+
+class CriticGenerationIdentity(FrozenStrictModel):
+    """Stable critic-generation identity without hidden configuration digests."""
+
+    critic_id: NonEmptyStr
+    version: NonEmptyStr
+    compatibility_generation: NonEmptyStr
+
+
+class CriticEvaluationOutcomeIdentity(FrozenStrictModel):
+    """Stable authority identity for one plan, critic, and candidate result."""
+
+    evaluation_plan: EvaluationPlanIdentity
+    critic_generation: CriticGenerationIdentity
+    candidate_sha256: str
+
+    @field_validator("candidate_sha256")
+    @classmethod
+    def validate_candidate_sha256(cls, value: str) -> str:
+        return validate_sha256(value)
+
+
+class HumanAuthorityApproval(LegacyContentAddressedModel):
     """Human decision bound to one exact consequential action and subject identity."""
 
     schema_version: Literal["aecbench.human-authority-approval.v1"] = "aecbench.human-authority-approval.v1"
@@ -131,19 +160,18 @@ class BasisReference(FrozenStrictModel):
         return validate_sha256(value)
 
 
-class PromotionSubjectLineage(ContentAddressedModel):
+class PromotionSubjectLineage(LegacyContentAddressedModel):
     """Host-derived join from one evaluated candidate to one promotion subject."""
 
     schema_version: Literal["aecbench.promotion-subject-lineage.v1"] = "aecbench.promotion-subject-lineage.v1"
     action: AuthorityAction
-    critic_evaluation_outcome_sha256: str
+    critic_evaluation_outcome: CriticEvaluationOutcomeIdentity
     candidate_sha256: str
     subject_id: NonEmptyStr
     subject_sha256: str
     derivation_evidence_sha256s: tuple[str, ...] = ()
 
     @field_validator(
-        "critic_evaluation_outcome_sha256",
         "candidate_sha256",
         "subject_sha256",
     )
@@ -176,7 +204,7 @@ class PromotionSubjectLineage(ContentAddressedModel):
         return self
 
 
-class MotifPromotionAssurance(ContentAddressedModel):
+class MotifPromotionAssurance(LegacyContentAddressedModel):
     """Exact active motif-assurance state admitted as promotion basis."""
 
     schema_version: Literal["aecbench.motif-promotion-assurance.v1"] = "aecbench.motif-promotion-assurance.v1"
@@ -197,7 +225,7 @@ class MotifPromotionAssurance(ContentAddressedModel):
         return validate_sha256(value)
 
 
-class MotifPromotionQualification(ContentAddressedModel):
+class MotifPromotionQualification(LegacyContentAddressedModel):
     """Host-derived proof that one exact provisional motif passed the first promotion gate."""
 
     schema_version: Literal["aecbench.motif-promotion-qualification.v1"] = "aecbench.motif-promotion-qualification.v1"
@@ -206,28 +234,26 @@ class MotifPromotionQualification(ContentAddressedModel):
     provisional_motif_sha256: str
     motif_subject_sha256: str
     candidate_sha256: str
-    critic_evaluation_outcome_sha256: str
+    critic_evaluation_outcome: CriticEvaluationOutcomeIdentity
     promotion_lineage_sha256: str
     promotion_monitor_attestation_sha256: str
     monitor_report_sha256: str
-    evaluation_plan_sha256: str
+    evaluation_plan: EvaluationPlanIdentity
     critic_release_authority_event_sha256: str
-    critic_generation_sha256: str
-    kernel_sha256: str
+    critic_generation: CriticGenerationIdentity
+    kernel_ref: KernelRef
+    kernel_abi_sha256: str
     qualified: Literal[True] = True
 
     @field_validator(
         "provisional_motif_sha256",
         "motif_subject_sha256",
         "candidate_sha256",
-        "critic_evaluation_outcome_sha256",
         "promotion_lineage_sha256",
         "promotion_monitor_attestation_sha256",
         "monitor_report_sha256",
-        "evaluation_plan_sha256",
         "critic_release_authority_event_sha256",
-        "critic_generation_sha256",
-        "kernel_sha256",
+        "kernel_abi_sha256",
     )
     @classmethod
     def validate_hashes(cls, value: str) -> str:
@@ -240,13 +266,13 @@ class MotifPromotionQualification(ContentAddressedModel):
         return self
 
 
-class PromotionMonitorAttestation(ContentAddressedModel):
+class PromotionMonitorAttestation(LegacyContentAddressedModel):
     """Host-policy attestation joining a passing monitor to one promotion regime."""
 
     schema_version: Literal["aecbench.promotion-monitor-attestation.v1"] = "aecbench.promotion-monitor-attestation.v1"
     monitor_basis_sha256: str
     monitor_report_sha256: str
-    evaluation_plan_sha256: str
+    evaluation_plan: EvaluationPlanIdentity
     assurance_snapshot_sha256: str
     cycle_id: NonEmptyStr
     cycle_index: int = Field(ge=0)
@@ -255,7 +281,6 @@ class PromotionMonitorAttestation(ContentAddressedModel):
     @field_validator(
         "monitor_basis_sha256",
         "monitor_report_sha256",
-        "evaluation_plan_sha256",
         "assurance_snapshot_sha256",
     )
     @classmethod
@@ -263,7 +288,7 @@ class PromotionMonitorAttestation(ContentAddressedModel):
         return validate_sha256(value)
 
 
-class OriginStamp(ContentAddressedModel):
+class OriginStamp(LegacyContentAddressedModel):
     """Host-observed producer and taint lineage for one consequential artifact."""
 
     schema_version: Literal["aecbench.origin-stamp.v1"] = "aecbench.origin-stamp.v1"
@@ -315,7 +340,7 @@ class OriginStamp(ContentAddressedModel):
         return self
 
 
-class AuthorityEvent(ContentAddressedModel):
+class AuthorityEvent(LegacyContentAddressedModel):
     """Scoped trust decision whose grant authority is validated by principal kind."""
 
     schema_version: Literal["aecbench.authority-event.v1"] = "aecbench.authority-event.v1"
@@ -326,21 +351,14 @@ class AuthorityEvent(ContentAddressedModel):
     subject_id: NonEmptyStr
     subject_sha256: str
     basis: tuple[BasisReference, ...] = Field(min_length=1)
-    kernel_sha256: str
-    critic_generation_sha256: str | None = None
+    kernel_ref: KernelRef
+    critic_generation: CriticGenerationIdentity | None = None
     reasons: tuple[NonEmptyStr, ...] = Field(min_length=1)
     revalidation_triggers: tuple[NonEmptyStr, ...] = ()
 
-    @field_validator("subject_sha256", "kernel_sha256")
+    @field_validator("subject_sha256")
     @classmethod
     def validate_required_hashes(cls, value: str) -> str:
-        return validate_sha256(value)
-
-    @field_validator("critic_generation_sha256")
-    @classmethod
-    def validate_optional_hash(cls, value: str | None) -> str | None:
-        if value is None:
-            return None
         return validate_sha256(value)
 
     @field_validator("basis")
@@ -367,7 +385,7 @@ class AuthorityEvent(ContentAddressedModel):
             if self.action in _HUMAN_ONLY_ACTIONS:
                 raise ValueError(f"{self.action.value} requires a human principal")
             raise ValueError(f"{self.principal.kind.value} principal cannot grant {self.action.value}")
-        if self.action in _CRITIC_GENERATION_ACTIONS and self.critic_generation_sha256 is None:
+        if self.action in _CRITIC_GENERATION_ACTIONS and self.critic_generation is None:
             raise ValueError("critic generation transitions require an exact critic generation identity")
         return self
 
@@ -392,7 +410,7 @@ class OperatorCapability(StrEnum):
     WRITE_CHALLENGE_CASE = "write_challenge_case"
 
 
-class OperatorAuthority(ContentAddressedModel):
+class OperatorAuthority(LegacyContentAddressedModel):
     """Closed capability set for one non-authoritative adaptive operator."""
 
     schema_version: Literal["aecbench.operator-authority.v1"] = "aecbench.operator-authority.v1"

@@ -10,11 +10,10 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TypeVar
+from typing import Protocol, TypeVar
 
 from pydantic import TypeAdapter
 
-from aec_bench.contracts.harness_kernel import ContentAddressedModel
 from aec_bench.ledger.immutable_artifact_store import (
     EvidenceRepository,
     ImmutableArtifactCollisionError,
@@ -47,7 +46,6 @@ from .contracts import (
     GovernedAttemptPreflight,
     GovernedAttemptReplay,
     GovernedAttemptStage,
-    GovernedAttemptStageClaim,
     GovernedAttemptTerminal,
 )
 
@@ -67,7 +65,11 @@ class AttemptState:
     terminal: GovernedAttemptTerminal | None
 
 
-RecordT = TypeVar("RecordT", bound=ContentAddressedModel)
+class _AttemptRecord(Protocol):
+    attempt_id: str
+
+
+RecordT = TypeVar("RecordT", bound=_AttemptRecord)
 
 PREFLIGHT_ADAPTER = TypeAdapter(GovernedAttemptPreflight)
 RESERVATION_ADAPTER = TypeAdapter(GovernedAttemptBudgetReservation)
@@ -78,11 +80,10 @@ IMPORT_ADAPTER = TypeAdapter(GovernedAttemptImportReceipt)
 BUDGET_CLOSURE_ADAPTER = TypeAdapter(GovernedAttemptBudgetClosure)
 MONITOR_CLOSURE_ADAPTER = TypeAdapter(GovernedAttemptMonitorClosure)
 TERMINAL_ADAPTER = TypeAdapter(GovernedAttemptTerminal)
-_CLAIM_ADAPTER = TypeAdapter(GovernedAttemptStageClaim)
 
 
 class GovernedAttemptRepository:
-    """Content-addressed objects and logical claims for governed attempts."""
+    """Immutable stage records selected by one governed-attempt identity."""
 
     def __init__(
         self,
@@ -112,37 +113,21 @@ class GovernedAttemptRepository:
         record: RecordT,
         adapter: TypeAdapter[RecordT],
     ) -> RecordT:
-        """Publish one content object and bind its immutable logical stage claim."""
+        """Publish one immutable record at its logical attempt-stage path."""
 
         label = _stage_label(stage)
         with _translate_repository_errors(label=label):
-            stored = self._repository.publish_content_addressed_model(
-                collection=_object_collection(stage),
-                filename="record.json",
-                model=record,
-                adapter=adapter,
-            )
-            claim = GovernedAttemptStageClaim(
-                attempt_id=attempt_id,
-                stage=stage,
-                record_sha256=stored.model.content_sha256,
-            )
-            self._repository.publish_logical_model(
-                collection=_claim_collection(stage),
+            stored = self._repository.publish_logical_model(
+                collection=_record_collection(stage),
                 logical_identity=_logical_identity(
                     attempt_id=attempt_id,
                     stage=stage,
                 ),
-                filename="claim.json",
-                model=claim,
-                adapter=_CLAIM_ADAPTER,
-            )
-            selected = self._repository.load_content_addressed_model(
-                collection=_object_collection(stage),
-                content_sha256=claim.record_sha256,
                 filename="record.json",
+                model=record,
                 adapter=adapter,
-            ).model
+            )
+            selected = stored.model
         if selected != record:
             raise GovernedAttemptCollisionError(
                 f"{label} selected different immutable content",
@@ -268,35 +253,30 @@ class GovernedAttemptRepository:
     ) -> RecordT | None:
         label = _stage_label(stage)
         with _translate_repository_errors(label=label):
-            claim_path = self._repository.logical_model_path(
-                collection=_claim_collection(stage),
+            record_path = self._repository.logical_model_path(
+                collection=_record_collection(stage),
                 logical_identity=_logical_identity(
                     attempt_id=attempt_id,
                     stage=stage,
                 ),
-                filename="claim.json",
+                filename="record.json",
             )
-            if not self._repository.exists(claim_path):
+            if not self._repository.exists(record_path):
                 return None
-            claim = self._repository.load_logical_model(
-                collection=_claim_collection(stage),
+            record = self._repository.load_logical_model(
+                collection=_record_collection(stage),
                 logical_identity=_logical_identity(
                     attempt_id=attempt_id,
                     stage=stage,
                 ),
-                filename="claim.json",
-                adapter=_CLAIM_ADAPTER,
-            ).model
-            if claim.attempt_id != attempt_id or claim.stage is not stage:
-                raise GovernedAttemptIntegrityError(
-                    f"{label} claim differs from its logical identity",
-                )
-            return self._repository.load_content_addressed_model(
-                collection=_object_collection(stage),
-                content_sha256=claim.record_sha256,
                 filename="record.json",
                 adapter=adapter,
             ).model
+            if record.attempt_id != attempt_id:
+                raise GovernedAttemptIntegrityError(
+                    f"{label} record differs from its logical identity",
+                )
+            return record
         raise AssertionError("unreachable")
 
 
@@ -413,12 +393,8 @@ def _raise_chain_error(error: str | None) -> None:
         raise GovernedAttemptIntegrityError(error)
 
 
-def _object_collection(stage: GovernedAttemptStage) -> str:
-    return f"governed-attempt/objects/{stage.value}"
-
-
-def _claim_collection(stage: GovernedAttemptStage) -> str:
-    return f"governed-attempt/claims/{stage.value}"
+def _record_collection(stage: GovernedAttemptStage) -> str:
+    return f"governed-attempt/records/{stage.value}"
 
 
 def _logical_identity(

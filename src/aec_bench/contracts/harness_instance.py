@@ -1,5 +1,5 @@
 # ABOUTME: Defines typed recipes and compiled task-specific harness instances over a fixed kernel.
-# ABOUTME: Keeps Hx immutable, content-addressed, and limited to explicit program-surface operations.
+# ABOUTME: Keeps Hx immutable, directly referenced, and limited to explicit program-surface operations.
 
 from __future__ import annotations
 
@@ -16,12 +16,10 @@ from pydantic import (
 )
 
 from aec_bench.contracts.harness_kernel import (
-    ContentAddressedModel,
     FrozenStrictModel,
     KernelCapabilityKind,
     KernelCapabilityRef,
     KernelRef,
-    validate_sha256,
 )
 from aec_bench.contracts.validators import NonEmptyStr
 
@@ -267,8 +265,8 @@ class HarnessRecursionPolicy(FrozenStrictModel):
         return self
 
 
-class HarnessContractSpec(ContentAddressedModel):
-    """Content-addressed schema contract enforced across an Hx boundary."""
+class HarnessContractSpec(FrozenStrictModel):
+    """Schema contract enforced across an Hx boundary."""
 
     contract_id: NonEmptyStr
     kind: HarnessContractKind
@@ -295,7 +293,7 @@ class HarnessBindingSpec(FrozenStrictModel):
         return self
 
 
-class HarnessRecipe(ContentAddressedModel):
+class HarnessRecipe(FrozenStrictModel):
     """Agent-proposable, deterministic-compiler input for a task-specific harness."""
 
     recipe_id: NonEmptyStr
@@ -318,8 +316,21 @@ class HarnessRecipe(ContentAddressedModel):
         """Return a recipe binding by id without exposing a mutable index."""
         return next((binding for binding in self.bindings if binding.binding_id == binding_id), None)
 
+    @property
+    def ref(self) -> HarnessRecipeRef:
+        """Return the stable identity of this recipe version."""
 
-class HarnessCompileRequest(ContentAddressedModel):
+        return HarnessRecipeRef(recipe_id=self.recipe_id, version=self.version)
+
+
+class HarnessRecipeRef(FrozenStrictModel):
+    """Stable reference to one harness recipe version."""
+
+    recipe_id: NonEmptyStr
+    version: NonEmptyStr
+
+
+class HarnessCompileRequest(FrozenStrictModel):
     """Closed compile request that pairs one complete recipe with one fixed K."""
 
     request_id: NonEmptyStr
@@ -368,18 +379,12 @@ class ProgramOperationScope(StrEnum):
 
 
 class ProgramOperationRef(FrozenStrictModel):
-    """Content-pinned reference used to resolve one exported Hx operation."""
+    """Stable reference used to resolve one exported Hx operation."""
 
     operation_id: NonEmptyStr
-    content_sha256: str
-
-    @field_validator("content_sha256")
-    @classmethod
-    def validate_content_sha256(cls, value: str) -> str:
-        return validate_sha256(value)
 
 
-class ProgramOperationSpec(ContentAddressedModel):
+class ProgramOperationSpec(FrozenStrictModel):
     """One typed operation exported by Hx for px compilation."""
 
     operation_id: NonEmptyStr
@@ -477,14 +482,11 @@ class ProgramOperationSpec(ContentAddressedModel):
 
     @property
     def ref(self) -> ProgramOperationRef:
-        return ProgramOperationRef(
-            operation_id=self.operation_id,
-            content_sha256=self.content_sha256,
-        )
+        return ProgramOperationRef(operation_id=self.operation_id)
 
 
-class ProgramSurface(ContentAddressedModel):
-    """Content-pinned operation surface against which execution programs compile."""
+class ProgramSurface(FrozenStrictModel):
+    """Named operation surface against which execution programs compile."""
 
     surface_id: NonEmptyStr
     operations: tuple[ProgramOperationSpec, ...]
@@ -507,42 +509,29 @@ class ProgramSurface(ContentAddressedModel):
         return next((operation for operation in self.operations if operation.operation_id == operation_id), None)
 
     def resolve_operation(self, reference: ProgramOperationRef) -> ProgramOperationSpec | None:
-        """Resolve a content-pinned reference only when both id and digest match."""
-        operation = self.operation(reference.operation_id)
-        if operation is None or operation.ref != reference:
-            return None
-        return operation
+        """Resolve an operation from the directly validated embedded surface."""
+
+        return self.operation(reference.operation_id)
 
 
 class HarnessInstanceRef(FrozenStrictModel):
-    """Content-pinned reference to one compiled task-specific harness instance."""
+    """Stable reference to one compiled task-specific harness instance."""
 
     instance_id: NonEmptyStr
-    content_sha256: str
-
-    @field_validator("content_sha256")
-    @classmethod
-    def validate_content_sha256(cls, value: str) -> str:
-        return validate_sha256(value)
 
 
-class CompiledHarnessInstance(ContentAddressedModel):
+class CompiledHarnessInstance(FrozenStrictModel):
     """Immutable Hx produced by deterministic compilation against one fixed K."""
 
     instance_id: NonEmptyStr
     kernel_ref: KernelRef
-    source_recipe_sha256: str
+    source_recipe_ref: HarnessRecipeRef
     contracts: tuple[HarnessContractSpec, ...] = ()
     budget: HarnessBudget = Field(default_factory=HarnessBudget)
     recursion_policy: HarnessRecursionPolicy = Field(default_factory=HarnessRecursionPolicy)
     bindings: tuple[CompiledHarnessBinding, ...]
     program_surface: ProgramSurface
     compatibility_notes: tuple[NonEmptyStr, ...] = ()
-
-    @field_validator("source_recipe_sha256")
-    @classmethod
-    def validate_source_recipe_sha256(cls, value: str) -> str:
-        return validate_sha256(value)
 
     @model_validator(mode="after")
     def validate_instance(self) -> Self:
@@ -600,7 +589,7 @@ class CompiledHarnessInstance(ContentAddressedModel):
 
     @property
     def ref(self) -> HarnessInstanceRef:
-        return HarnessInstanceRef(instance_id=self.instance_id, content_sha256=self.content_sha256)
+        return HarnessInstanceRef(instance_id=self.instance_id)
 
     def binding(self, binding_id: str) -> CompiledHarnessBinding | None:
         """Return a compiled binding by id without exposing a mutable index."""

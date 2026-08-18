@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Literal
 
-from aec_bench.contracts.harness_kernel import canonical_content_sha256
+from aec_bench.contracts.harness_kernel import canonical_json_sha256
 from aec_bench.contracts.output_completion import OutputCompletionContract
 from aec_bench.experimentation.proposals.task_packaging.build_context import (
     verify_proposal_task_build_context as _verify_proposal_task_build_context,
@@ -230,7 +230,7 @@ def _validate_governed_output_contract(
     identity: ProposalTaskPackageIdentity,
     output_contract: OutputCompletionContract,
 ) -> None:
-    contract_sha256 = canonical_content_sha256(output_contract.model_dump(mode="json"))
+    contract_sha256 = canonical_json_sha256(output_contract.model_dump(mode="json"))
     if contract_sha256 != identity.output_contract_sha256:
         raise ProposalTaskPackageError("output completion contract identity does not match")
     if output_contract.output_path != "/workspace/output.md":

@@ -13,7 +13,7 @@ from pathlib import Path, PurePosixPath
 
 from pydantic import TypeAdapter
 
-from aec_bench.contracts.harness_kernel import ContentAddressedModel
+from aec_bench.contracts.harness_kernel import FrozenStrictModel
 from aec_bench.contracts.proposal_execution.session import ProposalSessionReceipt
 from aec_bench.contracts.trial_record import ArtifactReference, TrialRecord
 from aec_bench.experimentation.proposals.harbor_import import ProposalHarborImportEvidence
@@ -137,7 +137,7 @@ def snapshot_file(
 def persist_model_artifact(
     *,
     repository: EvidenceRepository,
-    model: ContentAddressedModel,
+    model: FrozenStrictModel,
     kind: str,
     filename: str,
     object_root: Path,
@@ -160,7 +160,7 @@ def persist_model_artifact(
 def persist_model_path(
     *,
     repository: EvidenceRepository,
-    model: ContentAddressedModel,
+    model: FrozenStrictModel,
     filename: str,
     object_root: Path,
 ) -> Path:
@@ -443,7 +443,7 @@ def load_repository_bytes(
         )
 
 
-def load_repository_model[ModelT: ContentAddressedModel](
+def load_repository_model[ModelT: FrozenStrictModel](
     *,
     repository: EvidenceRepository,
     path: Path,
@@ -459,7 +459,7 @@ def load_repository_model[ModelT: ContentAddressedModel](
 
 
 def canonical_model_bytes(
-    model: ContentAddressedModel,
+    model: FrozenStrictModel,
 ) -> bytes:
     """Encode a content-addressed model with the historical canonical bytes."""
     return (

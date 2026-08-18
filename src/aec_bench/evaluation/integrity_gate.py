@@ -26,7 +26,6 @@ CriticGapEvaluator = Callable[
 
 def evaluate_with_integrity_gate(
     *,
-    evaluation_plan_sha256: str,
     candidate_sha256: str,
     evidence_set_sha256: str,
     integrity_checks: tuple[IntegrityCheck, ...],
@@ -40,7 +39,6 @@ def evaluate_with_integrity_gate(
 
     if not integrity.passed:
         return EvaluationOutcome(
-            evaluation_plan_sha256=evaluation_plan_sha256,
             candidate_sha256=candidate_sha256,
             evidence_set_sha256=evidence_set_sha256,
             integrity=integrity,
@@ -53,7 +51,6 @@ def evaluate_with_integrity_gate(
     validity = validity_evaluator()
     if not validity.verifier_completed:
         return EvaluationOutcome(
-            evaluation_plan_sha256=evaluation_plan_sha256,
             candidate_sha256=candidate_sha256,
             evidence_set_sha256=evidence_set_sha256,
             integrity=integrity,
@@ -66,7 +63,6 @@ def evaluate_with_integrity_gate(
 
     if not validity.valid:
         return EvaluationOutcome(
-            evaluation_plan_sha256=evaluation_plan_sha256,
             candidate_sha256=candidate_sha256,
             evidence_set_sha256=evidence_set_sha256,
             integrity=integrity,
@@ -82,7 +78,6 @@ def evaluate_with_integrity_gate(
     critic_gap = None if critic_gap_evaluator is None else critic_gap_evaluator(validity, utility)
     promotion_eligible = utility.acceptance_threshold_met
     return EvaluationOutcome(
-        evaluation_plan_sha256=evaluation_plan_sha256,
         candidate_sha256=candidate_sha256,
         evidence_set_sha256=evidence_set_sha256,
         integrity=integrity,

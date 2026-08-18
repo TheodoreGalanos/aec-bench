@@ -16,7 +16,7 @@ from typing import TypeVar
 from pydantic import BaseModel, ValidationError
 
 from aec_bench.contracts.harness_kernel import (
-    canonical_content_sha256,
+    canonical_json_sha256,
 )
 from aec_bench.ledger.durability import fsync_directory, mkdir_durable
 from aec_bench.worlds.stewardship.wastewater_pump_station.reference_package_models import (
@@ -143,7 +143,7 @@ class TemporalEvidenceRepository:
                 TemporalEvidenceCapability,
                 "capability",
             )
-            reference_namespace_id = canonical_content_sha256(
+            reference_namespace_id = canonical_json_sha256(
                 {
                     "policy": "opaque-reference-namespace.v1",
                     "run_id": context.run_id,
@@ -1223,7 +1223,7 @@ def _session_identity_key(
     session_id: str,
     agent_tenure_id: str,
 ) -> str:
-    return canonical_content_sha256(
+    return canonical_json_sha256(
         {
             "run_id": run_id,
             "session_id": session_id,
@@ -1233,10 +1233,10 @@ def _session_identity_key(
 
 
 def _transaction_path(request_id: str) -> str:
-    identity = canonical_content_sha256({"request_id": request_id})
+    identity = canonical_json_sha256({"request_id": request_id})
     return f"private/transactions/{identity}.json"
 
 
 def _reliance_path(action_request_id: str) -> str:
-    identity = canonical_content_sha256({"action_request_id": action_request_id})
+    identity = canonical_json_sha256({"action_request_id": action_request_id})
     return f"public/reliance/{identity}.json"

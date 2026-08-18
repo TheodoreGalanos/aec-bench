@@ -15,10 +15,10 @@ from aec_bench.contracts.authority import (
     OriginStamp,
 )
 from aec_bench.contracts.harness_kernel import (
-    ContentAddressedModel,
-    canonical_content_sha256,
+    canonical_json_sha256,
     validate_sha256,
 )
+from aec_bench.contracts.legacy_content_address import LegacyContentAddressedModel
 from aec_bench.contracts.program_proposal.candidate import ProgramCandidateRef
 from aec_bench.contracts.program_proposal.study import MatchedEvaluationCoordinate
 from aec_bench.contracts.task_definition import TaskDefinition
@@ -44,7 +44,7 @@ from aec_bench.experimentation.proposals.task_packaging.contracts import (
 )
 
 
-class GovernedProposalDispatch(ContentAddressedModel):
+class GovernedProposalDispatch(LegacyContentAddressedModel):
     """Exact host-validated proposal dispatch surface authorized for one provider job."""
 
     schema_version: Literal["aecbench.governed-proposal-dispatch.v1"] = "aecbench.governed-proposal-dispatch.v1"
@@ -100,10 +100,10 @@ class GovernedProposalDispatch(ContentAddressedModel):
         _validate_bundle_and_host(self)
         _validate_runtime(self)
         derived_task = _validate_task_identity(self)
-        if canonical_content_sha256(derived_task.model_dump(mode="json")) != self.derived_task_sha256:
+        if canonical_json_sha256(derived_task.model_dump(mode="json")) != self.derived_task_sha256:
             raise ValueError("governed dispatch derived task identity differs")
         job = load_canonical_job_json(self.harbor_job_config_json)
-        if canonical_content_sha256(job) != self.harbor_job_config_sha256:
+        if canonical_json_sha256(job) != self.harbor_job_config_sha256:
             raise ValueError("governed dispatch Harbor job identity differs")
         validate_recorded_job_surface(record=self, job=job)
         return self
@@ -134,7 +134,7 @@ class GovernedProposalDispatchAuthorization:
     def content_sha256(self) -> str:
         """Return the canonical identity of the complete authority chain."""
 
-        return canonical_content_sha256(
+        return canonical_json_sha256(
             {
                 "dispatch_sha256": self.dispatch.content_sha256,
                 "freeze_authority_event_sha256": (self.freeze_authority_event.content_sha256),
@@ -188,7 +188,7 @@ def _validate_bundle_and_host(record: GovernedProposalDispatch) -> None:
         raise ValueError(
             "governed dispatch host configuration differs from the exact bundle",
         )
-    if record.host_config_sha256 != canonical_content_sha256(
+    if record.host_config_sha256 != canonical_json_sha256(
         record.host_config.model_dump(mode="json"),
     ):
         raise ValueError("governed dispatch host configuration identity differs")

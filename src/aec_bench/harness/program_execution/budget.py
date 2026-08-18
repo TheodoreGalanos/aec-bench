@@ -11,6 +11,7 @@ from dataclasses import dataclass
 
 from aec_bench.contracts.execution_program import (
     CompiledExecutionProgram,
+    ExecutionProgramRef,
 )
 from aec_bench.contracts.harness_instance import ProgramOperationRef
 
@@ -19,7 +20,7 @@ from aec_bench.contracts.harness_instance import ProgramOperationRef
 class OperationExecutionContext:
     """Identity and bounded recursion surface supplied to one trusted handler call."""
 
-    program_sha256: str
+    program_ref: ExecutionProgramRef
     node_id: str
     operation_ref: ProgramOperationRef
     binding_ids: tuple[str, ...]

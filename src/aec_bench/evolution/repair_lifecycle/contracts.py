@@ -11,6 +11,7 @@ from pydantic import Field, NonNegativeInt, PositiveInt, field_validator, model_
 from aec_bench.contracts.execution_program import (
     CompiledExecutionProgram,
     ExecutionProgram,
+    ExecutionProgramRef,
     ProgramLimits,
     ProgramNode,
 )
@@ -208,8 +209,8 @@ class VerifiedRepairRun(FrozenStrictModel):
     verification_id: NonEmptyStr
     run_id: NonEmptyStr
     candidate_id: NonEmptyStr
-    harness_sha256: str
-    program_sha256: str
+    harness_ref: HarnessInstanceRef
+    program_ref: ExecutionProgramRef
     run_artifact_sha256: str
     pairing: RepairPairingSpec
     passed: bool
@@ -218,7 +219,7 @@ class VerifiedRepairRun(FrozenStrictModel):
     execution_observations: tuple[RepairExecutionObservation, ...] = ()
     diagnostics: tuple[NonEmptyStr, ...] = ()
 
-    @field_validator("harness_sha256", "program_sha256", "run_artifact_sha256")
+    @field_validator("run_artifact_sha256")
     @classmethod
     def validate_identity_sha256(cls, value: str) -> str:
         return validate_sha256(value)

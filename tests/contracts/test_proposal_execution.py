@@ -30,7 +30,8 @@ from aec_bench.contracts.harness_instance import (
 )
 from aec_bench.contracts.harness_kernel import (
     KernelCapabilityRef,
-    canonical_content_sha256,
+    KernelRef,
+    canonical_json_sha256,
 )
 from aec_bench.contracts.program_proposal.candidate import (
     CandidateGenerationCoordinate,
@@ -149,7 +150,6 @@ def _execution_profile() -> ProposalExecutionProfile:
                 capability_ref=KernelCapabilityRef(
                     capability_id=capability_id,
                     version="1.0.0",
-                    content_sha256=_sha(f"capability.{operation_id}"),
                 ),
                 required_scope=(
                     ProgramOperationScope.PUBLIC
@@ -214,7 +214,10 @@ def _view() -> DecompositionProblemView:
             "require_single_final_json_block": True,
         },
         fixed_harness=FixedHarnessCapabilityProjection(
-            kernel_sha256=_sha("kernel"),
+            kernel_ref=KernelRef(
+                kernel_id="aec-bench.adaptive-harness",
+                version="1.6.0",
+            ),
             harness_policy_sha256=_sha("h0-policy"),
             capability_ids=(
                 "check_subtask_contract.v1",
@@ -299,7 +302,7 @@ def _graph() -> ProposedDecompositionGraph:
                 kind=ProposalPortKind.DECISION_RECORD,
             ),
         ),
-        output_completion_contract_sha256=canonical_content_sha256(view.output_contract.model_dump(mode="json")),
+        output_completion_contract_sha256=canonical_json_sha256(view.output_contract.model_dump(mode="json")),
     )
     return ProposedDecompositionGraph(
         candidate_id="candidate.1",
@@ -380,7 +383,7 @@ def _parallel_graph() -> ProposedDecompositionGraph:
                 kind=ProposalPortKind.DECISION_RECORD,
             ),
         ),
-        output_completion_contract_sha256=canonical_content_sha256(view.output_contract.model_dump(mode="json")),
+        output_completion_contract_sha256=canonical_json_sha256(view.output_contract.model_dump(mode="json")),
     )
     return ProposedDecompositionGraph(
         candidate_id="candidate.1",
@@ -436,13 +439,12 @@ def _freeze(
         evaluation_plan_ref=EvaluationPlanRef(
             plan_id="plan.phase9",
             evaluation_generation="generation-1",
-            content_sha256=_sha("evaluation-plan"),
         ),
         evaluation_plan_candidate_manifest_sha256=manifest.content_sha256,
         structural_split_sha256=_sha("structural-split"),
         selected_structural_item_sha256=_sha("structural-item"),
         selected_review_lineage_id=_sha("review-lineage"),
-        fixed_harness_sha256=_sha("compiled-h0"),
+        fixed_harness_ref=HarnessInstanceRef(instance_id="compiled-h0"),
         operator_authority=operator_authority_for(
             "optimizer.phase9",
             OperatorRole.PERFORMANCE_OPTIMIZATION,
@@ -519,7 +521,7 @@ def _budget_plan(
         candidate_id=graph.candidate_id,
         proposal_graph_sha256=graph.content_sha256,
         proposal_freeze_sha256=freeze.content_sha256,
-        fixed_harness_sha256=freeze.fixed_harness_sha256,
+        fixed_harness_ref=freeze.fixed_harness_ref,
         allocation_policy_sha256=_sha("equal-budget-allocation"),
         aggregate_budget=freeze.problem_view.fixed_harness.aggregate_budget,
         execution_semantics=ProposalExecutionSemantics.SEQUENTIAL_DATAFLOW,
@@ -609,10 +611,7 @@ def _programs(
         ),
     )
     refs = tuple(
-        ProgramOperationRef(
-            operation_id=operation_id,
-            content_sha256=_sha(f"operation:{operation_id}"),
-        )
+        ProgramOperationRef(operation_id=operation_id)
         for operation_id in (
             "check_subtask_contract.v1",
             "finalize_proposed_plan.v1",
@@ -623,8 +622,8 @@ def _programs(
         program_id=source.program_id,
         version=source.version,
         harness_ref=harness_ref,
-        source_program_sha256=source.content_sha256,
-        surface_sha256=surface_sha256,
+        source_program_ref=source.ref,
+        surface_id=surface_sha256,
         nodes=source.nodes,
         limits=source.limits,
         topological_order=(
@@ -651,10 +650,7 @@ def _success(
         proposal_graph,
         candidate_artifact_sha256=raw_sha256,
     )
-    harness_ref = HarnessInstanceRef(
-        instance_id="h0.phase9",
-        content_sha256=freeze.fixed_harness_sha256,
-    )
+    harness_ref = freeze.fixed_harness_ref
     surface_sha256 = _sha("program-surface")
     source, compiled = _programs(harness_ref, surface_sha256)
     return ProposalCompilationSuccess(
@@ -665,9 +661,9 @@ def _success(
         proposal_graph=proposal_graph,
         proposal_freeze=freeze,
         freeze_authority_event_sha256=_sha("freeze-authority-event"),
-        kernel_sha256=freeze.problem_view.fixed_harness.kernel_sha256,
+        kernel_ref=freeze.problem_view.fixed_harness.kernel_ref,
         fixed_harness_ref=harness_ref,
-        surface_sha256=surface_sha256,
+        surface_id=surface_sha256,
         lowering_policy_sha256=_sha("fixed-lowering-policy"),
         task_snapshot_sha256=_sha("full-task-snapshot"),
         execution_profile=_execution_profile(),
@@ -698,8 +694,8 @@ def _node_receipts(
         candidate_id=compilation.candidate_ref.candidate_id,
         proposal_graph_sha256=compilation.proposal_graph.content_sha256,
         problem_view_sha256=compilation.proposal_graph.problem_view_sha256,
-        kernel_sha256=compilation.kernel_sha256,
-        fixed_harness_sha256=compilation.fixed_harness_ref.content_sha256,
+        kernel_ref=compilation.kernel_ref,
+        fixed_harness_ref=compilation.fixed_harness_ref,
         proposal_policy_sha256=compilation.proposal_graph.proposal_policy_sha256,
         node_id="analyse",
         attempt=1,
@@ -746,8 +742,8 @@ def _node_receipts(
         candidate_id=compilation.candidate_ref.candidate_id,
         proposal_graph_sha256=compilation.proposal_graph.content_sha256,
         problem_view_sha256=compilation.proposal_graph.problem_view_sha256,
-        kernel_sha256=compilation.kernel_sha256,
-        fixed_harness_sha256=compilation.fixed_harness_ref.content_sha256,
+        kernel_ref=compilation.kernel_ref,
+        fixed_harness_ref=compilation.fixed_harness_ref,
         proposal_policy_sha256=compilation.proposal_graph.proposal_policy_sha256,
         node_id="assess",
         attempt=1,
@@ -786,8 +782,8 @@ def _node_receipts(
         candidate_id=compilation.candidate_ref.candidate_id,
         proposal_graph_sha256=compilation.proposal_graph.content_sha256,
         problem_view_sha256=compilation.proposal_graph.problem_view_sha256,
-        kernel_sha256=compilation.kernel_sha256,
-        fixed_harness_sha256=compilation.fixed_harness_ref.content_sha256,
+        kernel_ref=compilation.kernel_ref,
+        fixed_harness_ref=compilation.fixed_harness_ref,
         proposal_policy_sha256=compilation.proposal_graph.proposal_policy_sha256,
         node_id="finalize",
         attempt=1,
@@ -1078,7 +1074,7 @@ def test_candidate_budget_rejects_sum_over_every_aggregate_dimension(
             candidate_id=graph.candidate_id,
             proposal_graph_sha256=graph.content_sha256,
             proposal_freeze_sha256=freeze.content_sha256,
-            fixed_harness_sha256=freeze.fixed_harness_sha256,
+            fixed_harness_ref=freeze.fixed_harness_ref,
             allocation_policy_sha256=_sha("allocator"),
             aggregate_budget=_budget(),
             execution_semantics=ProposalExecutionSemantics.SEQUENTIAL_DATAFLOW,
@@ -1096,14 +1092,14 @@ def test_compilation_success_binds_candidate_freeze_sources_budget_and_program()
     )
 
     assert success.candidate_ref.candidate_artifact_sha256 == success.proposal_graph.content_sha256
-    assert success.compiled_program.source_program_sha256 == success.lowered_program.content_sha256
+    assert success.compiled_program.source_program_ref == success.lowered_program.ref
     assert success.budget_plan.reservation_node_ids == success.proposal_graph.node_ids
     assert verification.candidate_id == success.candidate_ref.candidate_id
     assert verification.node_ids == success.proposal_graph.node_ids
     assert verification.profile_sha256 == success.execution_profile.content_sha256
 
     payload = success.model_dump(mode="json", exclude={"content_sha256"})
-    payload["surface_sha256"] = _sha("other-surface")
+    payload["surface_id"] = "other-surface"
     with pytest.raises(ValidationError, match="surface"):
         ProposalCompilationSuccess.model_validate(payload)
 
@@ -1129,12 +1125,9 @@ def test_grammar_invalid_rejection_binds_raw_frozen_candidate_without_a_graph() 
         raw_proposal_artifact_sha256=raw_proposal_sha256,
         proposal_freeze=freeze,
         freeze_authority_event_sha256=_sha("freeze-authority"),
-        kernel_sha256=freeze.problem_view.fixed_harness.kernel_sha256,
-        fixed_harness_ref=HarnessInstanceRef(
-            instance_id="h0.phase9",
-            content_sha256=freeze.fixed_harness_sha256,
-        ),
-        surface_sha256=_sha("surface"),
+        kernel_ref=freeze.problem_view.fixed_harness.kernel_ref,
+        fixed_harness_ref=freeze.fixed_harness_ref,
+        surface_id="proposal-surface",
         lowering_policy_sha256=_sha("lowering"),
         task_snapshot_sha256=_sha("task-snapshot"),
         execution_profile=_execution_profile(),

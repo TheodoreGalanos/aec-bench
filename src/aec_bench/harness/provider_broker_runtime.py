@@ -24,7 +24,7 @@ from aec_bench.adapters.rlm.client import (
     ToolCall,
     ToolCapableRlmClient,
 )
-from aec_bench.contracts.harness_kernel import canonical_content_sha256
+from aec_bench.contracts.harness_kernel import canonical_json_sha256
 from aec_bench.contracts.pricing import estimate_cost_usd
 from aec_bench.contracts.provider_broker import (
     ProviderBrokerCallPlane,
@@ -581,8 +581,8 @@ def _metered_call_outcome(
         call_plane=admitted.call_plane,
         method=admitted.operation,
         model=policy.model,
-        request_sha256=canonical_content_sha256(admitted.request),
-        response_sha256=canonical_content_sha256(response_payload),
+        request_sha256=canonical_json_sha256(admitted.request),
+        response_sha256=canonical_json_sha256(response_payload),
         input_tokens=response.input_tokens,
         output_tokens=response.output_tokens,
         cache_read_tokens=response.cache_read_tokens,
@@ -652,7 +652,7 @@ def _effect_unknown_outcome(
         call_plane=admitted.call_plane,
         method=admitted.operation,
         model=model,
-        request_sha256=canonical_content_sha256(admitted.request),
+        request_sha256=canonical_json_sha256(admitted.request),
         failure_code="provider_effect_outcome_unknown",
         started_at=started_at,
         recorded_at=datetime.now(UTC),

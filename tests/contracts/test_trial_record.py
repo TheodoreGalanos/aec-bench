@@ -938,7 +938,6 @@ def test_meta_harness_provenance_accepts_opaque_evaluation_plan_ref_and_loads_le
     plan_ref = EvaluationPlanRef(
         plan_id="evaluation-plan.stage-9",
         evaluation_generation="evaluation-generation-1",
-        content_sha256="9" * 64,
     )
     governed = current.model_copy(update={"evaluation_plan_ref": plan_ref})
     restored_governed = MetaHarnessTrialProvenance.model_validate(governed.model_dump(mode="json"))

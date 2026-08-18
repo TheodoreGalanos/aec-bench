@@ -17,7 +17,7 @@ from typing import Any, Literal
 import pytest
 
 from aec_bench.contracts.execution_environment import RUNTIME_PYTHON_PACKAGES
-from aec_bench.contracts.harness_kernel import canonical_content_sha256
+from aec_bench.contracts.harness_kernel import canonical_json_sha256
 from aec_bench.contracts.output_completion import OutputCompletionContract
 from aec_bench.contracts.task_definition import Visibility
 from aec_bench.experimentation.proposals.morph_cloud import (
@@ -296,7 +296,7 @@ def _environment_dir(tmp_path: Path) -> Path:
         task_revision=hashlib.sha256(b"task").hexdigest(),
         source_task_package_sha256=hashlib.sha256(b"source").hexdigest(),
         problem_view_sha256=hashlib.sha256(b"problem").hexdigest(),
-        output_contract_sha256=canonical_content_sha256(contract.model_dump(mode="json")),
+        output_contract_sha256=canonical_json_sha256(contract.model_dump(mode="json")),
         visibility=Visibility.PUBLIC,
         files=tuple(
             ProposalTaskPackageFile(

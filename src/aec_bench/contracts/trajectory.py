@@ -9,18 +9,17 @@ from typing import Any, Literal
 
 from pydantic import NonNegativeInt, PositiveInt, field_validator, model_validator
 
-from aec_bench.contracts.harness_kernel import validate_sha256
+from aec_bench.contracts.execution_program import ExecutionProgramRef
+from aec_bench.contracts.harness_instance import HarnessInstanceRef
+from aec_bench.contracts.harness_kernel import KernelRef
 from aec_bench.contracts.validators import NonEmptyStr, StrictModel
 
 
 class MetaHarnessTrajectoryContext(StrictModel):
-    kernel_sha256: NonEmptyStr
-    harness_id: NonEmptyStr
-    harness_sha256: NonEmptyStr
-    program_id: NonEmptyStr
-    program_sha256: NonEmptyStr
+    kernel_ref: KernelRef
+    harness_ref: HarnessInstanceRef
+    program_ref: ExecutionProgramRef
     bundle_id: NonEmptyStr
-    bundle_sha256: NonEmptyStr
     program_node_id: NonEmptyStr
     binding_ids: tuple[NonEmptyStr, ...] = ()
     repair_iteration: NonNegativeInt | None = None
@@ -30,11 +29,6 @@ class MetaHarnessTrajectoryContext(StrictModel):
     motif_ids: tuple[NonEmptyStr, ...] = ()
     proposal_session_id: NonEmptyStr | None = None
     proposal_invocation_id: NonEmptyStr | None = None
-
-    @field_validator("kernel_sha256", "harness_sha256", "program_sha256", "bundle_sha256")
-    @classmethod
-    def validate_kernel_hash(cls, value: str) -> str:
-        return validate_sha256(value)
 
     @field_validator("binding_ids", "motif_ids")
     @classmethod

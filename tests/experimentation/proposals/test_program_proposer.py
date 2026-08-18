@@ -20,7 +20,7 @@ from aec_bench.contracts.authority import (
     AuthorityPrincipalKind,
 )
 from aec_bench.contracts.harness_instance import HarnessBudget
-from aec_bench.contracts.harness_kernel import canonical_content_sha256
+from aec_bench.contracts.harness_kernel import canonical_json_sha256
 from aec_bench.contracts.pricing import estimate_cost_usd
 from aec_bench.contracts.program_proposal.candidate import CandidateGenerationCoordinate, CandidateGenerationManifest
 from aec_bench.contracts.program_proposal.problem import DecompositionProblemView
@@ -87,7 +87,10 @@ def _problem_view(policy: FrozenProgramProposerPolicy) -> DecompositionProblemVi
                 "require_single_final_json_block": True,
             },
             "fixed_harness": {
-                "kernel_sha256": _sha("kernel"),
+                "kernel_ref": {
+                    "kernel_id": "aec-bench.adaptive-harness",
+                    "version": "1.6.0",
+                },
                 "harness_policy_sha256": _sha("h0"),
                 "capability_ids": ["context.public", "tool.read"],
                 "aggregate_budget": HarnessBudget(
@@ -176,7 +179,7 @@ def _graph_payload(
                     "kind": "fact_set",
                 }
             ],
-            "output_completion_contract_sha256": canonical_content_sha256(
+            "output_completion_contract_sha256": canonical_json_sha256(
                 problem_view.output_contract.model_dump(mode="json")
             ),
         },
@@ -362,7 +365,7 @@ def test_one_frozen_invocation_returns_exactly_two_canonical_bound_artifacts() -
     assert public_request["problem_view"]["content_sha256"] == problem_view.content_sha256
     assert public_request["required_bindings"] == {
         "grammar_sha256": policy.grammar_sha256,
-        "output_completion_contract_sha256": canonical_content_sha256(
+        "output_completion_contract_sha256": canonical_json_sha256(
             problem_view.output_contract.model_dump(mode="json")
         ),
         "policy_checkpoint_sha256": policy.policy_checkpoint_sha256,

@@ -8,7 +8,7 @@ from typing import Annotated, Literal, Self
 
 from pydantic import Field, field_validator, model_validator
 
-from aec_bench.contracts.execution_program import ActionNode, FanoutNode, RetryPolicy
+from aec_bench.contracts.execution_program import ActionNode, ExecutionProgramRef, FanoutNode, RetryPolicy
 from aec_bench.contracts.harness_instance import AgentBindingConfig, prohibited_retry_safe_error_codes
 from aec_bench.contracts.harness_kernel import FrozenStrictModel, KernelCapabilityRef
 from aec_bench.contracts.validators import NonEmptyStr
@@ -94,7 +94,7 @@ class ProgramCoalesceTaskBatchDiagnosisRule(FrozenStrictModel):
     @model_validator(mode="after")
     def validate_coordinates(self) -> Self:
         ProgramCoalesceTaskBatchPatch(
-            expected_program_sha256="0" * 64,
+            expected_program_ref=ExecutionProgramRef(program_id="validation", version="validation"),
             source_node_ids=self.source_node_ids,
             replacement_node_id=self.replacement_node_id,
             task_refs=self.task_refs,

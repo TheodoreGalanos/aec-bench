@@ -14,10 +14,10 @@ from aec_bench.contracts.evaluation_generation.cohort import (
 )
 from aec_bench.contracts.evaluation_plane import CriticRole
 from aec_bench.contracts.harness_kernel import (
-    ContentAddressedModel,
     FrozenStrictModel,
     validate_sha256,
 )
+from aec_bench.contracts.legacy_content_address import LegacyContentAddressedModel
 from aec_bench.contracts.validators import NonEmptyStr
 
 
@@ -45,7 +45,7 @@ class EvaluationGenerationEvidenceRef(FrozenStrictModel):
         return validate_sha256(value)
 
 
-class _EvaluationGenerationClosureBase(ContentAddressedModel):
+class _EvaluationGenerationClosureBase(LegacyContentAddressedModel):
     """Fields shared by every explicit generation-terminal variant."""
 
     execution_id: NonEmptyStr
@@ -142,7 +142,7 @@ class GovernedBatchAssignmentEvidence(FrozenStrictModel):
         return validate_sha256(value)
 
 
-class GovernedBatchTerminalEvidence(ContentAddressedModel):
+class GovernedBatchTerminalEvidence(LegacyContentAddressedModel):
     """Phase-neutral execution projection for one completed batch."""
 
     schema_version: Literal["aecbench.governed-batch-terminal-evidence.v2"] = (
@@ -263,7 +263,7 @@ class EvaluationCriticRetirementRef(FrozenStrictModel):
         return self
 
 
-class EvaluationGenerationRetirementClosure(ContentAddressedModel):
+class EvaluationGenerationRetirementClosure(LegacyContentAddressedModel):
     """Final retirement and acceptance-reveal join for one generation closure."""
 
     schema_version: Literal["aecbench.evaluation-generation-retirement-closure.v2"] = (

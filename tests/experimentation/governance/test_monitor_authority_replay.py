@@ -15,6 +15,7 @@ from aec_bench.contracts.authority import (
     BasisKind,
     TaintLabel,
 )
+from aec_bench.contracts.harness_kernel import KernelRef
 from aec_bench.experimentation.governance.authority_ledger import AuthorityLedger
 from aec_bench.experimentation.governance.standing_monitors import (
     replay_scheduled_basis,
@@ -66,7 +67,7 @@ def _ledger_with_import_event(tmp_path: Path) -> tuple[AuthorityLedger, Authorit
         subject_id="trial-record.imported-001",
         subject_sha256=imported.reference.artifact_sha256,
         basis=(imported.reference,),
-        kernel_sha256=_sha("kernel"),
+        kernel_ref=KernelRef(kernel_id="test-kernel", version="1.0.0"),
         reasons=("host imported exact scored evidence",),
         revalidation_triggers=("basis_replay_due",),
     )

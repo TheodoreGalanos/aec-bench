@@ -6,12 +6,14 @@ from pydantic import ValidationError
 
 from aec_bench.contracts.harness_kernel import (
     KernelCapabilityKind,
+    KernelCapabilityRef,
     KernelCapabilitySpec,
     KernelExecutorImplementationIdentity,
     KernelImplementationIdentity,
     KernelManifest,
     KernelPortCardinality,
     KernelPortSpec,
+    KernelRef,
     KernelSourceDigest,
 )
 
@@ -34,23 +36,26 @@ def _adapter_capability(*, summary: str = "Execute one agent adapter.") -> Kerne
     )
 
 
-def test_kernel_capability_is_frozen_and_content_addressed() -> None:
+def test_kernel_capability_is_plain_frozen_and_directly_referenced() -> None:
     first = _adapter_capability()
     second = _adapter_capability()
     changed = _adapter_capability(summary="Execute a different adapter contract.")
 
-    assert len(first.content_sha256) == 64
-    assert first.content_sha256 == second.content_sha256
-    assert first.content_sha256 != changed.content_sha256
-    assert first.ref.content_sha256 == first.content_sha256
+    assert first == second
+    assert first != changed
+    assert first.ref == KernelCapabilityRef(
+        capability_id="aecbench.adapter.lambda-rlm",
+        version="1.0.0",
+    )
+    assert "content_sha256" not in first.model_dump(mode="json")
 
     with pytest.raises(ValidationError, match="frozen"):
         first.summary = "mutated"
 
 
-def test_content_address_rejects_a_digest_that_does_not_match_the_content() -> None:
-    with pytest.raises(ValidationError, match="content_sha256 does not match"):
-        _adapter_capability().model_copy(update={"content_sha256": "0" * 64}, deep=True).model_validate(
+def test_kernel_capability_rejects_an_ambient_content_digest() -> None:
+    with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
+        KernelCapabilitySpec.model_validate(
             {
                 **_adapter_capability().model_dump(mode="json"),
                 "content_sha256": "0" * 64,
@@ -85,7 +90,7 @@ def test_kernel_manifest_pins_unique_capabilities() -> None:
         ),
     )
 
-    assert manifest.ref.content_sha256 == manifest.content_sha256
+    assert manifest.ref == KernelRef(kernel_id="aec-bench", version="1.0.0")
     assert manifest.capability_refs == (adapter.ref, backend.ref)
 
     with pytest.raises(ValidationError, match="capability ids must be unique"):
@@ -97,7 +102,7 @@ def test_kernel_manifest_pins_unique_capabilities() -> None:
         )
 
 
-def test_kernel_manifest_identity_changes_with_executable_source_inventory() -> None:
+def test_kernel_manifest_value_changes_with_executable_source_inventory() -> None:
     capability = _adapter_capability()
     first = KernelManifest(
         kernel_id="aec-bench",
@@ -116,11 +121,12 @@ def test_kernel_manifest_identity_changes_with_executable_source_inventory() -> 
         ),
     )
 
-    assert first.implementation.content_sha256 != changed.implementation.content_sha256
-    assert first.content_sha256 != changed.content_sha256
+    assert first.implementation != changed.implementation
+    assert first != changed
+    assert first.ref == changed.ref
 
 
-def test_kernel_manifest_accepts_executor_surface_identity_without_rewriting_legacy_identity() -> None:
+def test_kernel_manifest_accepts_both_supported_implementation_identity_shapes() -> None:
     capability = _adapter_capability()
     legacy = KernelManifest(
         kernel_id="aec-bench",
@@ -143,11 +149,11 @@ def test_kernel_manifest_accepts_executor_surface_identity_without_rewriting_leg
     restored_executor_surface = KernelManifest.model_validate(executor_surface.model_dump(mode="json"))
 
     assert restored_legacy == legacy
-    assert restored_legacy.content_sha256 == legacy.content_sha256
     assert restored_legacy.implementation.kind == "python_source_inventory"
     assert restored_executor_surface == executor_surface
     assert restored_executor_surface.implementation.kind == "python_executor_surface"
-    assert restored_executor_surface.content_sha256 != legacy.content_sha256
+    assert "content_sha256" not in restored_legacy.model_dump(mode="json")
+    assert "content_sha256" not in restored_executor_surface.model_dump(mode="json")
 
 
 def test_kernel_capability_rejects_duplicate_port_names() -> None:

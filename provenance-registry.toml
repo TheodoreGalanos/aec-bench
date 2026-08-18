@@ -699,6 +699,76 @@ artifact_boundary = "one independently retained non-empty artifact addressed ins
 read_verification = "ArtifactRepository resolves the digest-derived artifact ID and rejects any locator, digest, or size mismatch"
 
 [[field]]
+symbol = "aec_bench.contracts.authority.CriticEvaluationOutcomeIdentity.candidate_sha256"
+aliases = ["aec_bench.contracts.evaluation_outcome.CriticEvaluationOutcomeRef.candidate_sha256"]
+surface = "pydantic_model"
+wire_name = "candidate_sha256"
+category = "semantic_commitment"
+domain_owner = "evaluation"
+authority = "critic_evaluation_outcome"
+authoritative = false
+exposure = "persisted"
+status = "temporary_exception"
+payload_contract = "candidate commitment copied from EvaluationOutcome.candidate_sha256"
+canonicalization = "the exact candidate digest supplied to the evaluated outcome"
+consumer = "promotion authority and critic-outcome reference matching"
+validation_behavior = "The reference validates digest syntax and governance compares it with the selected EvaluationOutcome"
+mismatch_behavior = "reject_governance_evidence"
+retention = "legacy_governance_evidence_lifetime"
+rationale = "Authority projections need the candidate coordinate while legacy promotion records still repeat the same digest."
+duplication = "temporary_exception"
+algorithm = "sha256"
+canonicalizer = "candidate producer selected by EvaluationOutcome"
+fail_closed = true
+duplicate_of = "aec_bench.contracts.evaluation_outcome.EvaluationOutcome.candidate_sha256"
+exception_reason = "Legacy promotion schemas carry candidate_sha256 beside the new explicit critic-outcome identity."
+removal_milestone = "promotion evidence moves to an owning schema without repeated candidate commitments"
+
+[[field]]
+symbol = "aec_bench.contracts.authority.CriticGenerationIdentity.version"
+surface = "pydantic_model"
+wire_name = "version"
+category = "compatibility"
+domain_owner = "evaluation"
+authority = "critic_release_authority"
+authoritative = true
+exposure = "persisted"
+status = "current"
+payload_contract = "released critic implementation and policy version"
+canonicalization = "non-empty critic version copied from CriticRef"
+consumer = "evaluation and promotion authority matching"
+validation_behavior = "Critic references and authority identities must compare as exact values"
+mismatch_behavior = "reject_critic_authority"
+retention = "critic_generation_lifetime"
+rationale = "A critic identifier can have multiple incompatible released generations."
+duplication = "unique"
+compatibility_behavior = "require the exact released critic version"
+compatibility_kind = "protocol"
+
+[[field]]
+symbol = "aec_bench.contracts.authority.MotifPromotionQualification.kernel_abi_sha256"
+aliases = ["aec_bench.experimentation.governance.motif_assurance.MotifAssuranceEntry.kernel_abi_sha256", "aec_bench.experimentation.governance.motif_assurance.MotifLifecycleEvent.kernel_abi_sha256"]
+surface = "pydantic_model"
+wire_name = "kernel_abi_sha256"
+category = "semantic_commitment"
+domain_owner = "harness_governance"
+authority = "fixed_kernel_catalogue"
+authoritative = true
+exposure = "persisted"
+status = "current"
+payload_contract = "aecbench.kernel-abi.v1 over KernelRef"
+canonicalization = "canonical JSON of the kernel ABI domain and exact KernelRef"
+consumer = "motif assurance, selection, and promotion validation"
+validation_behavior = "Governance compares the commitment with kernel_abi_commitment for the active KernelRef"
+mismatch_behavior = "reject_motif_governance_transition"
+retention = "motif_governance_evidence_lifetime"
+rationale = "Motif compatibility depends on one explicit fixed-kernel ABI commitment."
+duplication = "claim_binding"
+algorithm = "sha256"
+canonicalizer = "aec_bench.contracts.harness_kernel.kernel_abi_commitment"
+fail_closed = true
+
+[[field]]
 symbol = "aec_bench.contracts.authority_evidence.AuthorityEvidenceRef.protocol"
 surface = "pydantic_model"
 wire_name = "protocol"
@@ -781,6 +851,75 @@ duplication = "unique"
 format = "lowercase 40-character Git commit"
 
 [[field]]
+symbol = "aec_bench.contracts.evaluation_plane.CriticRef.acceptance_manifest_commitment"
+surface = "pydantic_model"
+wire_name = "acceptance_manifest_commitment"
+category = "semantic_commitment"
+domain_owner = "evaluation"
+authority = "acceptance_critic_release"
+authoritative = true
+exposure = "persisted"
+status = "current"
+payload_contract = "AcceptanceManifestCommitment structured hidden-policy commitment"
+canonicalization = "AcceptanceManifestCommitment.create over salted hidden cases and scoring policy"
+consumer = "acceptance escrow, reveal, audit, and critic release"
+validation_behavior = "Acceptance critics require the commitment and non-acceptance critics reject it"
+mismatch_behavior = "reject_acceptance_critic_or_reveal"
+retention = "acceptance_critic_generation_lifetime"
+rationale = "The public critic reference must bind the hidden acceptance material without exposing it."
+duplication = "claim_binding"
+algorithm = "sha256"
+canonicalizer = "aec_bench.contracts.evaluation_plane.AcceptanceManifestCommitment.create"
+fail_closed = true
+
+[[field]]
+symbol = "aec_bench.contracts.harness_instance.HarnessRecipeRef.version"
+surface = "pydantic_model"
+wire_name = "version"
+category = "compatibility"
+domain_owner = "harness"
+authority = "harness_recipe"
+authoritative = true
+exposure = "persisted"
+status = "current"
+payload_contract = "harness recipe version selected for compilation"
+canonicalization = "non-empty recipe version copied from HarnessRecipe"
+consumer = "compiled harness identity and recipe matching"
+validation_behavior = "Compiled harness records compare the complete HarnessRecipeRef value"
+mismatch_behavior = "reject_harness_identity"
+retention = "compiled_harness_lifetime"
+rationale = "A recipe identifier can have multiple incompatible declared versions."
+duplication = "unique"
+compatibility_behavior = "require the exact recipe version used for compilation"
+compatibility_kind = "protocol"
+
+[[field]]
+symbol = "aec_bench.contracts.legacy_content_address.LegacyContentAddressedModel.content_sha256"
+surface = "pydantic_model"
+wire_name = "content_sha256"
+category = "artifact_integrity"
+domain_owner = "legacy_contract_compatibility"
+authority = "historical_self_addressed_model"
+authoritative = false
+exposure = "persisted"
+status = "temporary_exception"
+payload_contract = "compatibility-era ContentAddressedModel canonical JSON"
+canonicalization = "SHA-256 over the historical JSON-mode model payload with content_sha256 excluded"
+consumer = "ImmutableArtifactStore.load_legacy_model"
+validation_behavior = "The compatibility reader recalculates the historical digest before it returns a plain current model"
+mismatch_behavior = "reject_legacy_artifact"
+retention = "legacy_fixture_migration_window"
+rationale = "Self-addressed compatibility records need one narrow reader while owning repositories migrate their formats."
+duplication = "temporary_exception"
+algorithm = "sha256"
+artifact_boundary = "historical self-addressed JSON model"
+fail_closed = true
+read_verification = "read_legacy_content_addressed_model validates the embedded digest before model conversion"
+exception_scope = "Only persisted compatibility records that still inherit LegacyContentAddressedModel"
+exception_reason = "The staged migration retains old record shapes until their owning formats have explicit readers."
+removal_milestone = "all legacy self-addressed fixtures have owning-format migrations"
+
+[[field]]
 symbol = "aec_bench.contracts.library_catalogue.LibraryCatalogue.schema_version"
 surface = "pydantic_model"
 wire_name = "schema_version"
@@ -812,7 +951,7 @@ authoritative = true
 exposure = "persisted"
 status = "current"
 payload_contract = "canonical OutputCompletionContract JSON"
-canonicalization = "ContentAddressedModel canonical JSON with schema-aware field exclusions"
+canonicalization = "canonical JSON of OutputCompletionContract with schema-aware field exclusions"
 consumer = "Harbor output-commit importer"
 validation_behavior = "The model validates digest syntax and the production importer recomputes the contract digest"
 mismatch_behavior = "reject_output_commit"
@@ -820,7 +959,7 @@ retention = "output_commit_attestation_lifetime"
 rationale = "The attestation must bind the structural contract used to accept the output."
 duplication = "unique"
 algorithm = "sha256"
-canonicalizer = "aec_bench.contracts.harness_kernel.canonical_content_sha256"
+canonicalizer = "aec_bench.contracts.harness_kernel.canonical_json_sha256"
 fail_closed = true
 
 [[field]]
@@ -910,6 +1049,32 @@ rationale = "Task packages and runtimes independently exchange the structural co
 duplication = "unique"
 compatibility_behavior = "reject unsupported completion-contract schemas"
 compatibility_kind = "external_schema"
+
+[[field]]
+symbol = "aec_bench.contracts.stage_execution.DeclaredStageGraphRef.review_sidecar_sha256"
+aliases = ["aec_bench.contracts.run_bundle.TaskReviewSnapshotRef.review_sidecar_sha256", "aec_bench.contracts.stage_execution.DeclaredStageGraph.review_sidecar_sha256"]
+surface = "pydantic_model"
+wire_name = "review_sidecar_sha256"
+category = "semantic_commitment"
+domain_owner = "task_review"
+authority = "task_review_sidecar"
+authoritative = true
+exposure = "persisted"
+status = "temporary_exception"
+payload_contract = "exact task-review sidecar bytes used to derive a declared stage graph"
+canonicalization = "SHA-256 over the task-owned review sidecar bytes"
+consumer = "run-bundle and declared-stage lineage validation"
+validation_behavior = "The run bundle and stage graph references compare the commitment with the active task review snapshot"
+mismatch_behavior = "reject_declared_stage_execution"
+retention = "task_snapshot_lifetime"
+rationale = "The stage graph identity must remain bound to the reviewed task source from which it was derived."
+duplication = "temporary_exception"
+algorithm = "sha256"
+canonicalizer = "aec_bench.harness.compilation.task_snapshot"
+fail_closed = true
+exception_scope = "TaskReviewSnapshotRef repeats the sidecar commitment only to support task reviews without a declared stage graph"
+exception_reason = "The task-review snapshot schema serves both staged and non-staged tasks during the run-bundle migration."
+removal_milestone = "PRD-09 run-bundle simplification separates the optional stage graph from the task-review snapshot"
 
 [[field]]
 symbol = "aec_bench.contracts.trial_record.ArtifactReference.sha256"

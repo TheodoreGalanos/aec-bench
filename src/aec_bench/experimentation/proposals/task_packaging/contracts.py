@@ -15,10 +15,10 @@ from aec_bench.contracts.evaluation_plane import (
     TaskVerifierSurfaceScope,
 )
 from aec_bench.contracts.harness_kernel import (
-    ContentAddressedModel,
     FrozenStrictModel,
     validate_sha256,
 )
+from aec_bench.contracts.legacy_content_address import LegacyContentAddressedModel
 from aec_bench.contracts.task_definition import Visibility
 from aec_bench.contracts.validators import NonEmptyStr
 
@@ -82,7 +82,7 @@ class ProposalTaskPackageFile(FrozenStrictModel):
         return validate_sha256(value)
 
 
-class ProposalTaskPackageManifest(ContentAddressedModel):
+class ProposalTaskPackageManifest(LegacyContentAddressedModel):
     """Content-addressed inventory for one source-free Harbor task package."""
 
     schema_version: Literal[

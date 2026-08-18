@@ -15,7 +15,7 @@ from aec_bench.contracts.harness_instance import (
     prohibited_retry_safe_error_codes,
 )
 from aec_bench.contracts.harness_kernel import (
-    canonical_content_sha256,
+    canonical_json_sha256,
 )
 from aec_bench.contracts.run_bundle import RunBundle, TaskSnapshotRef
 from aec_bench.contracts.stage_execution import KernelInstructionOverride
@@ -548,13 +548,13 @@ class _TrialLineageTransform:
             run_id=self._study.run_id,
             policy_id=self._study.policy_id,
             kernel_id=self._bundle.kernel_ref.kernel_id,
-            kernel_sha256=self._bundle.kernel_ref.content_sha256,
+            kernel_sha256=canonical_json_sha256(self._bundle.kernel_ref.model_dump(mode="json")),
             harness_id=self._bundle.harness.instance_id,
-            harness_sha256=self._bundle.harness.content_sha256,
+            harness_sha256=canonical_json_sha256(self._bundle.harness.model_dump(mode="json")),
             program_id=self._bundle.program.program_id,
-            program_sha256=self._bundle.program.content_sha256,
+            program_sha256=canonical_json_sha256(self._bundle.program.model_dump(mode="json")),
             bundle_id=self._bundle.bundle_id,
-            bundle_sha256=self._bundle.content_sha256,
+            bundle_sha256=canonical_json_sha256(self._bundle.model_dump(mode="json")),
             parent_bundle_id=self._study.parent_bundle_id,
             review_sidecar_sha256=review_sidecar_sha256,
             declared_surface_sha256=declared_surface_sha256,
@@ -814,7 +814,7 @@ def _invocation_root(
 ) -> Path:
     return (
         Path(artifacts_root)
-        / bundle.content_sha256
+        / _safe_segment(bundle.bundle_id)
         / "runs"
         / _safe_segment(run_id)
         / "invocations"
@@ -886,7 +886,7 @@ def _review_lineage(snapshot: TaskSnapshotRef) -> tuple[str, str]:
         return snapshot.task_review.review_sidecar_sha256, snapshot.task_review.declared_surface_sha256
     return (
         snapshot.package_sha256,
-        canonical_content_sha256(
+        canonical_json_sha256(
             {
                 "kind": "atomic-task",
                 "task_id": snapshot.task_id,
@@ -905,9 +905,7 @@ def _bound_runtime_versions(
     versions = dict(record.environment.tool_versions or {})
     expected = {
         **{
-            f"kernel:{binding.capability_ref.capability_id}": (
-                f"{binding.capability_ref.version}@sha256:{binding.capability_ref.content_sha256}"
-            )
+            f"kernel:{binding.capability_ref.capability_id}": binding.capability_ref.version
             for binding in bundle.harness.bindings
         },
         "task-package": f"sha256:{snapshot.package_sha256}",

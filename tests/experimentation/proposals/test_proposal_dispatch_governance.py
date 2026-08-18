@@ -18,7 +18,7 @@ from aec_bench.contracts.authority import (
     AuthorityPrincipal,
     AuthorityPrincipalKind,
 )
-from aec_bench.contracts.harness_kernel import canonical_content_sha256
+from aec_bench.contracts.harness_kernel import canonical_json_sha256
 from aec_bench.contracts.output_completion import OutputCompletionContract
 from aec_bench.contracts.program_proposal.candidate import ProgramCandidateRef
 from aec_bench.contracts.program_proposal.study import MatchedEvaluationCoordinate
@@ -296,7 +296,7 @@ def test_governed_dispatch_contract_binds_host_config_to_frozen_assignment(
     host_config = dict(payload["host_config"])
     host_config["execution_assignment_sha256"] = _sha("wrong-host-assignment")
     payload["host_config"] = host_config
-    payload["host_config_sha256"] = canonical_content_sha256(host_config)
+    payload["host_config_sha256"] = canonical_json_sha256(host_config)
 
     with pytest.raises(
         ValueError,
@@ -523,8 +523,8 @@ def _materialize_dispatch_fixture(
         proposal_freeze=governed.freeze,
         incumbent_candidate=incumbent,
         coordinates=(evaluation_coordinate,),
-        kernel_sha256=compiled.compilation.kernel_sha256,
-        fixed_harness_sha256=compiled.fixed_harness.content_sha256,
+        kernel_ref=compiled.compilation.kernel_ref,
+        fixed_harness_ref=compiled.fixed_harness.ref,
         evaluation_plan_ref=governed.freeze.evaluation_plan_ref,
         aggregate_budget=compiled.fixed_harness.budget,
     )

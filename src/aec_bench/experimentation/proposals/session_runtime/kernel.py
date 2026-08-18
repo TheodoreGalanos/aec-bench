@@ -92,7 +92,7 @@ def _validate_kernel(
 ) -> None:
     if (
         bundle.fixed_harness.kernel_ref != registry.manifest.ref
-        or bundle.compilation.kernel_sha256 != registry.manifest.content_sha256
+        or bundle.compilation.kernel_ref != registry.manifest.ref
     ):
         raise ProposalSessionRuntimeError(
             "kernel_identity_mismatch",

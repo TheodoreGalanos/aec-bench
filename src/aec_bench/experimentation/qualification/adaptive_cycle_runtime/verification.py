@@ -6,7 +6,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from aec_bench.contracts.harness_kernel import canonical_content_sha256
+from aec_bench.contracts.harness_kernel import canonical_json_sha256
 from aec_bench.evolution.repair_lifecycle import RepairCandidate
 from aec_bench.experimentation.governance.motifs import (
     MotifLibrary,
@@ -176,7 +176,7 @@ def _verify_learning_evidence(
         or learning.report.repair_terminal != report.repair_terminal
         or learning.report.repair_terminal != learning.report.repair_evidence.terminal
         or learning.report.repair_evidence.decision_sha256
-        != canonical_content_sha256(repair_decision.model_dump(mode="json"))
+        != canonical_json_sha256(repair_decision.model_dump(mode="json"))
         or learning.report.input_archive_sha256 != common.input_library.archive_sha256
     ):
         raise ValueError("adaptive cycle motif learning lineage does not match its source evidence")

@@ -11,7 +11,7 @@ from typing import Any
 import pytest
 import yaml  # type: ignore[import-untyped]
 
-from aec_bench.contracts.harness_kernel import canonical_content_sha256
+from aec_bench.contracts.harness_kernel import canonical_json_sha256
 from aec_bench.experimentation.qualification.harness_program_study import HarnessProgramStudyReport
 from aec_bench.experimentation.qualification.harness_program_study import (
     harness_program_study_evidence as harness_program_study_evidence,
@@ -303,7 +303,7 @@ def test_harness_program_study_report_loader_rejects_rehashed_invented_derived_e
     else:
         payload["analysis"]["cell_means"]["h0_p0"] = 0.99
         payload["analysis"]["joint_uplift"]["estimate"] = -0.09
-        payload["analysis_sha256"] = canonical_content_sha256(payload["analysis"])
+        payload["analysis_sha256"] = canonical_json_sha256(payload["analysis"])
     if forgery == "task-set-aggregate":
         with pytest.raises(ValueError, match="applicability does not bind its review lineages"):
             HarnessProgramStudyReport.model_validate(payload)

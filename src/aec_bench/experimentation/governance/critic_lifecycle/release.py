@@ -20,7 +20,10 @@ from aec_bench.contracts.evaluation_plane import (
     ExecutableAnchorCalibrationCadence,
     ExecutableAnchorCalibrationEvidence,
     ExecutableAnchorCalibrationPolicy,
+    critic_spec_commitment,
+    executable_anchor_calibration_policy_commitment,
 )
+from aec_bench.contracts.harness_kernel import KernelRef
 from aec_bench.experimentation.governance.acceptance_manifest_escrow import (
     load_acceptance_manifest_escrow,
 )
@@ -49,7 +52,7 @@ def release_critic_generation(
     critic_spec: CriticSpec,
     human_approval: BasisReference,
     event_id: str,
-    kernel_sha256: str,
+    kernel_ref: KernelRef,
     prior_retirement_authority: StoredAuthorityEvent | None = None,
     prior_reveal_authority: StoredAuthorityEvent | None = None,
     evaluation_plan: EvaluationPlan | None = None,
@@ -80,7 +83,7 @@ def release_critic_generation(
         calibration_policy=anchor_calibration_policy,
         calibration_evidence=anchor_calibration_evidence,
         event_id=event_id,
-        kernel_sha256=kernel_sha256,
+        kernel_ref=kernel_ref,
     )
     acceptance_escrow_basis: StoredBasis | None = None
     if acceptance_escrow is not None:
@@ -92,12 +95,13 @@ def release_critic_generation(
             invocation_id=event_id,
         )
     subject_id = _critic_subject_id(selected)
+    critic_commitment = critic_spec_commitment(selected)
     approval = _resolve_human_approval(
         ledger=ledger,
         reference=human_approval,
         action=AuthorityAction.RELEASE_CRITIC_GENERATION,
         subject_id=subject_id,
-        subject_sha256=selected.content_sha256,
+        subject_sha256=critic_commitment,
         mismatch_message="human approval does not match the exact critic release",
     )
     critic_basis = _observe_critic_spec(
@@ -113,7 +117,7 @@ def release_critic_generation(
         action=AuthorityAction.RELEASE_CRITIC_GENERATION,
         decision=AuthorityDecision.GRANTED,
         subject_id=subject_id,
-        subject_sha256=selected.content_sha256,
+        subject_sha256=critic_commitment,
         basis=(
             human_approval,
             critic_basis.reference,
@@ -121,8 +125,8 @@ def release_critic_generation(
             *(basis.reference for basis in closure_bases),
             *(basis.reference for basis in calibration_bases),
         ),
-        kernel_sha256=kernel_sha256,
-        critic_generation_sha256=selected.content_sha256,
+        kernel_ref=kernel_ref,
+        critic_generation=selected.ref.authority_identity,
         reasons=tuple(
             [
                 (
@@ -156,7 +160,7 @@ def release_acceptance_critic_generation(
     critic_spec: CriticSpec,
     human_approval: BasisReference,
     event_id: str,
-    kernel_sha256: str,
+    kernel_ref: KernelRef,
     prior_retirement_authority: StoredAuthorityEvent | None = None,
     prior_reveal_authority: StoredAuthorityEvent | None = None,
     evaluation_plan: EvaluationPlan | None = None,
@@ -174,7 +178,7 @@ def release_acceptance_critic_generation(
         critic_spec=selected,
         human_approval=human_approval,
         event_id=event_id,
-        kernel_sha256=kernel_sha256,
+        kernel_ref=kernel_ref,
         prior_retirement_authority=prior_retirement_authority,
         prior_reveal_authority=prior_reveal_authority,
         evaluation_plan=evaluation_plan,
@@ -207,8 +211,8 @@ def _resolve_release_predecessor_closure(
     reveal_authority: StoredAuthorityEvent | None,
     event_id: str,
 ) -> tuple[StoredBasis, ...]:
-    parent_sha256 = critic_spec.parent_critic_sha256
-    requires_closure = critic_spec.role is CriticRole.ACCEPTANCE and parent_sha256 is not None
+    parent_ref = critic_spec.parent_critic_ref
+    requires_closure = critic_spec.role is CriticRole.ACCEPTANCE and parent_ref is not None
     if not requires_closure:
         if retirement_authority is not None or reveal_authority is not None:
             raise AuthorityLedgerIntegrityError(
@@ -222,7 +226,7 @@ def _resolve_release_predecessor_closure(
         retirement_authority=retirement_authority,
         reveal_authority=reveal_authority,
     )
-    if closure.retirement.retirement.critic_generation_sha256 != parent_sha256:
+    if closure.retirement.retirement.critic_generation != parent_ref:
         raise AuthorityLedgerIntegrityError(
             "successor acceptance critic parent does not match the closed predecessor generation"
         )
@@ -251,7 +255,7 @@ def _resolve_release_calibration(
     calibration_policy: ExecutableAnchorCalibrationPolicy | None,
     calibration_evidence: BasisReference | None,
     event_id: str,
-    kernel_sha256: str,
+    kernel_ref: KernelRef,
 ) -> tuple[StoredBasis, ...]:
     selected = _select_calibration_inputs(
         evaluation_plan=evaluation_plan,
@@ -265,7 +269,7 @@ def _resolve_release_calibration(
         plan=plan,
         policy=policy,
         critic_spec=critic_spec,
-        kernel_sha256=kernel_sha256,
+        kernel_ref=kernel_ref,
     )
     if not _require_release_calibration(
         critic_spec=critic_spec,
@@ -330,7 +334,7 @@ def _validate_calibration_plan(
     plan: EvaluationPlan,
     policy: ExecutableAnchorCalibrationPolicy,
     critic_spec: CriticSpec,
-    kernel_sha256: str,
+    kernel_ref: KernelRef,
 ) -> None:
     plan_critics = tuple(
         critic
@@ -343,9 +347,9 @@ def _validate_calibration_plan(
     )
     if critic_spec not in plan_critics:
         raise AuthorityLedgerIntegrityError("critic release evaluation plan does not bind the exact critic generation")
-    if plan.kernel_sha256 != kernel_sha256:
+    if plan.kernel_ref != kernel_ref:
         raise AuthorityLedgerIntegrityError("critic release evaluation plan kernel does not match release authority")
-    if plan.anchor_calibration_policy_sha256 != policy.content_sha256:
+    if plan.anchor_calibration_policy_sha256 != executable_anchor_calibration_policy_commitment(policy):
         raise AuthorityLedgerIntegrityError(
             "critic release executable-anchor calibration policy does not match its evaluation plan"
         )
@@ -417,9 +421,9 @@ def _validate_calibration_evidence(
     critic_spec: CriticSpec,
 ) -> None:
     if (
-        evidence.evaluation_plan_sha256 != plan.content_sha256
-        or evidence.critic_generation_sha256 != critic_spec.content_sha256
-        or evidence.anchor_calibration_policy_sha256 != policy.content_sha256
+        evidence.evaluation_plan != plan.ref.authority_identity
+        or evidence.critic_generation != critic_spec.ref.authority_identity
+        or evidence.anchor_calibration_policy_sha256 != executable_anchor_calibration_policy_commitment(policy)
     ):
         raise AuthorityLedgerIntegrityError(
             "executable-anchor calibration evidence does not match the exact plan, critic, and policy"
@@ -447,10 +451,6 @@ def _validate_calibration_outcomes(
             outcome_reference,
             EvaluationOutcome,
         )
-        if outcome.evaluation_plan_sha256 != plan.content_sha256:
-            raise AuthorityLedgerIntegrityError(
-                "executable-anchor calibration outcome does not match the exact evaluation plan"
-            )
         outcome_anchor_sha256s.append(outcome.evidence_set_sha256)
     if evidence.executable_anchor_sha256s != tuple(sorted(outcome_anchor_sha256s)):
         raise AuthorityLedgerIntegrityError(

@@ -10,13 +10,15 @@ from typing import Literal, Self
 
 from pydantic import Field, FiniteFloat, NonNegativeFloat, NonNegativeInt, PositiveInt, field_validator, model_validator
 
+from aec_bench.contracts.execution_program import ExecutionProgramRef
+from aec_bench.contracts.harness_instance import HarnessInstanceRef
 from aec_bench.contracts.harness_kernel import (
-    ContentAddressedModel,
     FrozenStrictModel,
     KernelRef,
-    canonical_content_sha256,
+    canonical_json_sha256,
     validate_sha256,
 )
+from aec_bench.contracts.legacy_content_address import LegacyContentAddressedModel
 from aec_bench.contracts.run_bundle import TaskSnapshotRef
 from aec_bench.contracts.trial_record import ArtifactReference
 from aec_bench.contracts.validators import NonEmptyStr
@@ -37,7 +39,7 @@ from .artifact_io import _sha256_path
 HarnessProgramStudySplit = Literal["discovery", "calibration"]
 
 
-class HarnessProgramStudySpec(ContentAddressedModel):
+class HarnessProgramStudySpec(LegacyContentAddressedModel):
     """Strict, immutable inputs and preregistered candidate references for one harness-program-study run."""
 
     schema_version: Literal["aecbench.harness-program-study-spec.v1"] = "aecbench.harness-program-study-spec.v1"
@@ -101,21 +103,16 @@ class HarnessProgramStudyCellEvidence(FrozenStrictModel):
 
     cell: HarnessProgramCell
     candidate_reference: HarnessProgramCandidateReference
-    bundle_sha256: str
-    compiled_harness_sha256: str
-    compiled_program_sha256: str
+    bundle_id: NonEmptyStr
+    compiled_harness_ref: HarnessInstanceRef
+    compiled_program_ref: ExecutionProgramRef
     candidate_manifest: ArtifactReference
-
-    @field_validator("bundle_sha256", "compiled_harness_sha256", "compiled_program_sha256")
-    @classmethod
-    def validate_hashes(cls, value: str) -> str:
-        return validate_sha256(value)
 
     @model_validator(mode="after")
     def validate_cell_identity(self) -> Self:
         if self.candidate_reference.cell is not self.cell:
             raise ValueError("harness-program-study cell evidence does not match its candidate reference")
-        if self.candidate_reference.harness_sha256 != self.compiled_harness_sha256:
+        if self.candidate_reference.harness_ref != self.compiled_harness_ref:
             raise ValueError("harness-program-study cell evidence does not match its compiled harness")
         return self
 
@@ -156,7 +153,7 @@ class HarnessProgramStudyTrialEvidence(FrozenStrictModel):
     trial: HarnessProgramTrial
     execution_seed: int
     candidate_reference: HarnessProgramCandidateReference
-    bundle_sha256: str
+    bundle_id: NonEmptyStr
     trial_record_ids: tuple[NonEmptyStr, ...]
     trial_records: tuple[ArtifactReference, ...]
     budget: HarnessBudgetObservation
@@ -166,11 +163,6 @@ class HarnessProgramStudyTrialEvidence(FrozenStrictModel):
     token_evidence_complete: Literal[True]
     estimated_cost_usd: NonNegativeFloat
     cost_evidence_complete: Literal[True]
-
-    @field_validator("bundle_sha256")
-    @classmethod
-    def validate_bundle_hash(cls, value: str) -> str:
-        return validate_sha256(value)
 
     @model_validator(mode="after")
     def validate_trial_evidence(self) -> Self:
@@ -196,7 +188,7 @@ class HarnessProgramStudyTrialEvidence(FrozenStrictModel):
         return self
 
 
-class HarnessProgramStudyReport(ContentAddressedModel):
+class HarnessProgramStudyReport(LegacyContentAddressedModel):
     """Complete content-addressed harness-program-study report; never represents harness learning."""
 
     schema_version: Literal["aecbench.harness-program-study-report.v1"] = "aecbench.harness-program-study-report.v1"
@@ -257,7 +249,7 @@ class HarnessProgramStudyReport(ContentAddressedModel):
 def _validate_report_plan_bindings(
     report: HarnessProgramStudyReport,
 ) -> None:
-    if report.plan.manifest_sha256 != canonical_content_sha256(
+    if report.plan.manifest_sha256 != canonical_json_sha256(
         report.manifest.model_dump(mode="json"),
     ):
         raise ValueError("harness-program-study report plan does not bind its manifest")
@@ -271,7 +263,7 @@ def _validate_report_plan_bindings(
         )
     if report.plan.plan_sha256 != report.analysis.plan_sha256:
         raise ValueError("harness-program-study report analysis does not bind its plan")
-    if report.analysis_sha256 != canonical_content_sha256(
+    if report.analysis_sha256 != canonical_json_sha256(
         report.analysis.model_dump(mode="json"),
     ):
         raise ValueError(
@@ -330,7 +322,7 @@ def _validate_report_trial_bindings(
         cell = cells_by_reference.get(
             trial.candidate_reference.reference_sha256,
         )
-        if cell is None or cell.bundle_sha256 != trial.bundle_sha256:
+        if cell is None or cell.bundle_id != trial.bundle_id:
             raise ValueError(
                 "harness-program-study trial evidence does not bind its executable candidate",
             )

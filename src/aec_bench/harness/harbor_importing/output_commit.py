@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from aec_bench.adapters.base import AdapterResult
-from aec_bench.contracts.harness_kernel import canonical_content_sha256
+from aec_bench.contracts.harness_kernel import canonical_json_sha256
 from aec_bench.contracts.output_completion import (
     OutputCommitAttestation,
     OutputCompletionContract,
@@ -157,7 +157,7 @@ def _validate_committed_output(
     contract: OutputCompletionContract,
     output_bytes: bytes,
 ) -> None:
-    contract_sha256 = canonical_content_sha256(
+    contract_sha256 = canonical_json_sha256(
         contract.model_dump(mode="json"),
     )
     if contract_sha256 != attestation.completion_contract_sha256:

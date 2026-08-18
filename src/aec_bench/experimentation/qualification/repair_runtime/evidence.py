@@ -14,7 +14,7 @@ from pydantic import JsonValue
 from aec_bench.adapters.base import AdapterCompletionReason, AdapterStopReason
 from aec_bench.contracts.agent_output import AgentOutputStatus
 from aec_bench.contracts.execution_program import ActionNode, StopNode
-from aec_bench.contracts.harness_kernel import canonical_content_sha256
+from aec_bench.contracts.harness_kernel import canonical_json_sha256
 from aec_bench.contracts.output_completion import (
     OutputCommitAttestation,
     OutputCompletionContract,
@@ -214,7 +214,7 @@ def _repair_output_artifact_evidence(
         media_type=media_type,
         size_bytes=len(encoded),
         completion_contract_sha256=hashlib.sha256(contract_encoded).hexdigest(),
-        completion_contract_content_sha256=canonical_content_sha256(contract.model_dump(mode="json")),
+        completion_contract_content_sha256=canonical_json_sha256(contract.model_dump(mode="json")),
         completion_evaluation=completion_evaluation,
     )
 
@@ -493,7 +493,7 @@ def _interpret_trial_record(
             repetition=repetition,
             split=pairing.split,
             candidate_id=candidate.candidate_id,
-            kernel_sha256=candidate.harness.kernel_ref.content_sha256,
+            kernel_ref=candidate.harness.kernel_ref,
             resource_sha256=snapshot.package_sha256,
             review_lineage_sha256=review_lineage_sha256,
             reward=record.evaluation.reward,
@@ -628,7 +628,7 @@ def _block_id(
     repetition: int,
     seed: int,
 ) -> str:
-    identity = canonical_content_sha256(
+    identity = canonical_json_sha256(
         {
             "pairing": pairing.model_dump(mode="json"),
             "task_id": task_id,

@@ -22,15 +22,16 @@ from aec_bench.contracts.evaluation_plane import (
     EvaluationPlanAuthorityScope,
     EvaluationPlanRef,
 )
-from aec_bench.contracts.harness_instance import HarnessBudget
-from aec_bench.contracts.harness_kernel import ContentAddressedModel, validate_sha256
+from aec_bench.contracts.harness_instance import HarnessBudget, HarnessInstanceRef
+from aec_bench.contracts.harness_kernel import KernelRef, validate_sha256
+from aec_bench.contracts.legacy_content_address import LegacyContentAddressedModel
 from aec_bench.contracts.program_proposal.candidate import ProgramCandidateRef
 from aec_bench.contracts.program_proposal.study import MatchedEvaluationCoordinate
 from aec_bench.contracts.program_proposal.types import ProgramCandidateKind
 from aec_bench.contracts.validators import NonEmptyStr
 
 
-class CandidateAssignmentRef(ContentAddressedModel):
+class CandidateAssignmentRef(LegacyContentAddressedModel):
     """Contract-safe identity of one candidate-coordinate assignment."""
 
     schema_version: Literal["aecbench.candidate-assignment-ref.v2"] = "aecbench.candidate-assignment-ref.v2"
@@ -44,14 +45,14 @@ class CandidateAssignmentRef(ContentAddressedModel):
         return validate_sha256(value)
 
 
-class CandidateScheduleRef(ContentAddressedModel):
+class CandidateScheduleRef(LegacyContentAddressedModel):
     """Task-scoped candidate schedule whose shape is supplied by its generation spec."""
 
     schema_version: Literal["aecbench.candidate-schedule-ref.v2"] = "aecbench.candidate-schedule-ref.v2"
     schedule_id: NonEmptyStr
     schedule_sha256: str
-    kernel_sha256: str
-    fixed_harness_sha256: str
+    kernel_ref: KernelRef
+    fixed_harness_ref: HarnessInstanceRef
     evaluation_plan_ref: EvaluationPlanRef
     proposal_freeze_sha256: str
     aggregate_budget: HarnessBudget
@@ -60,8 +61,6 @@ class CandidateScheduleRef(ContentAddressedModel):
 
     @field_validator(
         "schedule_sha256",
-        "kernel_sha256",
-        "fixed_harness_sha256",
         "proposal_freeze_sha256",
         "coordinate_sha256",
     )
@@ -105,15 +104,15 @@ class CandidateScheduleRef(ContentAddressedModel):
         return self
 
 
-class TaskCandidatePlan(ContentAddressedModel):
+class TaskCandidatePlan(LegacyContentAddressedModel):
     """One task-scoped candidate plan with no evaluation outcomes."""
 
     schema_version: Literal["aecbench.task-candidate-plan.v2"] = "aecbench.task-candidate-plan.v2"
     task_plan_id: NonEmptyStr
     cohort_binding: EvaluationCohortBinding
     cohort_task: EvaluationCohortTask
-    kernel_sha256: str
-    fixed_harness_sha256: str
+    kernel_ref: KernelRef
+    fixed_harness_ref: HarnessInstanceRef
     evaluation_plan_ref: EvaluationPlanRef
     proposal_policy_sha256: str
     runtime_archive_sha256: str
@@ -127,8 +126,6 @@ class TaskCandidatePlan(ContentAddressedModel):
     schedule: CandidateScheduleRef
 
     @field_validator(
-        "kernel_sha256",
-        "fixed_harness_sha256",
         "proposal_policy_sha256",
         "runtime_archive_sha256",
         "monitor_policy_sha256",
@@ -160,8 +157,8 @@ class TaskCandidatePlan(ContentAddressedModel):
             )
         schedule = self.schedule
         if (
-            schedule.kernel_sha256 != self.kernel_sha256
-            or schedule.fixed_harness_sha256 != self.fixed_harness_sha256
+            schedule.kernel_ref != self.kernel_ref
+            or schedule.fixed_harness_ref != self.fixed_harness_ref
             or schedule.evaluation_plan_ref != self.evaluation_plan_ref
             or schedule.aggregate_budget != self.aggregate_budget
             or schedule.proposal_freeze_sha256 != self.proposal_freeze_sha256
@@ -173,7 +170,7 @@ class TaskCandidatePlan(ContentAddressedModel):
         return self
 
 
-class EvaluationBatchPlan(ContentAddressedModel):
+class EvaluationBatchPlan(LegacyContentAddressedModel):
     """Complete outcome-blind candidate batch validated against supplied design data."""
 
     schema_version: Literal["aecbench.evaluation-batch-plan.v2"] = "aecbench.evaluation-batch-plan.v2"
@@ -181,8 +178,8 @@ class EvaluationBatchPlan(ContentAddressedModel):
     prepared_generation_sha256: str
     cohort: EvaluationCohortManifest
     cohort_binding: EvaluationCohortBinding
-    kernel_sha256: str
-    fixed_harness_sha256: str
+    kernel_ref: KernelRef
+    fixed_harness_ref: HarnessInstanceRef
     evaluation_plan_ref: EvaluationPlanRef
     evaluation_authority_scope: EvaluationPlanAuthorityScope
     proposal_policy: ProposalGenerationPolicy
@@ -202,8 +199,6 @@ class EvaluationBatchPlan(ContentAddressedModel):
 
     @field_validator(
         "prepared_generation_sha256",
-        "kernel_sha256",
-        "fixed_harness_sha256",
         "candidate_manifest_proposal_policy_sha256",
         "compilation_policies_sha256",
         "runtime_archive_sha256",
@@ -330,8 +325,8 @@ def _validate_shared_task_bindings(
 ) -> None:
     if (
         task_plan.cohort_binding != batch.cohort_binding
-        or task_plan.kernel_sha256 != batch.kernel_sha256
-        or task_plan.fixed_harness_sha256 != batch.fixed_harness_sha256
+        or task_plan.kernel_ref != batch.kernel_ref
+        or task_plan.fixed_harness_ref != batch.fixed_harness_ref
         or task_plan.evaluation_plan_ref != batch.evaluation_plan_ref
         or task_plan.proposal_policy_sha256 != batch.candidate_manifest_proposal_policy_sha256
         or task_plan.runtime_archive_sha256 != batch.runtime_archive_sha256

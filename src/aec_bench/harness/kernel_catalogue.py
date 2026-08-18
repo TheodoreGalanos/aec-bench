@@ -14,7 +14,6 @@ from pydantic import field_validator, model_validator
 
 from aec_bench.contracts.harness_instance import prohibited_retry_safe_error_codes
 from aec_bench.contracts.harness_kernel import (
-    ContentAddressedModel,
     FrozenStrictModel,
     KernelCapabilityKind,
     KernelCapabilityRef,
@@ -26,6 +25,7 @@ from aec_bench.contracts.harness_kernel import (
     KernelPortSpec,
     KernelSourceDigest,
 )
+from aec_bench.contracts.legacy_content_address import LegacyContentAddressedModel
 from aec_bench.contracts.validators import NonEmptyStr
 
 
@@ -740,7 +740,7 @@ class KernelRuntimePrimitive(FrozenStrictModel):
         return self
 
 
-class KernelOperationDefinition(ContentAddressedModel):
+class KernelOperationDefinition(LegacyContentAddressedModel):
     """Single registry-owned definition shared by compilation and dispatch."""
 
     operation_id: NonEmptyStr
@@ -917,12 +917,12 @@ class KernelRuntimeRegistry:
         raise KernelRuntimeRegistryError(f"unknown kernel capability: {capability_id}")
 
     def resolve(self, reference: KernelCapabilityRef) -> KernelRuntimePrimitive:
-        """Resolve only an exact id/version/content tuple from the fixed manifest."""
+        """Resolve only an exact capability id and version from the fixed manifest."""
         for primitive in self.primitives:
             if primitive.spec.capability_id == reference.capability_id:
                 if primitive.spec.ref != reference:
                     raise KernelRuntimeRegistryError(
-                        f"content-pinned capability does not match fixed K: {reference.capability_id}"
+                        f"capability version does not match fixed K: {reference.capability_id}"
                     )
                 return primitive
         raise KernelRuntimeRegistryError(f"unknown kernel capability: {reference.capability_id}")

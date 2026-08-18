@@ -17,7 +17,8 @@ from aec_bench.contracts.harness_instance import (
     ProgramOperationScope,
 )
 from aec_bench.contracts.harness_kernel import (
-    canonical_content_sha256,
+    KernelRef,
+    canonical_json_sha256,
 )
 from aec_bench.contracts.program_proposal.candidate import ProgramCandidateRef
 from aec_bench.contracts.program_proposal.freeze import ProposalFreeze
@@ -74,7 +75,7 @@ def verify_proposal_compilation_success(
         raw_proposal_artifact_sha256=(compilation.raw_proposal_artifact_sha256),
         graph=compilation.proposal_graph,
         freeze=compilation.proposal_freeze,
-        kernel_sha256=compilation.kernel_sha256,
+        kernel_ref=compilation.kernel_ref,
         fixed_harness_ref=compilation.fixed_harness_ref,
         execution_profile=profile,
     )
@@ -114,7 +115,7 @@ def verify_proposal_compilation_rejection(
     _validate_frozen_compilation_inputs(
         candidate_ref=rejection.candidate_ref,
         freeze=rejection.proposal_freeze,
-        kernel_sha256=rejection.kernel_sha256,
+        kernel_ref=rejection.kernel_ref,
         fixed_harness_ref=rejection.fixed_harness_ref,
     )
     if rejection.raw_proposal_artifact_sha256 != rejection.candidate_ref.candidate_artifact_sha256:
@@ -140,13 +141,13 @@ def verify_proposal_compilation_rejection(
 def _validate_compiled_program_bindings(
     compilation: ProposalCompilationSuccess,
 ) -> None:
-    if compilation.surface_sha256 != compilation.compiled_program.surface_sha256:
+    if compilation.surface_id != compilation.compiled_program.surface_id:
         raise ValueError("compiled proposal surface identity does not match")
     if compilation.lowered_program.harness_ref != compilation.fixed_harness_ref:
         raise ValueError("lowered proposal does not target the fixed harness")
     if compilation.compiled_program.harness_ref != compilation.fixed_harness_ref:
         raise ValueError("compiled proposal does not target the fixed harness")
-    if compilation.compiled_program.source_program_sha256 != compilation.lowered_program.content_sha256:
+    if compilation.compiled_program.source_program_ref != compilation.lowered_program.ref:
         raise ValueError("compiled proposal does not bind the lowered program")
 
 
@@ -176,14 +177,14 @@ def _validate_common_compilation_bindings(
     raw_proposal_artifact_sha256: str,
     graph: ExecutableCandidateGraph,
     freeze: ProposalFreeze,
-    kernel_sha256: str,
+    kernel_ref: KernelRef,
     fixed_harness_ref: HarnessInstanceRef,
     execution_profile: ProposalExecutionProfile,
 ) -> None:
     _validate_frozen_compilation_inputs(
         candidate_ref=candidate_ref,
         freeze=freeze,
-        kernel_sha256=kernel_sha256,
+        kernel_ref=kernel_ref,
         fixed_harness_ref=fixed_harness_ref,
     )
     _validate_graph_against_profile(
@@ -205,7 +206,7 @@ def _validate_common_compilation_bindings(
         or graph.policy_checkpoint_sha256 != freeze.policy_checkpoint_sha256
     ):
         raise ValueError("proposed graph does not bind the frozen proposal policy")
-    expected_output_contract = canonical_content_sha256(freeze.problem_view.output_contract.model_dump(mode="json"))
+    expected_output_contract = canonical_json_sha256(freeze.problem_view.output_contract.model_dump(mode="json"))
     if graph.finalizer.output_completion_contract_sha256 != expected_output_contract:
         raise ValueError("proposal finalizer output contract does not match problem view")
 
@@ -230,7 +231,7 @@ def _validate_frozen_compilation_inputs(
     *,
     candidate_ref: ProgramCandidateRef,
     freeze: ProposalFreeze,
-    kernel_sha256: str,
+    kernel_ref: KernelRef,
     fixed_harness_ref: HarnessInstanceRef,
 ) -> None:
     frozen = (
@@ -247,9 +248,9 @@ def _validate_frozen_compilation_inputs(
     )
     if frozen != candidate_ref:
         raise ValueError("candidate artifact reference is outside the exact proposal freeze")
-    if kernel_sha256 != freeze.problem_view.fixed_harness.kernel_sha256:
+    if kernel_ref != freeze.problem_view.fixed_harness.kernel_ref:
         raise ValueError("compilation kernel does not match the frozen kernel")
-    if fixed_harness_ref.content_sha256 != freeze.fixed_harness_sha256:
+    if fixed_harness_ref != freeze.fixed_harness_ref:
         raise ValueError("compilation harness does not match the frozen harness")
 
 
@@ -337,7 +338,7 @@ def _validate_budget_plan(
         plan.candidate_id != graph.candidate_id
         or plan.proposal_graph_sha256 != graph.content_sha256
         or plan.proposal_freeze_sha256 != freeze.content_sha256
-        or plan.fixed_harness_sha256 != freeze.fixed_harness_sha256
+        or plan.fixed_harness_ref != freeze.fixed_harness_ref
         or plan.aggregate_budget != freeze.problem_view.fixed_harness.aggregate_budget
     ):
         raise ValueError("candidate budget plan does not bind the exact frozen candidate")

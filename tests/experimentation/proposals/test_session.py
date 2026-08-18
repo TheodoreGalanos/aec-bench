@@ -21,7 +21,7 @@ from aec_bench.adapters.base import (
 )
 from aec_bench.contracts.agent_output import AgentOutput, AgentOutputStatus
 from aec_bench.contracts.harness_instance import AgentBindingConfig
-from aec_bench.contracts.harness_kernel import canonical_content_sha256
+from aec_bench.contracts.harness_kernel import canonical_json_sha256
 from aec_bench.contracts.output_completion import (
     OutputCommitAttestation,
     OutputCompletionContract,
@@ -145,10 +145,10 @@ def test_semantic_node_preparation_lowers_exact_rlm_commit_h0_and_reservation(
     assert lineage["proposal_session_id"] == "proposal-session.test"
     assert lineage["proposal_invocation_id"] == "invoke.0001.analyse"
     assert lineage["program_node_id"] == "analyse"
-    assert lineage["kernel_sha256"] == bundle.compilation.kernel_sha256
-    assert lineage["harness_sha256"] == bundle.fixed_harness.content_sha256
-    assert lineage["program_sha256"] == bundle.compilation.lowered_program.content_sha256
-    assert lineage["bundle_sha256"] == bundle.content_sha256
+    assert lineage["kernel_ref"] == bundle.compilation.kernel_ref.model_dump(mode="json")
+    assert lineage["harness_ref"] == bundle.fixed_harness.ref.model_dump(mode="json")
+    assert lineage["program_ref"] == bundle.compilation.lowered_program.ref.model_dump(mode="json")
+    assert lineage["bundle_id"] == bundle.bundle_id
     assert lineage["execution_seed"] == _evaluation_coordinate(bundle).seed
     assert execution.request.output_path == "/workspace/node-output.md"
     assert execution.request.output_format == "markdown"
@@ -309,7 +309,7 @@ def test_finalizer_preparation_uses_exact_public_task_output_contract(
             evaluation_coordinate=_evaluation_coordinate(bundle),
         )
 
-    assert graph.finalizer.output_completion_contract_sha256 == canonical_content_sha256(
+    assert graph.finalizer.output_completion_contract_sha256 == canonical_json_sha256(
         source_contract.model_dump(mode="json"),
     )
 
@@ -760,7 +760,7 @@ class _RecordingProposalEnvironment:
             "workspace_wiped": True,
             "candidate_logs_wiped": True,
         }
-        payload["content_sha256"] = canonical_content_sha256(payload)
+        payload["content_sha256"] = canonical_json_sha256(payload)
         receipt_path = self.root / "transitions" / f"{invocation_id}.json"
         receipt_path.parent.mkdir(parents=True, exist_ok=True)
         receipt_path.write_text(
@@ -1001,7 +1001,7 @@ class _RecordingProposalEnvironment:
             output_path=contract.output_path,
             output_sha256=hashlib.sha256(output).hexdigest(),
             output_size_bytes=len(output),
-            completion_contract_sha256=canonical_content_sha256(
+            completion_contract_sha256=canonical_json_sha256(
                 contract.model_dump(mode="json"),
             ),
             completion_evaluation=evaluation,

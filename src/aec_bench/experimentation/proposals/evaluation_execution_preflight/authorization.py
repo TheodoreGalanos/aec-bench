@@ -7,6 +7,7 @@ from aec_bench.contracts.evaluation_generation.batch import EvaluationBatchPlan
 from aec_bench.contracts.evaluation_plane import (
     EvaluationPlan,
     TaskVerifierSurfaceScope,
+    task_verifier_surface_commitment,
 )
 from aec_bench.experimentation.governance.authority_ledger import AuthorityLedger
 from aec_bench.experimentation.proposals.evaluation_execution_preflight import (
@@ -162,7 +163,7 @@ def build_authorized_dispatch_ref(
         bundle_sha256=dispatch.bundle_sha256,
         task_id=dispatch.task_id,
         task_revision=dispatch.task_revision,
-        task_verifier_surface_sha256=verifier_surface.content_sha256,
+        task_verifier_surface_sha256=task_verifier_surface_commitment(verifier_surface),
         dispatch_id=dispatch.dispatch_id,
         dispatch_sha256=dispatch.content_sha256,
         runtime_archive_sha256=dispatch.runtime_archive_sha256,
@@ -236,7 +237,7 @@ def _verify_evaluation_surface(
         raise EvaluationExecutionPreflightError(
             "full evaluation plan identity differs from the source batch",
         )
-    if evaluation_plan.task_verifier_sha256 != verifier_scope.content_sha256:
+    if evaluation_plan.task_verifier_sha256 != task_verifier_surface_commitment(verifier_scope):
         raise EvaluationExecutionPreflightError(
             "evaluation plan task verifier identity differs from the expected scope",
         )

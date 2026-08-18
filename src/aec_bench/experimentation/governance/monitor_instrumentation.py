@@ -18,10 +18,11 @@ from aec_bench.contracts.authority import (
     AuthorityPrincipalKind,
 )
 from aec_bench.contracts.harness_kernel import (
-    ContentAddressedModel,
-    canonical_content_sha256,
+    FrozenStrictModel,
+    canonical_json_sha256,
     validate_sha256,
 )
+from aec_bench.contracts.legacy_content_address import LegacyContentAddressedModel
 from aec_bench.experimentation.governance.authority_ledger import (
     AuthorityLedger,
     AuthorityLedgerIntegrityError,
@@ -65,7 +66,7 @@ class MonitorInstrumentationError(ValueError):
     """Raised when a real monitor probe cannot close exactly."""
 
 
-class MotifCanaryProbeContext(ContentAddressedModel):
+class MotifCanaryProbeContext(LegacyContentAddressedModel):
     """Real frozen selector and assurance inputs for one planted motif canary."""
 
     schema_version: Literal["aecbench.motif-canary-probe-context.v1"] = "aecbench.motif-canary-probe-context.v1"
@@ -83,7 +84,7 @@ class MotifCanaryProbeContext(ContentAddressedModel):
         return self
 
 
-class MotifCanaryProbeEvidence(ContentAddressedModel):
+class MotifCanaryProbeEvidence(LegacyContentAddressedModel):
     """Selector and assurance result for one historically attractive revoked motif."""
 
     schema_version: Literal["aecbench.motif-canary-probe-evidence.v1"] = "aecbench.motif-canary-probe-evidence.v1"
@@ -114,7 +115,7 @@ class MotifCanaryProbeEvidence(ContentAddressedModel):
         return validate_sha256(value)
 
 
-class OrdinaryLedgerCanaryProbeEvidence(ContentAddressedModel):
+class OrdinaryLedgerCanaryProbeEvidence(LegacyContentAddressedModel):
     """Real authority resolver rejection for one ordinary-ledger canary."""
 
     schema_version: Literal["aecbench.ordinary-ledger-canary-probe-evidence.v1"] = (
@@ -136,7 +137,7 @@ class OrdinaryLedgerCanaryProbeEvidence(ContentAddressedModel):
         return validate_sha256(value)
 
 
-class SurfaceGuardProbeEvidence(ContentAddressedModel):
+class SurfaceGuardProbeEvidence(LegacyContentAddressedModel):
     """Exact attempted operation submitted to the principal-aware surface guard."""
 
     schema_version: Literal["aecbench.surface-guard-probe-evidence.v1"] = "aecbench.surface-guard-probe-evidence.v1"
@@ -153,7 +154,7 @@ class SurfaceGuardProbeEvidence(ContentAddressedModel):
         return validate_sha256(value)
 
 
-class FlowCollectorConfigurationEvidence(ContentAddressedModel):
+class FlowCollectorConfigurationEvidence(LegacyContentAddressedModel):
     """Exact guard, policy rule, and denied receipt wired into one collector."""
 
     schema_version: Literal["aecbench.flow-collector-configuration-evidence.v1"] = (
@@ -174,7 +175,7 @@ class FlowCollectorConfigurationEvidence(ContentAddressedModel):
         return validate_sha256(value)
 
 
-class MonitorInstrumentationActivation(ContentAddressedModel):
+class MonitorInstrumentationActivation(LegacyContentAddressedModel):
     """Complete external activation result for one exact monitor runtime."""
 
     schema_version: Literal["aecbench.monitor-instrumentation-activation.v1"] = (
@@ -506,7 +507,7 @@ def _read_canary_payload(
         payload: JsonValue = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError, TypeError) as error:
         raise MonitorInstrumentationError("physical monitor canary is not readable JSON") from error
-    if not isinstance(payload, dict) or canonical_content_sha256(payload) != commitment.artifact_sha256:
+    if not isinstance(payload, dict) or canonical_json_sha256(payload) != commitment.artifact_sha256:
         raise MonitorInstrumentationError("physical monitor canary differs from its exact commitment")
     return payload
 
@@ -578,7 +579,7 @@ def _require_safe_parent(path: Path) -> None:
             raise MonitorInstrumentationError("monitor instrumentation path contains a symlink")
 
 
-def _canonical_model_bytes(model: ContentAddressedModel) -> bytes:
+def _canonical_model_bytes(model: FrozenStrictModel) -> bytes:
     return (
         json.dumps(
             model.model_dump(mode="json"),

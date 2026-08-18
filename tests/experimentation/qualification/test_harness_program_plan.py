@@ -8,6 +8,9 @@ from collections import Counter, defaultdict
 import pytest
 from pydantic import ValidationError
 
+from aec_bench.contracts.execution_program import ExecutionProgramRef
+from aec_bench.contracts.harness_instance import HarnessInstanceRef
+from aec_bench.contracts.harness_kernel import KernelRef
 from aec_bench.experimentation.qualification.harness_program_study.plan import (
     HarnessProgramCandidateReference,
     HarnessProgramCandidateSet,
@@ -31,14 +34,14 @@ def test_candidate_reference_is_content_addressed_and_requires_one_common_abi() 
         candidate.reference_sha256
         == HarnessProgramCandidateReference.create(
             cell=HarnessProgramCell.H0_P0,
-            kernel_sha256=_sha("kernel"),
+            kernel_ref=KernelRef(kernel_id="kernel", version="1"),
             kernel_abi_sha256=_sha("abi"),
             policy_sha256=_sha("policy"),
             task_set_id="task-set.alpha",
             task_set_sha256=_sha("task-set.alpha"),
-            harness_sha256=_sha("h0"),
+            harness_ref=HarnessInstanceRef(instance_id="h0"),
             harness_abi_sha256=_sha("abi"),
-            program_sha256=_sha("p0"),
+            program_ref=ExecutionProgramRef(program_id="p0", version="1"),
             program_abi_sha256=_sha("abi"),
             resource_sha256=_sha("resource"),
         ).reference_sha256
@@ -47,19 +50,19 @@ def test_candidate_reference_is_content_addressed_and_requires_one_common_abi() 
     with pytest.raises(ValidationError, match="common ABI"):
         HarnessProgramCandidateReference.create(
             cell=HarnessProgramCell.H0_P0,
-            kernel_sha256=_sha("kernel"),
+            kernel_ref=KernelRef(kernel_id="kernel", version="1"),
             kernel_abi_sha256=_sha("abi"),
             policy_sha256=_sha("policy"),
             task_set_id="task-set.alpha",
             task_set_sha256=_sha("task-set.alpha"),
-            harness_sha256=_sha("h0"),
+            harness_ref=HarnessInstanceRef(instance_id="h0"),
             harness_abi_sha256=_sha("harness-abi"),
-            program_sha256=_sha("p0"),
+            program_ref=ExecutionProgramRef(program_id="p0", version="1"),
             program_abi_sha256=_sha("program-abi"),
             resource_sha256=_sha("resource"),
         )
 
-    tampered = candidate.model_dump(mode="json") | {"harness_sha256": _sha("tampered")}
+    tampered = candidate.model_dump(mode="json") | {"harness_ref": {"instance_id": "tampered"}}
     with pytest.raises(ValidationError, match="reference_sha256"):
         HarnessProgramCandidateReference.model_validate(tampered)
 
@@ -67,9 +70,14 @@ def test_candidate_reference_is_content_addressed_and_requires_one_common_abi() 
 @pytest.mark.parametrize(
     ("cell", "field", "replacement", "message"),
     [
-        (HarnessProgramCell.H0_PX, "harness_sha256", _sha("wrong-harness"), "fixed harness"),
-        (HarnessProgramCell.HX_P0, "program_sha256", _sha("wrong-program"), "fixed program"),
-        (HarnessProgramCell.HX_PX, "kernel_sha256", _sha("wrong-kernel"), "kernel"),
+        (HarnessProgramCell.H0_PX, "harness_ref", HarnessInstanceRef(instance_id="wrong-harness"), "fixed harness"),
+        (
+            HarnessProgramCell.HX_P0,
+            "program_ref",
+            ExecutionProgramRef(program_id="wrong-program", version="1"),
+            "fixed program",
+        ),
+        (HarnessProgramCell.HX_PX, "kernel_ref", KernelRef(kernel_id="wrong-kernel", version="1"), "kernel"),
         (HarnessProgramCell.HX_PX, "policy_sha256", _sha("wrong-policy"), "policy"),
         (HarnessProgramCell.HX_PX, "task_set_sha256", _sha("wrong-task-set"), "task set"),
         (HarnessProgramCell.HX_PX, "resource_sha256", _sha("wrong-resource"), "resource"),
@@ -78,14 +86,12 @@ def test_candidate_reference_is_content_addressed_and_requires_one_common_abi() 
 def test_candidate_set_rejects_broken_shared_factor_integrity(
     cell: HarnessProgramCell,
     field: str,
-    replacement: str,
+    replacement: object,
     message: str,
 ) -> None:
     candidates = list(_candidate_set("task-set.alpha").candidates)
     index = next(index for index, candidate in enumerate(candidates) if candidate.cell is cell)
-    payload = candidates[index].model_dump(mode="json") | {field: replacement}
-    payload.pop("reference_sha256")
-    candidates[index] = HarnessProgramCandidateReference.create(**payload)
+    candidates[index] = _replace_candidate_field(candidates[index], field=field, replacement=replacement)
 
     with pytest.raises(ValidationError, match=message):
         HarnessProgramCandidateSet(task_set_id="task-set.alpha", candidates=tuple(candidates))
@@ -103,10 +109,11 @@ def test_candidate_set_requires_nontrivial_harness_and_program_treatments() -> N
     candidates = list(_candidate_set("task-set.alpha").candidates)
     for index, candidate in enumerate(candidates):
         if candidate.cell in {HarnessProgramCell.HX_P0, HarnessProgramCell.HX_PX}:
-            payload = candidate.model_dump(mode="json")
-            payload["harness_sha256"] = _sha("h0")
-            payload.pop("reference_sha256")
-            candidates[index] = HarnessProgramCandidateReference.create(**payload)
+            candidates[index] = _replace_candidate_field(
+                candidate,
+                field="harness_ref",
+                replacement=HarnessInstanceRef(instance_id="h0"),
+            )
 
     with pytest.raises(ValidationError, match="learned harness must differ"):
         HarnessProgramCandidateSet(task_set_id="task-set.alpha", candidates=tuple(candidates))
@@ -116,10 +123,11 @@ def test_candidate_set_requires_nontrivial_program_treatment() -> None:
     candidates = list(_candidate_set("task-set.alpha").candidates)
     for index, candidate in enumerate(candidates):
         if candidate.cell in {HarnessProgramCell.H0_PX, HarnessProgramCell.HX_PX}:
-            payload = candidate.model_dump(mode="json")
-            payload["program_sha256"] = _sha("p0")
-            payload.pop("reference_sha256")
-            candidates[index] = HarnessProgramCandidateReference.create(**payload)
+            candidates[index] = _replace_candidate_field(
+                candidate,
+                field="program_ref",
+                replacement=ExecutionProgramRef(program_id="p0", version="1"),
+            )
 
     with pytest.raises(ValidationError, match="learned program must differ"):
         HarnessProgramCandidateSet(task_set_id="task-set.alpha", candidates=tuple(candidates))
@@ -235,17 +243,40 @@ def _candidate(
     learned_program = cell in {HarnessProgramCell.H0_PX, HarnessProgramCell.HX_PX}
     return HarnessProgramCandidateReference.create(
         cell=cell,
-        kernel_sha256=_sha("kernel"),
+        kernel_ref=KernelRef(kernel_id="kernel", version="1"),
         kernel_abi_sha256=_sha("abi"),
         policy_sha256=_sha(policy_label),
         task_set_id=task_set_id,
         task_set_sha256=_sha(task_set_id),
-        harness_sha256=_sha("hx" if learned_harness else "h0"),
+        harness_ref=HarnessInstanceRef(instance_id="hx" if learned_harness else "h0"),
         harness_abi_sha256=_sha("abi"),
-        program_sha256=_sha("px" if learned_program else "p0"),
+        program_ref=ExecutionProgramRef(program_id="px" if learned_program else "p0", version="1"),
         program_abi_sha256=_sha("abi"),
         resource_sha256=_sha("resource"),
     )
+
+
+def _replace_candidate_field(
+    candidate: HarnessProgramCandidateReference,
+    *,
+    field: str,
+    replacement: object,
+) -> HarnessProgramCandidateReference:
+    values: dict[str, object] = {
+        "cell": candidate.cell,
+        "kernel_ref": candidate.kernel_ref,
+        "kernel_abi_sha256": candidate.kernel_abi_sha256,
+        "policy_sha256": candidate.policy_sha256,
+        "task_set_id": candidate.task_set_id,
+        "task_set_sha256": candidate.task_set_sha256,
+        "harness_ref": candidate.harness_ref,
+        "harness_abi_sha256": candidate.harness_abi_sha256,
+        "program_ref": candidate.program_ref,
+        "program_abi_sha256": candidate.program_abi_sha256,
+        "resource_sha256": candidate.resource_sha256,
+    }
+    values[field] = replacement
+    return HarnessProgramCandidateReference.create(**values)  # type: ignore[arg-type]
 
 
 def _trial_membership(plan: HarnessProgramPlan) -> set[tuple[str, int, HarnessProgramCell, str]]:

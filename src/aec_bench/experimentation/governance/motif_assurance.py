@@ -12,14 +12,16 @@ from aec_bench.contracts.authority import (
     AuthorityAction,
     AuthorityDecision,
     BasisKind,
+    CriticGenerationIdentity,
     MotifPromotionQualification,
 )
 from aec_bench.contracts.harness_kernel import (
-    ContentAddressedModel,
     FrozenStrictModel,
-    canonical_content_sha256,
+    KernelRef,
+    canonical_json_sha256,
     validate_sha256,
 )
+from aec_bench.contracts.legacy_content_address import LegacyContentAddressedModel
 from aec_bench.contracts.validators import NonEmptyStr
 from aec_bench.experimentation.governance.authority_ledger import AuthorityLedger, AuthorityLedgerError
 from aec_bench.experimentation.governance.motifs import (
@@ -67,7 +69,7 @@ class MotifAssuranceAuthorityError(ValueError):
     """Raised when a lifecycle transition lacks exact scoped authority."""
 
 
-class MotifLifecycleEvent(ContentAddressedModel):
+class MotifLifecycleEvent(LegacyContentAddressedModel):
     """One authorized append-only state transition for a stable motif subject."""
 
     schema_version: Literal["aecbench.motif-lifecycle-event.v1"] = "aecbench.motif-lifecycle-event.v1"
@@ -78,8 +80,9 @@ class MotifLifecycleEvent(ContentAddressedModel):
     parent_event_sha256: str | None = None
     authority_event_sha256: str
     revalidation_basis_sha256: str | None = None
-    kernel_sha256: str
-    critic_generation_sha256: str | None = None
+    kernel_ref: KernelRef
+    kernel_abi_sha256: str
+    critic_generation: CriticGenerationIdentity | None = None
     model_generation_sha256: str | None = None
     tool_generation_sha256: str | None = None
     applicability_sha256: str
@@ -90,8 +93,7 @@ class MotifLifecycleEvent(ContentAddressedModel):
         "parent_event_sha256",
         "authority_event_sha256",
         "revalidation_basis_sha256",
-        "kernel_sha256",
-        "critic_generation_sha256",
+        "kernel_abi_sha256",
         "model_generation_sha256",
         "tool_generation_sha256",
         "applicability_sha256",
@@ -115,8 +117,9 @@ class MotifAssuranceEntry(FrozenStrictModel):
     state: MotifAssuranceState
     head_event_sha256: str
     authority_event_sha256: str
-    kernel_sha256: str
-    critic_generation_sha256: str | None = None
+    kernel_ref: KernelRef
+    kernel_abi_sha256: str
+    critic_generation: CriticGenerationIdentity | None = None
     model_generation_sha256: str | None = None
     tool_generation_sha256: str | None = None
     applicability_sha256: str
@@ -127,8 +130,7 @@ class MotifAssuranceEntry(FrozenStrictModel):
         "motif_subject_sha256",
         "head_event_sha256",
         "authority_event_sha256",
-        "kernel_sha256",
-        "critic_generation_sha256",
+        "kernel_abi_sha256",
         "model_generation_sha256",
         "tool_generation_sha256",
         "applicability_sha256",
@@ -150,7 +152,7 @@ class MotifAssuranceEntry(FrozenStrictModel):
         return self
 
 
-class MotifAssuranceLedger(ContentAddressedModel):
+class MotifAssuranceLedger(LegacyContentAddressedModel):
     """Immutable append-only event chain with one independently linked head per motif subject."""
 
     schema_version: Literal["aecbench.motif-assurance-ledger.v1"] = "aecbench.motif-assurance-ledger.v1"
@@ -190,7 +192,7 @@ class MotifAssuranceLedger(ContentAddressedModel):
         return MotifAssuranceLedger(events=(*self.events, normalized))
 
 
-class MotifAssuranceSnapshot(ContentAddressedModel):
+class MotifAssuranceSnapshot(LegacyContentAddressedModel):
     """Content-addressed effective-state projection derived from one exact assurance ledger."""
 
     schema_version: Literal["aecbench.motif-assurance-snapshot.v1"] = "aecbench.motif-assurance-snapshot.v1"
@@ -225,7 +227,7 @@ class MotifAssuranceSnapshot(ContentAddressedModel):
         return entry
 
 
-class MotifAssurancePin(ContentAddressedModel):
+class MotifAssurancePin(LegacyContentAddressedModel):
     """Frozen selection record binding one motif to the exact active assurance snapshot."""
 
     schema_version: Literal["aecbench.motif-assurance-pin.v1"] = "aecbench.motif-assurance-pin.v1"
@@ -268,7 +270,7 @@ class MotifAssurancePin(ContentAddressedModel):
         )
 
 
-class AssuredMotifSelectionRecord(ContentAddressedModel):
+class AssuredMotifSelectionRecord(LegacyContentAddressedModel):
     """Frozen selection record containing the exact decision and its active assurance pin."""
 
     schema_version: Literal["aecbench.assured-motif-selection.v1"] = "aecbench.assured-motif-selection.v1"
@@ -367,7 +369,7 @@ class AssuredMotifSelectionRecord(ContentAddressedModel):
 def motif_subject_sha256(motif: HarnessProgramMotif) -> str:
     """Hash only stable K/Hx/px/applicability/structure fields, excluding status and evidence."""
     normalized = HarnessProgramMotif.model_validate(motif.model_dump(mode="python"))
-    return canonical_content_sha256(
+    return canonical_json_sha256(
         {
             "schema_version": "aecbench.motif-subject.v1",
             "kernel_abi_sha256": normalized.kernel_abi_sha256,
@@ -393,8 +395,9 @@ def derive_motif_assurance_snapshot(
             state=event.state,
             head_event_sha256=event.content_sha256,
             authority_event_sha256=event.authority_event_sha256,
-            kernel_sha256=event.kernel_sha256,
-            critic_generation_sha256=event.critic_generation_sha256,
+            kernel_ref=event.kernel_ref,
+            kernel_abi_sha256=event.kernel_abi_sha256,
+            critic_generation=event.critic_generation,
             model_generation_sha256=event.model_generation_sha256,
             tool_generation_sha256=event.tool_generation_sha256,
             applicability_sha256=event.applicability_sha256,
@@ -479,11 +482,8 @@ def assert_assured_motif_selection_current(
             AuthorityAction.MOTIF_STATE_CHANGE,
         }
         or authority.subject_sha256 != selected.motif_subject_sha256
-        or authority.kernel_sha256 != entry.kernel_sha256
-        or (
-            authority.critic_generation_sha256 is not None
-            and authority.critic_generation_sha256 != entry.critic_generation_sha256
-        )
+        or authority.kernel_ref != entry.kernel_ref
+        or (authority.critic_generation is not None and authority.critic_generation != entry.critic_generation)
     ):
         raise MotifAssuranceAuthorityError(
             "stale authority basis: exact assurance authority no longer scopes the selected subject"
@@ -576,11 +576,11 @@ def _apply_reusable_motif_promotion(
         authority.decision is not AuthorityDecision.GRANTED
         or authority.action is not AuthorityAction.MOTIF_PROMOTION
         or authority.subject_sha256 != subject_sha256
-        or authority.kernel_sha256 != source.kernel_abi_sha256
-        or authority.critic_generation_sha256 != qualification.critic_generation_sha256
+        or authority.kernel_ref != qualification.kernel_ref
+        or authority.critic_generation != qualification.critic_generation
         or qualification.provisional_motif_sha256 != source.motif_sha256
         or qualification.motif_subject_sha256 != subject_sha256
-        or qualification.kernel_sha256 != source.kernel_abi_sha256
+        or qualification.kernel_abi_sha256 != source.kernel_abi_sha256
     ):
         raise MotifAssuranceAuthorityError(
             "reusable promotion authority does not bind the exact qualified provisional motif"
@@ -635,8 +635,9 @@ def _apply_transfer_validated_motif_promotion(
         authority.decision is not AuthorityDecision.GRANTED
         or authority.action is not AuthorityAction.MOTIF_STATE_CHANGE
         or authority.subject_sha256 != subject_sha256
-        or authority.kernel_sha256 != source.kernel_abi_sha256
-        or authority.critic_generation_sha256 != assurance_entry.critic_generation_sha256
+        or authority.kernel_ref != assurance_entry.kernel_ref
+        or assurance_entry.kernel_abi_sha256 != source.kernel_abi_sha256
+        or authority.critic_generation != assurance_entry.critic_generation
     ):
         raise MotifAssuranceAuthorityError(
             "transfer-validated promotion requires exact granted motif_state_change "
@@ -669,12 +670,9 @@ def append_authorized_motif_event(
         )
     if authority.subject_sha256 != selected_event.motif_subject_sha256:
         raise MotifAssuranceAuthorityError("motif lifecycle authority subject does not match the stable motif subject")
-    if authority.kernel_sha256 != selected_event.kernel_sha256:
+    if authority.kernel_ref != selected_event.kernel_ref:
         raise MotifAssuranceAuthorityError("motif lifecycle authority and event bind different kernels")
-    if (
-        authority.critic_generation_sha256 is not None
-        and authority.critic_generation_sha256 != selected_event.critic_generation_sha256
-    ):
+    if authority.critic_generation is not None and authority.critic_generation != selected_event.critic_generation:
         raise MotifAssuranceAuthorityError("motif lifecycle authority and event bind different critic generations")
     return selected_ledger.append(selected_event)
 

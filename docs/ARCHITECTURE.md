@@ -159,6 +159,11 @@ stewardship scoring, remains with the task package.
 The ledger and artifact stores own persistence mechanics, integrity checks, and
 queries. `ArtifactRepository` publishes exact bytes and canonical model bytes
 as `ArtifactRef` values, then verifies ID, size, and digest on each read.
+Kernel, Harness, execution-program, evaluation, stage, task-snapshot, and
+run-bundle contracts remain plain domain models. Their joins use stable IDs,
+typed references, direct values, and named commitments. They do not calculate
+or carry a universal self-digest. A legacy compatibility reader validates old
+self-addressed JSON before it creates a plain current model.
 `TrialRecord` is the durable trial provenance envelope. A dataset manifest
 defines semantic task selection; one full Git reference or detached-bundle
 `ArtifactRef` identifies the immutable bytes used for execution. Evidence-lifecycle and world

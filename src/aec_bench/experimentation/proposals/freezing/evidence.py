@@ -18,7 +18,7 @@ from aec_bench.contracts.evaluation_plane import (
     EvaluationPlan,
 )
 from aec_bench.contracts.harness_instance import CompiledHarnessInstance
-from aec_bench.contracts.harness_kernel import ContentAddressedModel
+from aec_bench.contracts.harness_kernel import FrozenStrictModel
 from aec_bench.contracts.program_proposal.candidate import CandidateGenerationManifest
 from aec_bench.contracts.program_proposal.problem import DecompositionLeakageAudit, DecompositionProblemView
 from aec_bench.contracts.proposal_execution_profile import (
@@ -232,7 +232,7 @@ def observe_input_basis(
     )
 
 
-def load_evidence_model[ModelT: ContentAddressedModel](
+def load_evidence_model[ModelT: FrozenStrictModel](
     *,
     ledger: AuthorityLedger,
     reference: BasisReference,
@@ -254,7 +254,7 @@ def _observe_model(
     *,
     ledger: AuthorityLedger,
     artifact_id: str,
-    model: ContentAddressedModel,
+    model: FrozenStrictModel,
     producer: AuthorityPrincipal,
     host_runtime: AuthorityPrincipal,
     operation_id: str,
@@ -268,7 +268,7 @@ def _observe_model(
         observed_by=host_runtime,
         channel="proposal-freeze",
         operation_id=operation_id,
-        invocation_id=model.content_sha256,
+        invocation_id=artifact_id,
         operation_taint=(TaintLabel.RUNTIME_OBSERVED,),
     )
 

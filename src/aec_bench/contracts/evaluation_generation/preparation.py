@@ -23,14 +23,15 @@ from aec_bench.contracts.evaluation_plane import (
     EvaluationPlanAuthorityScope,
     EvaluationPlanRef,
 )
-from aec_bench.contracts.harness_instance import HarnessBudget
-from aec_bench.contracts.harness_kernel import ContentAddressedModel, validate_sha256
+from aec_bench.contracts.harness_instance import HarnessBudget, HarnessInstanceRef
+from aec_bench.contracts.harness_kernel import KernelRef, validate_sha256
+from aec_bench.contracts.legacy_content_address import LegacyContentAddressedModel
 from aec_bench.contracts.program_proposal.candidate import CandidateGenerationManifest
 from aec_bench.contracts.program_proposal.problem import DecompositionLeakageAudit, DecompositionProblemView
 from aec_bench.contracts.validators import NonEmptyStr
 
 
-class PreparedProposalTask(ContentAddressedModel):
+class PreparedProposalTask(LegacyContentAddressedModel):
     """One public task surface prepared before proposal generation."""
 
     schema_version: Literal["aecbench.prepared-proposal-task.v2"] = "aecbench.prepared-proposal-task.v2"
@@ -63,7 +64,7 @@ class PreparedProposalTask(ContentAddressedModel):
         return self
 
 
-class PreparedEvaluationGeneration(ContentAddressedModel):
+class PreparedEvaluationGeneration(LegacyContentAddressedModel):
     """Provider-ready, outcome-blind inputs checked against one supplied design."""
 
     schema_version: Literal["aecbench.prepared-evaluation-generation.v2"] = "aecbench.prepared-evaluation-generation.v2"
@@ -71,8 +72,8 @@ class PreparedEvaluationGeneration(ContentAddressedModel):
     cohort: EvaluationCohortManifest
     cohort_binding: EvaluationCohortBinding
     candidate_manifest_scope: CandidateManifestScope
-    kernel_sha256: str
-    fixed_harness_sha256: str
+    kernel_ref: KernelRef
+    fixed_harness_ref: HarnessInstanceRef
     evaluation_plan_ref: EvaluationPlanRef
     evaluation_authority_scope: EvaluationPlanAuthorityScope
     proposal_policy: ProposalGenerationPolicy
@@ -91,8 +92,6 @@ class PreparedEvaluationGeneration(ContentAddressedModel):
     promotion_permitted: Literal[False] = False
 
     @field_validator(
-        "kernel_sha256",
-        "fixed_harness_sha256",
         "candidate_manifest_proposal_policy_sha256",
         "compilation_policies_sha256",
         "runtime_archive_sha256",
@@ -171,7 +170,7 @@ class PreparedEvaluationGeneration(ContentAddressedModel):
             )
         for item in self.task_inputs:
             if (
-                item.problem_view.fixed_harness.kernel_sha256 != self.kernel_sha256
+                item.problem_view.fixed_harness.kernel_ref != self.kernel_ref
                 or item.problem_view.fixed_harness.aggregate_budget != self.candidate_budget
             ):
                 raise ValueError(

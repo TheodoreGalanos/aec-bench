@@ -16,7 +16,8 @@ from aec_bench.contracts.execution_program import (
     ExecutionProgram,
 )
 from aec_bench.contracts.harness_instance import HarnessInstanceRef
-from aec_bench.contracts.harness_kernel import ContentAddressedModel, FrozenStrictModel, validate_sha256
+from aec_bench.contracts.harness_kernel import FrozenStrictModel, KernelRef, validate_sha256
+from aec_bench.contracts.legacy_content_address import LegacyContentAddressedModel
 from aec_bench.contracts.program_proposal.candidate import ProgramCandidateRef
 from aec_bench.contracts.program_proposal.freeze import ProposalFreeze
 from aec_bench.contracts.proposal_execution._canonical import canonical_unique_strings
@@ -50,7 +51,7 @@ class ProposalCompileDiagnostic(FrozenStrictModel):
         return canonical_unique_strings(value, label="diagnostic subject ids")
 
 
-class _ProfileBoundProposalCompilation(ContentAddressedModel):
+class _ProfileBoundProposalCompilation(LegacyContentAddressedModel):
     """Shared current execution-profile binding."""
 
     execution_profile: ProposalExecutionProfile
@@ -67,9 +68,9 @@ class ProposalCompilationSuccess(_ProfileBoundProposalCompilation):
     proposal_graph: ExecutableCandidateGraph
     proposal_freeze: ProposalFreeze
     freeze_authority_event_sha256: str
-    kernel_sha256: str
+    kernel_ref: KernelRef
     fixed_harness_ref: HarnessInstanceRef
-    surface_sha256: str
+    surface_id: NonEmptyStr
     lowering_policy_sha256: str
     task_snapshot_sha256: str
     source_scope_manifest: ProposalSourceScopeManifest
@@ -80,8 +81,6 @@ class ProposalCompilationSuccess(_ProfileBoundProposalCompilation):
     @field_validator(
         "freeze_authority_event_sha256",
         "raw_proposal_artifact_sha256",
-        "kernel_sha256",
-        "surface_sha256",
         "lowering_policy_sha256",
         "task_snapshot_sha256",
     )
@@ -112,9 +111,9 @@ class ProposalCompilationRejection(_ProfileBoundProposalCompilation):
     raw_proposal_artifact_sha256: str
     proposal_freeze: ProposalFreeze
     freeze_authority_event_sha256: str
-    kernel_sha256: str
+    kernel_ref: KernelRef
     fixed_harness_ref: HarnessInstanceRef
-    surface_sha256: str
+    surface_id: NonEmptyStr
     lowering_policy_sha256: str
     task_snapshot_sha256: str
     diagnostic: ProposalCompileDiagnostic
@@ -124,8 +123,6 @@ class ProposalCompilationRejection(_ProfileBoundProposalCompilation):
     @field_validator(
         "raw_proposal_artifact_sha256",
         "freeze_authority_event_sha256",
-        "kernel_sha256",
-        "surface_sha256",
         "lowering_policy_sha256",
         "task_snapshot_sha256",
     )

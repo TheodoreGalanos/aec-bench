@@ -26,7 +26,9 @@ from aec_bench.contracts.adapter_execution import (
     TranscriptRole,
 )
 from aec_bench.contracts.agent_output import AgentOutput, AgentOutputStatus
-from aec_bench.contracts.harness_kernel import canonical_content_sha256
+from aec_bench.contracts.execution_program import ExecutionProgramRef
+from aec_bench.contracts.harness_instance import HarnessInstanceRef
+from aec_bench.contracts.harness_kernel import KernelRef, canonical_json_sha256
 from aec_bench.contracts.output_completion import (
     OutputCommitAttestation,
     OutputCompletionEvaluation,
@@ -80,13 +82,10 @@ def _context(
     node_id: str = "analyse",
 ) -> MetaHarnessTrajectoryContext:
     return MetaHarnessTrajectoryContext(
-        kernel_sha256=_sha("kernel"),
-        harness_id="harness.fixed",
-        harness_sha256=_sha("harness"),
-        program_id="program.proposal",
-        program_sha256=_sha("program"),
+        kernel_ref=KernelRef(kernel_id="aec-bench.adaptive-harness", version="1.6.0"),
+        harness_ref=HarnessInstanceRef(instance_id="harness.fixed"),
+        program_ref=ExecutionProgramRef(program_id="program.proposal", version="1.0.0"),
         bundle_id="bundle.1",
-        bundle_sha256=_sha("bundle"),
         program_node_id=node_id,
         proposal_session_id=session_id,
         proposal_invocation_id=invocation_id,
@@ -554,7 +553,7 @@ def test_persists_exact_fresh_container_transition_and_rejects_identity_drift(
         "workspace_wiped": True,
         "candidate_logs_wiped": True,
     }
-    transition_payload["content_sha256"] = canonical_content_sha256(transition_payload)
+    transition_payload["content_sha256"] = canonical_json_sha256(transition_payload)
     receipt_path = tmp_path / "boundary" / "transition.json"
     receipt_path.parent.mkdir()
     receipt_bytes = json.dumps(transition_payload, indent=2, sort_keys=True).encode("utf-8") + b"\n"
@@ -647,8 +646,8 @@ def _receipt(
         candidate_id="candidate.1",
         proposal_graph_sha256=_sha("proposal-graph"),
         problem_view_sha256=_sha("problem-view"),
-        kernel_sha256=_sha("kernel"),
-        fixed_harness_sha256=_sha("harness"),
+        kernel_ref=KernelRef(kernel_id="aec-bench.adaptive-harness", version="1.6.0"),
+        fixed_harness_ref=HarnessInstanceRef(instance_id="harness.fixed"),
         proposal_policy_sha256=_sha("proposal-policy"),
         node_id=stored.node_id,
         attempt=1,

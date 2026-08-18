@@ -8,6 +8,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal, Protocol, TypedDict
 
+from aec_bench.contracts.harness_instance import HarnessInstanceRef
+from aec_bench.contracts.harness_kernel import KernelRef
 from aec_bench.contracts.output_completion import OutputCompletionContract
 from aec_bench.contracts.proposal_execution.session import ProposalNodeReceipt
 from aec_bench.contracts.provider_broker import ProviderBrokerPolicy
@@ -127,8 +129,8 @@ class NodeReceiptLineage(TypedDict):
     candidate_id: str
     proposal_graph_sha256: str
     problem_view_sha256: str
-    kernel_sha256: str
-    fixed_harness_sha256: str
+    kernel_ref: KernelRef
+    fixed_harness_ref: HarnessInstanceRef
     proposal_policy_sha256: str
     node_id: str
     node_source_scope_sha256: str

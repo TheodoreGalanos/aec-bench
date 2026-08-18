@@ -11,6 +11,7 @@ from aec_bench.contracts.execution_program import (
     BranchOperator,
     CompiledExecutionProgram,
     ExecutionProgram,
+    ExecutionProgramRef,
     FanoutNode,
     JoinNode,
     LiteralValue,
@@ -28,15 +29,15 @@ from aec_bench.contracts.execution_program import (
 from aec_bench.contracts.harness_instance import HarnessInstanceRef, ProgramOperationRef
 
 
-def _harness_ref(digest: str = "a" * 64) -> HarnessInstanceRef:
-    return HarnessInstanceRef(instance_id="hx-trace-diagnosis", content_sha256=digest)
+def _harness_ref() -> HarnessInstanceRef:
+    return HarnessInstanceRef(instance_id="hx-trace-diagnosis")
 
 
 def _operation_refs() -> tuple[ProgramOperationRef, ...]:
     return (
-        ProgramOperationRef(operation_id="load_traces.v1", content_sha256="1" * 64),
-        ProgramOperationRef(operation_id="review_trace.v1", content_sha256="2" * 64),
-        ProgramOperationRef(operation_id="verify_repair.v1", content_sha256="3" * 64),
+        ProgramOperationRef(operation_id="load_traces.v1"),
+        ProgramOperationRef(operation_id="review_trace.v1"),
+        ProgramOperationRef(operation_id="verify_repair.v1"),
     )
 
 
@@ -133,8 +134,8 @@ def test_execution_program_accepts_the_full_typed_dag() -> None:
         "verify",
         "stop",
     }
-    assert len(program.content_sha256) == 64
-    assert program.ref.content_sha256 == program.content_sha256
+    assert program.ref == ExecutionProgramRef(program_id=program.program_id, version=program.version)
+    assert "content_sha256" not in program.model_dump(mode="json")
 
 
 def test_execution_program_rejects_a_cycle() -> None:
@@ -282,23 +283,24 @@ def test_compiled_program_pins_source_surface_and_topological_order() -> None:
         program_id=source.program_id,
         version=source.version,
         harness_ref=source.harness_ref,
-        source_program_sha256=source.content_sha256,
-        surface_sha256="b" * 64,
+        source_program_ref=source.ref,
+        surface_id="trace-diagnosis-surface",
         nodes=source.nodes,
         limits=source.limits,
         topological_order=order,
         operation_refs=_operation_refs(),
     )
 
-    assert compiled.ref.content_sha256 == compiled.content_sha256
+    assert compiled.ref == source.ref
+    assert "content_sha256" not in compiled.model_dump(mode="json")
 
     with pytest.raises(ValidationError, match="topological_order places dependency 'synthesize' after 'verify'"):
         CompiledExecutionProgram(
             program_id=source.program_id,
             version=source.version,
             harness_ref=source.harness_ref,
-            source_program_sha256=source.content_sha256,
-            surface_sha256="b" * 64,
+            source_program_ref=source.ref,
+            surface_id="trace-diagnosis-surface",
             nodes=source.nodes,
             limits=source.limits,
             operation_refs=_operation_refs(),
@@ -342,12 +344,12 @@ def test_compiled_program_requires_one_content_pinned_ref_per_invoked_operation(
             program_id=source.program_id,
             version=source.version,
             harness_ref=source.harness_ref,
-            source_program_sha256=source.content_sha256,
-            surface_sha256="b" * 64,
+            source_program_ref=source.ref,
+            surface_id="trace-diagnosis-surface",
             nodes=source.nodes,
             limits=source.limits,
             topological_order=("load", "stop"),
-            operation_refs=(ProgramOperationRef(operation_id="other.v1", content_sha256="4" * 64),),
+            operation_refs=(ProgramOperationRef(operation_id="other.v1"),),
         )
 
 

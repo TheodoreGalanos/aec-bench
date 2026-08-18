@@ -58,7 +58,7 @@ OUTPUT_COMPLETION_CONTRACT = {
 def test_regenerate_adaptive_repair_example_prepares_exact_offline_spec_with_overrides(
     tmp_path: Path,
 ) -> None:
-    repo_root = Path(__file__).resolve().parents[2]
+    repo_root = Path(__file__).resolve().parents[3]
     script = repo_root / "scripts" / "regenerate_adaptive_repair_example.py"
     tasks_root = tmp_path / "tasks"
     task_id = "civil/review/offline-repair-fixture"
@@ -156,7 +156,7 @@ def test_regenerate_adaptive_repair_example_prepares_exact_offline_spec_with_ove
 def test_regenerate_adaptive_repair_example_prepares_serial_program_recovery_spec(
     tmp_path: Path,
 ) -> None:
-    repo_root = Path(__file__).resolve().parents[2]
+    repo_root = Path(__file__).resolve().parents[3]
     script = repo_root / "scripts" / "regenerate_adaptive_repair_example.py"
     tasks_root = tmp_path / "tasks"
     task_ids = (
@@ -301,8 +301,8 @@ def test_completion_policy_repair_keeps_turn_capacity_fixed_and_changes_only_age
         parent=spec.parent,
         registry=registry,
         workflow=SynchronousHarborWorkflow(
-            project_root=Path(__file__).resolve().parents[2],
-            repo_root=Path(__file__).resolve().parents[2],
+            project_root=Path(__file__).resolve().parents[3],
+            repo_root=Path(__file__).resolve().parents[3],
             tasks_root=tasks_root,
             ledger_root=tmp_path / "ledger",
             jobs_root=tmp_path / "jobs",
@@ -464,7 +464,7 @@ def test_program_batch_coalescing_can_fix_the_output_commit_harness_without_more
 def test_regenerate_adaptive_repair_example_can_issue_a_new_attempt_identity(
     tmp_path: Path,
 ) -> None:
-    repo_root = Path(__file__).resolve().parents[2]
+    repo_root = Path(__file__).resolve().parents[3]
     script = repo_root / "scripts" / "regenerate_adaptive_repair_example.py"
     tasks_root = tmp_path / "tasks"
     task_id = "civil/review/offline-repair-retry-fixture"
@@ -673,7 +673,7 @@ def test_output_commit_batch_coalescing_cannot_overwrite_the_executed_spec() -> 
 def test_current_program_recovery_candidate_compiles_the_exact_parent_and_predicted_child(
     tmp_path: Path,
 ) -> None:
-    repository_root = Path(__file__).resolve().parents[2]
+    repository_root = Path(__file__).resolve().parents[3]
     generator = importlib.import_module("scripts.regenerate_adaptive_repair_example")
     spec = generator.prepare_example_spec(
         repair_owner="program",
@@ -733,7 +733,7 @@ def test_current_program_recovery_candidate_compiles_the_exact_parent_and_predic
     assert parent.harness == child.harness
     assert parent.bundle.kernel_ref == child.bundle.kernel_ref == registry.manifest.ref
     assert parent.bundle.task_snapshots == child.bundle.task_snapshots == spec.task_snapshots
-    assert parent.program.content_sha256 != child.program.content_sha256
+    assert parent.program.ref != child.program.ref
     assert parent.program.limits.max_total_attempts == 1
     assert child.program.limits.max_total_attempts == 2
     child_second = lower_run_bundle(
@@ -754,7 +754,7 @@ def test_current_program_recovery_candidate_compiles_the_exact_parent_and_predic
 def test_current_batch_coalescing_fixture_compiles(
     tmp_path: Path,
 ) -> None:
-    repository_root = Path(__file__).resolve().parents[2]
+    repository_root = Path(__file__).resolve().parents[3]
     registry = default_kernel_registry()
 
     generator = importlib.import_module("scripts.regenerate_adaptive_repair_example")
@@ -804,7 +804,7 @@ def test_current_batch_coalescing_fixture_compiles(
             code=rule.code,
             message=rule.message,
             patch=ProgramCoalesceTaskBatchPatch(
-                expected_program_sha256=parent.program.content_sha256,
+                expected_program_ref=parent.program.ref,
                 source_node_ids=rule.source_node_ids,
                 replacement_node_id=rule.replacement_node_id,
                 task_refs=rule.task_refs,

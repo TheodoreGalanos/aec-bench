@@ -9,10 +9,11 @@ from typing import Annotated, Literal, Self
 
 from pydantic import Field, FiniteFloat, NonNegativeInt, PositiveInt, field_validator, model_validator
 
+from aec_bench.contracts.authority import CriticEvaluationOutcomeIdentity
 from aec_bench.contracts.evaluation_plane import CriticRef, EvaluationPlanRef
 from aec_bench.contracts.harness_kernel import (
-    ContentAddressedModel,
     FrozenStrictModel,
+    KernelRef,
     validate_sha256,
 )
 from aec_bench.contracts.validators import NonEmptyStr
@@ -69,8 +70,8 @@ class IntegrityCheck(FrozenStrictModel):
         return self
 
 
-class IntegrityEvaluation(ContentAddressedModel):
-    """Content-addressed result of evaluating all mandatory integrity checks."""
+class IntegrityEvaluation(FrozenStrictModel):
+    """Result of evaluating all mandatory integrity checks."""
 
     schema_version: Literal["aecbench.integrity-evaluation.v1"] = "aecbench.integrity-evaluation.v1"
     checks: tuple[IntegrityCheck, ...]
@@ -170,7 +171,7 @@ class CommonModeBasis(FrozenStrictModel):
         return validate_sha256(value)
 
 
-class SelectionNullEstimate(ContentAddressedModel):
+class SelectionNullEstimate(FrozenStrictModel):
     """Resampled differential null with a matched-aggregation envelope and estimator precision.
 
     ``interval_low`` and ``interval_high`` describe the empirical null
@@ -206,7 +207,7 @@ class SelectionNullEstimate(ContentAddressedModel):
         return self
 
 
-class CriticGapDecomposition(ContentAddressedModel):
+class CriticGapDecomposition(FrozenStrictModel):
     """Separate winner's-curse optimism, null-adjusted disagreement, and grounded breach.
 
     The null-adjusted residual is a detector, not evidence of a critic seam by
@@ -347,7 +348,7 @@ class CriticPlaneCost(FrozenStrictModel):
         )
 
 
-class EvaluationCostBreakdown(ContentAddressedModel):
+class EvaluationCostBreakdown(FrozenStrictModel):
     """Content-addressed accounting that never folds judging into candidate execution."""
 
     schema_version: Literal["aecbench.evaluation-cost-breakdown.v1"] = "aecbench.evaluation-cost-breakdown.v1"
@@ -370,11 +371,10 @@ class EvaluationCostBreakdown(ContentAddressedModel):
         return self.candidate_provider_cost_usd + self.critic_plane_provider_cost_usd
 
 
-class EvaluationOutcome(ContentAddressedModel):
+class EvaluationOutcome(FrozenStrictModel):
     """One fail-closed, causally bound result from the ordered evaluation gate."""
 
     schema_version: Literal["aecbench.evaluation-outcome.v1"] = "aecbench.evaluation-outcome.v1"
-    evaluation_plan_sha256: str
     candidate_sha256: str
     evidence_set_sha256: str
     integrity: IntegrityEvaluation
@@ -387,7 +387,6 @@ class EvaluationOutcome(ContentAddressedModel):
     reasons: tuple[NonEmptyStr, ...] = ()
 
     @field_validator(
-        "evaluation_plan_sha256",
         "candidate_sha256",
         "evidence_set_sha256",
     )
@@ -472,13 +471,21 @@ def _validate_valid_output(outcome: EvaluationOutcome) -> None:
         raise ValueError("only an accepted outcome may be promotion eligible")
 
 
-class CriticEvaluationOutcome(ContentAddressedModel):
-    """Critic-bound envelope around one legacy evaluation outcome.
+class CriticEvaluationOutcomeRef(FrozenStrictModel):
+    """Stable identity for one critic result without repeating its artifact digest."""
 
-    The legacy ``EvaluationOutcome`` remains loadable for historical evidence. New
-    consequential decisions use this envelope so the producing critic, released
-    generation, execution principal, kernel, and evaluation plan are explicit.
-    """
+    evaluation_plan_ref: EvaluationPlanRef
+    critic: CriticRef
+    candidate_sha256: str
+
+    @field_validator("candidate_sha256")
+    @classmethod
+    def validate_candidate_sha256(cls, value: str) -> str:
+        return validate_sha256(value)
+
+
+class CriticEvaluationOutcome(FrozenStrictModel):
+    """Critic-bound envelope around one evaluation outcome."""
 
     schema_version: Literal["aecbench.critic-evaluation-outcome.v1"] = "aecbench.critic-evaluation-outcome.v1"
     evaluation_plan_ref: EvaluationPlanRef
@@ -486,12 +493,11 @@ class CriticEvaluationOutcome(ContentAddressedModel):
     execution_principal_id: NonEmptyStr
     critic_release_authority_event_id: NonEmptyStr
     critic_release_authority_event_sha256: str
-    kernel_sha256: str
+    kernel_ref: KernelRef
     outcome: EvaluationOutcome
 
     @field_validator(
         "critic_release_authority_event_sha256",
-        "kernel_sha256",
     )
     @classmethod
     def validate_binding_hashes(cls, value: str) -> str:
@@ -499,8 +505,26 @@ class CriticEvaluationOutcome(ContentAddressedModel):
 
     @model_validator(mode="after")
     def validate_critic_binding(self) -> Self:
-        if self.outcome.evaluation_plan_sha256 != self.evaluation_plan_ref.content_sha256:
-            raise ValueError("critic outcome does not bind the exact evaluation plan")
         if self.critic.compatibility_generation != self.evaluation_plan_ref.evaluation_generation:
             raise ValueError("critic outcome generation differs from the evaluation plan")
         return self
+
+    @property
+    def ref(self) -> CriticEvaluationOutcomeRef:
+        """Return the stable critic, plan, and candidate identity for this outcome."""
+
+        return CriticEvaluationOutcomeRef(
+            evaluation_plan_ref=self.evaluation_plan_ref,
+            critic=self.critic,
+            candidate_sha256=self.outcome.candidate_sha256,
+        )
+
+    @property
+    def authority_identity(self) -> CriticEvaluationOutcomeIdentity:
+        """Return the stable authority identity for this critic result."""
+
+        return CriticEvaluationOutcomeIdentity(
+            evaluation_plan=self.evaluation_plan_ref.authority_identity,
+            critic_generation=self.critic.authority_identity,
+            candidate_sha256=self.outcome.candidate_sha256,
+        )

@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Protocol, cast
 
 from aec_bench.contracts.harness_kernel import (
-    canonical_content_sha256,
+    canonical_json_sha256,
     validate_sha256,
 )
 from aec_bench.experimentation.proposals.session_runtime import ProposalSessionEnvironment
@@ -562,7 +562,7 @@ def _write_content_addressed_json(
             f"proposal environment pool receipt already exists: {path}",
         )
     receipt = dict(payload)
-    receipt["content_sha256"] = canonical_content_sha256(receipt)
+    receipt["content_sha256"] = canonical_json_sha256(receipt)
     descriptor, temporary_raw = tempfile.mkstemp(
         prefix=f".{path.name}.",
         suffix=".tmp",

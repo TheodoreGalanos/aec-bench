@@ -8,7 +8,7 @@ from aec_bench.contracts.authority import (
     BasisReference,
     OriginStamp,
 )
-from aec_bench.contracts.harness_kernel import ContentAddressedModel
+from aec_bench.contracts.harness_kernel import FrozenStrictModel
 from aec_bench.experimentation.governance.authority_ledger import (
     AuthorityLedger,
     AuthorityLedgerError,
@@ -66,7 +66,7 @@ def resolve_event_basis(
     return stored, event
 
 
-def resolve_evidence_model[ModelT: ContentAddressedModel](
+def resolve_evidence_model[ModelT: FrozenStrictModel](
     *,
     ledger: AuthorityLedger,
     reference: BasisReference,

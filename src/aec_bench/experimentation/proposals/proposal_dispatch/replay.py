@@ -303,7 +303,7 @@ def _validate_compile_event(
         or compile_event.principal.kind is not AuthorityPrincipalKind.HOST_RUNTIME
         or compile_event.subject_id != compilation.compilation_id
         or compile_event.subject_sha256 != compilation.content_sha256
-        or compile_event.kernel_sha256 != compilation.kernel_sha256
+        or compile_event.kernel_ref != compilation.kernel_ref
         or compile_event.basis
         != (
             authorization.freeze_authority_basis,
@@ -331,7 +331,7 @@ def _validate_provider_event(
         or provider_event.principal != compile_event.principal
         or provider_event.subject_id != record.dispatch_id
         or provider_event.subject_sha256 != record.content_sha256
-        or provider_event.kernel_sha256 != compilation.kernel_sha256
+        or provider_event.kernel_ref != compilation.kernel_ref
         or provider_event.basis
         != (
             authorization.compile_event_basis,

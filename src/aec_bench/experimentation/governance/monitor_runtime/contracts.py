@@ -16,9 +16,9 @@ from aec_bench.contracts.authority import (
     AuthorityPrincipalKind,
 )
 from aec_bench.contracts.harness_kernel import (
-    ContentAddressedModel,
     validate_sha256,
 )
+from aec_bench.contracts.legacy_content_address import LegacyContentAddressedModel
 from aec_bench.contracts.validators import NonEmptyStr
 from aec_bench.experimentation.governance.monitor_repository import (
     ProductionMonitorCheckpointKind,
@@ -56,7 +56,7 @@ class FlowCollectorProbeOutcome(StrEnum):
     CAPTURED_OR_BLOCKED = "captured_or_blocked"
 
 
-class MonitorCanarySurface(ContentAddressedModel):
+class MonitorCanarySurface(LegacyContentAddressedModel):
     """Host placement root and logical monitor projection for one canary kind."""
 
     schema_version: Literal["aecbench.monitor-canary-surface.v2"] = "aecbench.monitor-canary-surface.v2"
@@ -80,7 +80,7 @@ class MonitorCanarySurface(ContentAddressedModel):
         return value
 
 
-class MonitorCanaryPlacement(ContentAddressedModel):
+class MonitorCanaryPlacement(LegacyContentAddressedModel):
     """One committed canary and its cycle-local physical placement."""
 
     schema_version: Literal["aecbench.monitor-canary-placement.v2"] = "aecbench.monitor-canary-placement.v2"
@@ -136,7 +136,7 @@ class MonitorCanaryPlacement(ContentAddressedModel):
         return self
 
 
-class ProductionMonitorRuntimeManifest(ContentAddressedModel):
+class ProductionMonitorRuntimeManifest(LegacyContentAddressedModel):
     """Frozen monitor policy, cycle, collectors, and physical canary slots."""
 
     schema_version: Literal["aecbench.production-monitor-runtime-manifest.v2"] = (
@@ -185,7 +185,7 @@ class ProductionMonitorRuntimeManifest(ContentAddressedModel):
         return self
 
 
-class CanaryLogicalProjectionConfiguration(ContentAddressedModel):
+class CanaryLogicalProjectionConfiguration(LegacyContentAddressedModel):
     """Exact host placement, logical projection, guard, and semantic probe wiring."""
 
     schema_version: Literal["aecbench.canary-logical-projection-configuration.v1"] = (
@@ -234,7 +234,7 @@ class CanaryLogicalProjectionConfiguration(ContentAddressedModel):
         return value
 
 
-class CanarySurfaceProbeReceipt(ContentAddressedModel):
+class CanarySurfaceProbeReceipt(LegacyContentAddressedModel):
     """Host probe of an exact physical canary and guarded logical projection."""
 
     schema_version: Literal["aecbench.canary-surface-probe-receipt.v2"] = "aecbench.canary-surface-probe-receipt.v2"
@@ -287,7 +287,7 @@ class CanarySurfaceProbeReceipt(ContentAddressedModel):
         return self
 
 
-class FlowCollectorProbeReceipt(ContentAddressedModel):
+class FlowCollectorProbeReceipt(LegacyContentAddressedModel):
     """Host active-probe receipt for one exact forbidden-flow collector."""
 
     schema_version: Literal["aecbench.flow-collector-probe-receipt.v1"] = "aecbench.flow-collector-probe-receipt.v1"
@@ -319,7 +319,7 @@ class FlowCollectorProbeReceipt(ContentAddressedModel):
         return self
 
 
-class CanarySurfaceActivation(ContentAddressedModel):
+class CanarySurfaceActivation(LegacyContentAddressedModel):
     """Verified host placement and guarded logical projection for one canary."""
 
     schema_version: Literal["aecbench.canary-surface-activation.v2"] = "aecbench.canary-surface-activation.v2"
@@ -361,7 +361,7 @@ class CanarySurfaceActivation(ContentAddressedModel):
         return self
 
 
-class FlowCollectorActivation(ContentAddressedModel):
+class FlowCollectorActivation(LegacyContentAddressedModel):
     """Verified collector configuration and active probe for one forbidden-flow rule."""
 
     schema_version: Literal["aecbench.flow-collector-activation.v1"] = "aecbench.flow-collector-activation.v1"
@@ -411,7 +411,7 @@ class FlowCollectorActivation(ContentAddressedModel):
         return self
 
 
-class CanaryReferenceEvent(ContentAddressedModel):
+class CanaryReferenceEvent(LegacyContentAddressedModel):
     """One host-recorded use of a canary by an effect-bearing runtime."""
 
     schema_version: Literal["aecbench.canary-reference-event.v1"] = "aecbench.canary-reference-event.v1"
@@ -425,7 +425,7 @@ class CanaryReferenceEvent(ContentAddressedModel):
         return validate_sha256(value)
 
 
-class MonitorRuntimeCollectionEvidence(ContentAddressedModel):
+class MonitorRuntimeCollectionEvidence(LegacyContentAddressedModel):
     """Exact host-collected observations consumed by one monitor checkpoint."""
 
     schema_version: Literal["aecbench.monitor-runtime-collection-evidence.v1"] = (
@@ -527,7 +527,7 @@ class MonitorRuntimeCollectionEvidence(ContentAddressedModel):
         return self
 
 
-class ProductionMonitorRuntimeCheckpoint(ContentAddressedModel):
+class ProductionMonitorRuntimeCheckpoint(LegacyContentAddressedModel):
     """One persisted, host-derived production monitor checkpoint."""
 
     schema_version: Literal["aecbench.production-monitor-runtime-checkpoint.v1"] = (
@@ -609,7 +609,7 @@ class ProductionMonitorRuntimeCheckpoint(ContentAddressedModel):
         return self
 
 
-class ProductionMonitorEffectPermit(ContentAddressedModel):
+class ProductionMonitorEffectPermit(LegacyContentAddressedModel):
     """Durable proof that the exact cycle passed its pre-effect checkpoint."""
 
     schema_version: Literal["aecbench.production-monitor-effect-permit.v1"] = (
@@ -628,7 +628,7 @@ class ProductionMonitorEffectPermit(ContentAddressedModel):
         return validate_sha256(value)
 
 
-class ProductionMonitorRuntimeClosure(ContentAddressedModel):
+class ProductionMonitorRuntimeClosure(LegacyContentAddressedModel):
     """Incident-preserving join over mandatory pre-effect and terminal checkpoints."""
 
     schema_version: Literal["aecbench.production-monitor-runtime-closure.v1"] = (

@@ -8,7 +8,7 @@ from pathlib import Path
 
 from aec_bench.adapters.base import SerializedAdapterExecution
 from aec_bench.contracts.harness_instance import ContextBindingConfig
-from aec_bench.contracts.harness_kernel import canonical_content_sha256
+from aec_bench.contracts.harness_kernel import canonical_json_sha256
 from aec_bench.contracts.output_completion import OutputCompletionContract
 from aec_bench.contracts.program_proposal.study import MatchedEvaluationCoordinate
 from aec_bench.contracts.proposal_execution.graph import FinalSynthesisSpec, SemanticSubtaskSpec
@@ -128,13 +128,10 @@ def prepare_proposal_node_invocation(
         context_manifest=context_manifest,
     )
     lineage = MetaHarnessTrajectoryContext(
-        kernel_sha256=bundle.compilation.kernel_sha256,
-        harness_id=bundle.fixed_harness.instance_id,
-        harness_sha256=bundle.fixed_harness.content_sha256,
-        program_id=bundle.compilation.lowered_program.program_id,
-        program_sha256=(bundle.compilation.lowered_program.content_sha256),
+        kernel_ref=bundle.fixed_harness.kernel_ref,
+        harness_ref=bundle.fixed_harness.ref,
+        program_ref=bundle.compilation.lowered_program.ref,
         bundle_id=bundle.bundle_id,
-        bundle_sha256=bundle.content_sha256,
         program_node_id=node_id,
         binding_ids=binding_ids,
         attempt=1,
@@ -245,7 +242,7 @@ def _output_contract(
             "output_contract_invalid",
             f"proposal finalizer output contract cannot be loaded safely: {error}",
         ) from error
-    if canonical_content_sha256(contract.model_dump(mode="json")) != finalizer.output_completion_contract_sha256:
+    if canonical_json_sha256(contract.model_dump(mode="json")) != finalizer.output_completion_contract_sha256:
         raise ProposalSessionRuntimeError(
             "output_contract_invalid",
             "proposal finalizer output contract differs from the compiled graph",

@@ -88,7 +88,7 @@ def test_harness_compiler_resolves_every_binding_into_one_execution_bearing_surf
     assert operation.capability_ref == batch_definition.capability.ref
     assert operation.input_schema_ref == batch_definition.input_schema_ref
     assert operation.output_schema_ref == batch_definition.output_schema_ref
-    assert operation.content_sha256 == "263edb549e348b705371346500a62af2bc40cd082422a92ed8041e88364181e4"
+    assert "content_sha256" not in operation.model_dump(mode="json")
     assert set(operation.binding_ids) == {binding.binding_id for binding in harness.bindings}
     assert operation.allowed_task_refs == ("civil/calculation/adaptive",)
     assert operation.max_parallelism == 2
@@ -96,7 +96,7 @@ def test_harness_compiler_resolves_every_binding_into_one_execution_bearing_surf
     assert operation.retry_safe_error_codes == ()
     assert operation.verifier_placements[0].binding_id == "verify"
     assert harness.kernel_ref == registry.manifest.ref
-    assert harness.source_recipe_sha256 == recipe.content_sha256
+    assert harness.source_recipe_ref == recipe.ref
     enumerate_operation = harness.program_surface.operation("enumerate_tasks.v1")
     assert enumerate_operation is not None
     enumerate_definition = registry.operation_definition("enumerate_tasks.v1")
@@ -112,7 +112,7 @@ def test_harness_compiler_resolves_every_binding_into_one_execution_bearing_surf
     assert enumerate_operation.capability_ref == enumerate_definition.capability.ref
     assert enumerate_operation.input_schema_ref == enumerate_definition.input_schema_ref
     assert enumerate_operation.output_schema_ref == enumerate_definition.output_schema_ref
-    assert enumerate_operation.content_sha256 == "834203c4ffc941d74d30ae9dd6d932c85746ba834ce49aa2c0c1b2302261157d"
+    assert "content_sha256" not in enumerate_operation.model_dump(mode="json")
     assert enumerate_operation.binding_ids == ("tasks",)
     assert enumerate_operation.allowed_task_refs == ("civil/calculation/adaptive",)
     run_stage = harness.program_surface.operation("run_stage.v1")
@@ -130,7 +130,7 @@ def test_harness_compiler_resolves_every_binding_into_one_execution_bearing_surf
     assert run_stage.capability_ref == stage_definition.capability.ref
     assert run_stage.input_schema_ref == stage_definition.input_schema_ref
     assert run_stage.output_schema_ref == stage_definition.output_schema_ref
-    assert run_stage.content_sha256 == "8d77742e7f60f3da72d8c5ec540642b25e576e7235c390885cf2b9ffb387ac50"
+    assert "content_sha256" not in run_stage.model_dump(mode="json")
     assert set(run_stage.binding_ids) == {"tasks", "context", "tools", "agent", "compute"}
     assert run_stage.verifier_placements == ()
     finalize_task = harness.program_surface.operation("finalize_task.v1")
@@ -148,7 +148,7 @@ def test_harness_compiler_resolves_every_binding_into_one_execution_bearing_surf
     assert finalize_task.capability_ref == finalize_definition.capability.ref
     assert finalize_task.input_schema_ref == finalize_definition.input_schema_ref
     assert finalize_task.output_schema_ref == finalize_definition.output_schema_ref
-    assert finalize_task.content_sha256 == "4b1a7246d69d8a3ef49389bb7e77a84e45c58078bc0f79fd4a0939cfa21d3a82"
+    assert "content_sha256" not in finalize_task.model_dump(mode="json")
     assert set(finalize_task.binding_ids) == {binding.binding_id for binding in harness.bindings}
     assert finalize_task.verifier_placements[0].binding_id == "verify"
 
@@ -184,13 +184,7 @@ def test_harness_compiler_exports_the_fixed_sequential_k9_proposal_surface() -> 
     assert set(operations["run_semantic_subtask.v1"].binding_ids) == execution_binding_ids
     assert operations["check_subtask_contract.v1"].binding_ids == ("tasks",)
     assert set(operations["finalize_proposed_plan.v1"].binding_ids) == all_binding_ids
-    expected_operation_hashes = {
-        "run_proposal_session.v1": "5428dd698fdee63a59f6c0ca3b33e0e26284d3c2875e62157e809638e1b759e6",
-        "run_semantic_subtask.v1": "d5c84d61611b2715d99c998380ad4a41edfab3dadc4193a0bb9c6e75be3459f3",
-        "check_subtask_contract.v1": "ce4d3a0a3e950000f2ad8d6e0077fbec224874294fd8b7829953f551a01e4794",
-        "finalize_proposed_plan.v1": "58708e4a5af5153b238d30cf308a91cc1256c9663313e6ba0ab7cdc5376fef19",
-    }
-    for operation_id, expected_hash in expected_operation_hashes.items():
+    for operation_id in expected_capabilities:
         operation = operations[operation_id]
         assert operation is not None
         definition = registry.operation_definition(operation_id)
@@ -206,7 +200,7 @@ def test_harness_compiler_exports_the_fixed_sequential_k9_proposal_surface() -> 
         assert operation.capability_ref == definition.capability.ref
         assert operation.input_schema_ref == definition.input_schema_ref
         assert operation.output_schema_ref == definition.output_schema_ref
-        assert operation.content_sha256 == expected_hash
+        assert "content_sha256" not in operation.model_dump(mode="json")
 
 
 def test_legacy_registry_without_definitions_preserves_migrated_v1_harness_abis() -> None:
@@ -589,8 +583,7 @@ def test_harness_compiler_rejects_unknown_or_tampered_kernel_capabilities() -> N
         update={
             "capability_ref": KernelCapabilityRef(
                 capability_id=agent.capability_ref.capability_id,
-                version=agent.capability_ref.version,
-                content_sha256="0" * 64,
+                version="0.0.0",
             )
         }
     )
@@ -863,7 +856,7 @@ def test_program_compiler_pins_operations_and_topological_order() -> None:
     assert operation is not None
     assert compiled.topological_order == ("run", "stop")
     assert compiled.operation_refs == (operation.ref,)
-    assert compiled.source_program_sha256 == source.content_sha256
+    assert compiled.source_program_ref == source.ref
 
 
 def test_program_compiler_rejects_retry_for_run_batch_without_a_safe_error_taxonomy() -> None:
@@ -1073,10 +1066,7 @@ def test_program_compiler_rejects_literal_stage_receipts() -> None:
 
 def test_harness_compiler_rejects_recursion_without_a_fixed_k_recursive_operation() -> None:
     registry = default_kernel_registry()
-    recipe_payload = _recipe(registry, task_id="civil/calculation/adaptive").model_dump(
-        mode="python",
-        exclude={"content_sha256"},
-    )
+    recipe_payload = _recipe(registry, task_id="civil/calculation/adaptive").model_dump(mode="python")
     recipe_payload["recursion_policy"] = HarnessRecursionPolicy(
         enabled=True,
         max_depth=2,
@@ -1663,7 +1653,7 @@ def _rebuild_recipe(
     contracts: tuple[HarnessContractSpec, ...] | None = None,
     bindings: tuple[HarnessBindingSpec, ...] | None = None,
 ) -> HarnessRecipe:
-    payload = recipe.model_dump(mode="python", exclude={"content_sha256"})
+    payload = recipe.model_dump(mode="python")
     if contracts is not None:
         payload["contracts"] = contracts
     if bindings is not None:

@@ -7,17 +7,20 @@ from typing import Literal, Self
 
 from pydantic import Field, field_validator, model_validator
 
+from aec_bench.contracts.authority import EvaluationPlanIdentity
 from aec_bench.contracts.evaluation_generation.batch import EvaluationBatchPlan
 from aec_bench.contracts.evaluation_plane import (
     EvaluationPlan,
     EvaluationPlanRef,
     TaskVerifierSurfaceScope,
+    task_verifier_surface_commitment,
 )
-from aec_bench.contracts.harness_instance import HarnessBudget
+from aec_bench.contracts.harness_instance import HarnessBudget, HarnessInstanceRef
 from aec_bench.contracts.harness_kernel import (
-    ContentAddressedModel,
+    KernelRef,
     validate_sha256,
 )
+from aec_bench.contracts.legacy_content_address import LegacyContentAddressedModel
 from aec_bench.contracts.program_proposal.candidate import ProgramCandidateRef
 from aec_bench.contracts.program_proposal.types import ProgramCandidateKind
 from aec_bench.contracts.proposal_execution.compilation import ProposalCompilationRejection
@@ -48,7 +51,7 @@ class EvaluationExecutionPreflightError(ValueError):
     """Reject incomplete or identity-drifted execution preflight evidence."""
 
 
-class ProposalInvocationRef(ContentAddressedModel):
+class ProposalInvocationRef(LegacyContentAddressedModel):
     """Content-pinned successful proposer invocation for one task plan."""
 
     schema_version: Literal["aecbench.proposal-invocation-ref.v1"] = "aecbench.proposal-invocation-ref.v1"
@@ -89,7 +92,7 @@ class ProposalInvocationRef(ContentAddressedModel):
         return tuple(sorted(value, key=lambda candidate: candidate.candidate_id))
 
 
-class ProposalBatchClosure(ContentAddressedModel):
+class ProposalBatchClosure(LegacyContentAddressedModel):
     """Task-scoped proposer invocations closed before compilation."""
 
     schema_version: Literal["aecbench.proposal-batch-closure.v1"] = "aecbench.proposal-batch-closure.v1"
@@ -122,7 +125,7 @@ class ProposalBatchClosure(ContentAddressedModel):
         )
 
 
-class VerifiedSchedule(ContentAddressedModel):
+class VerifiedSchedule(LegacyContentAddressedModel):
     """Exact join between a plan schedule reference and its concrete schedule."""
 
     schema_version: Literal["aecbench.verified-evaluation-schedule.v1"] = "aecbench.verified-evaluation-schedule.v1"
@@ -162,7 +165,7 @@ class VerifiedSchedule(ContentAddressedModel):
         return self
 
 
-class ScheduleClosure(ContentAddressedModel):
+class ScheduleClosure(LegacyContentAddressedModel):
     """Concrete schedules verified against the frozen evaluation batch."""
 
     schema_version: Literal["aecbench.evaluation-schedule-closure.v1"] = "aecbench.evaluation-schedule-closure.v1"
@@ -198,7 +201,7 @@ class ScheduleClosure(ContentAddressedModel):
         )
 
 
-class CompilationResultRef(ContentAddressedModel):
+class CompilationResultRef(LegacyContentAddressedModel):
     """One assignment-scoped compile result retaining a typed rejection."""
 
     schema_version: Literal["aecbench.compilation-result-ref.v1"] = "aecbench.compilation-result-ref.v1"
@@ -207,8 +210,8 @@ class CompilationResultRef(ContentAddressedModel):
     candidate: ProgramCandidateRef
     coordinate_sha256: str
     proposal_freeze_sha256: str
-    kernel_sha256: str
-    fixed_harness_sha256: str
+    kernel_ref: KernelRef
+    fixed_harness_ref: HarnessInstanceRef
     evaluation_plan_ref: EvaluationPlanRef
     aggregate_budget: HarnessBudget
     status: ProposalCompilationStatus
@@ -221,8 +224,6 @@ class CompilationResultRef(ContentAddressedModel):
         "schedule_sha256",
         "coordinate_sha256",
         "proposal_freeze_sha256",
-        "kernel_sha256",
-        "fixed_harness_sha256",
         "compilation_sha256",
         "bundle_sha256",
     )
@@ -247,8 +248,8 @@ class CompilationResultRef(ContentAddressedModel):
             self.compilation_sha256 != rejection.content_sha256
             or self.candidate != rejection.candidate_ref
             or self.proposal_freeze_sha256 != rejection.proposal_freeze.content_sha256
-            or self.kernel_sha256 != rejection.kernel_sha256
-            or self.fixed_harness_sha256 != rejection.fixed_harness_ref.content_sha256
+            or self.kernel_ref != rejection.kernel_ref
+            or self.fixed_harness_ref != rejection.fixed_harness_ref
             or self.evaluation_plan_ref != rejection.proposal_freeze.evaluation_plan_ref
             or self.aggregate_budget != rejection.proposal_freeze.problem_view.fixed_harness.aggregate_budget
         ):
@@ -278,8 +279,8 @@ class CompilationResultRef(ContentAddressedModel):
             candidate=selected.candidate_ref,
             coordinate_sha256=coordinate_sha256,
             proposal_freeze_sha256=freeze.content_sha256,
-            kernel_sha256=selected.kernel_sha256,
-            fixed_harness_sha256=selected.fixed_harness_ref.content_sha256,
+            kernel_ref=selected.kernel_ref,
+            fixed_harness_ref=selected.fixed_harness_ref,
             evaluation_plan_ref=freeze.evaluation_plan_ref,
             aggregate_budget=freeze.problem_view.fixed_harness.aggregate_budget,
             status=ProposalCompilationStatus.REJECTED,
@@ -309,8 +310,8 @@ class CompilationResultRef(ContentAddressedModel):
             candidate=compilation.candidate_ref,
             coordinate_sha256=coordinate_sha256,
             proposal_freeze_sha256=freeze.content_sha256,
-            kernel_sha256=compilation.kernel_sha256,
-            fixed_harness_sha256=compilation.fixed_harness_ref.content_sha256,
+            kernel_ref=compilation.kernel_ref,
+            fixed_harness_ref=compilation.fixed_harness_ref,
             evaluation_plan_ref=freeze.evaluation_plan_ref,
             aggregate_budget=compilation.budget_plan.aggregate_budget,
             status=ProposalCompilationStatus.COMPILED,
@@ -319,7 +320,7 @@ class CompilationResultRef(ContentAddressedModel):
         )
 
 
-class CompilationBatchClosure(ContentAddressedModel):
+class CompilationBatchClosure(LegacyContentAddressedModel):
     """Compilation results with an explicit fail-closed dispatch flag."""
 
     schema_version: Literal["aecbench.compilation-batch-closure.v1"] = "aecbench.compilation-batch-closure.v1"
@@ -373,12 +374,12 @@ class CompilationBatchClosure(ContentAddressedModel):
         return self
 
 
-class MonitorReadiness(ContentAddressedModel):
+class MonitorReadiness(LegacyContentAddressedModel):
     """Exact standing monitor, cycle, evaluation, and assurance preflight."""
 
     schema_version: Literal["aecbench.monitor-readiness.v1"] = "aecbench.monitor-readiness.v1"
     source_batch_sha256: str
-    evaluation_plan_sha256: str
+    evaluation_plan: EvaluationPlanIdentity
     policy: StandingMonitorPolicy
     policy_sha256: str
     cycle_plan: CycleMonitorPlan
@@ -389,7 +390,6 @@ class MonitorReadiness(ContentAddressedModel):
 
     @field_validator(
         "source_batch_sha256",
-        "evaluation_plan_sha256",
         "policy_sha256",
         "cycle_plan_sha256",
         "assurance_snapshot_sha256",
@@ -404,7 +404,7 @@ class MonitorReadiness(ContentAddressedModel):
             self.policy_sha256 != self.policy.content_sha256
             or self.cycle_plan_sha256 != self.cycle_plan.content_sha256
             or self.assurance_snapshot_sha256 != self.assurance_snapshot.content_sha256
-            or self.cycle_plan.evaluation_plan_sha256 != self.evaluation_plan_sha256
+            or self.cycle_plan.evaluation_plan != self.evaluation_plan
             or self.cycle_plan.standing_policy_sha256 != self.policy_sha256
             or self.cycle_plan.assurance_snapshot_sha256 != self.assurance_snapshot_sha256
         ):
@@ -412,7 +412,7 @@ class MonitorReadiness(ContentAddressedModel):
         return self
 
 
-class AuthorizedDispatchRef(ContentAddressedModel):
+class AuthorizedDispatchRef(LegacyContentAddressedModel):
     """Materialized and provider-authorized dispatch identity for one assignment."""
 
     schema_version: Literal["aecbench.authorized-dispatch-ref.v1"] = "aecbench.authorized-dispatch-ref.v1"
@@ -452,7 +452,7 @@ class AuthorizedDispatchRef(ContentAddressedModel):
         return validate_sha256(value)
 
 
-class PreparedExecutionBatch(ContentAddressedModel):
+class PreparedExecutionBatch(LegacyContentAddressedModel):
     """Only complete preflight object from which batch execution may open."""
 
     schema_version: Literal["aecbench.prepared-execution-batch.v1"] = "aecbench.prepared-execution-batch.v1"
@@ -492,7 +492,7 @@ class PreparedExecutionBatch(ContentAddressedModel):
             for task_plan in self.source_batch.task_plans
         }
         verifier_by_task = {
-            (surface.task_id, surface.task_revision): surface.content_sha256
+            (surface.task_id, surface.task_revision): task_verifier_surface_commitment(surface)
             for surface in self.task_verifier_scope.task_surfaces
         }
         if set(verifier_by_task) != expected_task_identities:
@@ -524,7 +524,7 @@ class PreparedExecutionBatch(ContentAddressedModel):
         return self
 
 
-class ExecutionGate(ContentAddressedModel):
+class ExecutionGate(LegacyContentAddressedModel):
     """Minimal public execution surface derivable only from a prepared batch."""
 
     schema_version: Literal["aecbench.execution-gate.v1"] = "aecbench.execution-gate.v1"
@@ -752,7 +752,7 @@ def verify_monitor_readiness(
         raise EvaluationExecutionPreflightError(
             "motif assurance snapshot identity differs from the source batch",
         )
-    if selected_cycle.evaluation_plan_sha256 != batch.evaluation_plan_ref.content_sha256:
+    if selected_cycle.evaluation_plan != batch.evaluation_plan_ref.authority_identity:
         raise EvaluationExecutionPreflightError(
             "cycle monitor plan differs from the batch evaluation plan",
         )
@@ -770,7 +770,7 @@ def verify_monitor_readiness(
         )
     return MonitorReadiness(
         source_batch_sha256=batch.content_sha256,
-        evaluation_plan_sha256=batch.evaluation_plan_ref.content_sha256,
+        evaluation_plan=batch.evaluation_plan_ref.authority_identity,
         policy=selected_policy,
         policy_sha256=selected_policy.content_sha256,
         cycle_plan=selected_cycle,
@@ -955,7 +955,7 @@ def _normalize_monitor_closure(
         or selected.policy_sha256 != batch.monitor_policy_sha256
         or selected.cycle_plan_sha256 != batch.monitor_cycle_plan_sha256
         or selected.assurance_snapshot_sha256 != batch.motif_assurance_snapshot_sha256
-        or selected.evaluation_plan_sha256 != batch.evaluation_plan_ref.content_sha256
+        or selected.evaluation_plan != batch.evaluation_plan_ref.authority_identity
     ):
         raise EvaluationExecutionPreflightError(
             "monitor closure differs from the source batch",

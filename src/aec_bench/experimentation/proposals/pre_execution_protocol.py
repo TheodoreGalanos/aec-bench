@@ -18,7 +18,9 @@ from pydantic import (
 )
 
 from aec_bench.contracts.authority import AuthorityPrincipalKind, TaintLabel
-from aec_bench.contracts.harness_kernel import ContentAddressedModel, validate_sha256
+from aec_bench.contracts.harness_instance import HarnessInstanceRef
+from aec_bench.contracts.harness_kernel import KernelRef, validate_sha256
+from aec_bench.contracts.legacy_content_address import LegacyContentAddressedModel
 from aec_bench.contracts.validators import NonEmptyStr
 from aec_bench.experimentation.governance.authority_ledger import (
     AuthorityLedger,
@@ -44,7 +46,7 @@ _REPORT_COLLECTION = "pre-execution-protocol-reports"
 _REPORT_FILENAME = "pre-execution-protocol-report.json"
 
 
-class PreExecutionProtocolSpec(ContentAddressedModel):
+class PreExecutionProtocolSpec(LegacyContentAddressedModel):
     """Versioned claim policy for one pre-execution readiness gate."""
 
     schema_version: Literal["aecbench.pre-execution-protocol-spec.v1"] = "aecbench.pre-execution-protocol-spec.v1"
@@ -73,13 +75,13 @@ class PreExecutionProtocolSpec(ContentAddressedModel):
         return tuple(sorted(value))
 
 
-class PreExecutionProtocolReport(ContentAddressedModel):
+class PreExecutionProtocolReport(LegacyContentAddressedModel):
     """Replayable proposal-readiness report with no candidate execution authority."""
 
     schema_version: Literal["aecbench.pre-execution-protocol-report.v1"] = "aecbench.pre-execution-protocol-report.v1"
     spec: PreExecutionProtocolSpec
-    kernel_sha256: str
-    fixed_harness_sha256: str
+    kernel_ref: KernelRef
+    fixed_harness_ref: HarnessInstanceRef
     harness_policy_sha256: str
     structural_split_sha256: str
     task_manifest_sha256: str
@@ -98,8 +100,6 @@ class PreExecutionProtocolReport(ContentAddressedModel):
     promotion_event_count: Literal[0] = 0
 
     @field_validator(
-        "kernel_sha256",
-        "fixed_harness_sha256",
         "harness_policy_sha256",
         "structural_split_sha256",
         "task_manifest_sha256",
@@ -113,8 +113,8 @@ class PreExecutionProtocolReport(ContentAddressedModel):
         validate_pre_execution_bindings(
             proposal_freeze_result=self.proposal_freeze_result,
             execution_schedule=self.execution_schedule,
-            kernel_sha256=self.kernel_sha256,
-            fixed_harness_sha256=self.fixed_harness_sha256,
+            kernel_ref=self.kernel_ref,
+            fixed_harness_ref=self.fixed_harness_ref,
             harness_policy_sha256=self.harness_policy_sha256,
             structural_split_sha256=self.structural_split_sha256,
             scheduled_candidate_count=self.scheduled_candidate_count,
@@ -191,8 +191,8 @@ def record_pre_execution_protocol(
         )
     report = PreExecutionProtocolReport(
         spec=validated_spec,
-        kernel_sha256=validated_schedule.kernel_sha256,
-        fixed_harness_sha256=validated_schedule.fixed_harness_sha256,
+        kernel_ref=validated_schedule.kernel_ref,
+        fixed_harness_ref=validated_schedule.fixed_harness_ref,
         harness_policy_sha256=freeze.problem_view.fixed_harness.harness_policy_sha256,
         structural_split_sha256=validated_split.content_sha256,
         task_manifest_sha256=validated_split.task_manifest_sha256,
@@ -281,8 +281,8 @@ def validate_pre_execution_bindings(
     *,
     proposal_freeze_result: GovernedProposalFreezeResult,
     execution_schedule: DecompositionExecutionSchedule,
-    kernel_sha256: str,
-    fixed_harness_sha256: str,
+    kernel_ref: KernelRef,
+    fixed_harness_ref: HarnessInstanceRef,
     harness_policy_sha256: str,
     structural_split_sha256: str,
     scheduled_candidate_count: int,
@@ -299,11 +299,11 @@ def validate_pre_execution_bindings(
             "schedule does not bind the governed proposal freeze",
         ),
         (
-            kernel_sha256 == schedule.kernel_sha256,
+            kernel_ref == schedule.kernel_ref,
             "kernel does not match the frozen schedule",
         ),
         (
-            fixed_harness_sha256 == schedule.fixed_harness_sha256,
+            fixed_harness_ref == schedule.fixed_harness_ref,
             "fixed harness does not match the frozen schedule",
         ),
         (

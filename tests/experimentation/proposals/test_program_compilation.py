@@ -21,7 +21,7 @@ from aec_bench.contracts.harness_instance import (
     ProgramOperationRef,
     ProgramOperationScope,
 )
-from aec_bench.contracts.harness_kernel import canonical_content_sha256
+from aec_bench.contracts.harness_kernel import canonical_json_sha256
 from aec_bench.contracts.program_proposal.candidate import ProgramCandidateRef
 from aec_bench.contracts.program_proposal.freeze import ProposalFreeze
 from aec_bench.contracts.program_proposal.types import ProgramCandidateKind
@@ -163,7 +163,7 @@ def test_serial_graph_compiles_to_exact_sequential_k9_program_and_session_bundle
     compilation = result.compilation
     assert compilation.proposal_graph == graph
     assert compilation.raw_proposal_artifact_sha256 == compilation.candidate_ref.candidate_artifact_sha256
-    assert compilation.kernel_sha256 == fixture.fixed_harness.kernel_ref.content_sha256
+    assert compilation.kernel_ref == fixture.fixed_harness.kernel_ref
     assert compilation.fixed_harness_ref == fixture.fixed_harness.ref
     assert compilation.source_scope_manifest.problem_view_sha256 == graph.problem_view_sha256
     assert compilation.budget_plan.aggregate_budget == fixture.fixed_harness.budget
@@ -340,7 +340,7 @@ def test_session_bundle_rejects_reconstructed_harness_or_task_identity(
             session_operation_ref=result.session_operation_ref,
         )
 
-    with pytest.raises(ValueError, match="operation does not resolve"):
+    with pytest.raises(ValueError, match="profiled session operation"):
         ProposalRunSessionBundle(
             bundle_id=result.bundle_id,
             compilation=result.compilation,
@@ -348,8 +348,7 @@ def test_session_bundle_rejects_reconstructed_harness_or_task_identity(
             fixed_harness=result.fixed_harness,
             task_snapshot=result.task_snapshot,
             session_operation_ref=ProgramOperationRef(
-                operation_id="run_proposal_session.v1",
-                content_sha256=hashlib.sha256(b"wrong-session-operation").hexdigest(),
+                operation_id="unknown_proposal_session.v1",
             ),
         )
 
@@ -403,7 +402,7 @@ def test_fork_join_lowering_and_content_identity_are_permutation_stable(
     assert isinstance(second, ProposalRunSessionBundle)
     assert first == second
     assert first.content_sha256 == second.content_sha256
-    assert first.compilation.lowered_program.content_sha256 == (second.compilation.lowered_program.content_sha256)
+    assert first.compilation.lowered_program == second.compilation.lowered_program
     assert first.compilation.compiled_program.topological_order == (
         "analyse",
         "check.analyse",
@@ -626,7 +625,7 @@ def _governed_incumbent_fixture(
                 source_ids=tuple(source.source_id for source in fixture.problem_view.public_sources),
             ),
             input_ports=(),
-            output_completion_contract_sha256=canonical_content_sha256(
+            output_completion_contract_sha256=canonical_json_sha256(
                 fixture.problem_view.output_contract.model_dump(mode="json"),
             ),
         ),
@@ -816,7 +815,7 @@ def _finalizer(
     input_ids: tuple[str, ...],
     output_contract_sha256: str | None,
 ) -> FinalSynthesisSpec:
-    expected = canonical_content_sha256(fixture.problem_view.output_contract.model_dump(mode="json"))
+    expected = canonical_json_sha256(fixture.problem_view.output_contract.model_dump(mode="json"))
     return FinalSynthesisSpec(
         node_id="finalize",
         objective="Synthesize the public task response from every checked subtask.",
@@ -909,9 +908,7 @@ def _compile_arguments(
         "source_materializations": (
             source_materializations if source_materializations is not None else _source_materializations(fixture)
         ),
-        "output_contract_sha256": canonical_content_sha256(
-            fixture.problem_view.output_contract.model_dump(mode="json")
-        ),
+        "output_contract_sha256": canonical_json_sha256(fixture.problem_view.output_contract.model_dump(mode="json")),
         "aggregate_budget": fixture.fixed_harness.budget,
         "proposal_grammar_sha256": _GRAMMAR_SHA256,
         "lowering_policy_sha256": _LOWERING_POLICY_SHA256,

@@ -6,7 +6,7 @@ from __future__ import annotations
 import json
 from typing import TYPE_CHECKING, Any
 
-from aec_bench.contracts.harness_kernel import ContentAddressedModel
+from aec_bench.contracts.harness_kernel import FrozenStrictModel
 from aec_bench.contracts.task_definition import TaskDefinition
 
 if TYPE_CHECKING:
@@ -87,7 +87,7 @@ def canonical_json(payload: object) -> str:
     )
 
 
-def canonical_model_bytes(model: ContentAddressedModel) -> bytes:
+def canonical_model_bytes(model: FrozenStrictModel) -> bytes:
     """Encode one content-addressed model in ledger canonical form."""
 
     return (canonical_json(model.model_dump(mode="json")) + "\n").encode(

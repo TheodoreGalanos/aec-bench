@@ -26,10 +26,12 @@ from aec_bench.contracts.evaluation_outcome import (
     ValidityEvaluation,
 )
 from aec_bench.contracts.evaluation_plane import (
+    AcceptanceManifestCommitment,
     CriticRef,
     CriticRole,
     EvaluationPlanRef,
 )
+from aec_bench.contracts.harness_kernel import KernelRef
 
 
 def _sha(label: str) -> str:
@@ -193,7 +195,6 @@ def test_candidate_and_critic_plane_costs_remain_separate() -> None:
 
 def test_critic_outcome_binds_exact_plan_critic_generation_and_release() -> None:
     outcome = EvaluationOutcome(
-        evaluation_plan_sha256=_sha("plan"),
         candidate_sha256=_sha("candidate"),
         evidence_set_sha256=_sha("evidence"),
         integrity=IntegrityEvaluation.create(
@@ -211,38 +212,35 @@ def test_critic_outcome_binds_exact_plan_critic_generation_and_release() -> None
         version="1",
         role=CriticRole.ACCEPTANCE,
         compatibility_generation="evaluation-generation.1",
-        content_sha256=_sha("critic.acceptance"),
-        acceptance_manifest_commitment_sha256=_sha("acceptance-commitment"),
+        acceptance_manifest_commitment=AcceptanceManifestCommitment.create(
+            critic_id="critic.acceptance",
+            critic_version="1",
+            case_manifest={"case": "hidden"},
+            scoring_policy={"threshold": 0.8},
+            salt="secret",
+            publication_receipt_sha256=_sha("acceptance-publication"),
+        ),
     )
     binding = CriticEvaluationOutcome(
         evaluation_plan_ref=EvaluationPlanRef(
             plan_id="plan",
             evaluation_generation="evaluation-generation.1",
-            content_sha256=outcome.evaluation_plan_sha256,
         ),
         critic=critic,
         execution_principal_id="critic-runtime.acceptance",
         critic_release_authority_event_id="authority.release.acceptance",
         critic_release_authority_event_sha256=_sha("authority.release.acceptance"),
-        kernel_sha256=_sha("kernel"),
+        kernel_ref=KernelRef(kernel_id="aec-bench", version="1.0.0"),
         outcome=outcome,
     )
 
     assert binding.outcome == outcome
     assert binding.critic == critic
 
-    wrong_plan = binding.model_dump(
-        mode="python",
-        exclude={"content_sha256"},
-    )
-    wrong_plan["evaluation_plan_ref"]["content_sha256"] = _sha("different-plan")
-    with pytest.raises(ValidationError, match="exact evaluation plan"):
-        CriticEvaluationOutcome.model_validate(wrong_plan)
+    assert binding.ref.evaluation_plan_ref == binding.evaluation_plan_ref
+    assert binding.ref.candidate_sha256 == outcome.candidate_sha256
 
-    wrong_generation = binding.model_dump(
-        mode="python",
-        exclude={"content_sha256"},
-    )
+    wrong_generation = binding.model_dump(mode="python")
     wrong_generation["critic"]["compatibility_generation"] = "evaluation-generation.2"
     with pytest.raises(ValidationError, match="generation differs"):
         CriticEvaluationOutcome.model_validate(wrong_generation)
@@ -255,7 +253,6 @@ def test_critic_ref_requires_role_appropriate_acceptance_commitment() -> None:
             version="1",
             role=CriticRole.ACCEPTANCE,
             compatibility_generation="evaluation-generation.1",
-            content_sha256=_sha("critic.acceptance"),
         )
 
     with pytest.raises(ValidationError, match="only acceptance critics"):
@@ -264,8 +261,14 @@ def test_critic_ref_requires_role_appropriate_acceptance_commitment() -> None:
             version="1",
             role=CriticRole.DEVELOPMENT,
             compatibility_generation="evaluation-generation.1",
-            content_sha256=_sha("critic.development"),
-            acceptance_manifest_commitment_sha256=_sha("acceptance-commitment"),
+            acceptance_manifest_commitment=AcceptanceManifestCommitment.create(
+                critic_id="critic.development",
+                critic_version="1",
+                case_manifest={"case": "hidden"},
+                scoring_policy={"threshold": 0.8},
+                salt="secret",
+                publication_receipt_sha256=_sha("acceptance-publication"),
+            ),
         )
 
 
@@ -283,7 +286,6 @@ def test_integrity_failure_cannot_carry_validity_utility_or_promotion() -> None:
 
     with pytest.raises(ValidationError, match="integrity failure blocks"):
         EvaluationOutcome(
-            evaluation_plan_sha256=_sha("plan"),
             candidate_sha256=_sha("candidate"),
             evidence_set_sha256=_sha("evidence"),
             integrity=integrity,

@@ -3,7 +3,7 @@
 
 from __future__ import annotations
 
-from aec_bench.contracts.harness_kernel import canonical_content_sha256
+from aec_bench.contracts.harness_kernel import canonical_json_sha256
 from aec_bench.experimentation.governance.authority_ledger import (
     AuthorityLedger,
     AuthorityLedgerError,
@@ -63,7 +63,7 @@ def replay_scheduled_basis(
             replayed=True,
             closure_complete=observed_closure == selected.basis_closure_sha256,
             observed_basis_closure_sha256=observed_closure,
-            evidence_sha256=canonical_content_sha256(
+            evidence_sha256=canonical_json_sha256(
                 {
                     "domain": "aecbench.basis-replay-evidence.v1",
                     "requirement_sha256": selected.content_sha256,
@@ -77,7 +77,7 @@ def replay_scheduled_basis(
             requirement_sha256=selected.content_sha256,
             replayed=True,
             closure_complete=False,
-            evidence_sha256=canonical_content_sha256(
+            evidence_sha256=canonical_json_sha256(
                 {
                     "domain": "aecbench.basis-replay-failure.v1",
                     "requirement_sha256": selected.content_sha256,
@@ -92,7 +92,7 @@ def _basis_closure_sha256(
     authority_event_sha256: str,
     basis: tuple[StoredBasis, ...],
 ) -> str:
-    return canonical_content_sha256(
+    return canonical_json_sha256(
         {
             "schema_version": "aecbench.authority-basis-closure.v1",
             "authority_event_sha256": authority_event_sha256,

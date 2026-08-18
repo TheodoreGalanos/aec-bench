@@ -8,6 +8,9 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
+from aec_bench.contracts.execution_program import ExecutionProgramRef
+from aec_bench.contracts.harness_instance import HarnessInstanceRef
+from aec_bench.contracts.harness_kernel import KernelRef
 from aec_bench.contracts.trial_record import OutputRecord
 from aec_bench.trajectory.writer import TrajectoryWriter
 
@@ -394,13 +397,10 @@ def test_trajectory_round_trip_preserves_typed_meta_harness_node_lineage(tmp_pat
     from aec_bench.contracts.trajectory import MetaHarnessTrajectoryContext, read_trajectory
 
     context = MetaHarnessTrajectoryContext(
-        kernel_sha256="a" * 64,
-        harness_id="harness.1",
-        harness_sha256="b" * 64,
-        program_id="program.1",
-        program_sha256="c" * 64,
+        kernel_ref=KernelRef(kernel_id="kernel.1", version="1"),
+        harness_ref=HarnessInstanceRef(instance_id="harness.1"),
+        program_ref=ExecutionProgramRef(program_id="program.1", version="1"),
         bundle_id="bundle.1",
-        bundle_sha256="d" * 64,
         program_node_id="node.calculate",
         binding_ids=("binding.agent", "binding.tools"),
         repair_iteration=2,
@@ -431,13 +431,10 @@ def test_meta_harness_trajectory_context_rejects_noncanonical_lineage() -> None:
 
     with pytest.raises(ValidationError, match="sorted and unique"):
         MetaHarnessTrajectoryContext(
-            kernel_sha256="a" * 64,
-            harness_id="harness.1",
-            harness_sha256="b" * 64,
-            program_id="program.1",
-            program_sha256="c" * 64,
+            kernel_ref=KernelRef(kernel_id="kernel.1", version="1"),
+            harness_ref=HarnessInstanceRef(instance_id="harness.1"),
+            program_ref=ExecutionProgramRef(program_id="program.1", version="1"),
             bundle_id="bundle.1",
-            bundle_sha256="d" * 64,
             program_node_id="node.calculate",
             binding_ids=("binding.tools", "binding.agent", "binding.agent"),
             motif_ids=(),
@@ -449,13 +446,10 @@ def test_meta_harness_trajectory_context_rejects_partial_proposal_invocation_lin
 
     with pytest.raises(ValidationError, match="proposal session and invocation"):
         MetaHarnessTrajectoryContext(
-            kernel_sha256="a" * 64,
-            harness_id="harness.1",
-            harness_sha256="b" * 64,
-            program_id="program.1",
-            program_sha256="c" * 64,
+            kernel_ref=KernelRef(kernel_id="kernel.1", version="1"),
+            harness_ref=HarnessInstanceRef(instance_id="harness.1"),
+            program_ref=ExecutionProgramRef(program_id="program.1", version="1"),
             bundle_id="bundle.1",
-            bundle_sha256="d" * 64,
             program_node_id="node.calculate",
             proposal_session_id="proposal-session.1",
         )

@@ -83,13 +83,13 @@ def derive_classification(
             raise ValueError("common-mode breach requires independent truth evidence")
         kind = CriticStressFindingKind.COMMON_MODE_SHARED_CRITIC_BREACH
         evidence_sha256s = (
-            gap.content_sha256,
+            measurement.content_sha256,
             gap.common_mode_basis.basis_sha256,
         )
     elif clears_residual_gate(policy, gap) and causal_seam_evidence:
         kind = CriticStressFindingKind.DIFFERENTIAL_SEAM
         evidence_sha256s = (
-            gap.content_sha256,
+            measurement.content_sha256,
             *(item.content_sha256 for item in causal_seam_evidence),
         )
     elif (
@@ -98,12 +98,12 @@ def derive_classification(
     ):
         kind = CriticStressFindingKind.SELECTION_NOISE
         evidence_sha256s = (
-            gap.content_sha256,
+            measurement.content_sha256,
             gap.null_estimate.evidence_sha256,
         )
     else:
         kind = CriticStressFindingKind.INCONCLUSIVE
-        evidence_sha256s = (gap.content_sha256,)
+        evidence_sha256s = (measurement.content_sha256,)
 
     regression_case_eligible = kind in {
         CriticStressFindingKind.DIFFERENTIAL_SEAM,

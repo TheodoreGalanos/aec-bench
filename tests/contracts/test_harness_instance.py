@@ -38,7 +38,6 @@ from aec_bench.contracts.harness_kernel import (
     KernelManifest,
     KernelPortSpec,
     KernelSourceDigest,
-    canonical_content_sha256,
 )
 
 
@@ -144,7 +143,7 @@ def _binding_specs(capabilities: dict[str, KernelCapabilitySpec]) -> tuple[Harne
     )
 
 
-def test_harness_recipe_and_compile_request_are_typed_and_content_addressed() -> None:
+def test_harness_recipe_and_compile_request_are_typed_and_plain() -> None:
     kernel, capabilities = _kernel()
     recipe = HarnessRecipe(
         recipe_id="trace-diagnosis",
@@ -158,14 +157,14 @@ def test_harness_recipe_and_compile_request_are_typed_and_content_addressed() ->
         recipe=recipe,
     )
 
-    assert request.recipe.content_sha256 == recipe.content_sha256
+    assert request.recipe == recipe
     assert request.kernel_ref == kernel.ref
-    assert len(request.content_sha256) == 64
+    assert "content_sha256" not in request.model_dump(mode="json")
 
     with pytest.raises(ValidationError, match="target_settings"):
         HarnessCompileRequest.model_validate(
             {
-                **request.model_dump(mode="json", exclude={"content_sha256"}),
+                **request.model_dump(mode="json"),
                 "target_settings": {"manifest": {"compute": {"backend": "anything"}}},
             }
         )
@@ -271,19 +270,20 @@ def test_compiled_harness_instance_pins_bindings_and_exports_a_program_surface()
     instance = CompiledHarnessInstance(
         instance_id="hx-trace-diagnosis",
         kernel_ref=kernel.ref,
-        source_recipe_sha256=recipe.content_sha256,
+        source_recipe_ref=recipe.ref,
         bindings=compiled_bindings,
         program_surface=surface,
     )
 
-    assert instance.ref.content_sha256 == instance.content_sha256
+    assert instance.ref.instance_id == instance.instance_id
+    assert "content_sha256" not in instance.model_dump(mode="json")
     assert instance.program_surface.operations[0].operation_id == "run_batch.v1"
 
     with pytest.raises(ValidationError, match="outside the compiled task-source bindings"):
         CompiledHarnessInstance(
             instance_id="hx-invalid-surface",
             kernel_ref=kernel.ref,
-            source_recipe_sha256=recipe.content_sha256,
+            source_recipe_ref=recipe.ref,
             bindings=compiled_bindings,
             program_surface=ProgramSurface(
                 surface_id="invalid",
@@ -345,7 +345,7 @@ def test_program_operation_retry_support_requires_an_explicit_safe_error_taxonom
         )
 
 
-def test_public_program_operation_preserves_legacy_canonical_payload() -> None:
+def test_public_program_operation_omits_default_scope_without_a_self_digest() -> None:
     _, capabilities = _kernel()
     legacy_payload = {
         "operation_id": "run_batch.v1",
@@ -361,13 +361,11 @@ def test_public_program_operation_preserves_legacy_canonical_payload() -> None:
         "supports_recursion": False,
         "verifier_placements": (),
     }
-    legacy_sha256 = canonical_content_sha256(legacy_payload)
-
-    operation = ProgramOperationSpec.model_validate({**legacy_payload, "content_sha256": legacy_sha256})
+    operation = ProgramOperationSpec.model_validate(legacy_payload)
 
     assert operation.required_compilation_scope is ProgramOperationScope.PUBLIC
-    assert operation.content_sha256 == legacy_sha256
     assert "required_compilation_scope" not in operation.model_dump(mode="json")
+    assert "content_sha256" not in operation.model_dump(mode="json")
 
     internal = ProgramOperationSpec.model_validate(
         {
@@ -379,7 +377,6 @@ def test_public_program_operation_preserves_legacy_canonical_payload() -> None:
         internal.model_dump(mode="json")["required_compilation_scope"]
         == ProgramOperationScope.PROPOSAL_SESSION_INTERNAL
     )
-    assert internal.content_sha256 != legacy_sha256
 
 
 def test_harness_recipe_captures_budgets_contracts_topology_and_recursion() -> None:
@@ -455,7 +452,7 @@ def test_compiled_harness_rejects_unknown_operation_provenance_and_verifier_plac
         CompiledHarnessInstance(
             instance_id="hx-invalid-operation-provenance",
             kernel_ref=kernel.ref,
-            source_recipe_sha256=recipe.content_sha256,
+            source_recipe_ref=recipe.ref,
             bindings=compiled_bindings,
             program_surface=ProgramSurface(
                 surface_id="invalid-provenance",
@@ -481,7 +478,7 @@ def test_compiled_harness_rejects_unknown_operation_provenance_and_verifier_plac
         CompiledHarnessInstance(
             instance_id="hx-invalid-verifier-placement",
             kernel_ref=kernel.ref,
-            source_recipe_sha256=recipe.content_sha256,
+            source_recipe_ref=recipe.ref,
             bindings=compiled_bindings,
             program_surface=ProgramSurface(
                 surface_id="invalid-verifier-placement",
@@ -507,7 +504,7 @@ def test_compiled_harness_rejects_unknown_operation_provenance_and_verifier_plac
         CompiledHarnessInstance(
             instance_id="hx-unwired-operation-tasks",
             kernel_ref=kernel.ref,
-            source_recipe_sha256=recipe.content_sha256,
+            source_recipe_ref=recipe.ref,
             bindings=compiled_bindings,
             program_surface=ProgramSurface(
                 surface_id="unwired-operation-tasks",

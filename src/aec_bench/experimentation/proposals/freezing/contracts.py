@@ -23,7 +23,7 @@ from aec_bench.contracts.authority import (
     BasisKind,
     BasisReference,
 )
-from aec_bench.contracts.harness_kernel import ContentAddressedModel
+from aec_bench.contracts.legacy_content_address import LegacyContentAddressedModel
 from aec_bench.contracts.program_proposal.candidate import ProgramCandidateRef
 from aec_bench.contracts.program_proposal.freeze import ProposalFreeze
 from aec_bench.experimentation.governance.standing_monitors import (
@@ -86,7 +86,7 @@ class SelectedTaskBinding:
     review_lineage_id: str
 
 
-class ProposalFreezeBasis(ContentAddressedModel):
+class ProposalFreezeBasis(LegacyContentAddressedModel):
     """Complete reference set for the host-confined proposal-freeze evidence."""
 
     schema_version: Literal["aecbench.proposal-freeze-basis.v1"] = "aecbench.proposal-freeze-basis.v1"
@@ -197,7 +197,7 @@ class ProposalFreezeBasis(ContentAddressedModel):
         )
 
 
-class GovernedProposalFreezeResult(ContentAddressedModel):
+class GovernedProposalFreezeResult(LegacyContentAddressedModel):
     """Host-side freeze authority without full evaluation-plan or proposal payloads."""
 
     schema_version: Literal["aecbench.governed-proposal-freeze-result.v1"] = (
@@ -253,7 +253,7 @@ def _validate_result_authority(
         raise ValueError(
             "proposal freeze authority does not bind the exact proposal freeze",
         )
-    if event.kernel_sha256 != freeze.problem_view.fixed_harness.kernel_sha256:
+    if event.kernel_ref != freeze.problem_view.fixed_harness.kernel_ref:
         raise ValueError(
             "proposal freeze authority kernel does not match the frozen problem view",
         )

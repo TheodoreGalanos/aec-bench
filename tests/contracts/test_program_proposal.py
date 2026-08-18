@@ -11,9 +11,13 @@ from pydantic import ValidationError
 
 from aec_bench.contracts.authority import OperatorRole, operator_authority_for
 from aec_bench.contracts.evaluation_generation.cohort import EvaluationCohortBinding
-from aec_bench.contracts.evaluation_plane import CandidateManifestScope, EvaluationPlanRef
-from aec_bench.contracts.harness_instance import HarnessBudget
-from aec_bench.contracts.harness_kernel import canonical_content_sha256
+from aec_bench.contracts.evaluation_plane import (
+    CandidateManifestScope,
+    EvaluationPlanRef,
+    candidate_manifest_scope_commitment,
+)
+from aec_bench.contracts.harness_instance import HarnessBudget, HarnessInstanceRef
+from aec_bench.contracts.harness_kernel import KernelRef, canonical_json_sha256
 from aec_bench.contracts.program_proposal.candidate import (
     CandidateGenerationCoordinate,
     CandidateGenerationManifest,
@@ -81,7 +85,7 @@ def _view_payload() -> dict[str, object]:
             "require_single_final_json_block": True,
         },
         "fixed_harness": {
-            "kernel_sha256": _sha("kernel"),
+            "kernel_ref": {"kernel_id": "kernel.fixed", "version": "1.0.0"},
             "harness_policy_sha256": _sha("h0-policy"),
             "capability_ids": ["context.public", "tool.read", "tool.write"],
             "aggregate_budget": _budget().model_dump(mode="json"),
@@ -109,9 +113,8 @@ def _view() -> DecompositionProblemView:
 
 def _plan_ref(candidate_manifest_sha256: str) -> EvaluationPlanRef:
     return EvaluationPlanRef(
-        plan_id="plan.phase-9",
+        plan_id=f"plan.phase-9.{candidate_manifest_sha256[:12]}",
         evaluation_generation="critic-generation-1",
-        content_sha256=_sha(f"plan:{candidate_manifest_sha256}"),
     )
 
 
@@ -177,7 +180,7 @@ def _freeze() -> ProposalFreeze:
         structural_split_sha256=_sha("structural-split"),
         selected_structural_item_sha256=_sha("selected-structural-item"),
         selected_review_lineage_id=_sha("selected-review-lineage"),
-        fixed_harness_sha256=_sha("compiled-h0-host-binding"),
+        fixed_harness_ref=HarnessInstanceRef(instance_id="compiled-h0-host-binding"),
         operator_authority=operator_authority_for(
             "optimizer.zero-shot",
             OperatorRole.PERFORMANCE_OPTIMIZATION,
@@ -208,9 +211,10 @@ def test_proposal_freeze_can_bind_one_member_of_a_multitask_candidate_scope() ->
         ),
     )
     payload = _freeze().model_dump(mode="python", exclude={"content_sha256"})
+    scope_commitment = candidate_manifest_scope_commitment(scope)
     payload.update(
-        evaluation_plan_ref=_plan_ref(scope.content_sha256),
-        evaluation_plan_candidate_manifest_sha256=scope.content_sha256,
+        evaluation_plan_ref=_plan_ref(scope_commitment),
+        evaluation_plan_candidate_manifest_sha256=scope_commitment,
         evaluation_plan_candidate_scope=scope,
     )
 
@@ -224,8 +228,8 @@ def test_proposal_freeze_can_bind_one_member_of_a_multitask_candidate_scope() ->
         candidate_manifest_sha256s=(_sha("other-task-candidate-manifest"),),
     )
     payload.update(
-        evaluation_plan_ref=_plan_ref(nonmember_scope.content_sha256),
-        evaluation_plan_candidate_manifest_sha256=nonmember_scope.content_sha256,
+        evaluation_plan_ref=_plan_ref(candidate_manifest_scope_commitment(nonmember_scope)),
+        evaluation_plan_candidate_manifest_sha256=candidate_manifest_scope_commitment(nonmember_scope),
         evaluation_plan_candidate_scope=nonmember_scope,
     )
     with pytest.raises(ValidationError, match="candidate manifest is not a member"):
@@ -240,7 +244,7 @@ def test_structural_freeze_content_identity_matches_current_payload() -> None:
     assert "provider_calibration_manifest_sha256" not in payload
     assert "provider_calibration_release_authority_event_sha256" not in payload
     current_payload = {key: value for key, value in payload.items() if key != "content_sha256"}
-    current_content_sha256 = canonical_content_sha256(current_payload)
+    current_content_sha256 = canonical_json_sha256(current_payload)
 
     assert freeze.content_sha256 == current_content_sha256
     assert (
@@ -329,7 +333,6 @@ def _evidence(
         coordinate_sha256=coordinate.content_sha256,
         kind=CandidateEvidenceKind.TRIAL_RECORD,
         trial_record_sha256=_sha(f"trial:{label}"),
-        evaluation_outcome_sha256=_sha(f"outcome:{label}"),
         evidence_complete=complete,
         integrity_passed=integrity,
     )
@@ -344,7 +347,6 @@ def test_matched_evidence_distinguishes_trials_from_compile_rejections() -> None
         "coordinate_sha256": coordinate.content_sha256,
         "kind": CandidateEvidenceKind.COMPILE_REJECTION,
         "trial_record_sha256": None,
-        "evaluation_outcome_sha256": _sha("compile-rejection-outcome"),
         "evidence_complete": True,
         "integrity_passed": True,
     }
@@ -376,8 +378,8 @@ def _study() -> ProgramCandidateStudy:
     evidence = tuple(_evidence(candidate, coordinate) for candidate in candidates for coordinate in coordinates)
     return ProgramCandidateStudy(
         study_id="study.problem-01",
-        kernel_sha256=freeze.problem_view.fixed_harness.kernel_sha256,
-        fixed_harness_sha256=freeze.fixed_harness_sha256,
+        kernel_ref=freeze.problem_view.fixed_harness.kernel_ref,
+        fixed_harness_ref=freeze.fixed_harness_ref,
         evaluation_plan_ref=freeze.evaluation_plan_ref,
         proposal_freeze=freeze,
         aggregate_budget=freeze.problem_view.fixed_harness.aggregate_budget,
@@ -741,8 +743,16 @@ def test_study_requires_exact_kernel_h0_plan_budget_split_and_cross_product() ->
     assert len(study.evidence_refs) == 6
 
     mutations = (
-        ("kernel_sha256", _sha("other-kernel"), "kernel"),
-        ("fixed_harness_sha256", _sha("other-h0"), "fixed H0"),
+        (
+            "kernel_ref",
+            KernelRef(kernel_id="kernel.fixed", version="2.0.0").model_dump(mode="json"),
+            "kernel",
+        ),
+        (
+            "fixed_harness_ref",
+            HarnessInstanceRef(instance_id="other-h0").model_dump(mode="json"),
+            "fixed H0",
+        ),
         ("aggregate_budget", HarnessBudget().model_dump(mode="json"), "aggregate budget"),
         (
             "evaluation_plan_ref",

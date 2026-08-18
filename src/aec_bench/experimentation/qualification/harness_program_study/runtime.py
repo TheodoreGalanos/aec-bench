@@ -6,7 +6,7 @@ from __future__ import annotations
 from pathlib import Path
 from statistics import fmean
 
-from aec_bench.contracts.harness_kernel import canonical_content_sha256
+from aec_bench.contracts.harness_kernel import canonical_json_sha256
 from aec_bench.contracts.trial_record import ArtifactReference
 from aec_bench.experimentation.governance.applicability import profile_task_applicability
 from aec_bench.experimentation.qualification.harness_program_study.candidates import (
@@ -181,7 +181,7 @@ def _build_report(
         candidates=candidate_evidence,
         trials=trial_evidence,
         analysis=execution.analysis,
-        analysis_sha256=canonical_content_sha256(execution.analysis.model_dump(mode="json")),
+        analysis_sha256=canonical_json_sha256(execution.analysis.model_dump(mode="json")),
         review_lineage_ids=review_lineages,
         trial_count=len(trial_evidence),
         validity_rate=valid_records / len(records),
@@ -221,9 +221,9 @@ def _candidate_cell_evidence(
     return HarnessProgramStudyCellEvidence(
         cell=candidate.cell,
         candidate_reference=candidate.reference,
-        bundle_sha256=candidate.bundle.content_sha256,
-        compiled_harness_sha256=candidate.bundle.harness.content_sha256,
-        compiled_program_sha256=candidate.bundle.program.content_sha256,
+        bundle_id=candidate.bundle.bundle_id,
+        compiled_harness_ref=candidate.bundle.harness.ref,
+        compiled_program_ref=candidate.bundle.program.ref,
         candidate_manifest=next(iter(matching.values())),
     )
 
@@ -261,7 +261,7 @@ def _trial_evidence(execution: object) -> HarnessProgramStudyTrialEvidence:
         trial=execution.trial,
         execution_seed=execution.execution_seed,
         candidate_reference=execution.candidate_reference,
-        bundle_sha256=execution.execution.candidate_manifest.path.parent.name,
+        bundle_id=execution.bundle_id,
         trial_record_ids=tuple(record.trial_id for record in records),
         trial_records=artifacts,
         budget=execution.execution.budget,

@@ -3,7 +3,7 @@
 
 from __future__ import annotations
 
-from aec_bench.contracts.harness_kernel import canonical_content_sha256
+from aec_bench.contracts.harness_kernel import canonical_json_sha256
 
 from .contracts import (
     GovernedAttemptBackendReceipt,
@@ -27,18 +27,16 @@ def build_dispatch_intent(
 ) -> GovernedAttemptDispatchIntent:
     """Build the only dispatch intent valid for a permitted reservation."""
 
-    dispatch_key_sha256 = canonical_content_sha256(
+    dispatch_key_sha256 = canonical_json_sha256(
         {
             "attempt_id": preflight.attempt_id,
-            "preflight_sha256": preflight.content_sha256,
             "dispatch_payload_sha256": preflight.dispatch_payload_sha256,
         }
     )
     return GovernedAttemptDispatchIntent(
         attempt_id=preflight.attempt_id,
-        preflight_sha256=preflight.content_sha256,
-        reservation_sha256=reservation.content_sha256,
-        monitor_permit_sha256=permit.content_sha256,
+        reservation_id=reservation.reservation_id,
+        permit_id=permit.permit_id,
         dispatch_payload_sha256=preflight.dispatch_payload_sha256,
         dispatch_key_sha256=dispatch_key_sha256,
     )
@@ -50,11 +48,7 @@ def reservation_error(
 ) -> str | None:
     """Return a mismatch when a reservation is not the preflight's exact budget."""
 
-    if (
-        reservation.attempt_id != preflight.attempt_id
-        or reservation.preflight_sha256 != preflight.content_sha256
-        or reservation.maximum_usage != preflight.maximum_usage
-    ):
+    if reservation.attempt_id != preflight.attempt_id or reservation.maximum_usage != preflight.maximum_usage:
         return "governed attempt budget reservation differs from preflight"
     return None
 
@@ -66,11 +60,7 @@ def permit_error(
 ) -> str | None:
     """Return a mismatch when a monitor permit is not bound to its reservation."""
 
-    if (
-        permit.attempt_id != preflight.attempt_id
-        or permit.preflight_sha256 != preflight.content_sha256
-        or permit.reservation_sha256 != reservation.content_sha256
-    ):
+    if permit.attempt_id != preflight.attempt_id or permit.reservation_id != reservation.reservation_id:
         return "governed attempt monitor permit differs from its reservation"
     return None
 
@@ -95,11 +85,7 @@ def receipt_error(
 ) -> str | None:
     """Return the first identity, usage, or evidence mismatch in a backend receipt."""
 
-    if (
-        receipt.attempt_id != preflight.attempt_id
-        or receipt.dispatch_intent_sha256 != intent.content_sha256
-        or receipt.dispatch_key_sha256 != intent.dispatch_key_sha256
-    ):
+    if receipt.attempt_id != preflight.attempt_id or receipt.dispatch_key_sha256 != intent.dispatch_key_sha256:
         return "governed attempt backend receipt differs from dispatch intent"
     usage_breach = usage_breach_label(
         observed=receipt.observed_usage,
@@ -123,7 +109,7 @@ def import_error(
 
     if (
         imported.attempt_id != preflight.attempt_id
-        or imported.dispatch_receipt_sha256 != receipt.content_sha256
+        or imported.backend_receipt_id != receipt.backend_receipt_id
         or imported.observed_usage != receipt.observed_usage
         or imported.source_effect_evidence_sha256s != receipt.effect_evidence_sha256s
     ):
@@ -141,9 +127,9 @@ def budget_closure_error(
 
     if (
         closure.attempt_id != reservation.attempt_id
-        or closure.reservation_sha256 != reservation.content_sha256
-        or closure.dispatch_receipt_sha256 != receipt.content_sha256
-        or closure.import_receipt_sha256 != imported.content_sha256
+        or closure.reservation_id != reservation.reservation_id
+        or closure.backend_receipt_id != receipt.backend_receipt_id
+        or closure.import_id != imported.import_id
         or closure.observed_usage != receipt.observed_usage
         or closure.effect_evidence_sha256s != receipt.effect_evidence_sha256s
     ):
@@ -162,10 +148,10 @@ def monitor_closure_error(
 
     if (
         closure.attempt_id != permit.attempt_id
-        or closure.permit_sha256 != permit.content_sha256
-        or closure.dispatch_receipt_sha256 != receipt.content_sha256
-        or closure.import_receipt_sha256 != imported.content_sha256
-        or closure.budget_closure_sha256 != budget_closure.content_sha256
+        or closure.permit_id != permit.permit_id
+        or closure.backend_receipt_id != receipt.backend_receipt_id
+        or closure.import_id != imported.import_id
+        or budget_closure.attempt_id != closure.attempt_id
         or closure.observed_usage != receipt.observed_usage
         or closure.effect_evidence_sha256s != receipt.effect_evidence_sha256s
         or not closure.closure_permitted
@@ -212,14 +198,13 @@ def complete_chain_error(
             return error
     if (
         terminal.attempt_id != preflight.attempt_id
-        or terminal.preflight_sha256 != preflight.content_sha256
-        or terminal.reservation_sha256 != reservation.content_sha256
-        or terminal.monitor_permit_sha256 != permit.content_sha256
-        or terminal.dispatch_intent_sha256 != intent.content_sha256
-        or terminal.dispatch_receipt_sha256 != receipt.content_sha256
-        or terminal.import_receipt_sha256 != imported.content_sha256
-        or terminal.budget_closure_sha256 != budget_closure.content_sha256
-        or terminal.monitor_closure_sha256 != monitor_closure.content_sha256
+        or terminal.reservation_id != reservation.reservation_id
+        or terminal.permit_id != permit.permit_id
+        or terminal.backend_receipt_id != receipt.backend_receipt_id
+        or terminal.import_id != imported.import_id
+        or intent.attempt_id != terminal.attempt_id
+        or budget_closure.attempt_id != terminal.attempt_id
+        or monitor_closure.attempt_id != terminal.attempt_id
         or terminal.effect_evidence_sha256s != receipt.effect_evidence_sha256s
         or terminal.imported_evidence_sha256s != imported.imported_evidence_sha256s
     ):

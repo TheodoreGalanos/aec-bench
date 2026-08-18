@@ -208,7 +208,7 @@ def diagnose_program_batch_coalescing(
 ) -> RepairPatchProposal | RepairNoPatchProposal:
     """Coalesce only an exact one-attempt partial matrix with valid primary-task evidence."""
     patch = ProgramCoalesceTaskBatchPatch(
-        expected_program_sha256=evidence.program_sha256,
+        expected_program_ref=evidence.program_ref,
         source_node_ids=source_node_ids,
         replacement_node_id=replacement_node_id,
         task_refs=task_refs,
@@ -344,7 +344,7 @@ def diagnose_program_declared_stage_graph_materialization(
         code=code,
         message=message,
         patch=ProgramMaterializeDeclaredStageGraphPatch(
-            expected_program_sha256=evidence.program_sha256,
+            expected_program_ref=evidence.program_ref,
             task_graphs=evidence.declared_stage_graphs,
         ),
     )

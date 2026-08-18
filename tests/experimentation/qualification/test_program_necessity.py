@@ -10,7 +10,7 @@ from pydantic import ValidationError
 
 from aec_bench.contracts.evaluation_plane import EvaluationPlanRef
 from aec_bench.contracts.harness_instance import HarnessBudget
-from aec_bench.contracts.harness_kernel import canonical_content_sha256
+from aec_bench.contracts.harness_kernel import canonical_json_sha256
 from aec_bench.contracts.program_proposal.candidate import ProgramCandidateRef
 from aec_bench.contracts.program_proposal.study import MatchedCandidateEvidenceRef, MatchedEvaluationCoordinate
 from aec_bench.contracts.program_proposal.types import CandidateEvidenceKind, OptimizationSplit, ProgramCandidateKind
@@ -65,7 +65,6 @@ def _evaluation_plan() -> EvaluationPlanRef:
     return EvaluationPlanRef(
         plan_id="program-necessity-evaluation",
         evaluation_generation="phase9.1b",
-        content_sha256=_sha("program-necessity-evaluation"),
     )
 
 
@@ -118,7 +117,7 @@ def _complexity(
             candidate_artifact_sha256=candidate.candidate_artifact_sha256,
             program_graph_sha256=_sha(f"{candidate.candidate_id}.graph"),
             source_scope_sha256=source_scope_sha256 or _sha(f"{candidate.candidate_id}.sources"),
-            aggregate_budget_sha256=canonical_content_sha256(
+            aggregate_budget_sha256=canonical_json_sha256(
                 budget.model_dump(mode="json"),
             ),
             measurement_policy_sha256=_sha("complexity-measurement-policy"),
@@ -307,9 +306,6 @@ def _observations(
                     kind=CandidateEvidenceKind.TRIAL_RECORD,
                     trial_record_sha256=_sha(
                         f"{lineage.lineage_plan_id}.{coordinate.coordinate_id}.{arm.value}.trial",
-                    ),
-                    evaluation_outcome_sha256=_sha(
-                        f"{lineage.lineage_plan_id}.{coordinate.coordinate_id}.{arm.value}.outcome",
                     ),
                     evidence_complete=True,
                     integrity_passed=integrity_passed,
@@ -515,9 +511,7 @@ def test_observation_must_bind_exact_lineage_candidate_study_and_evaluation() ->
         mode="json",
         exclude={"content_sha256"},
     )
-    wrong_evaluation["evaluation_plan_ref"]["content_sha256"] = _sha(
-        "unrelated-evaluation",
-    )
+    wrong_evaluation["evaluation_plan_ref"]["plan_id"] = "unrelated-evaluation"
     observations[0] = ProgramNecessityObservation.model_validate(
         wrong_evaluation,
     )
@@ -601,9 +595,9 @@ def test_program_necessity_review_lineage_hashes_remain_stable() -> None:
         family_results=results,
     )
 
-    assert preregistration.content_sha256 == ("5b97191817d463a3a4c65fdf1835ee006b40a6d8834d2f7dcf1e0eecccb64f0f")
-    assert results[0].content_sha256 == ("ffe3822d0de4c7d4a50e3f80871a7932ad6b8aeb120f7c77c09dbb923b9afa19")
-    assert gate.content_sha256 == ("be3c97382c848ce1f4be47e5db891b299bb61ad7cc91f4de5d05279c0f94cca7")
+    assert preregistration.content_sha256 == ("8c73498f38b40d7916b10acaab5dde13b8efec2f76558d01a3c838da2402e3a5")
+    assert results[0].content_sha256 == ("53233342ec034027016239cec8c3791af43535717ef5b1835f3d3e7acc1ceedf")
+    assert gate.content_sha256 == ("6a0d7feba9ef89e54aaf8b6cac41b0a556623ab87afc6682a9093482fbd424be")
 
 
 def test_program_necessity_design_owns_cardinality_and_gate_thresholds() -> None:

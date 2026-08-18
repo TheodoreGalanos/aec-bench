@@ -10,7 +10,7 @@ from pathlib import Path
 
 import yaml
 
-from aec_bench.contracts.harness_kernel import canonical_content_sha256
+from aec_bench.contracts.harness_kernel import canonical_json_sha256
 from aec_bench.contracts.run_bundle import TaskReviewSnapshotRef, TaskSnapshotRef
 from aec_bench.contracts.stage_execution import declared_stage_graph_from_payload
 from aec_bench.contracts.task_definition import TaskDefinition
@@ -42,7 +42,7 @@ def build_task_snapshot(*, task: TaskDefinition, tasks_root: Path) -> TaskSnapsh
 
     return TaskSnapshotRef(
         task_id=task.task_id,
-        definition_sha256=canonical_content_sha256(task.model_dump(mode="json")),
+        definition_sha256=canonical_json_sha256(task.model_dump(mode="json")),
         package_sha256=_task_package_sha256(task_dir),
         task_review=_task_review_snapshot(task=task, task_dir=task_dir),
     )
@@ -52,7 +52,7 @@ def graph_hidden_task_snapshot_sha256(snapshot: TaskSnapshotRef) -> str:
     """Identify an exact public task package only when no task review is present."""
     if snapshot.task_review is not None:
         raise TaskSnapshotError("graph-hidden task snapshot cannot contain a task review")
-    return canonical_content_sha256(
+    return canonical_json_sha256(
         {
             "task_id": snapshot.task_id,
             "definition_sha256": snapshot.definition_sha256,
@@ -114,9 +114,9 @@ def _task_review_snapshot(*, task: TaskDefinition, task_dir: Path) -> TaskReview
         raise TaskSnapshotError(f"invalid declared stage graph for {task.task_id}: {error}") from error
     return TaskReviewSnapshotRef(
         profile_id=profile.profile_id,
-        review_profile_sha256=canonical_content_sha256(profile.model_dump(mode="json", exclude_none=True)),
+        review_profile_sha256=canonical_json_sha256(profile.model_dump(mode="json", exclude_none=True)),
         review_sidecar_sha256=review_sidecar_sha256,
-        declared_surface_sha256=canonical_content_sha256(topology),
+        declared_surface_sha256=canonical_json_sha256(topology),
         visibility=task.visibility,
         stage_graph=stage_graph,
     )
