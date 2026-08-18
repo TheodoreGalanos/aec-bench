@@ -7,6 +7,7 @@ import json
 import re
 import subprocess
 import sys
+import tomllib
 from pathlib import Path
 from types import ModuleType
 from typing import Any, cast
@@ -257,13 +258,14 @@ def test_checked_stage1_program_recovery_pair_is_distinct_synthetic_long_horizon
         json.loads((task_dir / "task-review.json").read_text(encoding="utf-8")) for task_dir in task_dirs
     )
 
-    assert [payload["seed"] for payload in instance_payloads] == [7_301, 7_301]
-    assert [payload["difficulty"] for payload in instance_payloads] == ["hard", "hard"]
-    assert [payload["all_params"]["packet_variant"] for payload in instance_payloads] == [
+    assert all(set(payload) == {"parameters", "ground_truth"} for payload in instance_payloads)
+    task_configs = tuple(tomllib.loads((task_dir / "task.toml").read_text(encoding="utf-8")) for task_dir in task_dirs)
+    assert [config["metadata"]["difficulty"] for config in task_configs] == ["hard", "hard"]
+    assert [payload["parameters"]["packet_variant"] for payload in instance_payloads] == [
         "downstream_memo_stale_report",
         "stale_catchment_revision",
     ]
-    assert len({payload["instance_name"] for payload in instance_payloads}) == 2
+    assert len({task_dir.name for task_dir in task_dirs}) == 2
     assert all("template_id" not in payload for payload in review_payloads)
     test_scripts = tuple((task_dir / "tests" / "test.sh").read_text(encoding="utf-8") for task_dir in task_dirs)
     assert all('python3 "$SCRIPT_DIR/verify.py"' in script for script in test_scripts)

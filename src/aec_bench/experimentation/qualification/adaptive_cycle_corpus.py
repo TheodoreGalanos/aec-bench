@@ -1,9 +1,8 @@
 # ABOUTME: Freezes independent discovery, calibration, and holdout task-review corpora.
-# ABOUTME: Enforces explicit visibility, generation identity, and exact same-topology evidence splits.
+# ABOUTME: Enforces explicit visibility and exact same-topology evidence splits.
 
 from __future__ import annotations
 
-import tomllib
 from pathlib import Path
 from typing import Literal, Self
 
@@ -15,7 +14,6 @@ from aec_bench.contracts.harness_kernel import (
     validate_sha256,
 )
 from aec_bench.contracts.task_definition import Visibility
-from aec_bench.contracts.task_generation import TaskGenerationIdentity
 from aec_bench.contracts.validators import NonEmptyStr
 from aec_bench.experimentation.governance.applicability import (
     MotifApplicabilityAttestation,
@@ -23,18 +21,16 @@ from aec_bench.experimentation.governance.applicability import (
 )
 from aec_bench.experimentation.governance.motifs import MotifApplicabilityDescriptor
 from aec_bench.harness.kernel_catalogue import KernelRuntimeRegistry
-from aec_bench.tasks.registry import TaskRegistry
 
 CorpusSplitName = Literal["discovery", "calibration", "holdout"]
 
 
 class AdaptiveCycleCorpusSplit(FrozenStrictModel):
-    """One exact evidence split with task snapshots and declared generation provenance."""
+    """One exact evidence split with task snapshots and explicit visibility."""
 
     split: CorpusSplitName
     visibility: Visibility
     task_refs: tuple[NonEmptyStr, ...] = Field(min_length=2)
-    generation_identities: tuple[TaskGenerationIdentity, ...] = Field(min_length=2)
     applicability: MotifApplicabilityAttestation
 
     @field_validator("task_refs")
@@ -44,26 +40,11 @@ class AdaptiveCycleCorpusSplit(FrozenStrictModel):
             raise ValueError("corpus split task refs must be canonical and unique")
         return value
 
-    @field_validator("generation_identities")
-    @classmethod
-    def canonicalize_generation_identities(
-        cls,
-        value: tuple[TaskGenerationIdentity, ...],
-    ) -> tuple[TaskGenerationIdentity, ...]:
-        ordered = tuple(sorted(value, key=lambda identity: identity.task_id))
-        task_ids = tuple(identity.task_id for identity in ordered)
-        if len(task_ids) != len(set(task_ids)):
-            raise ValueError("corpus split generation identities must use unique task ids")
-        return ordered
-
     @model_validator(mode="after")
     def validate_split(self) -> Self:
         expected_visibility = Visibility.HOLDOUT if self.split == "holdout" else Visibility.PUBLIC
         if self.visibility is not expected_visibility:
             raise ValueError(f"{self.split} corpus visibility must be {expected_visibility.value}")
-        identity_task_refs = tuple(identity.task_id for identity in self.generation_identities)
-        if identity_task_refs != self.task_refs:
-            raise ValueError("corpus split generation identities must cover its exact task refs")
         projected_task_refs = tuple(projection.snapshot.task_id for projection in self.applicability.projections)
         if projected_task_refs != self.task_refs:
             raise ValueError("corpus split applicability must cover its exact task refs")
@@ -150,18 +131,6 @@ class AdaptiveCycleCorpusManifest(ContentAddressedModel):
         if declared_surfaces != {self.declared_surface_sha256}:
             raise ValueError("adaptive corpus must use exactly one declared surface")
 
-        identities = tuple(identity for split in splits for identity in split.generation_identities)
-        generation_keys = {
-            (
-                identity.template,
-                identity.template_source_sha256,
-                identity.seed,
-                identity.instance_index,
-            )
-            for identity in identities
-        }
-        if len(generation_keys) != len(identities):
-            raise ValueError("corpus generation identities must be unique")
         return self
 
 
@@ -183,8 +152,6 @@ def prepare_adaptive_cycle_corpus(
     calibration_refs = _validate_requested_refs(calibration_task_refs, label="calibration", minimum=2)
     holdout_refs = _validate_requested_refs(holdout_task_refs, label="holdout", minimum=2)
 
-    task_registry = TaskRegistry(tasks_root=root)
-    task_registry.reload()
     splits = (
         _prepare_split(
             split="discovery",
@@ -192,7 +159,6 @@ def prepare_adaptive_cycle_corpus(
             task_refs=discovery_refs,
             tasks_root=root,
             registry=registry,
-            task_registry=task_registry,
         ),
         _prepare_split(
             split="calibration",
@@ -200,7 +166,6 @@ def prepare_adaptive_cycle_corpus(
             task_refs=calibration_refs,
             tasks_root=root,
             registry=registry,
-            task_registry=task_registry,
         ),
         _prepare_split(
             split="holdout",
@@ -208,7 +173,6 @@ def prepare_adaptive_cycle_corpus(
             task_refs=holdout_refs,
             tasks_root=root,
             registry=registry,
-            task_registry=task_registry,
         ),
     )
     declared_surface = _single_declared_surface(splits)
@@ -230,17 +194,7 @@ def _prepare_split(
     task_refs: tuple[str, ...],
     tasks_root: Path,
     registry: KernelRuntimeRegistry,
-    task_registry: TaskRegistry,
 ) -> AdaptiveCycleCorpusSplit:
-    identities = tuple(
-        _load_generation_identity(
-            task_id=task_id,
-            tasks_root=tasks_root,
-            expected_visibility=visibility,
-            task_registry=task_registry,
-        )
-        for task_id in task_refs
-    )
     applicability = profile_task_applicability(
         task_refs=task_refs,
         tasks_root=tasks_root,
@@ -250,42 +204,8 @@ def _prepare_split(
         split=split,
         visibility=visibility,
         task_refs=task_refs,
-        generation_identities=identities,
         applicability=applicability,
     )
-
-
-def _load_generation_identity(
-    *,
-    task_id: str,
-    tasks_root: Path,
-    expected_visibility: Visibility,
-    task_registry: TaskRegistry,
-) -> TaskGenerationIdentity:
-    task = task_registry.get(task_id)
-    if task is None:
-        raise ValueError(f"adaptive corpus references an unknown task: {task_id}")
-    declared_visibility = task.metadata.get("visibility")
-    if declared_visibility != expected_visibility.value:
-        raise ValueError(f"corpus task {task_id} must explicitly declare visibility {expected_visibility.value}")
-    task_toml = tasks_root / task_id / "task.toml"
-    payload = tomllib.loads(task_toml.read_text(encoding="utf-8"))
-    generation = payload.get("generation")
-    if not isinstance(generation, dict):
-        raise ValueError(f"corpus task {task_id} must declare generated-instance provenance")
-    try:
-        return TaskGenerationIdentity.model_validate(
-            {
-                "task_id": task_id,
-                "origin": generation.get("origin"),
-                "template": generation.get("template"),
-                "template_source_sha256": generation.get("template_source_sha256"),
-                "seed": generation.get("seed"),
-                "instance_index": generation.get("instance_index"),
-            }
-        )
-    except ValueError as error:
-        raise ValueError(f"corpus task {task_id} has invalid generated-instance provenance") from error
 
 
 def _validate_requested_refs(

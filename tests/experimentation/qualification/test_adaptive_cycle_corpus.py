@@ -1,5 +1,5 @@
 # ABOUTME: Tests immutable discovery, calibration, and holdout corpus preparation.
-# ABOUTME: Proves split visibility, lineage independence, topology identity, and generation provenance.
+# ABOUTME: Proves split visibility, lineage independence, topology identity, and exact task snapshots.
 
 from __future__ import annotations
 
@@ -41,12 +41,6 @@ def test_prepare_adaptive_cycle_corpus_freezes_a_strict_2_2_2_manifest(
     assert manifest.discovery.applicability.descriptor == manifest.holdout.applicability.descriptor
     assert len(manifest.declared_surface_sha256) == 64
     assert len(manifest.content_sha256) == 64
-    identities = (
-        *manifest.discovery.generation_identities,
-        *manifest.calibration.generation_identities,
-        *manifest.holdout.generation_identities,
-    )
-    assert len({(item.template, item.seed, item.instance_index) for item in identities}) == 6
 
 
 def test_prepare_adaptive_cycle_corpus_requires_explicit_holdout_visibility(
@@ -63,7 +57,7 @@ def test_prepare_adaptive_cycle_corpus_requires_explicit_holdout_visibility(
         encoding="utf-8",
     )
 
-    with pytest.raises(ValueError, match="must explicitly declare visibility holdout"):
+    with pytest.raises(ValueError, match="task snapshots do not match declared visibility"):
         prepare_adaptive_cycle_corpus(
             corpus_id="drainage.phase5b.v1",
             discovery_task_refs=discovery,
@@ -151,52 +145,6 @@ def test_prepare_adaptive_cycle_corpus_rejects_same_bucket_topology_drift(
         )
 
 
-def test_prepare_adaptive_cycle_corpus_requires_stable_generated_provenance(
-    tmp_path: Path,
-) -> None:
-    """Every selected task needs the seed and stable index used to generate it."""
-    tasks_root, discovery, calibration, holdout = _write_corpus(tmp_path)
-    task_toml = tasks_root / discovery[0] / "task.toml"
-    task_toml.write_text(
-        task_toml.read_text(encoding="utf-8").replace("instance_index = 0\n", ""),
-        encoding="utf-8",
-    )
-
-    with pytest.raises(ValueError, match="invalid generated-instance provenance"):
-        prepare_adaptive_cycle_corpus(
-            corpus_id="drainage.phase5b.v1",
-            discovery_task_refs=discovery,
-            repair_task_refs=discovery,
-            calibration_task_refs=calibration,
-            holdout_task_refs=holdout,
-            tasks_root=tasks_root,
-            registry=default_kernel_registry(),
-        )
-
-
-def test_prepare_adaptive_cycle_corpus_rejects_duplicate_generation_identity(
-    tmp_path: Path,
-) -> None:
-    """Renaming a generated directory does not create an independent research instance."""
-    tasks_root, discovery, calibration, holdout = _write_corpus(tmp_path)
-    second = tasks_root / holdout[1] / "task.toml"
-    second_payload = second.read_text(encoding="utf-8")
-    second_payload = second_payload.replace("seed = 501", "seed = 500")
-    second_payload = second_payload.replace("instance_index = 21", "instance_index = 20")
-    second.write_text(second_payload, encoding="utf-8")
-
-    with pytest.raises(ValueError, match="generation identities must be unique"):
-        prepare_adaptive_cycle_corpus(
-            corpus_id="drainage.phase5b.v1",
-            discovery_task_refs=discovery,
-            repair_task_refs=discovery,
-            calibration_task_refs=calibration,
-            holdout_task_refs=holdout,
-            tasks_root=tasks_root,
-            registry=default_kernel_registry(),
-        )
-
-
 def _write_corpus(
     tmp_path: Path,
 ) -> tuple[Path, tuple[str, str], tuple[str, str], tuple[str, str]]:
@@ -205,20 +153,18 @@ def _write_corpus(
     calibration = ("civil/review/calibration-a", "civil/review/calibration-b")
     holdout = ("civil/review/holdout-a", "civil/review/holdout-b")
     specifications = (
-        (discovery[0], Visibility.PUBLIC, 300, 0),
-        (discovery[1], Visibility.PUBLIC, 301, 1),
-        (calibration[0], Visibility.PUBLIC, 400, 10),
-        (calibration[1], Visibility.PUBLIC, 401, 11),
-        (holdout[0], Visibility.HOLDOUT, 500, 20),
-        (holdout[1], Visibility.HOLDOUT, 501, 21),
+        (discovery[0], Visibility.PUBLIC),
+        (discovery[1], Visibility.PUBLIC),
+        (calibration[0], Visibility.PUBLIC),
+        (calibration[1], Visibility.PUBLIC),
+        (holdout[0], Visibility.HOLDOUT),
+        (holdout[1], Visibility.HOLDOUT),
     )
-    for task_id, visibility, seed, instance_index in specifications:
+    for task_id, visibility in specifications:
         _write_corpus_task(
             tasks_root,
             task_id=task_id,
             visibility=visibility,
-            seed=seed,
-            instance_index=instance_index,
         )
     return tasks_root, discovery, calibration, holdout
 
@@ -228,8 +174,6 @@ def _write_corpus_task(
     *,
     task_id: str,
     visibility: Visibility,
-    seed: int,
-    instance_index: int,
 ) -> None:
     task_dir = write_adaptive_task(tasks_root, task_id=task_id)
     task_toml = task_dir / "task.toml"
@@ -237,16 +181,6 @@ def _write_corpus_task(
         task_toml.read_text(encoding="utf-8").replace(
             'visibility = "public"',
             f'visibility = "{visibility.value}"',
-        )
-        + (
-            "\n[generation]\n"
-            'origin = "generated"\n'
-            'template = "drainage-review"\n'
-            f'template_source_sha256 = "{"0" * 64}"\n'
-            f"seed = {seed}\n"
-            f"instance_index = {instance_index}\n"
-            'difficulty = "medium"\n'
-            'archetype = "review-first"\n'
         ),
         encoding="utf-8",
     )

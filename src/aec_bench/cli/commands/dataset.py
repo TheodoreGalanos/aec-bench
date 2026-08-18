@@ -15,7 +15,7 @@ from aec_bench.contracts.task_definition import Difficulty
 
 if TYPE_CHECKING:
     from aec_bench.contracts.task_definition import TaskDefinition
-    from aec_bench.generation.dataset import SuiteOutput
+    from aec_bench.generation.replay import GenerationManifest
 
 app = typer.Typer(help="Create, publish, and inspect benchmark datasets.")
 
@@ -27,7 +27,7 @@ def create_dataset_cmd(
     from_suite_output: Path | None = typer.Option(
         None,
         "--from-suite-output",
-        help="Generated suite dataset.json whose exact task selection is used",
+        help="Generated suite generation-manifest.json whose exact task selection is used",
     ),
     domain: list[str] | None = typer.Option(None, "--domain", "-d", help="Filter by domain"),
     difficulty: list[str] | None = typer.Option(None, "--difficulty", help="Filter by difficulty"),
@@ -52,7 +52,7 @@ def create_dataset_cmd(
     if from_suite_output is not None:
         suite = _load_suite_output_manifest(from_suite_output)
         selected = _load_tasks_from_suite_output(from_suite_output, tasks_root, suite)
-        generation = DatasetGeneration(seed=suite.seed, config_ref=suite.config)
+        generation = DatasetGeneration(seed=suite.instances[0].seed, config_ref=suite.config_ref)
     else:
         registry = TaskRegistry(tasks_root=tasks_root)
         registry.reload()
@@ -454,27 +454,31 @@ def _parse_difficulties(values: list[str] | None) -> list[Difficulty]:
     return parsed
 
 
-def _load_suite_output_manifest(path: Path) -> SuiteOutput:
-    from aec_bench.generation.dataset import SuiteOutput
+def _load_suite_output_manifest(path: Path) -> GenerationManifest:
+    from aec_bench.generation.replay import GenerationManifest
 
     if not path.is_file():
         print_error(f"suite output not found: {path}")
         raise typer.Exit(1)
     try:
-        return SuiteOutput.model_validate_json(path.read_text(encoding="utf-8"))
+        return GenerationManifest.model_validate_json(path.read_text(encoding="utf-8"))
     except Exception as error:
         print_error(f"failed to read suite output: {error}")
         raise typer.Exit(1) from error
 
 
-def _load_tasks_from_suite_output(path: Path, tasks_root: Path, manifest: SuiteOutput) -> list[TaskDefinition]:
+def _load_tasks_from_suite_output(
+    path: Path,
+    tasks_root: Path,
+    manifest: GenerationManifest,
+) -> list[TaskDefinition]:
     from aec_bench.tasks.loader import load_task_definition
 
     suite_root = path.resolve().parent
     root = tasks_root.resolve()
     tasks: list[TaskDefinition] = []
     for entry in manifest.instances:
-        task_directory = (suite_root / entry.path).resolve()
+        task_directory = (suite_root / entry.task_id).resolve()
         if not task_directory.is_dir():
             print_error(f"suite output references missing task directory: {task_directory}")
             raise typer.Exit(1)

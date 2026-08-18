@@ -16,7 +16,6 @@ from aec_bench.contracts.harness_kernel import (
 )
 from aec_bench.contracts.run_bundle import TaskSnapshotRef
 from aec_bench.contracts.task_definition import Visibility
-from aec_bench.contracts.task_generation import TaskGenerationIdentity
 from aec_bench.contracts.validators import NonEmptyStr
 from aec_bench.harness.compilation.task_snapshot import graph_hidden_task_snapshot_sha256
 
@@ -134,7 +133,6 @@ class StructuralCorpusItem(FrozenStrictModel):
     visibility: Visibility
     public_snapshot: TaskSnapshotRef
     snapshot: TaskSnapshotRef
-    generation_identity: TaskGenerationIdentity
     topology: TopologyShapeRef
 
     @field_validator("review_lineage_id")
@@ -148,8 +146,6 @@ class StructuralCorpusItem(FrozenStrictModel):
             raise ValueError("structural corpus item public snapshot task id must match its task id")
         if self.snapshot.task_id != self.task_id:
             raise ValueError("structural corpus item snapshot task id must match its task id")
-        if self.generation_identity.task_id != self.task_id:
-            raise ValueError("structural corpus item generation identity task id must match its task id")
         if self.public_snapshot.task_review is not None:
             raise ValueError("structural corpus item public snapshot cannot contain a task review")
         if self.snapshot.task_review is None:
@@ -269,18 +265,6 @@ class StructuralSplitManifest(ContentAddressedModel):
         public_package_hashes = tuple(item.public_snapshot.package_sha256 for item in items)
         if len(public_package_hashes) != len(set(public_package_hashes)):
             raise ValueError("structural manifest public task package snapshots must be unique")
-        generation_keys = tuple(
-            (
-                item.generation_identity.template,
-                item.generation_identity.template_source_sha256,
-                item.generation_identity.seed,
-                item.generation_identity.instance_index,
-            )
-            for item in items
-        )
-        if len(generation_keys) != len(set(generation_keys)):
-            raise ValueError("structural manifest generation identities must be unique")
-
         _reject_cross_split_signature_collision(
             splits,
             attribute="full_signature_sha256",
@@ -312,7 +296,6 @@ class StructuralSplitManifest(ContentAddressedModel):
                         "visibility": item.visibility.value,
                         "public_snapshot": item.public_snapshot.model_dump(mode="json"),
                         "sealed_snapshot": item.snapshot.model_dump(mode="json"),
-                        "generation_identity": item.generation_identity.model_dump(mode="json"),
                     }
                     for split in (self.train, self.dev, self.holdout)
                     for item in split.items

@@ -195,9 +195,10 @@ uv run aec-bench generate task <meta.name> --instances 1 --seed 42 --output /tmp
 
 Show the generated `instruction.md` with concrete parameter values so the user can see exactly what an agent would receive.
 Also validate the generated task directory with `aec-bench task validate`. Its
-`task.toml` generation section should identify the template source digest,
-seed, instance index, and difficulty; it should not use creation time as task
-lineage.
+`task.toml` should contain runtime semantics only. Confirm that the generation
+output root contains `generation-manifest.json` with the shared source reference
+and the instance replay inputs. It must not contain a creation time, framework
+version, provider route, transport identity, or absolute path.
 
 ## Reference Files
 

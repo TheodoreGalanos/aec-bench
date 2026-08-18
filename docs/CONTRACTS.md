@@ -30,6 +30,7 @@ readable.
 | --- | --- | --- | --- | --- | --- |
 | Task specification | Task authoring and loading | Repository or imported task material becomes runnable input | Protected where task packages are published; otherwise internal | [`TaskDefinition`](../src/aec_bench/contracts/task_definition.py) and task loaders | Persisted task package |
 | Task instance and revision identity | Generation and harness | Selected task bytes become one exact execution identity | Protected when recorded in a dataset or trial | [`ResolvedTaskInstance`](../src/aec_bench/tasks/instance.py), `TaskReference`, and `DatasetTaskEntry` | Internal resolution; persisted references |
+| Generated-task replay | Task generation | Template sources and sampling inputs become optional reproducibility data | Schema 1 sidecar; not a runtime task contract | [`GenerationManifest`](../src/aec_bench/generation/replay.py) and the `generate replay` command | Optional persisted sidecar |
 | Finite lifecycle execution | Lifecycle task and host | Stage-specific task evidence and actor results become one bounded host-controlled progression | Internal package and runtime contract; persisted accepted evidence is current-format only | [`EvidenceLifecycleSpec`](../src/aec_bench/contracts/evidence_lifecycle.py) and the [staged evidence protocol](protocols/staged-evidence-and-publication.md) | Packaged task, runtime state, and persisted accepted evidence |
 | Experiment manifest | Experiment orchestration | User configuration becomes an executable plan | Internal, except documented CLI/config behavior | [`ExperimentManifest`](../src/aec_bench/contracts/experiment_manifest.py) | Persisted configuration |
 | Trial and episode record | Harness and ledger | Execution, verifier, and artifact evidence becomes reportable benchmark evidence | Current persisted record; no retained historical reader | [`TrialRecord`](../src/aec_bench/contracts/trial_record.py) plus the owning episode or world protocol | Persisted and exportable |
@@ -238,6 +239,24 @@ The named schema-1 migration reader reports `fully_verified`,
 `partially_verified`, or `invalid`. Only a fully verified manifest, including
 its historical top-level and declared task hashes, can become a schema-2
 publication.
+
+## Generated-task replay
+
+`GenerationManifest` schema 1 is an optional sidecar at the generated output
+root. It records one shared template source, one relative configuration
+reference, and the seed, instance index, difficulty, tool mode, and task
+visibility needed for each generated task. Clean built-in templates in a Git
+checkout use one full Git revision. A set that includes external, modified, or
+installed-package templates uses one immutable `ArtifactRef` for a deterministic
+source archive.
+
+Runnable task directories do not contain the sidecar fields. The task loader,
+validator, execution paths, evaluation paths, and catalogue do not read the
+sidecar. `aec-bench generate replay` resolves the retained source, writes to a
+separate directory, and compares all runtime task files. Artifact reads verify
+size and SHA-256 before extraction. Archive extraction rejects traversal,
+links, duplicate paths, and unsupported member types. Replay does not overwrite
+an existing output directory unless the user supplies `--overwrite`.
 
 ## Provider request and result envelopes
 

@@ -12,7 +12,7 @@ from aec_bench.experimentation.task_ecology.baseline import (
 )
 
 
-def test_discover_baseline_tasks_reads_generated_metadata(tmp_path: Path) -> None:
+def test_discover_baseline_tasks_reads_runtime_metadata_and_path(tmp_path: Path) -> None:
     task_dir = (
         tmp_path
         / "tasks"
@@ -33,10 +33,7 @@ version = "1.0"
 domain = "civil"
 category = "oil-containment"
 difficulty = "medium"
-
-[generation]
-template = "bund-volume-calculation"
-difficulty = "hard"
+generation_difficulty = "hard"
 """,
         encoding="utf-8",
     )

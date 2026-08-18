@@ -49,40 +49,38 @@ def _prepare_project(tmp_path: Path) -> None:
 
 
 def _write_suite_output(project_root: Path) -> Path:
-    suite_output = project_root / "tasks" / "dataset.json"
+    suite_output = project_root / "tasks" / "generation-manifest.json"
     suite_output.write_text(
         json.dumps(
             {
-                "name": "generated-suite",
-                "seed": 20260508,
-                "created": "2026-05-08T00:00:00Z",
-                "framework_version": "0.1.0",
-                "config": "suite.toml",
-                "summary": {
-                    "total_instances": 2,
-                    "by_discipline": {"electrical": 1, "mechanical": 1},
-                    "by_difficulty": {"easy": 1, "hard": 1},
-                    "by_visibility": {"all_given": 2},
-                    "by_tool_mode": {"with-tool": 2},
+                "schema_version": 1,
+                "suite_id": "generated-suite",
+                "source": {
+                    "kind": "git",
+                    "revision": "a" * 40,
+                    "template_root": "src/aec_bench/templates/builtin",
                 },
+                "config_ref": "generation-config.json",
                 "instances": [
                     {
-                        "path": "electrical/example/easy",
-                        "template": "example",
+                        "task_id": "electrical/example/easy",
+                        "task_kind": "artifact",
+                        "template_id": "electrical/example",
+                        "seed": 20260508,
+                        "instance_index": 0,
                         "difficulty": "easy",
-                        "archetype": "test",
-                        "site_context": "test",
-                        "visibility": "all_given",
                         "tool_mode": "with-tool",
+                        "task_visibility": "public",
                     },
                     {
-                        "path": "mechanical/example/hard",
-                        "template": "example",
+                        "task_id": "mechanical/example/hard",
+                        "task_kind": "artifact",
+                        "template_id": "mechanical/example",
+                        "seed": 20260509,
+                        "instance_index": 1,
                         "difficulty": "hard",
-                        "archetype": "test",
-                        "site_context": "test",
-                        "visibility": "all_given",
                         "tool_mode": "with-tool",
+                        "task_visibility": "public",
                     },
                 ],
             }
@@ -129,7 +127,7 @@ def test_dataset_create_from_suite_output_keeps_only_replay_inputs(tmp_path: Pat
     manifest = json.loads(
         (tmp_path / "artefacts/datasets/manifests/from-suite/manifest.json").read_text(encoding="utf-8")
     )
-    assert manifest["generation"] == {"seed": 20260508, "config_ref": "suite.toml"}
+    assert manifest["generation"] == {"seed": 20260508, "config_ref": "generation-config.json"}
     assert [task["task_id"] for task in manifest["tasks"]] == [
         "electrical/example/easy",
         "mechanical/example/hard",

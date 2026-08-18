@@ -70,8 +70,17 @@ def init_project(
     # Optionally generate one example task instance.
     if generate_example:
         try:
+            from aec_bench.generation.replay import (
+                GenerationInstance,
+                GenerationManifest,
+                prepare_template_source,
+                require_available_sidecar_paths,
+                write_generation_config,
+                write_generation_manifest,
+            )
             from aec_bench.generation.sampler import sample_instance
             from aec_bench.generation.scaffolder import scaffold_task_instance
+            from aec_bench.templates.contracts import ToolMode
             from aec_bench.templates.registry import discover_templates
 
             templates, _diagnostics = discover_templates()
@@ -91,7 +100,46 @@ def init_project(
                     instance_index=0,
                 )
                 tasks_dir = target / "tasks"
-                scaffold_task_instance(terzaghi, instance, tasks_dir)
+                require_available_sidecar_paths(tasks_dir)
+                prepared_source = prepare_template_source((terzaghi,), tasks_dir)
+                instance_dir = scaffold_task_instance(terzaghi, instance, tasks_dir)
+                tool_mode = (
+                    terzaghi.config.meta.tool_mode
+                    if terzaghi.config.meta.tool_mode is not ToolMode.BOTH
+                    else ToolMode.WITH_TOOL
+                )
+                config_ref = write_generation_config(
+                    tasks_dir,
+                    {
+                        "mode": "task",
+                        "suite_id": "aec-bench-example",
+                        "template_id": prepared_source.template_ids[terzaghi.path.resolve()],
+                        "seed": 42,
+                        "start_index": 0,
+                        "instances": 1,
+                        "difficulties": [difficulty_name],
+                        "tool_mode": tool_mode.value,
+                        "task_visibility": "public",
+                    },
+                )
+                write_generation_manifest(
+                    tasks_dir,
+                    GenerationManifest(
+                        suite_id="aec-bench-example",
+                        source=prepared_source.source,
+                        config_ref=config_ref,
+                        instances=(
+                            GenerationInstance(
+                                task_id=instance_dir.relative_to(tasks_dir).as_posix(),
+                                template_id=prepared_source.template_ids[terzaghi.path.resolve()],
+                                seed=42,
+                                instance_index=0,
+                                difficulty=difficulty_name,
+                                tool_mode=tool_mode,
+                            ),
+                        ),
+                    ),
+                )
                 messages.append(f"Generated example instance: {instance.instance_name}")
             else:
                 messages.append("Warning: terzaghi-bearing-capacity template not found — skipping example.")

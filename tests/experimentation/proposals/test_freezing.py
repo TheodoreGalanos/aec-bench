@@ -52,7 +52,6 @@ from aec_bench.contracts.proposal_execution_profile import (
 )
 from aec_bench.contracts.run_bundle import TaskReviewSnapshotRef, TaskSnapshotRef
 from aec_bench.contracts.task_definition import Visibility
-from aec_bench.contracts.task_generation import TaskGenerationIdentity
 from aec_bench.experimentation.governance.authority_ledger import (
     AuthorityLedger,
     AuthorityLedgerIntegrityError,
@@ -1197,13 +1196,6 @@ def _structural_item(
                 declared_surface_sha256=_sha(f"declared-surface:{task_id}"),
                 visibility=visibility,
             ),
-        ),
-        generation_identity=TaskGenerationIdentity(
-            task_id=task_id,
-            template=f"template:{family}",
-            template_source_sha256=_sha(f"template:{family}"),
-            seed=int.from_bytes(hashlib.sha256(task_id.encode()).digest()[:4]),
-            instance_index=0,
         ),
         topology=topology_shape_ref(nodes=nodes, edges=edges),
     )

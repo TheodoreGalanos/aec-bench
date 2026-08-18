@@ -195,15 +195,11 @@ def test_load_template_returns_callable_engine(tmp_path: Path) -> None:
     assert callable(module.compute)
 
 
-def test_template_source_digest_changes_with_supported_source(tmp_path: Path) -> None:
+def test_loaded_template_does_not_calculate_a_per_template_digest(tmp_path: Path) -> None:
     tdir = _make_template(tmp_path)
-    original = load_template(tdir).source_sha256
+    loaded = load_template(tdir)
 
-    (tdir / "instruction.md").write_text("Compute a different result.", encoding="utf-8")
-
-    changed = load_template(tdir).source_sha256
-    assert changed != original
-    assert len(changed) == 64
+    assert not hasattr(loaded, "source_sha256")
 
 
 def test_load_template_raises_on_missing_file(tmp_path: Path) -> None:

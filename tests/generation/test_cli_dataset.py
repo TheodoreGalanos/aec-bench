@@ -55,8 +55,7 @@ def test_suite_dry_run_creates_no_files(tmp_path: Path) -> None:
 
     result = runner.invoke(app, ["generate", "suite", "--config", str(config_file), "--dry-run"])
     assert result.exit_code == 0, result.output
-    # No dataset.json should exist
-    assert not (output_dir / "dataset.json").exists()
+    assert not (output_dir / "generation-manifest.json").exists()
 
 
 def test_suite_validate_only(tmp_path: Path) -> None:
@@ -70,11 +69,11 @@ def test_suite_validate_only(tmp_path: Path) -> None:
 
     result = runner.invoke(app, ["generate", "suite", "--config", str(config_file), "--validate-only"])
     assert result.exit_code == 0, result.output
-    assert not (output_dir / "dataset.json").exists()
+    assert not (output_dir / "generation-manifest.json").exists()
 
 
 def test_suite_full_run(tmp_path: Path) -> None:
-    """Full dataset generation should create instance dirs and dataset.json."""
+    """Full suite generation creates task directories and one replay sidecar."""
     output_dir = tmp_path / "output"
     output_dir.mkdir()
 
@@ -84,13 +83,15 @@ def test_suite_full_run(tmp_path: Path) -> None:
     result = runner.invoke(app, ["generate", "suite", "--config", str(config_file)])
     assert result.exit_code == 0, result.output
 
-    # dataset.json should exist
-    dataset_json = output_dir / "dataset.json"
-    assert dataset_json.exists()
+    manifest_path = output_dir / "generation-manifest.json"
+    assert manifest_path.exists()
 
-    data = json.loads(dataset_json.read_text())
-    assert data["name"] == "cli-test-suite"
+    data = json.loads(manifest_path.read_text())
+    assert data["suite_id"] == "cli-test-suite"
     assert len(data["instances"]) >= 2  # per_task = 2 × number of matched templates
+    assert "created" not in data
+    assert "framework_version" not in data
+    assert not (output_dir / "job.yaml").exists()
 
 
 def test_suite_seed_override(tmp_path: Path) -> None:
@@ -118,10 +119,10 @@ def test_suite_seed_override(tmp_path: Path) -> None:
     assert result_a.exit_code == 0, result_a.output
     assert result_b.exit_code == 0, result_b.output
 
-    data_a = json.loads((output_a / "dataset.json").read_text())
-    data_b = json.loads((output_b / "dataset.json").read_text())
+    data_a = json.loads((output_a / "generation-manifest.json").read_text())
+    data_b = json.loads((output_b / "generation-manifest.json").read_text())
 
-    assert data_a["seed"] != data_b["seed"]
+    assert data_a["instances"][0]["seed"] != data_b["instances"][0]["seed"]
 
 
 def test_suite_invalid_config(tmp_path: Path) -> None:

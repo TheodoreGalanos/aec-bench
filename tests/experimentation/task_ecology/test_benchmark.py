@@ -1,6 +1,7 @@
 # ABOUTME: Tests the task-ecology benchmark selection and config scaffolding.
 # ABOUTME: Keeps Experiment 1 setup deterministic before materialising generated tasks.
 
+import shutil
 from pathlib import Path
 
 import yaml
@@ -13,11 +14,13 @@ from aec_bench.experimentation.task_ecology.benchmark import (
     TemplateEntry,
     build_arm_config,
     load_pressure_task_patterns,
+    materialise_suite,
     scaffold_workspace,
     select_benchmark_templates,
     summarise_benchmark_runs,
     write_pressure_benchmark_configs,
 )
+from aec_bench.generation.replay import ArtifactTemplateSource, load_generation_manifest
 
 
 def _entries() -> list[TemplateEntry]:
@@ -94,6 +97,33 @@ def test_select_benchmark_templates_keeps_anchors_out_of_population() -> None:
 def test_default_max_cycles_covers_population_once_at_default_batch_size() -> None:
     assert DEFAULT_DIFFICULTIES == ("easy", "medium", "hard")
     assert DEFAULT_MAX_CYCLES == 6
+
+
+def test_materialise_suite_writes_one_replay_sidecar(tmp_path: Path) -> None:
+    repository_root = Path(__file__).resolve().parents[3]
+    source = repository_root / "src/aec_bench/templates/builtin/civil/bund_volume_calculation"
+    template = tmp_path / "templates/bund_volume_calculation"
+    shutil.copytree(source, template)
+
+    instances = materialise_suite(
+        repo_root=tmp_path,
+        suite_name="fixed",
+        entries=[
+            TemplateEntry(
+                task_id="civil/bund-volume-calculation",
+                domain="civil",
+                source_task_path=template.relative_to(tmp_path).as_posix(),
+            )
+        ],
+        output_root=tmp_path / "generated",
+        seed=42,
+        difficulties=("easy",),
+    )
+
+    manifest = load_generation_manifest(tmp_path / "generated/fixed/generation-manifest.json")
+    assert len(instances) == 1
+    assert isinstance(manifest.source, ArtifactTemplateSource)
+    assert [entry.task_id for entry in manifest.instances] == [instances[0].task_id.removeprefix("fixed/")]
 
 
 def test_build_arm_config_uses_suite_include_pattern(tmp_path: Path) -> None:

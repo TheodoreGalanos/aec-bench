@@ -1,6 +1,7 @@
 # ABOUTME: Tests for the CLI generate subcommand group.
 # ABOUTME: Covers list-templates, validate-template, and generate task commands via CliRunner.
 
+import json
 import tomllib
 from pathlib import Path
 
@@ -109,10 +110,11 @@ def test_generate_task_deterministic(tmp_path: Path) -> None:
     toml_a = next(out_a.rglob("task.toml"))
     toml_b = next(out_b.rglob("task.toml"))
     assert toml_a.read_bytes() == toml_b.read_bytes()
-    generation = tomllib.loads(toml_a.read_text(encoding="utf-8"))["generation"]
-    assert len(generation["template_source_sha256"]) == 64
-    assert "timestamp" not in generation
-    assert "template_version" not in generation
+    task_config = tomllib.loads(toml_a.read_text(encoding="utf-8"))
+    assert "version" not in task_config
+    assert "generation" not in task_config
+    manifest = (out_a / "generation-manifest.json").read_text(encoding="utf-8")
+    assert "template_source_sha256" not in manifest
 
 
 def test_generate_task_dry_run_creates_nothing(tmp_path: Path) -> None:
@@ -242,8 +244,9 @@ def test_generate_task_supports_explicit_visibility_and_start_index(tmp_path: Pa
     for task_toml in sorted(tmp_path.rglob("task.toml")):
         with open(task_toml, "rb") as fh:
             payloads.append(tomllib.load(fh))
-    assert [payload["generation"]["instance_index"] for payload in payloads] == [10, 11]
     assert {payload["metadata"]["visibility"] for payload in payloads} == {"holdout"}
+    manifest = json.loads((tmp_path / "generation-manifest.json").read_text(encoding="utf-8"))
+    assert [instance["instance_index"] for instance in manifest["instances"]] == [10, 11]
 
 
 def test_generate_task_rejects_a_negative_start_index(tmp_path: Path) -> None:

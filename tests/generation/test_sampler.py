@@ -115,7 +115,6 @@ def _build_test_template() -> LoadedTemplate:
         path=Path("test-template"),
         engine=engine,
         engine_source="def compute(): ...",
-        source_sha256="0" * 64,
     )
 
 
@@ -257,7 +256,7 @@ def test_sampled_instance_has_site_context() -> None:
 
 
 def test_sampled_instance_has_valid_metadata() -> None:
-    """Generation identity must bind the selected template source."""
+    """The sampler must retain only the in-process inputs needed by scaffolding."""
     template = _build_test_template()
     result = sample_instance(
         template=template,
@@ -267,6 +266,5 @@ def test_sampled_instance_has_valid_metadata() -> None:
     )
 
     assert result.template_name == "test-template"
-    assert result.template_source_sha256 == "0" * 64
     assert result.seed == 42
     assert result.instance_index == 0

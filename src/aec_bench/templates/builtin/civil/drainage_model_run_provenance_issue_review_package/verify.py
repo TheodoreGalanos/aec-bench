@@ -463,7 +463,7 @@ def zero_details() -> dict[str, Any]:
 def score_payload(payload: dict[str, Any], instance: dict[str, Any]) -> tuple[float, dict[str, Any]]:
     """Score one structured response against the generated instance."""
     ground_truth = instance["ground_truth"]
-    variant = str(instance["all_params"]["packet_variant"])
+    variant = str(instance["parameters"]["packet_variant"])
     matrix_score, matrix_details = score_matrix(payload, ground_truth, variant)
     evidence_score, evidence_details = score_evidence(payload, ground_truth)
     provenance_score, provenance_details = score_provenance(payload)

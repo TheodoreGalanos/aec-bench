@@ -1,5 +1,5 @@
 # ABOUTME: CLI generate subcommand group for producing task instances from templates.
-# ABOUTME: Provides task, suite, list-templates, and validate-template subcommands.
+# ABOUTME: Provides task, suite, replay, list-templates, and validate-template subcommands.
 
 # ruff: noqa: B008
 
@@ -12,6 +12,7 @@ from rich.table import Table
 from aec_bench.cli.commands.generate_dockerfiles import generate_dockerfiles_command
 from aec_bench.cli.output import console, emit, print_success, print_warning
 from aec_bench.contracts.task_definition import Visibility
+from aec_bench.templates.contracts import ToolMode
 from aec_bench.templates.registry import LoadedTemplate, discover_templates, load_template, validate_template
 
 app = typer.Typer(help="Generate task instances from templates.", no_args_is_help=True)
@@ -38,7 +39,7 @@ def _find_named_template(name: str) -> LoadedTemplate | None:
 def generate_task(
     name: str | None = typer.Argument(None, help="Built-in template name"),
     template: Path | None = typer.Option(None, "--template", help="Path to a local template directory"),
-    instances: int = typer.Option(3, "--instances", help="Number of instances to generate"),
+    instances: int = typer.Option(3, "--instances", min=1, help="Number of instances to generate"),
     difficulty: str | None = typer.Option(
         None,
         "--difficulty",
@@ -66,7 +67,7 @@ def generate_task(
     (instance number and difficulty per entry).
 
     Returns (live): dry_run, template, output, count, instances list
-    (index, instance name, difficulty, path per entry).
+    (index, instance name, difficulty, path per entry), manifest_path.
 
     Examples:
       aec-bench generate task voltage-drop --instances 5 --difficulty easy,medium
@@ -177,10 +178,31 @@ def generate_task(
         return
 
     # Import generation modules lazily to keep startup fast
+    from aec_bench.generation.replay import (
+        GenerationInstance,
+        GenerationManifest,
+        prepare_template_source,
+        require_available_sidecar_paths,
+        write_generation_config,
+        write_generation_manifest,
+    )
     from aec_bench.generation.sampler import sample_instance
     from aec_bench.generation.scaffolder import scaffold_task_instance
 
+    resolved_output = output.resolve()
+    resolved_output.mkdir(parents=True, exist_ok=True)
+    require_available_sidecar_paths(resolved_output)
+    prepared_source = prepare_template_source((loaded_template,), resolved_output)
+    template_id = prepared_source.template_ids[loaded_template.path.resolve()]
+    effective_tool_mode = (
+        ToolMode(tool_mode)
+        if tool_mode is not None
+        else ToolMode.WITH_TOOL
+        if config.meta.tool_mode is ToolMode.BOTH
+        else config.meta.tool_mode
+    )
     created_paths: list[Path] = []
+    replay_instances: list[GenerationInstance] = []
 
     for i in range(instances):
         diff = difficulty_cycle[i % len(difficulty_cycle)]
@@ -194,11 +216,46 @@ def generate_task(
         instance_dir = scaffold_task_instance(
             template=loaded_template,
             instance=instance,
-            output_dir=output.resolve(),
+            output_dir=resolved_output,
             tool_mode_override=tool_mode,
             task_visibility=task_visibility,
         )
         created_paths.append(instance_dir)
+        replay_instances.append(
+            GenerationInstance(
+                task_id=instance_dir.relative_to(resolved_output).as_posix(),
+                template_id=template_id,
+                seed=seed,
+                instance_index=instance_index,
+                difficulty=diff,
+                tool_mode=effective_tool_mode,
+                task_visibility=task_visibility,
+            )
+        )
+
+    config_ref = write_generation_config(
+        resolved_output,
+        {
+            "mode": "task",
+            "suite_id": f"{config.meta.name}-standalone",
+            "template_id": template_id,
+            "seed": seed,
+            "start_index": start_index,
+            "instances": instances,
+            "difficulties": difficulty_cycle,
+            "tool_mode": effective_tool_mode.value,
+            "task_visibility": task_visibility.value,
+        },
+    )
+    write_generation_manifest(
+        resolved_output,
+        GenerationManifest(
+            suite_id=f"{config.meta.name}-standalone",
+            source=prepared_source.source,
+            config_ref=config_ref,
+            instances=tuple(replay_instances),
+        ),
+    )
 
     results_list = [
         {
@@ -216,6 +273,7 @@ def generate_task(
         "output": str(output.resolve()),
         "count": len(created_paths),
         "instances": results_list,
+        "manifest_path": str(resolved_output / "generation-manifest.json"),
     }
 
     def _render_results(data: dict[str, Any]) -> None:
@@ -235,6 +293,7 @@ def generate_task(
 
         console.print(table)
         print_success(f"Generated {data['count']} instance(s) in {data['output']}")
+        print_success(f"Replay sidecar: {data['manifest_path']}")
 
     emit(
         "generate task",
@@ -378,8 +437,7 @@ def generate_suite(
     Returns (dry-run): dry_run, suite_name, total_instances, by_discipline,
     by_difficulty, by_visibility, by_tool_mode.
 
-    Returns (live): same plan fields plus instances_generated, manifest_path,
-    job_config_path.
+    Returns (live): same plan fields plus instances_generated and manifest_path.
 
     Returns (validate-only): valid, matched_templates, total_templates.
 
@@ -508,21 +566,19 @@ def generate_suite(
         return
 
     # Execute
-    manifest = execute_plan(plan, suite_config, config_path=str(config_path))
+    manifest = execute_plan(plan, suite_config)
 
     out_dir = suite_config.output.dir.resolve()
     result_data: dict[str, object] = {
         "dry_run": False,
         **plan_summary,
         "instances_generated": len(manifest.instances),
-        "manifest_path": str(out_dir / "dataset.json"),
-        "job_config_path": str(out_dir / "job.yaml"),
+        "manifest_path": str(out_dir / "generation-manifest.json"),
     }
 
     def _render_result(data: dict[str, Any]) -> None:
         _render_plan_table(data)
         print_success(f"Generated {data['instances_generated']} instance(s). Manifest: {data['manifest_path']}")
-        print_success(f"Harbor job config: {data['job_config_path']}")
 
     emit(
         "generate suite",
@@ -530,6 +586,47 @@ def generate_suite(
         start_time=start,
         human_renderer=_render_result,
     )
+
+
+@app.command("replay")
+def replay_generation_command(
+    manifest: Path = typer.Argument(help="Path to generation-manifest.json"),
+    output: Path | None = typer.Option(None, "--output", help="Separate replay output directory"),
+    overwrite: bool = typer.Option(False, "--overwrite", help="Replace an existing replay output directory"),
+) -> None:
+    """Regenerate task files from one optional generation replay sidecar."""
+    import time
+
+    from aec_bench.generation.replay import replay_generation
+
+    start = time.monotonic()
+    manifest_path = manifest.resolve()
+    default_output = manifest_path.parent.parent / f"{manifest_path.parent.name}-replay"
+    output_dir = (output or default_output).resolve()
+    try:
+        result = replay_generation(manifest_path, output_dir, overwrite=overwrite)
+    except (FileNotFoundError, ValueError, OSError) as error:
+        emit("generate replay", None, errors=[str(error)], start_time=start)
+        return
+
+    data: dict[str, object] = {
+        "output": str(result.output_dir),
+        "runtime_matches": result.runtime_matches,
+        "runtime_differences": list(result.runtime_differences),
+        "replay_metadata_differences": list(result.replay_metadata_differences),
+    }
+
+    def _render_replay(replay_data: dict[str, Any]) -> None:
+        if replay_data["runtime_matches"]:
+            print_success(f"Replay reproduced all runtime task files in {replay_data['output']}")
+        else:
+            console.print("[red]Replay runtime files differ.[/red]")
+        metadata_differences = replay_data["replay_metadata_differences"]
+        if metadata_differences:
+            print_warning("Replay metadata differs: " + ", ".join(metadata_differences))
+
+    errors = list(result.runtime_differences) if result.runtime_differences else None
+    emit("generate replay", data, errors=errors, start_time=start, human_renderer=_render_replay)
 
 
 def _render_plan_table(data: dict[str, Any]) -> None:

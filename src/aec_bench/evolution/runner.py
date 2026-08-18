@@ -208,8 +208,16 @@ def generate_task_instances(gen_config: TaskGenerateConfig) -> list[Path]:
     The template field can be a builtin template name (e.g. ``"voltage-drop"``)
     or an absolute/relative path to a template directory.
     """
+    from aec_bench.generation.replay import (
+        GenerationInstance,
+        GenerationManifest,
+        prepare_template_source,
+        write_generation_config,
+        write_generation_manifest,
+    )
     from aec_bench.generation.sampler import sample_instance
     from aec_bench.generation.scaffolder import scaffold_task_instance
+    from aec_bench.templates.contracts import ToolMode
     from aec_bench.templates.registry import load_template
 
     template_dir = _resolve_template(gen_config.template)
@@ -218,6 +226,11 @@ def generate_task_instances(gen_config: TaskGenerateConfig) -> list[Path]:
     output_dir = Path(tempfile.mkdtemp(prefix="aec-bench-evo-tasks-"))
     difficulties = gen_config.difficulties
     generated_dirs: list[Path] = []
+    replay_instances: list[GenerationInstance] = []
+    prepared_source = prepare_template_source((template,), output_dir)
+    tool_mode = (
+        template.config.meta.tool_mode if template.config.meta.tool_mode is not ToolMode.BOTH else ToolMode.WITH_TOOL
+    )
 
     for i in range(gen_config.count):
         difficulty = difficulties[i % len(difficulties)]
@@ -233,7 +246,40 @@ def generate_task_instances(gen_config: TaskGenerateConfig) -> list[Path]:
             output_dir=output_dir,
         )
         generated_dirs.append(instance_dir)
+        replay_instances.append(
+            GenerationInstance(
+                task_id=instance_dir.relative_to(output_dir).as_posix(),
+                template_id=prepared_source.template_ids[template.path.resolve()],
+                seed=gen_config.seed,
+                instance_index=instance.instance_index,
+                difficulty=difficulty,
+                tool_mode=tool_mode,
+            )
+        )
         _log.info("Generated task instance: %s", instance_dir.name)
+
+    config_ref = write_generation_config(
+        output_dir,
+        {
+            "mode": "evolution",
+            "suite_id": "evolution-generated-tasks",
+            "template_id": prepared_source.template_ids[template.path.resolve()],
+            "seed": gen_config.seed,
+            "instances": gen_config.count,
+            "difficulties": list(difficulties),
+            "tool_mode": tool_mode.value,
+            "task_visibility": "public",
+        },
+    )
+    write_generation_manifest(
+        output_dir,
+        GenerationManifest(
+            suite_id="evolution-generated-tasks",
+            source=prepared_source.source,
+            config_ref=config_ref,
+            instances=tuple(replay_instances),
+        ),
+    )
 
     _log.info("Generated %d task instances in %s", len(generated_dirs), output_dir)
     return generated_dirs

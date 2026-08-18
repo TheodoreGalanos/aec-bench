@@ -10,7 +10,6 @@ from pydantic import ValidationError
 
 from aec_bench.contracts.run_bundle import TaskReviewSnapshotRef, TaskSnapshotRef
 from aec_bench.contracts.task_definition import Visibility
-from aec_bench.contracts.task_generation import TaskGenerationIdentity
 from aec_bench.experimentation.proposals.structural_corpus import (
     StructuralCorpusItem,
     StructuralSplit,
@@ -259,7 +258,6 @@ def test_manifest_keeps_family_and_review_lineage_separate_and_records_distance(
     assert manifest.train.items[0].visibility is Visibility.PUBLIC
     assert manifest.holdout.items[0].visibility is Visibility.HOLDOUT
     assert manifest.train.items[0].snapshot.task_id == "train-1"
-    assert manifest.holdout.items[0].generation_identity.task_id == "holdout-1"
     assert {(item.left_split, item.right_split) for item in manifest.near_structure_distances} == {
         ("train", "dev"),
         ("train", "holdout"),
@@ -345,7 +343,7 @@ def test_manifest_rejects_reused_task_or_world_identity() -> None:
         )
 
 
-def test_item_rejects_snapshot_generation_lineage_and_visibility_mismatches() -> None:
+def test_item_rejects_snapshot_lineage_and_visibility_mismatches() -> None:
     """Every descriptive identity must agree with the exact host-owned task snapshot."""
     shape = topology_shape_ref(nodes=("a", "b"), edges=(("a", "b"),))
     valid = _item("train-1", "drainage", "review-train", shape)
@@ -363,14 +361,6 @@ def test_item_rejects_snapshot_generation_lineage_and_visibility_mismatches() ->
             {
                 **valid.model_dump(mode="python"),
                 "snapshot": valid.snapshot.model_copy(update={"task_id": "other-task"}),
-            }
-        )
-
-    with pytest.raises(ValidationError, match="generation identity task id"):
-        StructuralCorpusItem.model_validate(
-            {
-                **valid.model_dump(mode="python"),
-                "generation_identity": valid.generation_identity.model_copy(update={"task_id": "other-task"}),
             }
         )
 
@@ -441,8 +431,8 @@ def test_manifest_enforces_split_visibility() -> None:
         )
 
 
-def test_manifest_rejects_duplicate_package_or_generation_identity() -> None:
-    """Renaming a task cannot duplicate package bytes or generated-instance provenance."""
+def test_manifest_rejects_duplicate_task_packages() -> None:
+    """Renaming a task cannot make duplicate task-package bytes independent."""
     train_item = _chain_item("train-1", "drainage", "review-train", 3)
     dev_item = _chain_item("dev-1", "roads", "review-dev", 4)
     holdout_item = _chain_item(
@@ -477,26 +467,6 @@ def test_manifest_rejects_duplicate_package_or_generation_identity() -> None:
             manifest_id="phase9.structural.v1",
             train=_split("train", train_item),
             dev=_split("dev", duplicate_public_package_dev),
-            holdout=_split("holdout", holdout_item),
-            near_structure_distances=(),
-        )
-
-    duplicate_generation_dev = dev_item.model_copy(
-        update={
-            "generation_identity": TaskGenerationIdentity(
-                task_id=dev_item.task_id,
-                template=train_item.generation_identity.template,
-                template_source_sha256=train_item.generation_identity.template_source_sha256,
-                seed=train_item.generation_identity.seed,
-                instance_index=train_item.generation_identity.instance_index,
-            )
-        }
-    )
-    with pytest.raises(ValidationError, match="generation identities must be unique"):
-        StructuralSplitManifest(
-            manifest_id="phase9.structural.v1",
-            train=_split("train", train_item),
-            dev=_split("dev", duplicate_generation_dev),
             holdout=_split("holdout", holdout_item),
             near_structure_distances=(),
         )
@@ -536,13 +506,6 @@ def _item(
                 declared_surface_sha256=_digest(f"declared-surface:{task_id}"),
                 visibility=visibility,
             ),
-        ),
-        generation_identity=TaskGenerationIdentity(
-            task_id=task_id,
-            template=f"template:{family}",
-            template_source_sha256=_digest(f"template:{family}"),
-            seed=int.from_bytes(hashlib.sha256(task_id.encode()).digest()[:4]),
-            instance_index=0,
         ),
         topology=shape,
     )

@@ -131,9 +131,9 @@ def test_custom_verifier_gets_instance_json(tmp_path: Path) -> None:
     instance_json = instance_dir / "tests" / "instance.json"
     assert instance_json.exists()
     payload = json.loads(instance_json.read_text())
-    assert payload["all_params"]["case_variant"] in {"clean", "defect"}
+    assert payload["parameters"]["case_variant"] in {"clean", "defect"}
     assert "head_m" in payload["ground_truth"]
-    assert payload["seed"] == 7
+    assert set(payload) == {"parameters", "ground_truth"}
 
 
 def test_golden_hooks_override_fixture_content(tmp_path: Path) -> None:
