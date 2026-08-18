@@ -159,17 +159,17 @@ def test_dataset_generation_verifier_scores_golden_pass(tmp_path: Path) -> None:
     assert len(manifest.instances) == 2
 
     for entry in manifest.instances:
-        instance_dir = output_dir / entry.path
+        instance_dir = output_dir / entry.task_id
         assert instance_dir.is_dir(), f"Instance dir missing: {instance_dir}"
 
         # Copy golden_pass.md as the agent output
         golden = (instance_dir / "tests" / "fixtures" / "golden_pass.md").read_text()
-        agent_output = tmp_path / f"output_{entry.path.replace('/', '_')}.md"
+        agent_output = tmp_path / f"output_{entry.task_id.replace('/', '_')}.md"
         agent_output.write_text(golden)
 
         # Run verifier
         verify_py = instance_dir / "tests" / "verify.py"
-        reward_file = tmp_path / f"reward_{entry.path.replace('/', '_')}.json"
+        reward_file = tmp_path / f"reward_{entry.task_id.replace('/', '_')}.json"
 
         result = subprocess.run(
             ["python3", str(verify_py), "--input", str(agent_output), "--output", str(reward_file)],
@@ -177,10 +177,10 @@ def test_dataset_generation_verifier_scores_golden_pass(tmp_path: Path) -> None:
             text=True,
             timeout=30,
         )
-        assert result.returncode == 0, f"Verifier failed for {entry.path}: {result.stderr}"
+        assert result.returncode == 0, f"Verifier failed for {entry.task_id}: {result.stderr}"
 
         reward_data = json.loads(reward_file.read_text())
-        assert reward_data["reward"] == 1.0, f"Expected reward 1.0 for {entry.path}, got {reward_data}"
+        assert reward_data["reward"] == 1.0, f"Expected reward 1.0 for {entry.task_id}, got {reward_data}"
 
 
 def test_builtin_templates_discovered() -> None:
@@ -250,5 +250,5 @@ def test_dataset_with_three_templates(tmp_path: Path) -> None:
     manifest = execute_plan(plan, config)
     assert len(manifest.instances) == expected_count
 
-    dataset_json = tmp_path / "dataset.json"
-    assert dataset_json.exists()
+    generation_manifest = tmp_path / "generation-manifest.json"
+    assert generation_manifest.exists()

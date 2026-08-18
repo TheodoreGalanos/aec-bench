@@ -65,30 +65,21 @@ def test_scaffold_creates_directory_structure(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Test 2: task.toml generation metadata
+# Test 2: task.toml runtime metadata
 # ---------------------------------------------------------------------------
 
 
-def test_scaffold_task_toml_has_generation_metadata(tmp_path: Path) -> None:
-    """task.toml must contain a [generation] section with correct provenance fields."""
+def test_scaffold_task_toml_excludes_replay_metadata(tmp_path: Path) -> None:
+    """task.toml must contain runtime semantics and no generation replay fields."""
     instance_dir = _generate_test_instance(tmp_path)
     toml_path = instance_dir / "task.toml"
 
     with open(toml_path, "rb") as fh:
         data = tomllib.load(fh)
 
-    assert "generation" in data, "[generation] section missing from task.toml"
-    gen = data["generation"]
-    assert gen["origin"] == "generated"
-    assert "template" in gen
-    assert "seed" in gen
-    assert "timestamp" not in gen
-    assert gen["template_source_sha256"] == load_template(TEMPLATE_DIR).source_sha256
-    assert "template_version" not in gen
-    assert "difficulty" in gen
-    assert "visibility_level" in gen
-    assert "archetype" in gen
-    assert "site_context" in gen
+    assert "version" not in data
+    assert "generation" not in data
+    assert data["metadata"]["domain"] == "ground"
 
 
 def test_scaffold_task_toml_preserves_nonstandard_generation_difficulty(tmp_path: Path) -> None:
@@ -106,17 +97,15 @@ def test_scaffold_task_toml_preserves_nonstandard_generation_difficulty(tmp_path
 
     assert data["metadata"]["difficulty"] == "medium"
     assert data["metadata"]["generation_difficulty"] == "baseline_audited"
-    assert data["generation"]["difficulty"] == "baseline_audited"
 
 
 def test_scaffold_task_toml_has_required_sections(tmp_path: Path) -> None:
-    """task.toml must contain version, [metadata], [agent], [verifier], [environment] sections."""
+    """task.toml must contain the required runtime sections."""
     instance_dir = _generate_test_instance(tmp_path)
 
     with open(instance_dir / "task.toml", "rb") as fh:
         data = tomllib.load(fh)
 
-    assert "version" in data
     assert "metadata" in data
     assert "agent" in data
     assert "verifier" in data
@@ -296,8 +285,8 @@ def test_scaffold_task_toml_no_tools_section_in_no_tool_mode(tmp_path: Path) -> 
     assert "tools" not in data, "[tools] section should not be present in no-tool mode"
 
 
-def test_scaffold_records_explicit_task_visibility_and_instance_index(tmp_path: Path) -> None:
-    """Generated research tasks must preserve registry visibility and stable sampling identity."""
+def test_scaffold_records_task_visibility_without_replay_identity(tmp_path: Path) -> None:
+    """Runtime metadata retains visibility but excludes the sampling identity."""
     template = load_template(TEMPLATE_DIR)
     instance = sample_instance(template, "easy", seed=42, instance_index=12)
 
@@ -314,7 +303,7 @@ def test_scaffold_records_explicit_task_visibility_and_instance_index(tmp_path: 
         data = tomllib.load(fh)
 
     assert data["metadata"]["visibility"] == "holdout"
-    assert data["generation"]["instance_index"] == 12
+    assert "generation" not in data
 
 
 def test_scaffold_refuses_to_overwrite_an_existing_task_package(tmp_path: Path) -> None:

@@ -14,8 +14,17 @@ import yaml
 from aec_bench.evolution.config_loader import load_evolution_config
 from aec_bench.evolution.report_data import list_runs
 from aec_bench.generation.contracts import SampledInstance
+from aec_bench.generation.replay import (
+    GenerationInstance,
+    GenerationManifest,
+    prepare_template_source,
+    require_available_sidecar_paths,
+    write_generation_config,
+    write_generation_manifest,
+)
 from aec_bench.generation.sampler import sample_instance
 from aec_bench.generation.scaffolder import scaffold_task_instance
+from aec_bench.templates.contracts import ToolMode
 from aec_bench.templates.registry import LoadedTemplate, load_template
 
 Strategy = Literal["hill_climb", "qd"]
@@ -121,12 +130,14 @@ def materialise_suite(
     if suite_root.exists():
         shutil.rmtree(suite_root)
     suite_root.mkdir(parents=True, exist_ok=True)
+    require_available_sidecar_paths(suite_root)
+
+    loaded_entries = [(entry, load_template(repo_root / entry.source_task_path)) for entry in entries]
+    prepared_source = prepare_template_source(tuple(template for _, template in loaded_entries), suite_root)
 
     materialised: list[MaterialisedInstance] = []
-    for template_index, entry in enumerate(entries):
-        template_dir = repo_root / entry.source_task_path
-        template = load_template(template_dir)
-
+    replay_instances: list[GenerationInstance] = []
+    for template_index, (entry, template) in enumerate(loaded_entries):
         for difficulty_index, difficulty in enumerate(difficulties):
             instance = _sample_instance_with_retries(
                 template_task_id=entry.task_id,
@@ -149,6 +160,39 @@ def materialise_suite(
                     path=instance_dir.relative_to(repo_root).as_posix(),
                 )
             )
+            replay_instances.append(
+                GenerationInstance(
+                    task_id=instance_dir.relative_to(suite_root).as_posix(),
+                    template_id=prepared_source.template_ids[template.path.resolve()],
+                    seed=instance.seed,
+                    instance_index=instance.instance_index,
+                    difficulty=difficulty,
+                    tool_mode=(
+                        template.config.meta.tool_mode
+                        if template.config.meta.tool_mode is not ToolMode.BOTH
+                        else ToolMode.WITH_TOOL
+                    ),
+                )
+            )
+
+    config_ref = write_generation_config(
+        suite_root,
+        {
+            "mode": "task-ecology",
+            "suite_id": suite_name,
+            "seed": seed,
+            "difficulties": list(difficulties),
+        },
+    )
+    write_generation_manifest(
+        suite_root,
+        GenerationManifest(
+            suite_id=suite_name,
+            source=prepared_source.source,
+            config_ref=config_ref,
+            instances=tuple(replay_instances),
+        ),
+    )
 
     return materialised
 

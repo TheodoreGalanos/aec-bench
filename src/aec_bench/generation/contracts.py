@@ -19,7 +19,6 @@ class SampledInstance:
     site_context: str
     difficulty: str
     template_name: str
-    template_source_sha256: str
     seed: int
     instance_index: int
     visibility_level: VisibilityLevel

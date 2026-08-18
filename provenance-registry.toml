@@ -938,6 +938,47 @@ exception_reason = "The shared reference contract is legitimate, but its current
 removal_milestone = "ArtifactReference consumers use an owned repository reader that fails closed on byte mismatch"
 
 [[field]]
+symbol = "aec_bench.generation.replay.GenerationManifest.schema_version"
+surface = "pydantic_model"
+wire_name = "schema_version"
+category = "compatibility"
+domain_owner = "task_generation"
+authority = "generation_manifest_reader"
+authoritative = true
+exposure = "persisted"
+status = "current"
+payload_contract = "AEC-Bench generated-task replay manifest schema 1"
+canonicalization = "fixed integer literal 1"
+consumer = "generation replay command and dataset selection reader"
+validation_behavior = "GenerationManifest rejects any schema version other than 1 and rejects extra fields"
+mismatch_behavior = "reject_generation_manifest"
+retention = "generated_task_replay_lifetime"
+rationale = "The optional replay sidecar is interpreted independently from runnable task packages."
+duplication = "unique"
+compatibility_behavior = "reject unsupported generation replay schemas"
+compatibility_kind = "external_schema"
+
+[[field]]
+symbol = "aec_bench.generation.replay.GitTemplateSource.revision"
+surface = "pydantic_model"
+wire_name = "revision"
+category = "source_identity"
+domain_owner = "task_generation"
+authority = "git_repository"
+authoritative = true
+exposure = "persisted"
+status = "current"
+payload_contract = "one exact repository revision containing all built-in template sources for a generated set"
+canonicalization = "git rev-parse HEAD when all selected built-in template paths match the committed revision"
+consumer = "generation replay source resolver"
+validation_behavior = "GitTemplateSource requires a lowercase full commit and replay requires git archive to resolve that commit and template root"
+mismatch_behavior = "reject_generation_replay"
+retention = "generated_task_replay_lifetime"
+rationale = "One shared repository revision replaces repeated per-template source hashes."
+duplication = "unique"
+format = "lowercase 40-character Git commit"
+
+[[field]]
 symbol = "aec_bench.harness.execution_payload.RuntimeExecutionAttestation.evidence_manifest_sha256"
 aliases = ["aec_bench.adapters.deepseek_harness.runtime.DeepSeekHarnessRun.evidence_manifest_sha256"]
 surface = "pydantic_model"

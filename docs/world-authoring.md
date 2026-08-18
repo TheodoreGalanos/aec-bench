@@ -39,8 +39,9 @@ workspace are sufficient.
    uv run aec-bench task validate <generated-task-dir>
    ```
 
-The generated directory is the runnable artifact. Its `task.toml` records
-source identity, seed, instance index, difficulty, and visibility. The root
+The generated task directory is the runnable artifact. Its `task.toml` contains
+runtime task semantics only. The optional `generation-manifest.json` at the
+generation output root records source identity and replay inputs. The root
 [README](../README.md#generate-tasks) owns public CLI instructions; this guide
 does not duplicate the full task-authoring workflow.
 

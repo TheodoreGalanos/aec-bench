@@ -69,10 +69,11 @@ The current path is:
 5. Build an `EvaluationResult` and persist a `TrialRecord`.
 
 Deterministic templates and suite generation live with authoring and generation.
-Generated instances remain derived artifacts. Their generation provenance uses
-the template source digest, seed, instance index, difficulty, and visibility;
-ambient materialization time is not part of task meaning. The generated task
-directory is validated through the current `TaskDefinition` loader before use.
+Generated instances remain derived artifacts. Runnable task directories contain
+task semantics only. One optional `generation-manifest.json` beside the
+generated set records the shared template source and per-instance replay inputs.
+Task loading does not read this sidecar. The replay command regenerates into a
+separate directory and compares runtime files before it reports success.
 
 ### Interactive worlds
 

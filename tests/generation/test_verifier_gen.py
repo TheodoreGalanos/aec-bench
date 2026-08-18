@@ -33,7 +33,6 @@ def _build_test_instance() -> SampledInstance:
         site_context="test-site",
         difficulty="easy",
         template_name="test",
-        template_source_sha256="0" * 64,
         seed=42,
         instance_index=0,
         visibility_level=VisibilityLevel.ALL_GIVEN,

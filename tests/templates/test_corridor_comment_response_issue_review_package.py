@@ -439,7 +439,7 @@ def test_scaffolded_instance_layout(tmp_path: Path) -> None:
         assert f"COPY {rel} /workspace/{rel}" in dockerfile
 
     instance_json = json.loads((instance_dir / "tests" / "instance.json").read_text(encoding="utf-8"))
-    assert instance_json["all_params"]["packet_variant"] == "clean"
+    assert instance_json["parameters"]["packet_variant"] == "clean"
     assert "rlr_01_status" in instance_json["ground_truth"]
 
     verify_source = (instance_dir / "tests" / "verify.py").read_text(encoding="utf-8")

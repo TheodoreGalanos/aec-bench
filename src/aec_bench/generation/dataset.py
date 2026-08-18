@@ -1,21 +1,20 @@
 # ABOUTME: Dataset composition engine for generating evaluation suites from templates.
-# ABOUTME: Parses suite.toml, allocates instances with coverage controls, and writes dataset.json.
+# ABOUTME: Parses suite.toml, allocates instances, and writes one optional replay sidecar.
 
 from __future__ import annotations
 
-import json
 import logging
 import math
 import tomllib
 from collections import Counter, defaultdict
 from dataclasses import dataclass
-from datetime import UTC, datetime
 from fnmatch import fnmatch
 from pathlib import Path
 
 from pydantic import Field
 
 from aec_bench.contracts.validators import StrictModel
+from aec_bench.generation.replay import GenerationManifest
 from aec_bench.templates.contracts import ToolMode
 from aec_bench.templates.registry import LoadedTemplate
 
@@ -523,30 +522,6 @@ def compose_dataset(
     )
 
 
-class InstanceEntry(StrictModel):
-    """One instance's metadata in the dataset manifest."""
-
-    path: str
-    template: str
-    difficulty: str
-    archetype: str
-    site_context: str
-    visibility: str
-    tool_mode: str
-
-
-class SuiteOutput(StrictModel):
-    """The dataset.json file written alongside generated instances."""
-
-    name: str
-    seed: int
-    created: datetime
-    framework_version: str
-    config: str
-    summary: DatasetSummary
-    instances: list[InstanceEntry]
-
-
 def load_suite_config(config_path: Path) -> SuiteConfig:
     """Load a suite.toml file and return a validated SuiteConfig."""
     with open(config_path, "rb") as fh:
@@ -557,22 +532,32 @@ def load_suite_config(config_path: Path) -> SuiteConfig:
 def execute_plan(
     plan: CompositionPlan,
     config: SuiteConfig,
-    *,
-    config_path: str = "suite.toml",
-) -> SuiteOutput:
-    """Execute a composition plan by scaffolding all instances and writing dataset.json.
+) -> GenerationManifest:
+    """Execute a composition plan and write one optional replay sidecar.
 
     Reuses the loaded template carried by each planned instance.
-    Returns the suite output that was written to disk.
+    Returns the replay manifest that was written to disk.
     """
-    from aec_bench import __version__
+    from aec_bench.generation.replay import (
+        GenerationInstance,
+        GenerationManifest,
+        prepare_template_source,
+        require_available_sidecar_paths,
+        write_generation_config,
+        write_generation_manifest,
+    )
     from aec_bench.generation.sampler import sample_instance
     from aec_bench.generation.scaffolder import scaffold_task_instance
 
     output_dir = config.output.dir.resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
+    require_available_sidecar_paths(output_dir)
+    templates = tuple(
+        {planned.template.path.resolve(): planned.template for planned in plan.planned_instances}.values()
+    )
+    prepared_source = prepare_template_source(templates, output_dir)
 
-    entries: list[InstanceEntry] = []
+    entries: list[GenerationInstance] = []
 
     for instance_index, planned in enumerate(plan.planned_instances):
         template = planned.template
@@ -593,102 +578,38 @@ def execute_plan(
             tool_mode_override=planned.tool_mode,
         )
 
-        # Build manifest entry with relative path
-        rel_path = instance_dir.relative_to(output_dir)
+        rel_path = instance_dir.relative_to(output_dir).as_posix()
         entries.append(
-            InstanceEntry(
-                path=str(rel_path),
-                template=planned.template_name,
+            GenerationInstance(
+                task_id=rel_path,
+                template_id=prepared_source.template_ids[template.path.resolve()],
+                seed=planned.seed_offset,
+                instance_index=instance_index,
                 difficulty=planned.difficulty,
-                archetype=sampled.archetype_name,
-                site_context=sampled.site_context,
-                visibility=planned.visibility,
-                tool_mode=planned.tool_mode,
+                tool_mode=ToolMode(planned.tool_mode),
             )
         )
 
-    # Build manifest
-    manifest = SuiteOutput(
-        name=plan.suite_name,
-        seed=plan.seed,
-        created=datetime.now(tz=UTC),
-        framework_version=__version__,
-        config=config_path,
-        summary=plan.summary,
-        instances=entries,
+    config_ref = write_generation_config(output_dir, _suite_generation_config(config))
+    manifest = GenerationManifest(
+        suite_id=plan.suite_name,
+        source=prepared_source.source,
+        config_ref=config_ref,
+        instances=tuple(entries),
     )
-
-    # Write dataset.json
-    manifest_path = output_dir / "dataset.json"
-    manifest_path.write_text(json.dumps(manifest.model_dump(mode="json"), indent=2, default=str) + "\n")
-
-    # Write Harbor-compatible job.yaml with one dataset path per instance
-    _write_harbor_job_config(output_dir, entries)
-
+    write_generation_manifest(output_dir, manifest)
     return manifest
 
 
-def _write_harbor_job_config(
-    output_dir: Path,
-    entries: list[InstanceEntry],
-) -> None:
-    """Write a Harbor job.yaml alongside dataset.json.
-
-    Includes provider documentation and references the Harbor BaseAgent contract
-    so users know how to plug in their own agents.
-    """
-    parent_dirs: dict[str, list[str]] = {}
-    for entry in entries:
-        parts = Path(entry.path).parts
-        parent = str(Path(*parts[:-1])) if len(parts) > 1 else "."
-        if parent not in parent_dirs:
-            parent_dirs[parent] = []
-        parent_dirs[parent].append(parts[-1])
-
-    dataset_lines: list[str] = []
-    for parent_path in sorted(parent_dirs):
-        full_path = output_dir / parent_path
-        dataset_lines.append(f"  - path: {full_path}")
-
-    job_yaml = (
-        "# Auto-generated Harbor job config for this dataset.\n"
-        "#\n"
-        "# To use your own agent:\n"
-        "#   1. Subclass Harbor's BaseAgent, compose aec_bench utility functions\n"
-        "#   2. See agents/ directory for ready-to-use default agents\n"
-        "#   3. Set import_path below to your module:class\n"
-        "#\n"
-        "# Provider options (set in agent kwargs or env):\n"
-        "#   anthropic     — direct Anthropic API (ANTHROPIC_API_KEY)\n"
-        "#   bedrock       — AWS Bedrock (AWS_BEDROCK_ENDPOINT, AWS_BEARER_TOKEN)\n"
-        "#   azure_openai  — Azure OpenAI (AZURE_OPENAI_ENDPOINT, AZURE_OPENAI_API_KEY)\n"
-        "#   openai        — OpenAI API (OPENAI_API_KEY)\n"
-        "#   together      — Together AI OpenAI-compatible API (TOGETHER_API_KEY)\n"
-        "\n"
-        "jobs_dir: jobs\n"
-        "n_attempts: 1\n"
-        "timeout_multiplier: 1.0\n"
-        "\n"
-        "orchestrator:\n"
-        "  type: local\n"
-        "  n_concurrent_trials: 1\n"
-        "  quiet: false\n"
-        "\n"
-        "environment:\n"
-        "  type: modal\n"
-        "  force_build: false\n"
-        "  delete: true\n"
-        "  kwargs:\n"
-        "    secrets:\n"
-        "      - azure-openai-key\n"
-        "\n"
-        "agents:\n"
-        "  - name: my-agent\n"
-        "    import_path: agents.tool_loop_anthropic:ToolLoopAnthropicAgent\n"
-        "    model_name: claude-sonnet-4-20250514\n"
-        "\n"
-        "datasets:\n" + "\n".join(dataset_lines) + "\n"
-    )
-
-    job_path = output_dir / "job.yaml"
-    job_path.write_text(job_yaml)
+def _suite_generation_config(config: SuiteConfig) -> dict[str, object]:
+    """Return deterministic suite settings without source or output locators."""
+    return {
+        "mode": "suite",
+        "suite_id": config.name,
+        "seed": config.seed,
+        "coverage": config.coverage.model_dump(mode="json"),
+        "templates": {"include": config.templates.include},
+        "visibility": config.visibility.model_dump(mode="json"),
+        "tool_mode": config.tool_mode.model_dump(mode="json"),
+        "instances": config.instances.model_dump(mode="json"),
+    }

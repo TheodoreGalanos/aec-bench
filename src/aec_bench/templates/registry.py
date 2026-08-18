@@ -1,7 +1,6 @@
 # ABOUTME: Registry for loading, discovering, and validating task generation templates.
 # ABOUTME: Handles TOML parsing with field remapping, dynamic engine import, and directory scanning.
 
-import hashlib
 import importlib.util
 import tomllib
 from collections.abc import Sequence
@@ -22,7 +21,6 @@ from aec_bench.templates.contracts import (
 
 # Files that must be present in every template directory.
 _REQUIRED_FILES = ("engine.py", "params.toml", "instruction.md")
-_SOURCE_FILES = (*_REQUIRED_FILES, "verify.py", "system_prompt.md", "output_contract.json")
 
 # Known fields for DifficultyPreset — anything else becomes `extra`.
 _DIFFICULTY_KNOWN_FIELDS = frozenset({"description", "visibility", "archetypes", "hidden_params", "replacement_text"})
@@ -93,7 +91,6 @@ class LoadedTemplate:
     path: Path
     engine: ModuleType
     engine_source: str
-    source_sha256: str
 
     @property
     def discipline(self) -> str:
@@ -131,22 +128,6 @@ def _load_engine(template_dir: Path) -> tuple[ModuleType, str]:
         raise ValueError(msg)
 
     return module, engine_path.read_text(encoding="utf-8")
-
-
-def _template_source_sha256(template_dir: Path) -> str:
-    """Hash the supported source files that determine generated task content."""
-    digest = hashlib.sha256()
-    for name in _SOURCE_FILES:
-        path = template_dir / name
-        if not path.is_file():
-            continue
-        content = path.read_bytes()
-        digest.update(name.encode("utf-8"))
-        digest.update(b"\0")
-        digest.update(str(len(content)).encode("ascii"))
-        digest.update(b"\0")
-        digest.update(content)
-    return digest.hexdigest()
 
 
 def load_template(template_dir: Path) -> LoadedTemplate:
@@ -208,7 +189,6 @@ def load_template(template_dir: Path) -> LoadedTemplate:
         path=template_dir,
         engine=engine,
         engine_source=engine_source,
-        source_sha256=_template_source_sha256(template_dir),
     )
 
 

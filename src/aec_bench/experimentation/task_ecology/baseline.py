@@ -253,11 +253,9 @@ def validate_baseline_environment(model: str) -> None:
 def _read_task_metadata(task_toml: Path) -> dict[str, Any]:
     raw = tomllib.loads(task_toml.read_text(encoding="utf-8"))
     metadata = raw.get("metadata", {})
-    generation = raw.get("generation", {})
     return {
         "domain": metadata.get("domain"),
-        "difficulty": generation.get("difficulty") or metadata.get("difficulty"),
-        "template": generation.get("template"),
+        "difficulty": metadata.get("generation_difficulty") or metadata.get("difficulty"),
     }
 
 

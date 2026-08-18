@@ -100,7 +100,7 @@ def sample_instance(
 
     Draws parameter values from archetype ranges and difficulty presets,
     calls engine_compute to obtain ground truth, and returns a SampledInstance
-    with full provenance metadata.
+    with the inputs needed to scaffold the runtime task.
     """
     if instance_index < 0:
         raise ValueError("instance_index must be non-negative")
@@ -142,7 +142,6 @@ def sample_instance(
         site_context=site_context,
         difficulty=difficulty_name,
         template_name=config.meta.name,
-        template_source_sha256=template.source_sha256,
         seed=seed,
         instance_index=instance_index,
         visibility_level=preset.visibility,

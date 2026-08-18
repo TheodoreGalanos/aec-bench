@@ -6,16 +6,15 @@ import textwrap
 import tomllib
 from pathlib import Path
 from types import ModuleType
+from typing import Any
 
 import pytest
 from pydantic import ValidationError
 
 from aec_bench.generation.dataset import (
     CompositionPlan,
-    InstanceEntry,
     OutputConfig,
     SuiteConfig,
-    SuiteOutput,
     allocate_budget,
     compose_dataset,
     execute_plan,
@@ -24,6 +23,7 @@ from aec_bench.generation.dataset import (
     load_suite_config,
     normalise_ratios,
 )
+from aec_bench.generation.replay import GenerationManifest
 from aec_bench.templates.contracts import (
     DifficultyPreset,
     OutputSpec,
@@ -33,6 +33,14 @@ from aec_bench.templates.contracts import (
     VisibilityLevel,
 )
 from aec_bench.templates.registry import LoadedTemplate
+
+
+def _nested_mapping_keys(value: Any) -> set[str]:
+    if isinstance(value, dict):
+        return {str(key) for key in value} | {key for item in value.values() for key in _nested_mapping_keys(item)}
+    if isinstance(value, list):
+        return {key for item in value for key in _nested_mapping_keys(item)}
+    return set()
 
 
 def _parse_suite_toml(toml_str: str) -> SuiteConfig:
@@ -181,7 +189,6 @@ def _loaded_template(config: TemplateConfig, path: Path) -> LoadedTemplate:
         path=path,
         engine=engine,
         engine_source="def compute(**kwargs): ...",
-        source_sha256="0" * 64,
     )
 
 
@@ -523,19 +530,19 @@ def test_execute_plan_creates_instance_dirs(tmp_path: Path) -> None:
     plan = compose_dataset(config_with_output, templates)
     manifest = execute_plan(plan, config_with_output)
 
-    assert isinstance(manifest, SuiteOutput)
-    assert manifest.name == "test-suite"
+    assert isinstance(manifest, GenerationManifest)
+    assert manifest.suite_id == "test-suite"
     assert len(manifest.instances) == plan.summary.total_instances
 
     # Verify instance directories exist on disk
     for entry in manifest.instances:
-        instance_path = tmp_path / entry.path
+        instance_path = tmp_path / entry.task_id
         assert instance_path.exists(), f"Missing: {instance_path}"
         assert (instance_path / "task.toml").exists()
 
 
-def test_execute_plan_writes_dataset_json(tmp_path: Path) -> None:
-    """execute_plan should write dataset.json to the output dir."""
+def test_execute_plan_writes_one_generation_manifest(tmp_path: Path) -> None:
+    """execute_plan writes deterministic replay data outside task directories."""
     from aec_bench.templates.registry import discover_templates
 
     templates, diagnostics = discover_templates()
@@ -547,13 +554,22 @@ def test_execute_plan_writes_dataset_json(tmp_path: Path) -> None:
     plan = compose_dataset(config_with_output, templates)
     execute_plan(plan, config_with_output)
 
-    dataset_json = tmp_path / "dataset.json"
-    assert dataset_json.exists()
-    data = json.loads(dataset_json.read_text())
-    assert data["name"] == "test-suite"
-    assert data["seed"] == 42
-    assert "summary" in data
+    manifest_path = tmp_path / "generation-manifest.json"
+    assert manifest_path.exists()
+    data = json.loads(manifest_path.read_text())
+    assert data["suite_id"] == "test-suite"
+    assert data["schema_version"] == 1
+    assert "created" not in data
+    assert "framework_version" not in data
     assert "instances" in data
+    assert not (tmp_path / "dataset.json").exists()
+    assert not (tmp_path / "job.yaml").exists()
+    config_data = json.loads((tmp_path / "generation-config.json").read_text())
+    retained_replay_data = manifest_path.read_text() + json.dumps(config_data)
+    assert str(tmp_path) not in retained_replay_data
+    retained_keys = _nested_mapping_keys(data) | _nested_mapping_keys(config_data)
+    forbidden_generation_keys = ("provider", "actor", "transport", "harbor")
+    assert all(term not in key.lower() for key in retained_keys for term in forbidden_generation_keys)
 
 
 def test_execute_plan_writes_unique_instance_paths(tmp_path: Path) -> None:
@@ -571,40 +587,14 @@ def test_execute_plan_writes_unique_instance_paths(tmp_path: Path) -> None:
 
     plan = compose_dataset(config_with_output, templates)
     manifest = execute_plan(plan, config_with_output)
-    paths = [entry.path for entry in manifest.instances]
+    paths = [entry.task_id for entry in manifest.instances]
 
     assert len(paths) == 5
     assert len(paths) == len(set(paths))
 
 
-def test_harbor_job_config_has_provider_docs(tmp_path: Path) -> None:
-    """Generated job.yaml must contain provider documentation comments."""
-    from aec_bench.generation.dataset import _write_harbor_job_config
-
-    entries = [
-        InstanceEntry(
-            path="ground/terzaghi/demo",
-            template="terzaghi",
-            difficulty="easy",
-            archetype="arch",
-            site_context="ctx",
-            visibility="public",
-            tool_mode="with-tool",
-        )
-    ]
-    _write_harbor_job_config(tmp_path, entries)
-
-    job_content = (tmp_path / "job.yaml").read_text()
-    assert "BaseAgent" in job_content
-    assert "agents/" in job_content
-    assert "import_path" in job_content
-    assert "anthropic" in job_content
-    assert "azure_openai" in job_content
-    assert "together" in job_content
-
-
-def test_manifest_instance_entries_have_archetype(tmp_path: Path) -> None:
-    """Instance entries should have archetype and site_context from sampling."""
+def test_manifest_instance_entries_keep_only_replay_inputs(tmp_path: Path) -> None:
+    """Replay entries exclude sampled runtime content and provider settings."""
     from aec_bench.templates.registry import discover_templates
 
     templates, diagnostics = discover_templates()
@@ -617,5 +607,13 @@ def test_manifest_instance_entries_have_archetype(tmp_path: Path) -> None:
     manifest = execute_plan(plan, config_with_output)
 
     for entry in manifest.instances:
-        assert entry.archetype != ""
-        assert entry.site_context != ""
+        assert set(entry.model_dump(mode="json")) == {
+            "task_id",
+            "task_kind",
+            "template_id",
+            "seed",
+            "instance_index",
+            "difficulty",
+            "tool_mode",
+            "task_visibility",
+        }

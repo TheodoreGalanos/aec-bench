@@ -270,7 +270,6 @@ DEFAULT_KERNEL_EXECUTOR_SOURCE_PATHS: tuple[str, ...] = (
     "aec_bench/contracts/stage_execution.py",
     "aec_bench/contracts/synthesis.py",
     "aec_bench/contracts/task_definition.py",
-    "aec_bench/contracts/task_generation.py",
     "aec_bench/contracts/task_review.py",
     "aec_bench/contracts/trajectory.py",
     "aec_bench/contracts/trial_record.py",

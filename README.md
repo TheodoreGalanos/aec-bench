@@ -97,6 +97,9 @@ uv run aec-bench generate task terzaghi-bearing-capacity --dry-run
 # Generate a full suite from a suite configuration
 uv run aec-bench generate suite --config suite.toml
 
+# Regenerate and compare runtime task files from an optional replay sidecar
+uv run aec-bench generate replay tasks/generation-manifest.json
+
 # List built-in templates
 uv run aec-bench generate list-templates
 
@@ -110,9 +113,13 @@ The built-in catalogue is larger than a README can usefully list. Use
 the public docs site. The command emits deterministic schema 2 content with
 templates and seeds only; clients derive counts from those arrays. Direct
 template loading is strict; catalogue discovery reports invalid candidates.
-Generated task lineage records the template source digest, seed, instance
-index, and difficulty, so repeated generation does not depend on wall-clock
-time.
+Generated `task.toml` files contain runtime semantics only. Optional replay
+inputs live once in `generation-manifest.json`. A suite of clean built-in
+templates in a Git checkout records one Git revision. Local, modified, or
+installed-package templates use one exact source archive. The sidecar contains
+no generation time, package version, provider route, transport identity, or
+absolute path. Deleting the sidecar does not change task discovery, validation,
+execution, or evaluation.
 
 ### Run Experiments
 

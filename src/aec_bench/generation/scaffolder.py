@@ -55,7 +55,7 @@ def _generation_difficulty_metadata_line(generation_difficulty: str) -> str:
     """Preserve custom generation presets when metadata difficulty is normalized."""
     if generation_difficulty in RUNNABLE_DIFFICULTIES:
         return ""
-    return f'\tgeneration_difficulty = "{generation_difficulty}"\n'
+    return f'generation_difficulty = "{generation_difficulty}"\n'
 
 
 def _build_task_toml(
@@ -66,7 +66,6 @@ def _build_task_toml(
 ) -> str:
     """Produce task.toml content as a string using f-strings (tomllib is read-only).
 
-    Includes a [generation] section with full provenance metadata from the instance.
     When tool_mode is WITH_TOOL, includes a [tools] section listing the calc script.
     """
     # Build tags list — include config tags plus tool-mode tag
@@ -77,14 +76,12 @@ def _build_task_toml(
     generation_difficulty_line = _generation_difficulty_metadata_line(instance.difficulty)
 
     toml_str = f"""\
-version = "1.0"
-
-	[metadata]
-	domain = "{config.meta.discipline}"
-	category = "{config.meta.category}"
-	difficulty = "{metadata_difficulty}"
-	visibility = "{task_visibility.value}"
-{generation_difficulty_line}	tags = [{tags_toml}]
+[metadata]
+domain = "{config.meta.discipline}"
+category = "{config.meta.category}"
+difficulty = "{metadata_difficulty}"
+visibility = "{task_visibility.value}"
+{generation_difficulty_line}tags = [{tags_toml}]
 
 [agent]
 timeout_sec = 600.0
@@ -99,17 +96,6 @@ cpus = 1
 memory_mb = 2048
 storage_mb = 5120
 network_mode = "public"
-
-[generation]
-origin = "generated"
-template = "{instance.template_name}"
-template_source_sha256 = "{instance.template_source_sha256}"
-seed = {instance.seed}
-instance_index = {instance.instance_index}
-difficulty = "{instance.difficulty}"
-visibility_level = "{instance.visibility_level}"
-archetype = "{instance.archetype_name}"
-site_context = "{instance.site_context}"
 """
 
     # Add [tools] section when tool_mode is WITH_TOOL
@@ -252,14 +238,10 @@ def _copy_output_completion_contract(template_dir: Path, environment_dir: Path) 
 def _write_instance_record(instance: SampledInstance, tests_dir: Path) -> None:
     """Write tests/instance.json so a custom verifier can read instance gold state."""
     record = {
-        "instance_name": instance.instance_name,
-        "seed": instance.seed,
-        "instance_index": instance.instance_index,
-        "difficulty": instance.difficulty,
-        "all_params": instance.all_params,
+        "parameters": instance.all_params,
         "ground_truth": instance.ground_truth,
     }
-    (tests_dir / "instance.json").write_text(json.dumps(record, indent=2))
+    (tests_dir / "instance.json").write_text(json.dumps(record, indent=2) + "\n")
 
 
 def _generated_task_review_profile(
