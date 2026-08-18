@@ -139,6 +139,7 @@ Current valid examples include:
 - `aec-bench/world-actor/1`;
 - `aec-bench/actor-invocation/1`;
 - `aec-bench/actor-invocation-evidence/1`;
+- public library catalogue schema 2;
 - `aec-bench/native-world-tool-surface/1`;
 - `aec-bench/deepseek-evidence/2`; and
 - `aec-bench/deepseek-qualification/1`.

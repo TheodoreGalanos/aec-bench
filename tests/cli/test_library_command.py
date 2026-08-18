@@ -3,6 +3,7 @@
 
 import json
 from pathlib import Path
+from unittest.mock import patch
 
 from typer.testing import CliRunner
 
@@ -72,9 +73,13 @@ def test_library_export_writes_to_custom_out(tmp_path: Path) -> None:
     )
     assert result.exit_code == 0, result.output
     assert out.exists()
-    data = json.loads(out.read_text())
-    assert data["schema_version"] == 1
+    content = out.read_text(encoding="utf-8")
+    data = json.loads(content)
+    assert data["schema_version"] == 2
+    assert set(data) == {"schema_version", "templates", "seeds"}
     assert len(data["templates"]) == 1
+    assert content.endswith("\n")
+    assert not content.endswith("\n\n")
 
 
 def test_library_export_stdout_mode(tmp_path: Path) -> None:
@@ -96,7 +101,9 @@ def test_library_export_stdout_mode(tmp_path: Path) -> None:
     )
     assert result.exit_code == 0
     data = json.loads(result.stdout)
-    assert data["schema_version"] == 1
+    assert data["schema_version"] == 2
+    assert result.stdout.endswith("\n")
+    assert not result.stdout.endswith("\n\n")
 
 
 def test_library_export_pretty_indents_output(tmp_path: Path) -> None:
@@ -105,24 +112,64 @@ def test_library_export_pretty_indents_output(tmp_path: Path) -> None:
     tasks_root.mkdir()
     _stage(templates_root, "voltage-drop")
     out = tmp_path / "c.json"
+    second_out = tmp_path / "c-second.json"
 
-    result = runner.invoke(
+    args = [
+        "export",
+        "--templates-root",
+        str(templates_root),
+        "--tasks-root",
+        str(tasks_root),
+        "--out",
+        str(out),
+        "--pretty",
+    ]
+    result = runner.invoke(app, args)
+    second_args = [*args]
+    second_args[second_args.index(str(out))] = str(second_out)
+    second_result = runner.invoke(
         app,
-        [
-            "export",
-            "--templates-root",
-            str(templates_root),
-            "--tasks-root",
-            str(tasks_root),
-            "--out",
-            str(out),
-            "--pretty",
-        ],
+        second_args,
     )
     assert result.exit_code == 0
-    content = out.read_text()
+    assert second_result.exit_code == 0
+    content = out.read_text(encoding="utf-8")
     # Pretty mode uses indented JSON → at least two lines.
     assert content.count("\n") > 2
+    assert out.read_bytes() == second_out.read_bytes()
+
+
+def test_library_export_does_not_read_git_or_package_version(tmp_path: Path) -> None:
+    templates_root = tmp_path / "templates"
+    tasks_root = tmp_path / "tasks"
+    tasks_root.mkdir()
+    _stage(templates_root, "voltage-drop")
+    first_out = tmp_path / "first.json"
+    second_out = tmp_path / "second.json"
+
+    def export(out: Path, version: str) -> None:
+        with (
+            patch("subprocess.run", side_effect=AssertionError("library export must not invoke Git")),
+            patch("aec_bench.__version__", version),
+        ):
+            result = runner.invoke(
+                app,
+                [
+                    "export",
+                    "--templates-root",
+                    str(templates_root),
+                    "--tasks-root",
+                    str(tasks_root),
+                    "--out",
+                    str(out),
+                ],
+            )
+        assert result.exit_code == 0, result.output
+
+    export(first_out, "1.0.0")
+    export(second_out, "9.0.0")
+
+    assert first_out.read_bytes() == second_out.read_bytes()
 
 
 def test_library_export_out_and_stdout_mutex(tmp_path: Path) -> None:

@@ -2,9 +2,8 @@
 # ABOUTME: Uses real tmp_path fixtures, never mocks the filesystem.
 
 import json
-from datetime import UTC, datetime
 from pathlib import Path
-from unittest.mock import patch
+from typing import Any
 
 import pytest
 
@@ -14,10 +13,10 @@ from aec_bench.tasks.library_export import (
     DuplicateTemplateError,
     ExportDiagnostics,
     SkippedEntry,
-    _git_short_sha,
     _project_seed,
     _project_template,
     build_catalogue,
+    catalogue_json_bytes,
     load_seeds,
 )
 from aec_bench.templates.contracts import (
@@ -55,12 +54,12 @@ def test_duplicate_template_error_is_value_error() -> None:
     assert "duplicate" in str(err)
 
 
-def _write_seed(dest: Path, data: dict) -> None:
+def _write_seed(dest: Path, data: dict[str, Any]) -> None:
     dest.parent.mkdir(parents=True, exist_ok=True)
     dest.write_text(json.dumps(data), encoding="utf-8")
 
 
-def _valid_seed(task_id: str = "t1", discipline: str = "electrical") -> dict:
+def _valid_seed(task_id: str = "t1", discipline: str = "electrical") -> dict[str, Any]:
     return {
         "status": "proposed",
         "seed_origin": "expert",
@@ -228,6 +227,25 @@ def test_project_template_difficulty_tiers_canonical_order() -> None:
     assert entry.difficulty_tiers == ["easy", "medium", "hard"]
 
 
+def test_project_template_sorts_set_like_metadata() -> None:
+    cfg = _make_template_config()
+    cfg = cfg.model_copy(
+        update={
+            "meta": cfg.meta.model_copy(
+                update={
+                    "standards": ["ZZ 2", "AA 1"],
+                    "tags": ["zeta", "alpha"],
+                }
+            )
+        }
+    )
+
+    entry = _project_template(cfg)
+
+    assert entry.standards == ["AA 1", "ZZ 2"]
+    assert entry.tags == ["alpha", "zeta"]
+
+
 def test_project_template_unknown_tier_names_sort_last() -> None:
     """Non-canonical tier names (e.g. 'expert') appear after the canonical set."""
     cfg = _make_template_config()
@@ -308,6 +326,13 @@ def test_project_seed_plain_inputs() -> None:
     assert entry.inputs[0].type is None
 
 
+def test_project_seed_sorts_set_like_standards() -> None:
+    seed = _make_seed_plain()
+    seed = seed.model_copy(update={"source": seed.source.model_copy(update={"standards": ["ZZ 2", "AA 1"]})})
+
+    assert _project_seed(seed).standards == ["AA 1", "ZZ 2"]
+
+
 def test_project_seed_structured_inputs() -> None:
     seed = SeedTask(
         status="proposed",
@@ -344,25 +369,6 @@ def test_project_seed_missing_category_falls_back() -> None:
     # Fallback: category becomes the task_id (stable, non-empty).
     assert entry.category == "busbar-thermal"
     assert entry.category_label is None
-
-
-def test_git_short_sha_returns_none_outside_repo(tmp_path: Path) -> None:
-    # tmp_path is not a git repo, so git rev-parse fails.
-    assert _git_short_sha(cwd=tmp_path) is None
-
-
-def test_git_short_sha_returns_short_sha_inside_repo() -> None:
-    # Running against the actual repo — SHA should be 7+ hex chars.
-    sha = _git_short_sha(cwd=Path.cwd())
-    if sha is not None:  # allow None if the test env is not a git repo
-        assert len(sha) >= 7
-        assert all(c in "0123456789abcdef" for c in sha)
-
-
-def test_git_short_sha_handles_git_not_installed() -> None:
-    """If git binary is missing, return None — don't crash the export."""
-    with patch("subprocess.run", side_effect=FileNotFoundError):
-        assert _git_short_sha(cwd=Path.cwd()) is None
 
 
 # --- Helpers to stage templates on disk in a tmp dir ---
@@ -421,19 +427,13 @@ def test_build_catalogue_happy_path(tmp_path: Path) -> None:
     cat, diag = build_catalogue(
         templates_root=templates_root,
         tasks_root=tasks_root,
-        library_version="9.9.9",
-        library_commit="deadbee",
-        now=datetime(2026, 4, 19, 12, 0, tzinfo=UTC),
     )
 
     assert isinstance(cat, LibraryCatalogue)
-    assert cat.library_version == "9.9.9"
-    assert cat.library_commit == "deadbee"
-    assert cat.generated_at == datetime(2026, 4, 19, 12, 0, tzinfo=UTC)
+    assert cat.schema_version == 2
+    assert set(cat.model_dump()) == {"schema_version", "templates", "seeds"}
     assert len(cat.templates) == 2
     assert len(cat.seeds) == 1
-    assert cat.counts.total_templates == 2
-    assert cat.counts.total_seeds == 1
     assert diag.skipped_templates == []
     assert diag.skipped_seeds == []
 
@@ -449,8 +449,6 @@ def test_build_catalogue_dedupes_seed_matching_template(tmp_path: Path) -> None:
     cat, _ = build_catalogue(
         templates_root=templates_root,
         tasks_root=tasks_root,
-        library_version="1",
-        now=datetime(2026, 4, 19, tzinfo=UTC),
     )
     assert len(cat.templates) == 1
     assert len(cat.seeds) == 0
@@ -460,35 +458,71 @@ def test_build_catalogue_sort_stability(tmp_path: Path) -> None:
     templates_root = tmp_path / "templates"
     tasks_root = tmp_path / "tasks"
     # Stage in non-alphabetical order.
-    _stage_template(templates_root, "zebra", "electrical", "cat-b")
-    _stage_template(templates_root, "alpha", "electrical", "cat-a")
+    _stage_template(templates_root, "zebra", "electrical", "cat-a")
+    _stage_template(templates_root, "alpha", "electrical", "cat-z")
     _stage_template(templates_root, "middle", "civil", "cat-a")
 
     cat, _ = build_catalogue(
         templates_root=templates_root,
         tasks_root=tasks_root,
-        library_version="1",
-        now=datetime(2026, 4, 19, tzinfo=UTC),
     )
-    # Sorted by (discipline, category, task_id).
+    # Category is content, not identity, so ordering uses the stable composite ID.
     assert [(t.discipline, t.category, t.task_id) for t in cat.templates] == [
         ("civil", "cat-a", "middle"),
-        ("electrical", "cat-a", "alpha"),
-        ("electrical", "cat-b", "zebra"),
+        ("electrical", "cat-z", "alpha"),
+        ("electrical", "cat-a", "zebra"),
     ]
 
 
-def test_build_catalogue_deterministic_output(tmp_path: Path) -> None:
+@pytest.mark.parametrize("pretty", [False, True])
+def test_build_catalogue_deterministic_output(tmp_path: Path, pretty: bool) -> None:
     templates_root = tmp_path / "templates"
     tasks_root = tmp_path / "tasks"
     _stage_template(templates_root, "t1", "electrical")
     _write_seed(tasks_root / "civil" / "s1" / "source_task.json", _valid_seed("s1", "civil"))
 
-    now = datetime(2026, 4, 19, tzinfo=UTC)
-    kwargs = dict(templates_root=templates_root, tasks_root=tasks_root, library_version="1", now=now)
+    kwargs = dict(templates_root=templates_root, tasks_root=tasks_root)
     cat1, _ = build_catalogue(**kwargs)
     cat2, _ = build_catalogue(**kwargs)
-    assert cat1.model_dump_json() == cat2.model_dump_json()
+    payload1 = catalogue_json_bytes(cat1, pretty=pretty)
+    payload2 = catalogue_json_bytes(cat2, pretty=pretty)
+
+    assert payload1 == payload2
+    assert payload1.endswith(b"\n")
+    assert not payload1.endswith(b"\n\n")
+    assert json.loads(payload1) == cat1.model_dump(mode="json")
+
+
+def test_golden_fixture_is_pretty_canonical_output() -> None:
+    fixture_path = Path(__file__).parents[1] / "contracts" / "fixtures" / "library_catalogue_golden.json"
+    catalogue = LibraryCatalogue.model_validate_json(fixture_path.read_text(encoding="utf-8"))
+
+    assert catalogue_json_bytes(catalogue, pretty=True) == fixture_path.read_bytes()
+
+
+@pytest.mark.parametrize("changed_source", ["template", "seed"])
+def test_catalogue_bytes_change_when_public_content_changes(tmp_path: Path, changed_source: str) -> None:
+    templates_root = tmp_path / "templates"
+    tasks_root = tmp_path / "tasks"
+    _stage_template(templates_root, "t1", "electrical")
+    seed_path = tasks_root / "civil" / "s1" / "source_task.json"
+    _write_seed(seed_path, _valid_seed("s1", "civil"))
+    original, _ = build_catalogue(templates_root=templates_root, tasks_root=tasks_root)
+
+    if changed_source == "template":
+        params_path = templates_root / "electrical" / "t1" / "params.toml"
+        params_path.write_text(
+            params_path.read_text(encoding="utf-8").replace('description = "d"', 'description = "changed"'),
+            encoding="utf-8",
+        )
+    else:
+        changed_seed = _valid_seed("s1", "civil")
+        changed_seed["source"]["description"] = "changed"
+        _write_seed(seed_path, changed_seed)
+
+    changed, _ = build_catalogue(templates_root=templates_root, tasks_root=tasks_root)
+
+    assert catalogue_json_bytes(changed) != catalogue_json_bytes(original)
 
 
 def test_build_catalogue_duplicate_template_hard_fails(tmp_path: Path) -> None:
@@ -510,8 +544,6 @@ def test_build_catalogue_duplicate_template_hard_fails(tmp_path: Path) -> None:
         build_catalogue(
             templates_root=templates_root,
             tasks_root=tasks_root,
-            library_version="1",
-            now=datetime(2026, 4, 19, tzinfo=UTC),
         )
 
 
@@ -524,8 +556,6 @@ def test_build_catalogue_duplicate_seed_soft_skips(tmp_path: Path) -> None:
     cat, diag = build_catalogue(
         templates_root=templates_root,
         tasks_root=tasks_root,
-        library_version="1",
-        now=datetime(2026, 4, 19, tzinfo=UTC),
     )
     # First kept, second counted as skipped.
     assert len(cat.seeds) == 1
@@ -542,12 +572,10 @@ def test_build_catalogue_empty_library_hard_fails(tmp_path: Path) -> None:
         build_catalogue(
             templates_root=templates_root,
             tasks_root=tasks_root,
-            library_version="1",
-            now=datetime(2026, 4, 19, tzinfo=UTC),
         )
 
 
-def test_build_catalogue_counts_match_lists(tmp_path: Path) -> None:
+def test_build_catalogue_does_not_persist_derived_counts(tmp_path: Path) -> None:
     templates_root = tmp_path / "templates"
     tasks_root = tmp_path / "tasks"
     _stage_template(templates_root, "t1", "electrical")
@@ -559,11 +587,7 @@ def test_build_catalogue_counts_match_lists(tmp_path: Path) -> None:
     cat, _ = build_catalogue(
         templates_root=templates_root,
         tasks_root=tasks_root,
-        library_version="1",
-        now=datetime(2026, 4, 19, tzinfo=UTC),
     )
-    assert cat.counts.total_templates == 3
-    assert cat.counts.total_seeds == 2
-    assert cat.counts.by_discipline["electrical"] == {"templates": 2, "seeds": 0}
-    assert cat.counts.by_discipline["civil"] == {"templates": 1, "seeds": 1}
-    assert cat.counts.by_discipline["ground"] == {"templates": 0, "seeds": 1}
+    assert len(cat.templates) == 3
+    assert len(cat.seeds) == 2
+    assert "counts" not in cat.model_dump()

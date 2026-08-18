@@ -3,16 +3,14 @@
 
 from __future__ import annotations
 
-import subprocess
+import json
 from dataclasses import dataclass
-from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal, cast
 
 from pydantic import ValidationError
 
 from aec_bench.contracts.library_catalogue import (
-    CatalogueCounts,
     InputField,
     LibraryCatalogue,
     OutputField,
@@ -174,13 +172,13 @@ def _project_template(cfg: TemplateConfig) -> TemplateEntry:
         discipline=cast(_CatalogueDiscipline, meta.discipline),
         category=meta.category,
         category_label=None,
-        standards=list(meta.standards),
+        standards=sorted(meta.standards),
         inputs=inputs,
         outputs=outputs,
         task_name=_slug_to_title(meta.name),
         description=meta.description,
         long_description=long_desc or None,
-        tags=list(meta.tags),
+        tags=sorted(meta.tags),
         tool_mode=meta.tool_mode.value,
         difficulty_tiers=_sort_difficulty_tiers(list(cfg.difficulty.keys())),
         archetype_count=len(cfg.archetypes),
@@ -214,7 +212,7 @@ def _project_seed(seed: SeedTask) -> SeedEntry:
         discipline=src.discipline,
         category=src.category_id or src.task_id,
         category_label=src.category_name,
-        standards=list(src.standards),
+        standards=sorted(src.standards),
         inputs=[_seed_field_to_input(f) for f in src.inputs],
         outputs=[_seed_field_to_output(f) for f in src.outputs],
         task_name=src.task_name,
@@ -223,32 +221,20 @@ def _project_seed(seed: SeedTask) -> SeedEntry:
     )
 
 
-def _git_short_sha(cwd: Path) -> str | None:
-    """Return the short git SHA of HEAD, or None if not a repo / git unavailable."""
-    try:
-        result = subprocess.run(
-            ["git", "rev-parse", "--short", "HEAD"],
-            cwd=cwd,
-            capture_output=True,
-            text=True,
-            timeout=5,
-            check=False,
-        )
-    except (FileNotFoundError, subprocess.TimeoutExpired):
-        return None
-    if result.returncode != 0:
-        return None
-    sha = result.stdout.strip()
-    return sha or None
+def catalogue_json_bytes(catalogue: LibraryCatalogue, *, pretty: bool = False) -> bytes:
+    """Return deterministic UTF-8 catalogue JSON with one final newline."""
+    payload = catalogue.model_dump(mode="json")
+    if pretty:
+        serialised = json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True)
+    else:
+        serialised = json.dumps(payload, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
+    return f"{serialised}\n".encode()
 
 
 def build_catalogue(
     *,
     templates_root: Path,
     tasks_root: Path,
-    library_version: str,
-    library_commit: str | None = None,
-    now: datetime | None = None,
 ) -> tuple[LibraryCatalogue, ExportDiagnostics]:
     """Build the library catalogue from templates and seeds on disk.
 
@@ -299,19 +285,13 @@ def build_catalogue(
         seed_keys.add(key)
         seed_entries.append(_project_seed(seed))
 
-    # --- Sort by (discipline, category, task_id) for deterministic output ---
-    template_entries.sort(key=lambda e: (e.discipline, e.category, e.task_id))
-    seed_entries.sort(key=lambda e: (e.discipline, e.category, e.task_id))
-
-    counts = _compute_counts(template_entries, seed_entries)
+    # The stable public entry identity is the discipline and task ID pair.
+    template_entries.sort(key=lambda entry: (entry.discipline, entry.task_id))
+    seed_entries.sort(key=lambda entry: (entry.discipline, entry.task_id))
 
     catalogue = LibraryCatalogue(
-        generated_at=now or datetime.now(UTC),
-        library_version=library_version,
-        library_commit=library_commit,
         templates=template_entries,
         seeds=seed_entries,
-        counts=counts,
     )
 
     diagnostics = ExportDiagnostics(
@@ -323,19 +303,3 @@ def build_catalogue(
     )
 
     return catalogue, diagnostics
-
-
-def _compute_counts(templates: list[TemplateEntry], seeds: list[SeedEntry]) -> CatalogueCounts:
-    """Derive per-discipline and total counts from the finalised entry lists."""
-    by_discipline: dict[str, dict[str, int]] = {}
-    for t in templates:
-        by_discipline.setdefault(t.discipline, {"templates": 0, "seeds": 0})
-        by_discipline[t.discipline]["templates"] += 1
-    for s in seeds:
-        by_discipline.setdefault(s.discipline, {"templates": 0, "seeds": 0})
-        by_discipline[s.discipline]["seeds"] += 1
-    return CatalogueCounts(
-        total_templates=len(templates),
-        total_seeds=len(seeds),
-        by_discipline=by_discipline,
-    )

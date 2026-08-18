@@ -3,7 +3,6 @@
 
 from __future__ import annotations
 
-import json
 import time
 from pathlib import Path
 from typing import Any
@@ -11,9 +10,8 @@ from typing import Any
 import click
 import typer
 
-from aec_bench import __version__
 from aec_bench.cli.output import emit, print_error, print_success
-from aec_bench.tasks.library_export import _git_short_sha, build_catalogue
+from aec_bench.tasks.library_export import build_catalogue, catalogue_json_bytes
 
 app = typer.Typer(
     help="Library catalogue export for external consumers (e.g. the aec-bench site).",
@@ -64,29 +62,28 @@ def export_cmd(
         catalogue, diagnostics = build_catalogue(
             templates_root=templates_root,
             tasks_root=tasks_root,
-            library_version=__version__,
-            library_commit=_git_short_sha(cwd=Path.cwd()),
         )
     except ValueError as exc:
         print_error(str(exc))
         raise typer.Exit(1) from exc
 
-    payload = catalogue.model_dump(mode="json")
-    serialised = json.dumps(payload, indent=2 if pretty else None, default=str)
+    payload = catalogue_json_bytes(catalogue, pretty=pretty)
 
     if stdout:
-        typer.echo(serialised)
+        typer.echo(payload.decode("utf-8"), nl=False)
         return
 
     out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(serialised, encoding="utf-8")
+    out.write_bytes(payload)
+
+    disciplines = sorted({entry.discipline for entry in [*catalogue.templates, *catalogue.seeds]})
 
     summary_data = {
         "out_path": str(out),
-        "total_templates": catalogue.counts.total_templates,
-        "total_seeds": catalogue.counts.total_seeds,
+        "total_templates": len(catalogue.templates),
+        "total_seeds": len(catalogue.seeds),
         "skipped_seeds": len(diagnostics.skipped_seeds),
-        "disciplines": sorted(catalogue.counts.by_discipline.keys()),
+        "disciplines": disciplines,
     }
 
     def _human(data: dict[str, Any]) -> None:
