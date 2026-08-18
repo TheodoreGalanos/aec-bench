@@ -11,6 +11,9 @@ from typing import Any, Literal
 
 from pydantic import PositiveInt, field_validator, model_validator
 
+from aec_bench.contracts.execution_program import ExecutionProgramRef
+from aec_bench.contracts.harness_instance import HarnessInstanceRef
+from aec_bench.contracts.harness_kernel import KernelRef
 from aec_bench.contracts.validators import NonEmptyStr, StrictModel
 
 
@@ -42,26 +45,23 @@ class HarnessProgramCandidateReference(StrictModel):
 
     reference_sha256: NonEmptyStr
     cell: HarnessProgramCell
-    kernel_sha256: NonEmptyStr
+    kernel_ref: KernelRef
     kernel_abi_sha256: NonEmptyStr
     policy_sha256: NonEmptyStr
     task_set_id: NonEmptyStr
     task_set_sha256: NonEmptyStr
-    harness_sha256: NonEmptyStr
+    harness_ref: HarnessInstanceRef
     harness_abi_sha256: NonEmptyStr
-    program_sha256: NonEmptyStr
+    program_ref: ExecutionProgramRef
     program_abi_sha256: NonEmptyStr
     resource_sha256: NonEmptyStr
 
     @field_validator(
         "reference_sha256",
-        "kernel_sha256",
         "kernel_abi_sha256",
         "policy_sha256",
         "task_set_sha256",
-        "harness_sha256",
         "harness_abi_sha256",
-        "program_sha256",
         "program_abi_sha256",
         "resource_sha256",
     )
@@ -83,42 +83,42 @@ class HarnessProgramCandidateReference(StrictModel):
         cls,
         *,
         cell: HarnessProgramCell | str,
-        kernel_sha256: str,
+        kernel_ref: KernelRef,
         kernel_abi_sha256: str,
         policy_sha256: str,
         task_set_id: str,
         task_set_sha256: str,
-        harness_sha256: str,
+        harness_ref: HarnessInstanceRef,
         harness_abi_sha256: str,
-        program_sha256: str,
+        program_ref: ExecutionProgramRef,
         program_abi_sha256: str,
         resource_sha256: str,
     ) -> HarnessProgramCandidateReference:
         resolved_cell = HarnessProgramCell(cell)
         payload = {
             "cell": resolved_cell.value,
-            "kernel_sha256": kernel_sha256,
+            "kernel_ref": kernel_ref.model_dump(mode="json"),
             "kernel_abi_sha256": kernel_abi_sha256,
             "policy_sha256": policy_sha256,
             "task_set_id": task_set_id,
             "task_set_sha256": task_set_sha256,
-            "harness_sha256": harness_sha256,
+            "harness_ref": harness_ref.model_dump(mode="json"),
             "harness_abi_sha256": harness_abi_sha256,
-            "program_sha256": program_sha256,
+            "program_ref": program_ref.model_dump(mode="json"),
             "program_abi_sha256": program_abi_sha256,
             "resource_sha256": resource_sha256,
         }
         return cls(
             reference_sha256=_canonical_sha256(payload),
             cell=resolved_cell,
-            kernel_sha256=kernel_sha256,
+            kernel_ref=kernel_ref,
             kernel_abi_sha256=kernel_abi_sha256,
             policy_sha256=policy_sha256,
             task_set_id=task_set_id,
             task_set_sha256=task_set_sha256,
-            harness_sha256=harness_sha256,
+            harness_ref=harness_ref,
             harness_abi_sha256=harness_abi_sha256,
-            program_sha256=program_sha256,
+            program_ref=program_ref,
             program_abi_sha256=program_abi_sha256,
             resource_sha256=resource_sha256,
         )
@@ -154,7 +154,7 @@ def _validate_shared_candidate_identities(
     candidates: tuple[HarnessProgramCandidateReference, ...],
 ) -> None:
     for field_name, label in (
-        ("kernel_sha256", "kernel"),
+        ("kernel_ref", "kernel"),
         ("kernel_abi_sha256", "kernel ABI"),
         ("policy_sha256", "policy"),
         ("task_set_sha256", "task set"),
@@ -171,17 +171,17 @@ def _validate_harness_program_cell_factors(
     hx_p0 = by_cell[HarnessProgramCell.HX_P0]
     h0_px = by_cell[HarnessProgramCell.H0_PX]
     hx_px = by_cell[HarnessProgramCell.HX_PX]
-    if h0_p0.harness_sha256 != h0_px.harness_sha256:
+    if h0_p0.harness_ref != h0_px.harness_ref:
         raise ValueError("h0_p0 and h0_px must share the fixed harness")
-    if hx_p0.harness_sha256 != hx_px.harness_sha256:
+    if hx_p0.harness_ref != hx_px.harness_ref:
         raise ValueError("hx_p0 and hx_px must share the learned harness")
-    if h0_p0.harness_sha256 == hx_p0.harness_sha256:
+    if h0_p0.harness_ref == hx_p0.harness_ref:
         raise ValueError("learned harness must differ from the fixed harness")
-    if h0_p0.program_sha256 != hx_p0.program_sha256:
+    if h0_p0.program_ref != hx_p0.program_ref:
         raise ValueError("h0_p0 and hx_p0 must share the fixed program")
-    if h0_px.program_sha256 != hx_px.program_sha256:
+    if h0_px.program_ref != hx_px.program_ref:
         raise ValueError("h0_px and hx_px must share the learned program")
-    if h0_p0.program_sha256 == h0_px.program_sha256:
+    if h0_p0.program_ref == h0_px.program_ref:
         raise ValueError("learned program must differ from the fixed program")
 
 
@@ -223,7 +223,7 @@ class HarnessProgramStudyManifest(StrictModel):
     def validate_shared_study_factors(self) -> HarnessProgramStudyManifest:
         references = [candidate_set.candidates[0] for candidate_set in self.candidate_sets]
         for field_name, label in (
-            ("kernel_sha256", "kernel"),
+            ("kernel_ref", "kernel"),
             ("kernel_abi_sha256", "kernel ABI"),
             ("policy_sha256", "policy"),
             ("resource_sha256", "resource envelope"),

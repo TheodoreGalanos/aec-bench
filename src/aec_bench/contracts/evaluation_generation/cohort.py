@@ -9,11 +9,11 @@ from typing import Literal, Self
 from pydantic import Field, field_validator, model_validator
 
 from aec_bench.contracts.harness_kernel import (
-    ContentAddressedModel,
     FrozenStrictModel,
-    canonical_content_sha256,
+    canonical_json_sha256,
     validate_sha256,
 )
+from aec_bench.contracts.legacy_content_address import LegacyContentAddressedModel
 from aec_bench.contracts.run_bundle import TaskSnapshotRef
 from aec_bench.contracts.validators import NonEmptyStr
 
@@ -28,7 +28,7 @@ class EvaluationCohortPurpose(StrEnum):
     TRANSFER = "transfer"
 
 
-class EvaluationTaskIdentity(ContentAddressedModel):
+class EvaluationTaskIdentity(LegacyContentAddressedModel):
     """One public task identity paired with its hidden evaluation lineage."""
 
     schema_version: Literal["aecbench.evaluation-task-identity.v3"] = "aecbench.evaluation-task-identity.v3"
@@ -57,7 +57,7 @@ class EvaluationTaskIdentity(ContentAddressedModel):
             raise ValueError("evaluation task id must match its public snapshot")
         if self.public_snapshot.task_review is not None:
             raise ValueError("evaluation public snapshot cannot contain a task review")
-        expected = canonical_content_sha256(
+        expected = canonical_json_sha256(
             {
                 "task_id": self.public_snapshot.task_id,
                 "definition_sha256": self.public_snapshot.definition_sha256,
@@ -75,7 +75,7 @@ class EvaluationTaskIdentity(ContentAddressedModel):
         return self
 
 
-class EvaluationCohortTask(ContentAddressedModel):
+class EvaluationCohortTask(LegacyContentAddressedModel):
     """One cohort task and its preregistered evaluation seeds."""
 
     schema_version: Literal["aecbench.evaluation-cohort-task.v2"] = "aecbench.evaluation-cohort-task.v2"
@@ -95,7 +95,7 @@ class EvaluationCohortTask(ContentAddressedModel):
         return tuple(sorted(value))
 
 
-class EvaluationCohortManifest(ContentAddressedModel):
+class EvaluationCohortManifest(LegacyContentAddressedModel):
     """Released task cohort whose size and coordinates are supplied as data."""
 
     schema_version: Literal["aecbench.evaluation-cohort-manifest.v2"] = "aecbench.evaluation-cohort-manifest.v2"
@@ -169,7 +169,7 @@ class EvaluationCohortBinding(FrozenStrictModel):
         return validate_sha256(value)
 
 
-class EvaluationCohortRetirement(ContentAddressedModel):
+class EvaluationCohortRetirement(LegacyContentAddressedModel):
     """Human-signable retirement of one exact released evaluation cohort."""
 
     schema_version: Literal["aecbench.evaluation-cohort-retirement.v2"] = "aecbench.evaluation-cohort-retirement.v2"

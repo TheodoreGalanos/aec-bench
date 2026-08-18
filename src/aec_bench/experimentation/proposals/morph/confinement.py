@@ -11,7 +11,7 @@ import tempfile
 from collections.abc import Mapping
 from pathlib import Path, PurePosixPath
 
-from aec_bench.contracts.harness_kernel import canonical_content_sha256
+from aec_bench.contracts.harness_kernel import canonical_json_sha256
 
 from .boundary import ProposalMorphBoundaryError
 from .constants import (
@@ -188,7 +188,7 @@ def write_receipt(path: Path, payload: dict[str, object]) -> None:
     """Persist canonical receipt content with its embedded content identity."""
 
     receipt = dict(payload)
-    receipt["content_sha256"] = canonical_content_sha256(receipt)
+    receipt["content_sha256"] = canonical_json_sha256(receipt)
     write_json_atomic(path, receipt)
 
 

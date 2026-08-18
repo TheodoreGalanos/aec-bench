@@ -14,7 +14,7 @@ import pytest
 from pydantic import TypeAdapter
 
 import aec_bench.ledger.immutable_artifact_store as store_runtime
-from aec_bench.contracts.harness_kernel import ContentAddressedModel
+from aec_bench.contracts.legacy_content_address import LegacyContentAddressedModel
 from aec_bench.ledger.immutable_artifact_store import (
     EvidenceRepository,
     ImmutableArtifact,
@@ -38,12 +38,12 @@ from aec_bench.ledger.immutable_byte_store import (
 from aec_bench.ledger.immutable_byte_store import ImmutableByteStore
 
 
-class _Artifact(ContentAddressedModel):
+class _Artifact(LegacyContentAddressedModel):
     schema_version: str = "test.immutable-artifact.v1"
     label: str
 
 
-class _ArtifactClaim(ContentAddressedModel):
+class _ArtifactClaim(LegacyContentAddressedModel):
     schema_version: str = "test.immutable-artifact-claim.v1"
     target_content_sha256: str
 

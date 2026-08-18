@@ -8,7 +8,7 @@ from typing import Literal, Self
 from pydantic import model_validator
 
 from aec_bench.contracts.harness_instance import CompiledHarnessInstance, ProgramOperationRef
-from aec_bench.contracts.harness_kernel import ContentAddressedModel
+from aec_bench.contracts.legacy_content_address import LegacyContentAddressedModel
 from aec_bench.contracts.proposal_execution.compilation import ProposalCompilationSuccess
 from aec_bench.contracts.proposal_execution.session import ProposalSessionPlan
 from aec_bench.contracts.proposal_execution_types import ProposalExecutionSemantics
@@ -22,7 +22,7 @@ from aec_bench.harness.compilation.task_snapshot import (
 from .constants import _SESSION_OPERATION_ID
 
 
-class ProposalRunSessionBundle(ContentAddressedModel):
+class ProposalRunSessionBundle(LegacyContentAddressedModel):
     """Provider-free wrapper binding compilation evidence to the fixed session operation."""
 
     schema_version: Literal["aecbench.proposal-run-session-bundle.v1"] = "aecbench.proposal-run-session-bundle.v1"

@@ -36,7 +36,8 @@ from aec_bench.contracts.evaluation_outcome import (
     EvaluationOutcome,
 )
 from aec_bench.contracts.evaluation_plane import CriticSpec
-from aec_bench.contracts.harness_kernel import ContentAddressedModel, validate_sha256
+from aec_bench.contracts.harness_kernel import FrozenStrictModel, validate_sha256
+from aec_bench.contracts.legacy_content_address import LegacyContentAddressedModel
 from aec_bench.contracts.validators import NonEmptyStr
 from aec_bench.ledger.durability import fsync_directory, mkdir_durable
 
@@ -83,7 +84,7 @@ class StoredAuthorityEvent:
     path: Path
 
 
-class _IdentityClaim(ContentAddressedModel):
+class _IdentityClaim(LegacyContentAddressedModel):
     """Exclusive mapping from one human-readable identity to one content digest."""
 
     schema_version: Literal["aecbench.authority-identity-claim.v1"] = "aecbench.authority-identity-claim.v1"
@@ -97,7 +98,7 @@ class _IdentityClaim(ContentAddressedModel):
         return validate_sha256(value)
 
 
-class _BasisClaim(ContentAddressedModel):
+class _BasisClaim(LegacyContentAddressedModel):
     """Exclusive typed registration of one basis payload and its origin stamp."""
 
     schema_version: Literal["aecbench.authority-basis-claim.v1"] = "aecbench.authority-basis-claim.v1"
@@ -124,7 +125,7 @@ _HOST_PRINCIPAL_KINDS = frozenset(
         AuthorityPrincipalKind.HOST_POLICY,
     }
 )
-_DEFAULT_TYPED_BASIS_MODELS: dict[BasisKind, type[ContentAddressedModel]] = {
+_DEFAULT_TYPED_BASIS_MODELS: dict[BasisKind, type[FrozenStrictModel]] = {
     BasisKind.ORIGIN: OriginStamp,
     BasisKind.AUTHORITY_EVENT: AuthorityEvent,
     BasisKind.CRITIC_SPEC: CriticSpec,
@@ -166,7 +167,7 @@ class AuthorityLedger:
         root: Path,
         *,
         candidate_roots: tuple[Path, ...] = (),
-        typed_basis_models: Mapping[BasisKind, type[ContentAddressedModel]] | None = None,
+        typed_basis_models: Mapping[BasisKind, type[FrozenStrictModel]] | None = None,
     ) -> None:
         supplied_root = Path(root)
         if _path_lexists(supplied_root) and supplied_root.is_symlink():
@@ -185,7 +186,7 @@ class AuthorityLedger:
                 raise AuthorityLedgerIntegrityError(
                     f"typed {kind.value} basis model cannot replace the built-in schema"
                 )
-            if not issubclass(model_type, ContentAddressedModel):
+            if not issubclass(model_type, FrozenStrictModel):
                 raise AuthorityLedgerIntegrityError(f"typed {kind.value} basis model must be content addressed")
             self._typed_basis_models[kind] = model_type
         mkdir_durable(self._root)
@@ -321,7 +322,7 @@ class AuthorityLedger:
         *,
         kind: BasisKind,
         artifact_id: str,
-        model: ContentAddressedModel,
+        model: FrozenStrictModel,
         producer: AuthorityPrincipal,
         producer_process_id: str,
         observed_by: AuthorityPrincipal,
@@ -346,7 +347,7 @@ class AuthorityLedger:
             operation_taint=operation_taint,
         )
 
-    def resolve_model_basis[ModelT: ContentAddressedModel](
+    def resolve_model_basis[ModelT: FrozenStrictModel](
         self,
         reference: BasisReference,
         model_type: type[ModelT],
@@ -539,7 +540,7 @@ class AuthorityLedger:
 
     def _persist_model(
         self,
-        model: ContentAddressedModel,
+        model: LegacyContentAddressedModel,
         *,
         namespace: str,
         logical_id: str,
@@ -594,7 +595,7 @@ class AuthorityLedger:
     def _publish_claim(
         self,
         path: Path,
-        claim: ContentAddressedModel,
+        claim: LegacyContentAddressedModel,
         *,
         label: str,
     ) -> None:
@@ -655,7 +656,7 @@ class AuthorityLedger:
         except OSError as error:
             raise AuthorityLedgerIntegrityError(f"{label} is unreadable") from error
 
-    def _load_model[ModelT: ContentAddressedModel](
+    def _load_model[ModelT: FrozenStrictModel](
         self,
         path: Path,
         model_type: type[ModelT],
@@ -708,7 +709,7 @@ class AuthorityLedger:
         )
 
 
-def _canonical_model_bytes(model: ContentAddressedModel) -> bytes:
+def _canonical_model_bytes(model: FrozenStrictModel) -> bytes:
     return (
         json.dumps(
             model.model_dump(mode="json"),

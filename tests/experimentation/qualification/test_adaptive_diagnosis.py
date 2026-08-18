@@ -10,6 +10,7 @@ from aec_bench.adapters.base import AdapterStopReason
 from aec_bench.contracts.agent_output import AgentOutputStatus
 from aec_bench.contracts.execution_program import (
     ActionNode,
+    ExecutionProgramRef,
     FanoutNode,
     LiteralValue,
     ProgramArgument,
@@ -25,9 +26,11 @@ from aec_bench.contracts.harness_instance import (
     HarnessBindingSpec,
     HarnessBudget,
     HarnessCompileRequest,
+    HarnessInstanceRef,
     HarnessRecipe,
     HarnessTopologyRole,
 )
+from aec_bench.contracts.harness_kernel import KernelRef
 from aec_bench.contracts.output_completion import OutputCompletionEvaluation, OutputCompletionReason
 from aec_bench.contracts.stage_execution import DeclaredStage, DeclaredStageGraph
 from aec_bench.evolution.repair_lifecycle import (
@@ -159,7 +162,7 @@ def test_declared_stage_graph_rule_emits_one_content_bound_program_patch() -> No
             "for a task with an unmaterialized declared stage graph."
         ),
         patch=ProgramMaterializeDeclaredStageGraphPatch(
-            expected_program_sha256=evidence.program_sha256,
+            expected_program_ref=evidence.program_ref,
             task_graphs=evidence.declared_stage_graphs,
         ),
     )
@@ -311,7 +314,7 @@ def test_program_batch_coalescing_rule_round_trips_and_dispatches_an_evidence_bo
     proposal = diagnosis_function_for_rule(rule)(_batch_coalescing_evidence())
     assert isinstance(proposal, RepairPatchProposal)
     assert proposal.patch == ProgramCoalesceTaskBatchPatch(
-        expected_program_sha256="c" * 64,
+        expected_program_ref=ExecutionProgramRef(program_id="program.parent", version="1"),
         source_node_ids=("run-primary", "run-secondary"),
         replacement_node_id="run-coalesced",
         task_refs=_BATCH_TASK_IDS,
@@ -347,7 +350,7 @@ def test_program_batch_coalescing_diagnosis_requires_exact_partial_matrix_eviden
     )
 
     assert isinstance(proposal, RepairPatchProposal)
-    assert proposal.patch.expected_program_sha256 == evidence.program_sha256
+    assert proposal.patch.expected_program_ref == evidence.program_ref
 
 
 @pytest.mark.parametrize(
@@ -844,10 +847,10 @@ def _program_failure_evidence(
     return RepairRuntimeEvidence(
         candidate_id="candidate.parent",
         run_id="run.parent",
-        kernel_sha256="a" * 64,
-        harness_sha256="b" * 64,
-        program_sha256="c" * 64,
-        compiled_bundle_sha256="d" * 64,
+        kernel_ref=KernelRef(kernel_id="fixed-kernel", version="1"),
+        harness_ref=HarnessInstanceRef(instance_id="harness.parent"),
+        program_ref=ExecutionProgramRef(program_id="program.parent", version="1"),
+        bundle_id="bundle.parent",
         run_artifact_sha256="e" * 64,
         pairing=_pairing(),
         program_executions=(
@@ -876,10 +879,10 @@ def _turn_limit_evidence() -> RepairRuntimeEvidence:
     return RepairRuntimeEvidence(
         candidate_id="candidate.parent",
         run_id="run.parent",
-        kernel_sha256="a" * 64,
-        harness_sha256="b" * 64,
-        program_sha256="c" * 64,
-        compiled_bundle_sha256="d" * 64,
+        kernel_ref=KernelRef(kernel_id="fixed-kernel", version="1"),
+        harness_ref=HarnessInstanceRef(instance_id="harness.parent"),
+        program_ref=ExecutionProgramRef(program_id="program.parent", version="1"),
+        bundle_id="bundle.parent",
         run_artifact_sha256="e" * 64,
         pairing=_pairing(),
         trials=(_turn_limit_trial(),),
@@ -926,7 +929,6 @@ def _declared_stage_graph_evidence() -> RepairRuntimeEvidence:
     task_graph = RepairDeclaredStageGraphEvidence(
         task_id=task_id,
         task_package_sha256="8" * 64,
-        review_sidecar_sha256=review_sidecar_sha256,
         stage_graph=graph,
     )
     trial = RepairTrialEvidence(
@@ -954,10 +956,10 @@ def _declared_stage_graph_evidence() -> RepairRuntimeEvidence:
     return RepairRuntimeEvidence(
         candidate_id="candidate.parent",
         run_id="run.parent",
-        kernel_sha256="a" * 64,
-        harness_sha256="b" * 64,
-        program_sha256="c" * 64,
-        compiled_bundle_sha256="d" * 64,
+        kernel_ref=KernelRef(kernel_id="fixed-kernel", version="1"),
+        harness_ref=HarnessInstanceRef(instance_id="harness.parent"),
+        program_ref=ExecutionProgramRef(program_id="program.parent", version="1"),
+        bundle_id="bundle.parent",
         run_artifact_sha256="e" * 64,
         pairing=_pairing(budget=HarnessBudget(max_total_attempts=8)),
         trials=(trial,),
@@ -1081,10 +1083,10 @@ def _batch_coalescing_evidence(
     return RepairRuntimeEvidence(
         candidate_id="candidate.parent",
         run_id="run.parent",
-        kernel_sha256="a" * 64,
-        harness_sha256="b" * 64,
-        program_sha256="c" * 64,
-        compiled_bundle_sha256="d" * 64,
+        kernel_ref=KernelRef(kernel_id="fixed-kernel", version="1"),
+        harness_ref=HarnessInstanceRef(instance_id="harness.parent"),
+        program_ref=ExecutionProgramRef(program_id="program.parent", version="1"),
+        bundle_id="bundle.parent",
         run_artifact_sha256="e" * 64,
         pairing=_batch_coalescing_pairing(budget=budget),
         trials=tuple(trials),

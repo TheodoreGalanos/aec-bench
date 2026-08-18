@@ -15,7 +15,8 @@ from typing import Literal, Self
 from pydantic import field_validator, model_validator
 
 from aec_bench.contracts.evaluation_result import StewardshipEvaluation
-from aec_bench.contracts.harness_kernel import ContentAddressedModel, validate_sha256
+from aec_bench.contracts.harness_kernel import validate_sha256
+from aec_bench.contracts.legacy_content_address import LegacyContentAddressedModel
 from aec_bench.contracts.validators import FrozenStrictModel, NonEmptyStr
 from aec_bench.contracts.world_session import (
     StewardshipStateSnapshotRef,
@@ -90,7 +91,7 @@ class PrimeRefinementQualificationLimits(FrozenStrictModel):
         )
 
 
-class PrimeRefinementQualificationObservation(ContentAddressedModel):
+class PrimeRefinementQualificationObservation(LegacyContentAddressedModel):
     """One independently evaluated baseline or candidate journey."""
 
     schema_version: Literal["aecbench.prime-refinement-observation.v1"] = "aecbench.prime-refinement-observation.v1"
@@ -146,7 +147,7 @@ class PrimeRefinementQualificationContrast(FrozenStrictModel):
         return value
 
 
-class PrimeRefinementQualificationReport(ContentAddressedModel):
+class PrimeRefinementQualificationReport(LegacyContentAddressedModel):
     """Complete comparison evidence with an explicit pending human decision."""
 
     schema_version: Literal["aecbench.prime-refinement-qualification.v1"] = "aecbench.prime-refinement-qualification.v1"

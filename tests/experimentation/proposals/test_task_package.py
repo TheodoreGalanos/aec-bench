@@ -18,7 +18,7 @@ from aec_bench.contracts.evaluation_plane import (
     TaskVerifierSurface,
     TaskVerifierSurfaceScope,
 )
-from aec_bench.contracts.harness_kernel import canonical_content_sha256
+from aec_bench.contracts.harness_kernel import canonical_json_sha256
 from aec_bench.contracts.output_completion import OutputCompletionContract
 from aec_bench.contracts.task_definition import Visibility
 from aec_bench.experimentation.proposals.task_package import (
@@ -564,7 +564,7 @@ def _identity(
         task_revision=_sha256(b"task-revision"),
         source_task_package_sha256=source_task_package_sha256(source_task),
         problem_view_sha256=_sha256(b"problem-view"),
-        output_contract_sha256=canonical_content_sha256(contract.model_dump(mode="json")),
+        output_contract_sha256=canonical_json_sha256(contract.model_dump(mode="json")),
         visibility=Visibility.PUBLIC,
     )
 

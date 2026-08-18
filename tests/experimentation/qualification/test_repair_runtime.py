@@ -23,6 +23,7 @@ from aec_bench.contracts.authority import (
 )
 from aec_bench.contracts.execution_program import (
     ActionNode,
+    ExecutionProgramRef,
     JoinNode,
     LiteralValue,
     ProgramArgument,
@@ -43,7 +44,7 @@ from aec_bench.contracts.harness_instance import (
     TaskSourceBindingConfig,
     VerificationBindingConfig,
 )
-from aec_bench.contracts.harness_kernel import KernelRef, canonical_content_sha256
+from aec_bench.contracts.harness_kernel import KernelRef, canonical_json_sha256
 from aec_bench.contracts.output_completion import (
     OutputCommitAttestation,
     OutputCompletionEvaluation,
@@ -483,8 +484,7 @@ def test_repair_runtime_executes_seeded_parent_child_pair_and_preserves_lineage(
     assert {item.outcome.reward for item in parent.observations} == {0.2}
     assert {item.outcome.reward for item in child.observations} == {0.9}
     assert all(
-        item.outcome.kernel_sha256 == runtime.registry.manifest.content_sha256
-        for item in (*parent.observations, *child.observations)
+        item.outcome.kernel_ref == runtime.registry.manifest.ref for item in (*parent.observations, *child.observations)
     )
 
 
@@ -1015,7 +1015,7 @@ def _forged_terminal_execution(
     terminal_payload = json.loads(execution.terminal.path.read_text(encoding="utf-8"))
     terminal_payload["result"] = result.model_dump(mode="json")
     terminal_payload["attempt_plan_sha256"] = attempt_plan_sha256 or selected_plan.reference.sha256
-    terminal_payload["content_sha256"] = canonical_content_sha256(
+    terminal_payload["content_sha256"] = canonical_json_sha256(
         {key: value for key, value in terminal_payload.items() if key != "content_sha256"}
     )
     encoded = (json.dumps(terminal_payload, indent=2, sort_keys=True) + "\n").encode()
@@ -1268,8 +1268,7 @@ def test_repair_runtime_rejects_candidate_kernel_drift_at_compile_boundary(tmp_p
     kernel = runtime.registry.manifest.ref
     wrong_kernel = KernelRef(
         kernel_id=kernel.kernel_id,
-        version=kernel.version,
-        content_sha256="0" * 64,
+        version="different-version",
     )
     wrong_parent = RepairCandidate(
         candidate_id=runtime.parent.candidate_id,
@@ -1497,9 +1496,9 @@ def test_program_attempt_limit_repair_recovers_a_partial_real_task_matrix_withou
     }
     parent = manifests[runtime.request.parent_candidate_id]
     child = manifests[runtime.request.child_candidate_id]
-    assert parent.kernel_sha256 == child.kernel_sha256 == runtime.registry.manifest.content_sha256
-    assert parent.harness_sha256 == child.harness_sha256
-    assert parent.program_sha256 != child.program_sha256
+    assert parent.kernel_ref == child.kernel_ref == runtime.registry.manifest.ref
+    assert parent.harness_ref == child.harness_ref
+    assert parent.program_ref != child.program_ref
     assert parent.pairing == child.pairing == runtime.request.pairing
     assert parent.executions[0].program_execution.status is ProgramExecutionStatus.FAILED
     assert parent.executions[0].program_execution.error_code == "global_attempt_budget_exhausted"
@@ -1518,7 +1517,7 @@ def test_program_attempt_limit_repair_recovers_a_partial_real_task_matrix_withou
         for reference in child.executions[0].harbor_invocation_receipts
     )
     assert parent_receipt.run_id == parent.executions[0].run_id
-    assert parent_receipt.bundle_sha256 == parent.executions[0].execution_bundle_sha256
+    assert parent_receipt.bundle_id == parent.executions[0].execution_bundle_id
     assert [receipt.program_node_id for receipt in child_receipts] == ["run-alpha", "run-beta"]
     assert {reference.path for receipt in child_receipts for reference in receipt.imported_trial_records} == {
         reference.path for reference in child.executions[0].trial_records
@@ -1544,7 +1543,7 @@ def test_program_batch_coalescing_patch_preserves_fixed_hx_and_all_program_limit
         code="program_task_batch_coalescing_required",
         message="The exact serial task pair fits one existing batch operation.",
         patch=ProgramCoalesceTaskBatchPatch(
-            expected_program_sha256=parent.program.content_sha256,
+            expected_program_ref=parent.program.ref,
             source_node_ids=("run-primary", "run-secondary"),
             replacement_node_id="run-coalesced",
             task_refs=task_ids,
@@ -1580,14 +1579,14 @@ def test_program_batch_coalescing_patch_rejects_a_stale_compiled_program_hash(
     runtime, _, task_ids = _batch_coalescing_runtime(tmp_path)
     runtime.dependencies.compiler(runtime.parent, runtime.request.pairing)
 
-    with pytest.raises(ValueError, match="expected program hash"):
+    with pytest.raises(ValueError, match="expected program"):
         runtime.apply_patch(
             RepairPatchProposal(
                 owner=RepairOwner.PROGRAM,
                 code="program_task_batch_coalescing_required",
                 message="The exact serial task pair fits one existing batch operation.",
                 patch=ProgramCoalesceTaskBatchPatch(
-                    expected_program_sha256="f" * 64,
+                    expected_program_ref=ExecutionProgramRef(program_id="stale", version="1.0.0"),
                     source_node_ids=("run-primary", "run-secondary"),
                     replacement_node_id="run-coalesced",
                     task_refs=task_ids,
@@ -1613,11 +1612,10 @@ def test_declared_stage_graph_patch_compiles_the_exact_graph_without_changing_hx
     task_graph = RepairDeclaredStageGraphEvidence(
         task_id=task_id,
         task_package_sha256=snapshot.package_sha256,
-        review_sidecar_sha256=snapshot.task_review.review_sidecar_sha256,
         stage_graph=snapshot.task_review.stage_graph,
     )
     patch = ProgramMaterializeDeclaredStageGraphPatch(
-        expected_program_sha256=parent.program.content_sha256,
+        expected_program_ref=parent.program.ref,
         task_graphs=(task_graph,),
     )
     proposal = RepairPatchProposal(
@@ -1630,13 +1628,13 @@ def test_declared_stage_graph_patch_compiles_the_exact_graph_without_changing_hx
     child_source = runtime.apply_patch(proposal)
     child = runtime.dependencies.compiler(child_source, runtime.request.pairing)
 
-    assert (
-        materialize_program_declared_stage_graph(
-            runtime.parent.program_template,
-            patch,
-        )
-        == child_source.program_template
+    expected_program = materialize_program_declared_stage_graph(
+        runtime.parent.program_template,
+        patch,
     )
+    assert child_source.program_template.nodes == expected_program.nodes
+    assert child_source.program_template.limits == expected_program.limits
+    assert child_source.program_template.version != expected_program.version
     assert child_source.harness_request == runtime.parent.harness_request
     assert child_source.program_template.limits == runtime.parent.program_template.limits
     assert child.harness == parent.harness
@@ -1686,18 +1684,17 @@ def test_declared_stage_graph_patch_rejects_stale_program_or_task_graph_identity
     task_graph = RepairDeclaredStageGraphEvidence(
         task_id=task_id,
         task_package_sha256=snapshot.package_sha256,
-        review_sidecar_sha256=snapshot.task_review.review_sidecar_sha256,
         stage_graph=snapshot.task_review.stage_graph,
     )
 
-    with pytest.raises(ValueError, match="expected program hash"):
+    with pytest.raises(ValueError, match="expected program"):
         runtime.apply_patch(
             RepairPatchProposal(
                 owner=RepairOwner.PROGRAM,
                 code="program_declared_stage_graph_unmaterialized",
                 message="Reject stale program identity.",
                 patch=ProgramMaterializeDeclaredStageGraphPatch(
-                    expected_program_sha256="f" * 64,
+                    expected_program_ref=ExecutionProgramRef(program_id="stale", version="1.0.0"),
                     task_graphs=(task_graph,),
                 ),
             )
@@ -1710,7 +1707,7 @@ def test_declared_stage_graph_patch_rejects_stale_program_or_task_graph_identity
                 code="program_declared_stage_graph_unmaterialized",
                 message="Reject stale task identity.",
                 patch=ProgramMaterializeDeclaredStageGraphPatch(
-                    expected_program_sha256=parent.program.content_sha256,
+                    expected_program_ref=parent.program.ref,
                     task_graphs=(task_graph.model_copy(update={"task_package_sha256": "0" * 64}),),
                 ),
             )
@@ -1767,7 +1764,7 @@ def test_declared_stage_graph_repair_runs_one_scored_finalization_per_task_and_s
     }
     parent = manifests[runtime.request.parent_candidate_id]
     child = manifests[runtime.request.child_candidate_id]
-    assert parent.harness_sha256 == child.harness_sha256
+    assert parent.harness_ref == child.harness_ref
     assert all(item.program_execution.total_attempts == 1 for item in parent.executions)
     assert all(item.program_execution.total_attempts == 4 for item in child.executions)
     assert all(len(item.trial_records) == 1 for item in child.executions)
@@ -1837,7 +1834,7 @@ def test_program_batch_coalescing_recovers_with_one_attempt_and_one_child_invoca
     }
     parent = manifests[runtime.request.parent_candidate_id]
     child = manifests[runtime.request.child_candidate_id]
-    assert parent.harness_sha256 == child.harness_sha256
+    assert parent.harness_ref == child.harness_ref
     assert parent.pairing == child.pairing == runtime.request.pairing
     assert parent.executions[0].program_execution.error_code == "global_attempt_budget_exhausted"
     assert parent.executions[0].program_execution.total_attempts == 1
@@ -1856,7 +1853,7 @@ def test_program_batch_coalescing_recovers_with_one_attempt_and_one_child_invoca
     terminal = RepairTerminalRecord.model_validate_json(execution.terminal.path.read_text(encoding="utf-8"))
     assert terminal.patch_proposal is not None
     assert isinstance(terminal.patch_proposal.patch, ProgramCoalesceTaskBatchPatch)
-    assert terminal.patch_proposal.patch.expected_program_sha256 == parent.program_sha256
+    assert terminal.patch_proposal.patch.expected_program_ref == parent.program_ref
 
 
 def test_repair_runtime_revalidates_bound_harbor_invocation_receipts(

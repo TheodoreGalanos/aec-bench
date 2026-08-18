@@ -8,6 +8,9 @@ import math
 import pytest
 from pydantic import ValidationError
 
+from aec_bench.contracts.execution_program import ExecutionProgramRef
+from aec_bench.contracts.harness_instance import HarnessInstanceRef
+from aec_bench.contracts.harness_kernel import KernelRef
 from aec_bench.experimentation.qualification.harness_program_study.analysis import (
     HarnessProgramOutcome,
     analyse_harness_program_study,
@@ -148,14 +151,14 @@ def _candidate(task_set_id: str, cell: HarnessProgramCell) -> HarnessProgramCand
     learned_program = cell in {HarnessProgramCell.H0_PX, HarnessProgramCell.HX_PX}
     return HarnessProgramCandidateReference.create(
         cell=cell,
-        kernel_sha256=_sha("kernel"),
+        kernel_ref=KernelRef(kernel_id="kernel", version="1"),
         kernel_abi_sha256=_sha("abi"),
         policy_sha256=_sha("policy"),
         task_set_id=task_set_id,
         task_set_sha256=_sha(task_set_id),
-        harness_sha256=_sha("hx" if learned_harness else "h0"),
+        harness_ref=HarnessInstanceRef(instance_id="hx" if learned_harness else "h0"),
         harness_abi_sha256=_sha("abi"),
-        program_sha256=_sha("px" if learned_program else "p0"),
+        program_ref=ExecutionProgramRef(program_id="px" if learned_program else "p0", version="1"),
         program_abi_sha256=_sha("abi"),
         resource_sha256=_sha("resource"),
     )

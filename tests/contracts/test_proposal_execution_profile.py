@@ -31,7 +31,6 @@ def _operation(
         capability_ref=KernelCapabilityRef(
             capability_id=capability_id,
             version="1.0.0",
-            content_sha256="a" * 64,
         ),
         required_scope=scope,
         max_parallelism=1,
@@ -117,7 +116,6 @@ def test_profile_rejects_ambiguous_operation_or_capability_bindings() -> None:
             "capability_ref": KernelCapabilityRef(
                 capability_id="another.capability",
                 version="1.0.0",
-                content_sha256="d" * 64,
             ),
             "operation_definition_sha256": "e" * 64,
         },

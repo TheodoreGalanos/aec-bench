@@ -11,7 +11,7 @@ from pathlib import Path
 import pytest
 
 from aec_bench.contracts.agent_output import AgentOutputStatus
-from aec_bench.contracts.harness_kernel import canonical_content_sha256
+from aec_bench.contracts.harness_kernel import canonical_json_sha256
 from aec_bench.contracts.output_completion import (
     OutputCommitAttestation,
     OutputCompletionContract,
@@ -855,7 +855,7 @@ def _install_output_commit_contract(
         output_path="/workspace/output.md",
         output_sha256=hashlib.sha256(output_bytes).hexdigest(),
         output_size_bytes=len(output_bytes),
-        completion_contract_sha256=canonical_content_sha256(contract.model_dump(mode="json")),
+        completion_contract_sha256=canonical_json_sha256(contract.model_dump(mode="json")),
         completion_evaluation=evaluation,
         initial_output_sha256=None,
         commit_turn=commit_turn,
@@ -1298,7 +1298,7 @@ def _write_content_addressed_json(
     payload: dict[str, object],
 ) -> None:
     content = dict(payload)
-    content["content_sha256"] = canonical_content_sha256(content)
+    content["content_sha256"] = canonical_json_sha256(content)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
         json.dumps(content, indent=2, sort_keys=True) + "\n",

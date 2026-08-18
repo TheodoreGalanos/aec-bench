@@ -12,7 +12,10 @@ from pydantic import JsonValue
 
 from aec_bench.contracts.authority import (
     AuthorityPrincipalKind,
+    CriticGenerationIdentity,
+    EvaluationPlanIdentity,
 )
+from aec_bench.contracts.harness_kernel import KernelRef
 from aec_bench.experimentation.governance.authority_ledger import AuthorityLedger
 from aec_bench.experimentation.governance.monitor_instrumentation import (
     MotifCanaryProbeContext,
@@ -61,6 +64,18 @@ def _sha(label: str) -> str:
     return hashlib.sha256(label.encode()).hexdigest()
 
 
+def _kernel_ref() -> KernelRef:
+    return KernelRef(kernel_id="test-kernel", version="1.0.0")
+
+
+def _critic_generation() -> CriticGenerationIdentity:
+    return CriticGenerationIdentity(
+        critic_id="critic.acceptance",
+        version="1",
+        compatibility_generation="critic-generation",
+    )
+
+
 def _motif() -> HarnessProgramMotif:
     return HarnessProgramMotif.create(
         status=MotifStatus.REUSABLE,
@@ -103,8 +118,9 @@ def _revoked_snapshot(
         state=MotifAssuranceState.ACTIVE,
         cause="planted_monitor_canary",
         authority_event_sha256=_sha("canary-active-not-authority"),
-        kernel_sha256=_sha("kernel-generation"),
-        critic_generation_sha256=_sha("critic-generation"),
+        kernel_ref=_kernel_ref(),
+        kernel_abi_sha256=_sha("kernel-generation"),
+        critic_generation=_critic_generation(),
         applicability_sha256=_sha("applicability-generation"),
         revalidation_triggers=("critic_generation_change",),
     )
@@ -115,8 +131,9 @@ def _revoked_snapshot(
         cause="planted_revoked_monitor_canary",
         parent_event_sha256=active.content_sha256,
         authority_event_sha256=_sha("canary-revoked-not-authority"),
-        kernel_sha256=_sha("kernel-generation"),
-        critic_generation_sha256=_sha("critic-generation"),
+        kernel_ref=_kernel_ref(),
+        kernel_abi_sha256=_sha("kernel-generation"),
+        critic_generation=_critic_generation(),
         applicability_sha256=_sha("applicability-generation"),
         revalidation_triggers=("critic_generation_change",),
     )
@@ -171,7 +188,10 @@ def _monitor_inputs(
     cycle = CycleMonitorPlan(
         cycle_id="cycle.instrumentation",
         cycle_index=1,
-        evaluation_plan_sha256=_sha("evaluation-plan"),
+        evaluation_plan=EvaluationPlanIdentity(
+            plan_id="evaluation-plan",
+            evaluation_generation="evaluation-generation.1",
+        ),
         standing_policy_sha256=policy.content_sha256,
         assurance_snapshot_sha256=snapshot.content_sha256,
     )

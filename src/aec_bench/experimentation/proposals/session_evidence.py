@@ -23,9 +23,9 @@ from aec_bench.adapters.base import (
 from aec_bench.contracts.adapter_execution import TranscriptEvent
 from aec_bench.contracts.agent_output import AgentOutputStatus
 from aec_bench.contracts.harness_kernel import (
-    ContentAddressedModel,
     validate_sha256,
 )
+from aec_bench.contracts.legacy_content_address import LegacyContentAddressedModel
 from aec_bench.contracts.pricing import estimate_cost_usd
 from aec_bench.contracts.proposal_execution.graph import ProposalHandoff
 from aec_bench.contracts.proposal_execution.session import (
@@ -141,7 +141,7 @@ class ProposalCandidateTransitionEvidence(Protocol):
     receipt_path: Path
 
 
-class _CompletedCandidateTransitionReceipt(ContentAddressedModel):
+class _CompletedCandidateTransitionReceipt(LegacyContentAddressedModel):
     """Exact completed host receipt accepted into proposal-session evidence."""
 
     schema_version: Literal["aecbench.proposal-candidate-transition.v1"]

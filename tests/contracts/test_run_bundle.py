@@ -17,6 +17,7 @@ from aec_bench.contracts.harness_instance import (
     CompiledHarnessBinding,
     CompiledHarnessInstance,
     ComputeBindingConfig,
+    HarnessRecipeRef,
     HarnessTopologyRole,
     ProgramOperationRef,
     ProgramOperationSpec,
@@ -129,7 +130,7 @@ def _bundle_parts() -> tuple[KernelManifest, CompiledHarnessInstance, CompiledEx
     harness = CompiledHarnessInstance(
         instance_id="hx-alpha",
         kernel_ref=kernel.ref,
-        source_recipe_sha256="c" * 64,
+        source_recipe_ref=HarnessRecipeRef(recipe_id="alpha", version="1.0.0"),
         bindings=bindings,
         program_surface=surface,
     )
@@ -146,8 +147,8 @@ def _bundle_parts() -> tuple[KernelManifest, CompiledHarnessInstance, CompiledEx
         program_id=source_program.program_id,
         version=source_program.version,
         harness_ref=harness.ref,
-        source_program_sha256=source_program.content_sha256,
-        surface_sha256=surface.content_sha256,
+        source_program_ref=source_program.ref,
+        surface_id=surface.surface_id,
         nodes=source_program.nodes,
         limits=source_program.limits,
         topological_order=("run", "stop"),
@@ -174,7 +175,7 @@ def _compile_for_surface(
     compiled_harness = CompiledHarnessInstance(
         instance_id=harness.instance_id,
         kernel_ref=harness.kernel_ref,
-        source_recipe_sha256=harness.source_recipe_sha256,
+        source_recipe_ref=harness.source_recipe_ref,
         contracts=harness.contracts,
         budget=harness.budget,
         recursion_policy=harness.recursion_policy,
@@ -197,8 +198,8 @@ def _compile_for_surface(
         program_id=source_program.program_id,
         version=source_program.version,
         harness_ref=compiled_harness.ref,
-        source_program_sha256=source_program.content_sha256,
-        surface_sha256=surface.content_sha256,
+        source_program_ref=source_program.ref,
+        surface_id=surface.surface_id,
         nodes=source_program.nodes,
         limits=source_program.limits,
         topological_order=("run", "stop"),
@@ -225,8 +226,8 @@ def test_run_bundle_binds_fixed_kernel_harness_program_and_task_snapshots() -> N
     )
 
     assert bundle.harness.ref == program.harness_ref
-    assert bundle.program.surface_sha256 == harness.program_surface.content_sha256
-    assert len(bundle.content_sha256) == 64
+    assert bundle.program.surface_id == harness.program_surface.surface_id
+    assert "content_sha256" not in bundle.model_dump(mode="json")
 
     with pytest.raises(ValidationError, match="frozen"):
         bundle.bundle_id = "mutated"
@@ -234,7 +235,7 @@ def test_run_bundle_binds_fixed_kernel_harness_program_and_task_snapshots() -> N
     with pytest.raises(ValidationError, match="target_settings"):
         RunBundle.model_validate(
             {
-                **bundle.model_dump(mode="json", exclude={"content_sha256"}),
+                **bundle.model_dump(mode="json"),
                 "target_settings": {"agents": [{"adapter": "untrusted"}]},
             }
         )
@@ -299,10 +300,9 @@ def test_run_bundle_rejects_a_program_compiled_for_another_harness() -> None:
     kernel, harness, program, payload = _bundle_parts()
     mismatched_program = CompiledExecutionProgram.model_validate(
         {
-            **program.model_dump(mode="json", exclude={"content_sha256", "harness_ref"}),
+            **program.model_dump(mode="json", exclude={"harness_ref"}),
             "harness_ref": {
-                "instance_id": program.harness_ref.instance_id,
-                "content_sha256": "f" * 64,
+                "instance_id": "another-harness",
             },
         }
     )
@@ -326,7 +326,7 @@ def test_run_bundle_rejects_a_program_compiled_for_another_harness() -> None:
 
 def test_run_bundle_preserves_cross_contract_error_order() -> None:
     kernel, harness, program, payload = _bundle_parts()
-    mismatched_kernel_ref = kernel.ref.model_copy(update={"content_sha256": "f" * 64})
+    mismatched_kernel_ref = kernel.ref.model_copy(update={"version": "2.0.0"})
 
     with pytest.raises(
         ValidationError,
@@ -344,15 +344,13 @@ def test_run_bundle_preserves_cross_contract_error_order() -> None:
 
 def test_run_bundle_rejects_an_operation_ref_not_pinned_to_its_surface() -> None:
     kernel, harness, program, payload = _bundle_parts()
-    mismatched_program = CompiledExecutionProgram.model_validate(
-        {
-            **program.model_dump(mode="json", exclude={"content_sha256", "operation_refs"}),
-            "operation_refs": (
-                ProgramOperationRef(
-                    operation_id="run_batch.v1",
-                    content_sha256="f" * 64,
-                ),
+    mismatched_program = program.model_copy(
+        update={
+            "nodes": (
+                ActionNode(node_id="run", operation_id="other-operation.v1"),
+                StopNode(node_id="stop", depends_on=("run",), outcome=StopOutcome.SUCCEEDED),
             ),
+            "operation_refs": (ProgramOperationRef(operation_id="other-operation.v1"),),
         }
     )
 

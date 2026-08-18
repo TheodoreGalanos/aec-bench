@@ -19,9 +19,11 @@ from aec_bench.contracts.authority import (
     AuthorityPrincipal,
     AuthorityPrincipalKind,
     BasisKind,
+    EvaluationPlanIdentity,
     TaintLabel,
 )
-from aec_bench.contracts.harness_kernel import ContentAddressedModel
+from aec_bench.contracts.harness_kernel import KernelRef
+from aec_bench.contracts.legacy_content_address import LegacyContentAddressedModel
 from aec_bench.experimentation.governance.authority_ledger import AuthorityLedger
 from aec_bench.experimentation.governance.monitor_runtime import (
     CanaryLogicalProjectionConfiguration,
@@ -105,7 +107,10 @@ def _cycle(
     return CycleMonitorPlan(
         cycle_id="cycle.009",
         cycle_index=9,
-        evaluation_plan_sha256=_sha("evaluation-plan"),
+        evaluation_plan=EvaluationPlanIdentity(
+            plan_id="evaluation-plan",
+            evaluation_generation="evaluation-generation.1",
+        ),
         standing_policy_sha256=policy.content_sha256,
         assurance_snapshot_sha256=_sha(assurance),
         basis_replay_requirements=replay_requirements,
@@ -128,7 +133,7 @@ def _clock(values: tuple[float, ...]) -> Iterator[float]:
     return iter(values)
 
 
-def _write_model(path: Path, model: ContentAddressedModel) -> None:
+def _write_model(path: Path, model: LegacyContentAddressedModel) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     payload = model.model_dump(mode="json")
     path.write_text(
@@ -743,7 +748,10 @@ def test_runtime_executes_scheduled_basis_replay_through_the_ledger(
         subject_id="bundle.compile-001",
         subject_sha256=_sha("bundle.compile-001"),
         basis=(basis.reference,),
-        kernel_sha256=_sha("kernel"),
+        kernel_ref=KernelRef(
+            kernel_id="aec-bench.adaptive-harness",
+            version="1.6.0",
+        ),
         reasons=("exact compile basis closed",),
     )
     stored_event = ledger.issue_authority_event(event)

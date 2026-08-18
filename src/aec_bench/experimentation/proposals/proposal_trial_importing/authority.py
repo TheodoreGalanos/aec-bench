@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 
 from aec_bench.contracts.authority import (
@@ -15,7 +16,7 @@ from aec_bench.contracts.authority import (
     OriginStamp,
     TaintLabel,
 )
-from aec_bench.contracts.harness_kernel import ContentAddressedModel
+from aec_bench.contracts.harness_kernel import FrozenStrictModel
 from aec_bench.contracts.trial_record import ArtifactReference, TrialRecord
 from aec_bench.experimentation.governance.authority_ledger import (
     AuthorityLedger,
@@ -45,12 +46,12 @@ from aec_bench.experimentation.proposals.proposal_trial_importing.persistence im
 from aec_bench.ledger.immutable_artifact_store import EvidenceRepository
 
 
-def resolve_unique_event_model[ModelT: ContentAddressedModel](
+def resolve_unique_event_model[ModelT: FrozenStrictModel](
     *,
     ledger: AuthorityLedger,
     event: AuthorityEvent,
     model_type: type[ModelT],
-    expected_content_sha256: str,
+    matches_expected: Callable[[ModelT], bool],
     label: str,
 ) -> ModelT:
     """Resolve one canonical model from an authority event's evidence bases."""
@@ -65,10 +66,7 @@ def resolve_unique_event_model[ModelT: ContentAddressedModel](
             )
         except ValueError:
             continue
-        if (
-            model.content_sha256 == expected_content_sha256
-            and canonical_model_bytes(model) == stored.content_path.read_bytes()
-        ):
+        if matches_expected(model) and canonical_model_bytes(model) == stored.content_path.read_bytes():
             matches.append(model)
     if len(matches) != 1:
         raise ProposalTrialImportError(
@@ -301,7 +299,7 @@ def record_import_authority(
             trial_basis.reference,
             import_basis.reference,
         ),
-        kernel_sha256=authorization.dispatch.bundle.fixed_harness.kernel_ref.content_sha256,
+        kernel_ref=authorization.dispatch.bundle.fixed_harness.kernel_ref,
         reasons=("exact complete proposal TrialRecord and non-circular import receipt persisted",),
         revalidation_triggers=(
             "basis_replay_due",

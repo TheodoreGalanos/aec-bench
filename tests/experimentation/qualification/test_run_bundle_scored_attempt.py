@@ -76,11 +76,11 @@ def test_scored_invocation_persists_complete_governed_lifecycle(
     assert execution.program.status is ProgramExecutionStatus.SUCCEEDED
     attempt_root = _attempt_root(
         artifacts_root=artifacts_root,
-        bundle_sha256=bundle.content_sha256,
+        bundle_id=bundle.bundle_id,
         run_id=study.run_id,
     )
-    assert len(tuple(_claims(attempt_root, "terminal"))) == 1
-    assert len(tuple(_claims(attempt_root, "dispatch_intent"))) == 1
+    assert len(tuple(_records(attempt_root, "terminal"))) == 1
+    assert len(tuple(_records(attempt_root, "dispatch_intent"))) == 1
     assert (attempt_root / "standing-monitor" / "model-claims" / "authority-event").is_dir()
 
 
@@ -175,10 +175,10 @@ def test_missing_exact_usage_fails_closed_before_terminal(
     assert execution.program.error_code == "governed_usage_evidence_missing"
     attempt_root = _attempt_root(
         artifacts_root=artifacts_root,
-        bundle_sha256=bundle.content_sha256,
+        bundle_id=bundle.bundle_id,
         run_id=study.run_id,
     )
-    assert not tuple(_claims(attempt_root, "terminal"))
+    assert not tuple(_records(attempt_root, "terminal"))
 
 
 def test_budget_breach_closes_exact_usage_but_never_publishes_terminal(
@@ -210,10 +210,10 @@ def test_budget_breach_closes_exact_usage_but_never_publishes_terminal(
     assert execution.budget.unaccounted_dispatches == 0
     attempt_root = _attempt_root(
         artifacts_root=artifacts_root,
-        bundle_sha256=bundle.content_sha256,
+        bundle_id=bundle.bundle_id,
         run_id=study.run_id,
     )
-    assert not tuple(_claims(attempt_root, "terminal"))
+    assert not tuple(_records(attempt_root, "terminal"))
 
 
 def test_scored_authority_failure_preserves_governed_backend_without_terminal(
@@ -249,11 +249,11 @@ def test_scored_authority_failure_preserves_governed_backend_without_terminal(
     assert len(execution.harbor_invocations) == 1
     attempt_root = _attempt_root(
         artifacts_root=artifacts_root,
-        bundle_sha256=bundle.content_sha256,
+        bundle_id=bundle.bundle_id,
         run_id=study.run_id,
     )
-    assert tuple(_claims(attempt_root, "backend_receipt"))
-    assert not tuple(_claims(attempt_root, "terminal"))
+    assert tuple(_records(attempt_root, "backend_receipt"))
+    assert not tuple(_records(attempt_root, "terminal"))
 
 
 def test_terminal_replay_rejects_changed_imported_trial_without_redispatch(
@@ -311,11 +311,11 @@ def _case(
 def _attempt_root(
     *,
     artifacts_root: Path,
-    bundle_sha256: str,
+    bundle_id: str,
     run_id: str,
 ) -> Path:
-    return artifacts_root / bundle_sha256 / "runs" / run_id / "invocations" / "run-a1"
+    return artifacts_root / bundle_id / "runs" / run_id / "invocations" / "run-a1"
 
 
-def _claims(attempt_root: Path, stage: str) -> Iterator[Path]:
-    return (attempt_root / "governed-attempt-state" / "governed-attempt" / "claims" / stage).glob("*/claim.json")
+def _records(attempt_root: Path, stage: str) -> Iterator[Path]:
+    return (attempt_root / "governed-attempt-state" / "governed-attempt" / "records" / stage).glob("*/record.json")

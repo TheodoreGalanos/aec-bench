@@ -13,7 +13,8 @@ from typing import Any, Literal, Self
 
 from pydantic import JsonValue, field_validator, model_validator
 
-from aec_bench.contracts.harness_kernel import ContentAddressedModel, validate_sha256
+from aec_bench.contracts.harness_kernel import validate_sha256
+from aec_bench.contracts.legacy_content_address import LegacyContentAddressedModel
 from aec_bench.contracts.validators import FrozenStrictModel, NonEmptyStr
 from aec_bench.prime_agent.batch import redact_prime_bytes
 
@@ -73,7 +74,7 @@ class PrimeRefinementEntry(FrozenStrictModel):
         return value
 
 
-class PrimeRefinementCandidate(ContentAddressedModel):
+class PrimeRefinementCandidate(LegacyContentAddressedModel):
     """One exact, isolated continual-harness treatment that can be installed again."""
 
     schema_version: Literal["aecbench.prime-refinement-candidate.v1"] = "aecbench.prime-refinement-candidate.v1"
@@ -117,7 +118,7 @@ class PrimeRefinementSource(FrozenStrictModel):
         return validate_sha256(value)
 
 
-class PrimeRefinementChange(ContentAddressedModel):
+class PrimeRefinementChange(LegacyContentAddressedModel):
     """A proposed candidate derived from one closed Prime session."""
 
     schema_version: Literal["aecbench.prime-refinement-change.v1"] = "aecbench.prime-refinement-change.v1"

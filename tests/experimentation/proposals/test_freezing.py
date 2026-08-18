@@ -29,9 +29,10 @@ from aec_bench.contracts.evaluation_plane import (
     EvaluationBudgetPartition,
     EvaluationBudgetPlan,
     EvaluationPlan,
+    candidate_manifest_scope_commitment,
 )
 from aec_bench.contracts.harness_instance import CompiledHarnessInstance
-from aec_bench.contracts.harness_kernel import canonical_content_sha256
+from aec_bench.contracts.harness_kernel import KernelRef, canonical_json_sha256
 from aec_bench.contracts.output_completion import OutputCompletionContract
 from aec_bench.contracts.program_proposal.candidate import (
     CandidateGenerationCoordinate,
@@ -139,19 +140,17 @@ def test_governed_freeze_persists_complete_basis_and_immediately_replays_it(
 
     result = _issue(fixture)
 
-    assert result.freeze.fixed_harness_sha256 == fixture.fixed_harness.content_sha256
+    assert result.freeze.fixed_harness_ref == fixture.fixed_harness.ref
     assert result.freeze.evaluation_plan_ref == fixture.evaluation_plan.ref
     selected_item = fixture.structural_split.dev.items[0]
-    assert result.freeze.selected_structural_item_sha256 == canonical_content_sha256(
-        selected_item.model_dump(mode="json")
-    )
+    assert result.freeze.selected_structural_item_sha256 == canonical_json_sha256(selected_item.model_dump(mode="json"))
     assert result.freeze.selected_review_lineage_id == selected_item.review_lineage_id
     assert result.freeze.execution_profile_sha256 is None
     assert result.basis.execution_profile is None
     basis_payload = result.basis.model_dump(mode="json")
     assert "execution_profile" not in basis_payload
     basis_content = {key: value for key, value in basis_payload.items() if key != "content_sha256"}
-    basis_sha256 = canonical_content_sha256(basis_content)
+    basis_sha256 = canonical_json_sha256(basis_content)
     assert result.basis.content_sha256 == basis_sha256
     assert (
         ProposalFreezeBasis.model_validate(
@@ -233,7 +232,7 @@ def test_governed_freeze_observes_a_multitask_candidate_scope(
     )
     plan = _mutate_plan(
         fixture.evaluation_plan,
-        candidate_manifest_sha256=scope.content_sha256,
+        candidate_manifest_sha256=candidate_manifest_scope_commitment(scope),
     )
 
     result = _issue(
@@ -266,7 +265,7 @@ def test_public_freeze_result_does_not_expose_acceptance_or_critic_configuration
     assert fixture.evaluation_plan.development_critic.case_manifest_sha256 not in public_result
     assert "acceptance_critic" not in public_result
     assert "development_critic" not in public_result
-    assert result.freeze.evaluation_plan_ref.content_sha256 in public_result
+    assert result.freeze.evaluation_plan_ref.plan_id in public_result
 
 
 def _pre_execution_spec() -> PreExecutionProtocolSpec:
@@ -439,7 +438,10 @@ def test_freeze_rejects_exact_binding_or_byte_mismatches(
             fixture,
             evaluation_plan=_mutate_plan(
                 fixture.evaluation_plan,
-                kernel_sha256=_sha("different-kernel"),
+                kernel_ref=KernelRef(
+                    kernel_id=fixture.evaluation_plan.kernel_ref.kernel_id,
+                    version="different-kernel-version",
+                ),
             ),
         )
     elif mutation == "harness_policy":
@@ -789,8 +791,8 @@ def _schedule(
         proposal_freeze=result.freeze,
         incumbent_candidate=incumbent,
         coordinates=coordinates,
-        kernel_sha256=fixture.fixed_harness.kernel_ref.content_sha256,
-        fixed_harness_sha256=fixture.fixed_harness.content_sha256,
+        kernel_ref=fixture.fixed_harness.kernel_ref,
+        fixed_harness_ref=fixture.fixed_harness.ref,
         evaluation_plan_ref=fixture.evaluation_plan.ref,
         aggregate_budget=fixture.fixed_harness.budget,
     )
@@ -911,7 +913,7 @@ def _fixture(
         stopping_policy_sha256=_sha("two-candidates-then-stop"),
     )
     evaluation_plan = _evaluation_plan(
-        kernel_sha256=fixed_harness.kernel_ref.content_sha256,
+        kernel_ref=fixed_harness.kernel_ref,
         harness_policy_sha256=view_result.problem_view.fixed_harness.harness_policy_sha256,
         candidate_manifest_sha256=candidate_manifest.content_sha256,
         task_manifest_sha256=structural_split.task_manifest_sha256,
@@ -998,7 +1000,7 @@ def _proposal_artifact(
 
 def _evaluation_plan(
     *,
-    kernel_sha256: str,
+    kernel_ref: KernelRef,
     harness_policy_sha256: str,
     candidate_manifest_sha256: str,
     task_manifest_sha256: str,
@@ -1017,7 +1019,7 @@ def _evaluation_plan(
     return EvaluationPlan(
         plan_id="evaluation-plan.phase9",
         evaluation_generation="evaluation-generation-1",
-        kernel_sha256=kernel_sha256,
+        kernel_ref=kernel_ref,
         harness_policy_sha256=harness_policy_sha256,
         candidate_manifest_sha256=candidate_manifest_sha256,
         task_manifest_sha256=task_manifest_sha256,
@@ -1100,7 +1102,7 @@ def _budgets() -> EvaluationBudgetPlan:
     )
 
 
-def _mutate_plan(plan: EvaluationPlan, **updates: str) -> EvaluationPlan:
+def _mutate_plan(plan: EvaluationPlan, **updates: object) -> EvaluationPlan:
     payload = plan.model_dump(mode="json", exclude={"content_sha256"})
     payload.update(updates)
     return EvaluationPlan.model_validate(payload)

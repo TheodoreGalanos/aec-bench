@@ -18,11 +18,12 @@ from aec_bench.contracts.evaluation_plane import (
     CriticRole,
     EvaluationPlanRef,
 )
-from aec_bench.contracts.harness_instance import HarnessBudget
+from aec_bench.contracts.harness_instance import HarnessBudget, HarnessInstanceRef
 from aec_bench.contracts.harness_kernel import (
-    ContentAddressedModel,
+    KernelRef,
     validate_sha256,
 )
+from aec_bench.contracts.legacy_content_address import LegacyContentAddressedModel
 from aec_bench.contracts.program_proposal.candidate import ProgramCandidateRef
 from aec_bench.contracts.program_proposal.freeze import ProposalFreeze
 from aec_bench.contracts.program_proposal.study import (
@@ -47,7 +48,7 @@ class OptimizationExperimentError(ValueError):
     disposition = OptimizationDisposition.EXPERIMENT_ERROR
 
 
-class CandidateExecutionAssignment(ContentAddressedModel):
+class CandidateExecutionAssignment(LegacyContentAddressedModel):
     """One immutable candidate-coordinate execution assignment."""
 
     schema_version: Literal["aecbench.candidate-execution-assignment.v1"] = "aecbench.candidate-execution-assignment.v1"
@@ -55,26 +56,21 @@ class CandidateExecutionAssignment(ContentAddressedModel):
     coordinate: MatchedEvaluationCoordinate
 
 
-class DecompositionExecutionSchedule(ContentAddressedModel):
+class DecompositionExecutionSchedule(LegacyContentAddressedModel):
     """Complete outcome-blind execution matrix for an incumbent and frozen proposals."""
 
     schema_version: Literal["aecbench.decomposition-execution-schedule.v1"] = (
         "aecbench.decomposition-execution-schedule.v1"
     )
     schedule_id: NonEmptyStr
-    kernel_sha256: str
-    fixed_harness_sha256: str
+    kernel_ref: KernelRef
+    fixed_harness_ref: HarnessInstanceRef
     evaluation_plan_ref: EvaluationPlanRef
     proposal_freeze: ProposalFreeze
     aggregate_budget: HarnessBudget
     incumbent_candidate: ProgramCandidateRef
     coordinates: tuple[MatchedEvaluationCoordinate, ...] = Field(min_length=1)
     assignments: tuple[CandidateExecutionAssignment, ...] = Field(min_length=1)
-
-    @field_validator("kernel_sha256", "fixed_harness_sha256")
-    @classmethod
-    def validate_hashes(cls, value: str) -> str:
-        return validate_sha256(value)
 
     @field_validator("coordinates")
     @classmethod
@@ -141,9 +137,9 @@ def _validate_schedule_authority_bindings(
     schedule: DecompositionExecutionSchedule,
 ) -> None:
     projection = schedule.proposal_freeze.problem_view.fixed_harness
-    if schedule.kernel_sha256 != projection.kernel_sha256:
+    if schedule.kernel_ref != projection.kernel_ref:
         raise ValueError("schedule kernel does not match the frozen H0 projection")
-    if schedule.fixed_harness_sha256 != schedule.proposal_freeze.fixed_harness_sha256:
+    if schedule.fixed_harness_ref != schedule.proposal_freeze.fixed_harness_ref:
         raise ValueError("schedule fixed H0 does not match the proposal freeze")
     if schedule.evaluation_plan_ref != schedule.proposal_freeze.evaluation_plan_ref:
         raise ValueError("schedule evaluation plan does not match the proposal freeze")
@@ -203,7 +199,7 @@ def _validate_schedule_cross_product(
         raise ValueError("schedule requires the exact incumbent-and-proposal coordinate cross product")
 
 
-class EvidenceOutcomeBinding(ContentAddressedModel):
+class EvidenceOutcomeBinding(LegacyContentAddressedModel):
     """Exact resolution of one study evidence reference to its typed outcome."""
 
     schema_version: Literal["aecbench.evidence-outcome-binding.v1"] = "aecbench.evidence-outcome-binding.v1"
@@ -217,7 +213,7 @@ class EvidenceOutcomeBinding(ContentAddressedModel):
         return validate_sha256(value)
 
 
-class FrozenSelectionRule(ContentAddressedModel):
+class FrozenSelectionRule(LegacyContentAddressedModel):
     """Preregistered deterministic rule for selecting at most one proposal."""
 
     schema_version: Literal["aecbench.frozen-selection-rule.v1"] = "aecbench.frozen-selection-rule.v1"
@@ -226,7 +222,7 @@ class FrozenSelectionRule(ContentAddressedModel):
     candidate_tie_break: Literal["candidate_id_ascending"] = "candidate_id_ascending"
 
 
-class DevelopmentSelectionRegime(ContentAddressedModel):
+class DevelopmentSelectionRegime(LegacyContentAddressedModel):
     """Exact Vdev critic and frozen rule allowed to select an optimization candidate."""
 
     schema_version: Literal["aecbench.development-selection-regime.v1"] = "aecbench.development-selection-regime.v1"
@@ -251,7 +247,7 @@ class DevelopmentSelectionRegime(ContentAddressedModel):
         return self
 
 
-class DecompositionOptimizationResult(ContentAddressedModel):
+class DecompositionOptimizationResult(LegacyContentAddressedModel):
     """Internal exact cycle result nested inside the current development selection."""
 
     schedule: DecompositionExecutionSchedule
@@ -295,7 +291,7 @@ class DecompositionOptimizationResult(ContentAddressedModel):
         return self
 
 
-class DevelopmentSelectionResult(ContentAddressedModel):
+class DevelopmentSelectionResult(LegacyContentAddressedModel):
     """Vdev-only selection artifact that cannot authorize acceptance or promotion."""
 
     schema_version: Literal["aecbench.development-selection-result.v1"] = "aecbench.development-selection-result.v1"
@@ -330,8 +326,8 @@ def build_decomposition_execution_schedule(
     proposal_freeze: ProposalFreeze,
     incumbent_candidate: ProgramCandidateRef,
     coordinates: tuple[MatchedEvaluationCoordinate, ...],
-    kernel_sha256: str,
-    fixed_harness_sha256: str,
+    kernel_ref: KernelRef,
+    fixed_harness_ref: HarnessInstanceRef,
     evaluation_plan_ref: EvaluationPlanRef,
     aggregate_budget: HarnessBudget,
 ) -> DecompositionExecutionSchedule:
@@ -347,8 +343,8 @@ def build_decomposition_execution_schedule(
     )
     return DecompositionExecutionSchedule(
         schedule_id=schedule_id,
-        kernel_sha256=kernel_sha256,
-        fixed_harness_sha256=fixed_harness_sha256,
+        kernel_ref=kernel_ref,
+        fixed_harness_ref=fixed_harness_ref,
         evaluation_plan_ref=evaluation_plan_ref,
         proposal_freeze=proposal_freeze,
         aggregate_budget=aggregate_budget,
@@ -367,8 +363,8 @@ def complete_program_candidate_study(
     """Close an exact study matrix before any evaluation outcome is resolved."""
     return ProgramCandidateStudy(
         study_id=study_id,
-        kernel_sha256=schedule.kernel_sha256,
-        fixed_harness_sha256=schedule.fixed_harness_sha256,
+        kernel_ref=schedule.kernel_ref,
+        fixed_harness_ref=schedule.fixed_harness_ref,
         evaluation_plan_ref=schedule.evaluation_plan_ref,
         proposal_freeze=schedule.proposal_freeze,
         aggregate_budget=schedule.aggregate_budget,
@@ -547,12 +543,8 @@ def _validate_outcome_identity_binding(
     outcome = binding.outcome
     if binding.evidence_sha256 != reference.content_sha256:
         raise error_type(f"outcome binding {binding.evidence_id!r} does not bind exact study evidence")
-    if reference.evaluation_outcome_sha256 != outcome.content_sha256:
-        raise error_type(f"evidence {binding.evidence_id!r} does not resolve its declared evaluation outcome")
-    if outcome.evaluation_plan_sha256 != study.evaluation_plan_ref.content_sha256:
-        raise error_type(f"outcome {outcome.content_sha256!r} does not bind the frozen evaluation plan")
     if outcome.candidate_sha256 != candidate.candidate_artifact_sha256:
-        raise error_type(f"outcome {outcome.content_sha256!r} does not bind the exact candidate artifact")
+        raise error_type(f"outcome for {binding.evidence_id!r} does not bind the exact candidate artifact")
 
 
 def _validate_outcome_evidence_state(

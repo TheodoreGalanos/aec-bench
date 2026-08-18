@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+from aec_bench.contracts.authority import EvaluationPlanIdentity
 from aec_bench.contracts.harness_kernel import validate_sha256
 from aec_bench.experimentation.governance.standing_monitors.models import (
     CycleMonitorReport,
@@ -41,7 +42,7 @@ def assert_current_production_cycle_monitor_envelope(
     envelope: ProductionCycleMonitorEnvelope,
     *,
     policy: StandingMonitorPolicy,
-    evaluation_plan_sha256: str,
+    evaluation_plan: EvaluationPlanIdentity,
     cycle_id: str,
     cycle_index: int,
     assurance_snapshot_sha256: str,
@@ -49,13 +50,12 @@ def assert_current_production_cycle_monitor_envelope(
     """Fail closed unless a complete production envelope covers the current cycle."""
     selected = ProductionCycleMonitorEnvelope.model_validate(envelope.model_dump(mode="python"))
     selected_policy = StandingMonitorPolicy.model_validate(policy.model_dump(mode="python"))
-    validate_sha256(evaluation_plan_sha256)
     validate_sha256(assurance_snapshot_sha256)
     if selected.report.status is not CycleMonitorReportStatus.PASSED:
         raise ValueError("production cycle monitor report is not passing")
     if (
         selected.policy.content_sha256 != selected_policy.content_sha256
-        or selected.cycle_plan.evaluation_plan_sha256 != evaluation_plan_sha256
+        or selected.cycle_plan.evaluation_plan != evaluation_plan
         or selected.cycle_plan.cycle_id != cycle_id
         or selected.cycle_plan.cycle_index != cycle_index
         or selected.cycle_plan.assurance_snapshot_sha256 != assurance_snapshot_sha256

@@ -75,7 +75,6 @@ def _evaluate(
     critic_gap_evaluator: (Callable[[ValidityEvaluation, UtilityEvaluation], CriticGapDecomposition] | None) = None,
 ) -> EvaluationOutcome:
     return evaluate_with_integrity_gate(
-        evaluation_plan_sha256=_sha("plan"),
         candidate_sha256=_sha("candidate"),
         evidence_set_sha256=_sha("evidence"),
         integrity_checks=integrity_checks,

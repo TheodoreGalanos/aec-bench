@@ -16,7 +16,7 @@ from aec_bench.contracts.evaluation_plane import (
     CriticRole,
     CriticSpec,
 )
-from aec_bench.contracts.harness_kernel import canonical_content_sha256
+from aec_bench.contracts.harness_kernel import canonical_json_sha256
 from aec_bench.experimentation.governance.acceptance_manifest_escrow import (
     AcceptanceManifestEscrowCollisionError,
     AcceptanceManifestEscrowConfinementError,
@@ -68,8 +68,8 @@ def _critic(
         version="2.0.0",
         role=CriticRole.ACCEPTANCE,
         implementation_sha256=_sha("implementation"),
-        rubric_policy_sha256=canonical_content_sha256(scoring),
-        case_manifest_sha256=canonical_content_sha256(cases),
+        rubric_policy_sha256=canonical_json_sha256(scoring),
+        case_manifest_sha256=canonical_json_sha256(cases),
         eligibility_policy_sha256=_sha("eligibility"),
         denominator_policy_sha256=_sha("denominator"),
         threshold_policy_sha256=_sha("threshold"),

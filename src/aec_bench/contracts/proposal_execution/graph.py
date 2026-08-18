@@ -8,10 +8,10 @@ from typing import Literal, Self
 from pydantic import Field, field_validator, model_validator
 
 from aec_bench.contracts.harness_kernel import (
-    ContentAddressedModel,
     FrozenStrictModel,
     validate_sha256,
 )
+from aec_bench.contracts.legacy_content_address import LegacyContentAddressedModel
 from aec_bench.contracts.proposal_execution._canonical import (
     canonical_unique_models,
     canonical_unique_strings,
@@ -45,7 +45,7 @@ class ProposalSourceScope(FrozenStrictModel):
         return canonical_unique_strings(value, label="proposal source ids")
 
 
-class NodeEvidenceContract(ContentAddressedModel):
+class NodeEvidenceContract(LegacyContentAddressedModel):
     """Structural completeness policy checked without opening task quality evidence."""
 
     schema_version: Literal["aecbench.node-evidence-contract.v1"] = "aecbench.node-evidence-contract.v1"
@@ -149,7 +149,7 @@ class ProposalHandoff(FrozenStrictModel):
         return self
 
 
-class ProposedDecompositionGraph(ContentAddressedModel):
+class ProposedDecompositionGraph(LegacyContentAddressedModel):
     """Canonical decomposition plan generated from one public problem view."""
 
     schema_version: Literal["aecbench.proposed-decomposition-graph.v1"] = "aecbench.proposed-decomposition-graph.v1"
@@ -228,7 +228,7 @@ class ProposedDecompositionGraph(ContentAddressedModel):
         return verify_proposed_decomposition_graph(self).topological_order
 
 
-class MonolithicIncumbentProgram(ContentAddressedModel):
+class MonolithicIncumbentProgram(LegacyContentAddressedModel):
     """Host-owned one-call control bound only to the graph-hidden public task view."""
 
     schema_version: Literal["aecbench.monolithic-incumbent-program.v1"] = "aecbench.monolithic-incumbent-program.v1"

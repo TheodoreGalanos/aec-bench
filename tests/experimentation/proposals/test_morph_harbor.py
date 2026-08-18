@@ -25,7 +25,7 @@ from harbor.models.trial.config import (  # type: ignore[import-untyped]
 from harbor.models.trial.paths import TrialPaths  # type: ignore[import-untyped]
 
 from aec_bench.contracts.execution_environment import RUNTIME_PYTHON_PACKAGES
-from aec_bench.contracts.harness_kernel import canonical_content_sha256
+from aec_bench.contracts.harness_kernel import canonical_json_sha256
 from aec_bench.contracts.program_proposal.study import MatchedEvaluationCoordinate
 from aec_bench.contracts.proposal_execution.session import (
     ProposalNodeReceipt,
@@ -678,7 +678,7 @@ def test_delete_stop_persists_cleanup_receipt_bound_to_completed_verifier_rotati
     assert cleanup["failure_steps"] == []
     assert "stop_container:container-verifier" in operations.events
     content_sha256 = cleanup.pop("content_sha256")
-    assert content_sha256 == canonical_content_sha256(cleanup)
+    assert content_sha256 == canonical_json_sha256(cleanup)
     assert list(environment.boundary_dir.glob(".proposal-cleanup.json.*.tmp")) == []
     loaded = load_completed_proposal_morph_cleanup_receipt(
         environment.cleanup_receipt_path,
@@ -822,7 +822,7 @@ def test_cleanup_receipt_fails_closed_without_a_completed_verifier_rotation(
     rotation = json.loads(environment.rotation_receipt_path.read_text(encoding="utf-8"))
     rotation.pop("content_sha256")
     rotation["status"] = "started"
-    rotation["content_sha256"] = canonical_content_sha256(rotation)
+    rotation["content_sha256"] = canonical_json_sha256(rotation)
     environment.rotation_receipt_path.write_text(
         json.dumps(rotation, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",

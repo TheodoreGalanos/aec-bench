@@ -10,7 +10,7 @@ import tempfile
 from collections.abc import Mapping
 from pathlib import Path, PurePosixPath
 
-from aec_bench.contracts.harness_kernel import canonical_content_sha256, validate_sha256
+from aec_bench.contracts.harness_kernel import canonical_json_sha256, validate_sha256
 from aec_bench.contracts.proposal_execution.session import ProposalSessionReceipt
 from aec_bench.contracts.proposal_execution_types import ProposalSessionStatus
 
@@ -362,7 +362,7 @@ def _read_content_addressed_receipt(
     validate_sha256(content_sha256)
     content = dict(receipt)
     content.pop("content_sha256")
-    if canonical_content_sha256(content) != content_sha256:
+    if canonical_json_sha256(content) != content_sha256:
         raise ProposalMorphBoundaryError(f"{label} content identity changed")
     return raw, receipt, content_sha256
 
@@ -607,7 +607,7 @@ def _write_seal_manifest(
     if candidate_failure_receipt is not None:
         manifest_payload["handoff_variant"] = HandoffVariant.CANDIDATE_FAILURE.value
         manifest_payload["candidate_failure_session_receipt_sha256"] = candidate_failure_receipt.content_sha256
-    manifest_payload["content_sha256"] = canonical_content_sha256(manifest_payload)
+    manifest_payload["content_sha256"] = canonical_json_sha256(manifest_payload)
     write_json_atomic(manifest_path, manifest_payload)
 
 

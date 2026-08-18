@@ -8,7 +8,7 @@ from typing import Any, Self, TypeVar
 
 from pydantic import Field, PositiveInt, field_validator, model_validator
 
-from aec_bench.contracts.execution_program import ExecutionProgram, ProgramLimits, ProgramNode
+from aec_bench.contracts.execution_program import ExecutionProgram, ExecutionProgramRef, ProgramLimits, ProgramNode
 from aec_bench.contracts.harness_instance import (
     AgentBindingConfig,
     ComputeBindingConfig,
@@ -22,11 +22,12 @@ from aec_bench.contracts.harness_instance import (
     ToolBindingConfig,
 )
 from aec_bench.contracts.harness_kernel import (
-    ContentAddressedModel,
     FrozenStrictModel,
     KernelRef,
-    canonical_content_sha256,
+    canonical_json_sha256,
+    kernel_abi_commitment,
 )
+from aec_bench.contracts.legacy_content_address import LegacyContentAddressedModel
 from aec_bench.contracts.run_bundle import RunBundle, TaskSnapshotRef
 from aec_bench.contracts.validators import NonEmptyStr
 from aec_bench.experimentation.qualification.harness_program_study.plan import (
@@ -42,7 +43,7 @@ from aec_bench.harness.compilation import (
 from aec_bench.harness.kernel_catalogue import KernelRuntimeRegistry
 
 
-class ProgramFactorTemplate(ContentAddressedModel):
+class ProgramFactorTemplate(LegacyContentAddressedModel):
     """Harness-independent program factor rebound explicitly to each compiled Hx."""
 
     factor_id: NonEmptyStr
@@ -52,7 +53,7 @@ class ProgramFactorTemplate(ContentAddressedModel):
 
     @model_validator(mode="after")
     def validate_program_graph(self) -> Self:
-        self.bind(HarnessInstanceRef(instance_id="factor-validation", content_sha256="0" * 64))
+        self.bind(HarnessInstanceRef(instance_id="factor-validation"))
         return self
 
     def bind(self, harness_ref: HarnessInstanceRef) -> ExecutionProgram:
@@ -65,8 +66,14 @@ class ProgramFactorTemplate(ContentAddressedModel):
             limits=self.limits,
         )
 
+    @property
+    def ref(self) -> ExecutionProgramRef:
+        """Return the stable program factor identity."""
 
-class HarnessProgramCandidateRequest(ContentAddressedModel):
+        return ExecutionProgramRef(program_id=self.factor_id, version=self.version)
+
+
+class HarnessProgramCandidateRequest(LegacyContentAddressedModel):
     """Explicit source factors and shared controls for one matched candidate set."""
 
     candidate_set_id: NonEmptyStr
@@ -111,14 +118,14 @@ class MaterializedHarnessProgramCandidate(FrozenStrictModel):
     def validate_local_identity(self) -> Self:
         if self.reference.cell is not self.cell:
             raise ValueError("materialized candidate cell does not match its reference")
-        if self.reference.kernel_sha256 != self.bundle.kernel_ref.content_sha256:
+        if self.reference.kernel_ref != self.bundle.kernel_ref:
             raise ValueError("materialized candidate kernel does not match its RunBundle")
-        if self.reference.harness_sha256 != self.bundle.harness.content_sha256:
+        if self.reference.harness_ref != self.bundle.harness.ref:
             raise ValueError("materialized candidate harness does not match its RunBundle")
         return self
 
 
-class MaterializedHarnessProgramCandidateSet(ContentAddressedModel):
+class MaterializedHarnessProgramCandidateSet(LegacyContentAddressedModel):
     """Integrity-checked four-cell references, source factors, and executable bundles."""
 
     request: HarnessProgramCandidateRequest
@@ -142,7 +149,7 @@ class MaterializedHarnessProgramCandidateSet(ContentAddressedModel):
         task_set_sha256 = _task_set_sha256(snapshots)
         policy_sha256 = _policy_sha256(self.request)
         resource_sha256 = _resource_sha256(self.request)
-        abi_sha256 = self.request.kernel_ref.content_sha256
+        abi_sha256 = kernel_abi_commitment(self.request.kernel_ref)
         for cell, candidate in by_cell.items():
             recipe = _harness_recipe(self.request, cell)
             program_factor = _program_factor(self.request, cell)
@@ -179,10 +186,14 @@ def _validate_candidate_seed_block(request: HarnessProgramCandidateRequest) -> N
 def _validate_candidate_factor_differences(
     request: HarnessProgramCandidateRequest,
 ) -> None:
-    if request.fixed_harness_recipe.content_sha256 == request.learned_harness_recipe.content_sha256:
+    if request.fixed_harness_recipe == request.learned_harness_recipe:
         raise ValueError("learned harness recipe must differ from the fixed harness recipe")
-    if request.fixed_program.content_sha256 == request.learned_program.content_sha256:
+    if request.fixed_program == request.learned_program:
         raise ValueError("learned program factor must differ from the fixed program factor")
+    if request.fixed_harness_recipe.ref == request.learned_harness_recipe.ref:
+        raise ValueError("learned harness recipe must use a distinct stable reference")
+    if request.fixed_program.ref == request.learned_program.ref:
+        raise ValueError("learned program factor must use a distinct stable reference")
     if harness_runtime_semantics(request.fixed_harness_recipe) == harness_runtime_semantics(
         request.learned_harness_recipe
     ):
@@ -256,7 +267,7 @@ def _validate_candidate_bundle_factors(
     recipe: HarnessRecipe,
     program_factor: ProgramFactorTemplate,
 ) -> None:
-    if bundle.harness.source_recipe_sha256 != recipe.content_sha256:
+    if bundle.harness.source_recipe_ref != recipe.ref:
         raise ValueError("candidate harness does not match its harness factor")
     if bundle.harness.budget != request.harness_budget:
         raise ValueError("candidate bundles must use one shared harness budget")
@@ -264,7 +275,7 @@ def _validate_candidate_bundle_factors(
     if agent.model != request.model:
         raise ValueError("candidate bundles must use one shared model")
     expected_program = program_factor.bind(bundle.harness.ref)
-    if bundle.program.source_program_sha256 != expected_program.content_sha256:
+    if bundle.program.source_program_ref != expected_program.ref:
         raise ValueError("candidate compiled program does not match its program factor")
     if bundle.program.limits != request.program_limits:
         raise ValueError("candidate bundles must use one shared program limits budget")
@@ -287,7 +298,7 @@ def _validate_candidate_reference(
         raise ValueError("candidate reference does not bind the shared model, seeds, and repetitions")
     if reference.resource_sha256 != resource_sha256:
         raise ValueError("candidate reference does not bind the shared resource budget")
-    if reference.program_sha256 != program_factor.content_sha256:
+    if reference.program_ref != candidate.bundle.program.source_program_ref:
         raise ValueError("candidate reference does not bind its harness-independent program factor")
     abi_identities = (
         reference.kernel_abi_sha256,
@@ -398,23 +409,23 @@ def build_harness_program_candidate_reference(
     expected_recipe = source.learned_harness_recipe if _learned_harness(cell) else source.fixed_harness_recipe
     if compiled.kernel_ref != source.kernel_ref:
         raise ValueError("harness-program candidate bundle does not use the requested fixed kernel")
-    if compiled.harness.source_recipe_sha256 != expected_recipe.content_sha256:
+    if compiled.harness.source_recipe_ref != expected_recipe.ref:
         raise ValueError("harness-program candidate bundle does not use the requested harness factor")
-    if compiled.program.source_program_sha256 != factor.bind(compiled.harness.ref).content_sha256:
+    if compiled.program.source_program_ref != factor.bind(compiled.harness.ref).ref:
         raise ValueError("harness-program candidate bundle does not use the requested program factor")
     if compiled.harbor.task_refs != source.task_refs or compiled.harbor.repetitions != 1:
         raise ValueError("harness-program candidate bundle does not use the requested task/repetition surface")
-    abi_sha256 = source.kernel_ref.content_sha256
+    abi_sha256 = kernel_abi_commitment(source.kernel_ref)
     return HarnessProgramCandidateReference.create(
         cell=cell,
-        kernel_sha256=source.kernel_ref.content_sha256,
+        kernel_ref=source.kernel_ref,
         kernel_abi_sha256=abi_sha256,
         policy_sha256=_policy_sha256(source),
         task_set_id=source.task_set_id,
         task_set_sha256=_task_set_sha256(compiled.task_snapshots),
-        harness_sha256=compiled.harness.content_sha256,
+        harness_ref=compiled.harness.ref,
         harness_abi_sha256=abi_sha256,
-        program_sha256=factor.content_sha256,
+        program_ref=compiled.program.source_program_ref,
         program_abi_sha256=abi_sha256,
         resource_sha256=_resource_sha256(source),
     )
@@ -443,16 +454,16 @@ def harness_runtime_semantics(recipe: HarnessRecipe) -> dict[str, Any]:
                 "capability_ref": binding.capability_ref.model_dump(mode="json"),
                 "contracts": sorted(
                     (contract_semantics[contract_id] for contract_id in binding.contract_ids),
-                    key=canonical_content_sha256,
+                    key=canonical_json_sha256,
                 ),
                 "configuration": configuration,
             }
         )
     return {
-        "contracts": sorted(contract_semantics.values(), key=canonical_content_sha256),
+        "contracts": sorted(contract_semantics.values(), key=canonical_json_sha256),
         "budget": source.budget.model_dump(mode="json"),
         "recursion_policy": source.recursion_policy.model_dump(mode="json"),
-        "bindings": sorted(bindings, key=canonical_content_sha256),
+        "bindings": sorted(bindings, key=canonical_json_sha256),
     }
 
 
@@ -557,7 +568,7 @@ def _learned_harness(cell: HarnessProgramCell) -> bool:
 
 
 def _task_set_sha256(snapshots: tuple[TaskSnapshotRef, ...]) -> str:
-    return canonical_content_sha256(
+    return canonical_json_sha256(
         {
             "schema_version": "1",
             "task_snapshots": [snapshot.model_dump(mode="json") for snapshot in snapshots],
@@ -566,7 +577,7 @@ def _task_set_sha256(snapshots: tuple[TaskSnapshotRef, ...]) -> str:
 
 
 def _policy_sha256(request: HarnessProgramCandidateRequest) -> str:
-    return canonical_content_sha256(
+    return canonical_json_sha256(
         {
             "schema_version": "1",
             "model": request.model,
@@ -577,7 +588,7 @@ def _policy_sha256(request: HarnessProgramCandidateRequest) -> str:
 
 
 def _resource_sha256(request: HarnessProgramCandidateRequest) -> str:
-    return canonical_content_sha256(
+    return canonical_json_sha256(
         {
             "schema_version": "1",
             "harness_budget": request.harness_budget.model_dump(mode="json"),

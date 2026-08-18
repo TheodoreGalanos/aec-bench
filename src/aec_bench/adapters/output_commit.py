@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from aec_bench.adapters.base import AdapterRequest
-from aec_bench.contracts.harness_kernel import canonical_content_sha256
+from aec_bench.contracts.harness_kernel import canonical_json_sha256
 from aec_bench.contracts.output_completion import (
     OutputCommitAttestation,
     OutputCompletionContract,
@@ -175,7 +175,7 @@ def evaluate_output_commit_candidate(
         output_path=contract.output_path,
         output_sha256=hashlib.sha256(encoded).hexdigest(),
         output_size_bytes=len(encoded),
-        completion_contract_sha256=canonical_content_sha256(contract.model_dump(mode="json")),
+        completion_contract_sha256=canonical_json_sha256(contract.model_dump(mode="json")),
         completion_evaluation=evaluation,
         initial_output_sha256=(
             hashlib.sha256(initial_content.encode("utf-8")).hexdigest() if initial_content is not None else None

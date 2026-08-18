@@ -32,6 +32,7 @@ from aec_bench.contracts.evaluation_outcome import (
 from aec_bench.contracts.evaluation_plane import (
     AcceptanceManifestCommitment,
     CriticFeedbackVisibility,
+    CriticRef,
     CriticRole,
     CriticSpec,
     EvaluationBudgetPartition,
@@ -40,8 +41,11 @@ from aec_bench.contracts.evaluation_plane import (
     ExecutableAnchorCalibrationCadence,
     ExecutableAnchorCalibrationEvidence,
     ExecutableAnchorCalibrationPolicy,
+    acceptance_manifest_reveal_commitment,
+    critic_spec_commitment,
+    executable_anchor_calibration_policy_commitment,
 )
-from aec_bench.contracts.harness_kernel import canonical_content_sha256
+from aec_bench.contracts.harness_kernel import KernelRef, canonical_json_sha256
 from aec_bench.experimentation.governance.acceptance_manifest_escrow import (
     AcceptanceManifestEscrowIntegrityError,
     escrow_acceptance_manifest,
@@ -76,6 +80,10 @@ def _sha(label: str) -> str:
     return hashlib.sha256(label.encode()).hexdigest()
 
 
+def _kernel_ref() -> KernelRef:
+    return KernelRef(kernel_id="aec-bench.adaptive-harness", version="1.6.0")
+
+
 def _host() -> AuthorityPrincipal:
     return AuthorityPrincipal(
         principal_id="host.critic-governance",
@@ -106,7 +114,7 @@ def _acceptance_critic(
     ledger: AuthorityLedger,
     *,
     version: str = "2.0.0",
-    parent_critic_sha256: str | None = None,
+    parent_critic_ref: CriticRef | None = None,
 ) -> CriticSpec:
     cases, scoring, salt = _acceptance_material()
     escrow = escrow_acceptance_manifest(
@@ -130,8 +138,8 @@ def _acceptance_critic(
         version=version,
         role=CriticRole.ACCEPTANCE,
         implementation_sha256=_sha("implementation"),
-        rubric_policy_sha256=canonical_content_sha256(scoring),
-        case_manifest_sha256=canonical_content_sha256(cases),
+        rubric_policy_sha256=canonical_json_sha256(scoring),
+        case_manifest_sha256=canonical_json_sha256(cases),
         eligibility_policy_sha256=_sha("eligibility"),
         denominator_policy_sha256=_sha("denominator"),
         threshold_policy_sha256=_sha("threshold"),
@@ -140,7 +148,7 @@ def _acceptance_critic(
         feedback_visibility=CriticFeedbackVisibility.HOST_ONLY,
         execution_principal_id=f"principal.acceptance-{version}",
         compatibility_generation="evaluation-generation-2",
-        parent_critic_sha256=parent_critic_sha256,
+        parent_critic_ref=parent_critic_ref,
         acceptance_manifest_commitment=commitment,
     )
 
@@ -222,7 +230,7 @@ def _observe_release_approval(
         ledger,
         action=AuthorityAction.RELEASE_CRITIC_GENERATION,
         subject_id=f"{critic.critic_id}@{critic.version}",
-        subject_sha256=critic.content_sha256,
+        subject_sha256=critic_spec_commitment(critic),
         producer=producer,
         taint=taint,
         suffix=suffix,
@@ -233,7 +241,6 @@ def _evaluation_outcome_basis(
     ledger: AuthorityLedger,
     *,
     suffix: str,
-    evaluation_plan_sha256: str | None = None,
 ) -> StoredBasis:
     zero = ResourceCost(
         provider_calls=0,
@@ -242,7 +249,6 @@ def _evaluation_outcome_basis(
         wall_time_seconds=0.0,
     )
     outcome = EvaluationOutcome(
-        evaluation_plan_sha256=evaluation_plan_sha256 or _sha(f"evaluation-plan-{suffix}"),
         candidate_sha256=_sha(f"candidate-{suffix}"),
         evidence_set_sha256=_sha(f"evidence-{suffix}"),
         integrity=IntegrityEvaluation.create(
@@ -302,7 +308,8 @@ def _promotion_event(
         event_id=f"authority.promotion.{suffix}",
         subject_id=f"candidate.{suffix}",
         subject_sha256=_sha(f"candidate-{suffix}"),
-        kernel_sha256=_sha("kernel"),
+        kernel_ref=_kernel_ref(),
+        kernel_abi_sha256=_sha("kernel"),
         critic=critic.ref,
         critic_execution_principal_id=critic.execution_principal_id,
         critic_release=critic_release,
@@ -327,7 +334,7 @@ def _release(
         critic_spec=critic,
         human_approval=approval.reference,
         event_id=f"authority.release-{suffix}",
-        kernel_sha256=_sha("kernel"),
+        kernel_ref=_kernel_ref(),
     )
 
 
@@ -363,7 +370,7 @@ def _retire(
         promotion_authority_events=(),
         human_approval=approval.reference,
         event_id=f"authority.retire-{suffix}",
-        kernel_sha256=_sha("kernel"),
+        kernel_ref=_kernel_ref(),
     )
 
 
@@ -389,7 +396,7 @@ def _reveal(
         ledger,
         action=AuthorityAction.REVEAL_ACCEPTANCE_MANIFEST,
         subject_id=f"{critic.critic_id}@{critic.version}#acceptance-manifest-reveal",
-        subject_sha256=reveal.content_sha256,
+        subject_sha256=acceptance_manifest_reveal_commitment(reveal),
         producer=_human(),
         taint=(TaintLabel.HUMAN_AUTHORITY,),
         suffix=f"reveal-{suffix}",
@@ -402,7 +409,7 @@ def _reveal(
         promotion_authority_events=(),
         human_approval=approval.reference,
         event_id=f"authority.reveal-{suffix}",
-        kernel_sha256=_sha("kernel"),
+        kernel_ref=_kernel_ref(),
     )
 
 
@@ -432,7 +439,7 @@ def _evaluation_plan(
     return EvaluationPlan(
         plan_id="critic-release-calibration",
         evaluation_generation=critic.compatibility_generation,
-        kernel_sha256=_sha("kernel"),
+        kernel_ref=_kernel_ref(),
         harness_policy_sha256=_sha("harness"),
         candidate_manifest_sha256=_sha("candidates"),
         task_manifest_sha256=_sha("tasks"),
@@ -452,7 +459,7 @@ def _evaluation_plan(
         integrity_policy_sha256=_sha("integrity"),
         utility_policy_sha256=_sha("utility"),
         selection_null_protocol_sha256=_sha("selection-null"),
-        anchor_calibration_policy_sha256=policy.content_sha256,
+        anchor_calibration_policy_sha256=executable_anchor_calibration_policy_commitment(policy),
         monitor_plan_sha256=_sha("monitor"),
         opening_policy_sha256=_sha("opening"),
         stopping_policy_sha256=_sha("stopping"),
@@ -478,12 +485,12 @@ def test_acceptance_critic_release_binds_human_approval_spec_and_escrow_commitme
         critic_spec=critic,
         human_approval=approval.reference,
         event_id="authority.release-acceptance-v2",
-        kernel_sha256=_sha("kernel"),
+        kernel_ref=_kernel_ref(),
     )
 
     assert released.event.action is AuthorityAction.RELEASE_CRITIC_GENERATION
-    assert released.event.subject_sha256 == critic.content_sha256
-    assert released.event.critic_generation_sha256 == critic.content_sha256
+    assert released.event.subject_sha256 == critic_spec_commitment(critic)
+    assert released.event.critic_generation == critic.ref.authority_identity
     assert {item.kind for item in released.event.basis} == {
         BasisKind.CRITIC_SPEC,
         BasisKind.EVIDENCE,
@@ -530,7 +537,7 @@ def test_acceptance_critic_release_requires_recoverable_escrow_bytes(
             critic_spec=critic,
             human_approval=approval.reference,
             event_id="authority.release-missing-escrow",
-            kernel_sha256=_sha("kernel"),
+            kernel_ref=_kernel_ref(),
         )
 
 
@@ -555,7 +562,7 @@ def test_candidate_origin_cannot_authorize_an_exactly_shaped_critic_release(
             critic_spec=critic,
             human_approval=candidate_approval.reference,
             event_id="authority.forged-release",
-            kernel_sha256=_sha("kernel"),
+            kernel_ref=_kernel_ref(),
         )
 
 
@@ -573,8 +580,8 @@ def test_generic_critic_release_keeps_non_acceptance_roles_under_human_authority
 
     assert released.event.action is AuthorityAction.RELEASE_CRITIC_GENERATION
     assert released.event.subject_id == f"{critic.critic_id}@{critic.version}"
-    assert released.event.subject_sha256 == critic.content_sha256
-    assert released.event.critic_generation_sha256 == critic.content_sha256
+    assert released.event.subject_sha256 == critic_spec_commitment(critic)
+    assert released.event.critic_generation == critic.ref.authority_identity
     assert (
         assert_critic_generation_released(
             ledger=ledger,
@@ -621,11 +628,11 @@ def test_generic_critic_retirement_keeps_development_generation_under_human_auth
         promotion_authority_events=(),
         human_approval=approval.reference,
         event_id="authority.retire-development-v2",
-        kernel_sha256=_sha("kernel"),
+        kernel_ref=_kernel_ref(),
     )
 
     assert retired.authority_event.event.action is (AuthorityAction.RETIRE_CRITIC_GENERATION)
-    assert retired.authority_event.event.critic_generation_sha256 == (critic.content_sha256)
+    assert retired.authority_event.event.critic_generation == critic.ref.authority_identity
     assert retired.authority_event.event.revalidation_triggers == ()
     assert (
         load_critic_generation_retirement(
@@ -682,7 +689,7 @@ def test_exact_retirement_and_reveal_chain_reloads_from_a_fresh_ledger(
         promotion_authority_events=promotions,
         human_approval=retirement_approval.reference,
         event_id="authority.retire-acceptance-v2",
-        kernel_sha256=_sha("kernel"),
+        kernel_ref=_kernel_ref(),
     )
     reveal = prepare_acceptance_manifest_reveal(
         ledger=ledger,
@@ -699,7 +706,7 @@ def test_exact_retirement_and_reveal_chain_reloads_from_a_fresh_ledger(
         ledger,
         action=AuthorityAction.REVEAL_ACCEPTANCE_MANIFEST,
         subject_id=f"{critic.critic_id}@{critic.version}#acceptance-manifest-reveal",
-        subject_sha256=reveal.content_sha256,
+        subject_sha256=acceptance_manifest_reveal_commitment(reveal),
         producer=_human(),
         taint=(TaintLabel.HUMAN_AUTHORITY,),
         suffix="reveal-acceptance-v2",
@@ -712,7 +719,7 @@ def test_exact_retirement_and_reveal_chain_reloads_from_a_fresh_ledger(
         promotion_authority_events=promotions,
         human_approval=reveal_approval.reference,
         event_id="authority.reveal-acceptance-v2",
-        kernel_sha256=_sha("kernel"),
+        kernel_ref=_kernel_ref(),
     )
 
     reloaded_ledger = AuthorityLedger(
@@ -828,7 +835,7 @@ def test_non_human_origin_cannot_authorize_acceptance_retirement(
             promotion_authority_events=(),
             human_approval=candidate_approval.reference,
             event_id="authority.forged-retirement",
-            kernel_sha256=_sha("kernel"),
+            kernel_ref=_kernel_ref(),
         )
 
 
@@ -894,7 +901,7 @@ def test_reveal_rejects_wrong_escrow_material(
         promotion_authority_events=(),
         human_approval=approval.reference,
         event_id=f"authority.retire-wrong-material-{message.replace(' ', '-')}",
-        kernel_sha256=_sha("kernel"),
+        kernel_ref=_kernel_ref(),
     )
 
     with pytest.raises(ValueError, match=message):
@@ -951,7 +958,7 @@ def test_reveal_rejects_missing_retirement_bound_historical_coverage(
         promotion_authority_events=(),
         human_approval=approval.reference,
         event_id="authority.retire-coverage",
-        kernel_sha256=_sha("kernel"),
+        kernel_ref=_kernel_ref(),
     )
     cases, scoring, salt = _acceptance_material()
 
@@ -1027,7 +1034,7 @@ def test_successor_acceptance_release_requires_parent_audit_closure(
     successor = _acceptance_critic(
         ledger,
         version="3.0.0",
-        parent_critic_sha256=parent.content_sha256,
+        parent_critic_ref=parent.ref,
     )
     approval = _observe_release_approval(
         ledger,
@@ -1043,7 +1050,7 @@ def test_successor_acceptance_release_requires_parent_audit_closure(
             critic_spec=successor,
             human_approval=approval.reference,
             event_id="authority.release-successor",
-            kernel_sha256=_sha("kernel"),
+            kernel_ref=_kernel_ref(),
             prior_retirement_authority=parent_retirement.authority_event,
             prior_reveal_authority=None,
         )
@@ -1059,7 +1066,7 @@ def test_successor_acceptance_release_requires_parent_audit_closure(
         critic_spec=successor,
         human_approval=approval.reference,
         event_id="authority.release-successor",
-        kernel_sha256=_sha("kernel"),
+        kernel_ref=_kernel_ref(),
         prior_retirement_authority=parent_retirement.authority_event,
         prior_reveal_authority=parent_reveal.authority_event,
     )
@@ -1096,7 +1103,7 @@ def test_release_binds_completed_executable_anchor_calibration_when_declared(
             critic_spec=critic,
             human_approval=approval.reference,
             event_id="authority.release-calibrated",
-            kernel_sha256=_sha("kernel"),
+            kernel_ref=_kernel_ref(),
             evaluation_plan=plan,
             anchor_calibration_policy=policy,
             anchor_calibration_evidence=None,
@@ -1105,7 +1112,6 @@ def test_release_binds_completed_executable_anchor_calibration_when_declared(
     outcome = _evaluation_outcome_basis(
         ledger,
         suffix="release-calibration",
-        evaluation_plan_sha256=plan.content_sha256,
     )
     _, outcome_model = ledger.resolve_model_basis(
         outcome.reference,
@@ -1113,9 +1119,9 @@ def test_release_binds_completed_executable_anchor_calibration_when_declared(
     )
     incomplete_evidence = ExecutableAnchorCalibrationEvidence(
         calibration_id="critic.acceptance@2.0.0#incomplete-release-calibration",
-        evaluation_plan_sha256=plan.content_sha256,
-        critic_generation_sha256=critic.content_sha256,
-        anchor_calibration_policy_sha256=policy.content_sha256,
+        evaluation_plan=plan.ref.authority_identity,
+        critic_generation=critic.ref.authority_identity,
+        anchor_calibration_policy_sha256=executable_anchor_calibration_policy_commitment(policy),
         executable_anchor_sha256s=(outcome_model.evidence_set_sha256,),
         evaluation_outcomes=(outcome.reference,),
         completed=False,
@@ -1149,7 +1155,7 @@ def test_release_binds_completed_executable_anchor_calibration_when_declared(
             critic_spec=critic,
             human_approval=approval.reference,
             event_id="authority.release-calibrated",
-            kernel_sha256=_sha("kernel"),
+            kernel_ref=_kernel_ref(),
             evaluation_plan=plan,
             anchor_calibration_policy=policy,
             anchor_calibration_evidence=incomplete_basis.reference,
@@ -1157,9 +1163,9 @@ def test_release_binds_completed_executable_anchor_calibration_when_declared(
 
     mismatched_evidence = ExecutableAnchorCalibrationEvidence(
         calibration_id="critic.acceptance@2.0.0#mismatched-release-calibration",
-        evaluation_plan_sha256=plan.content_sha256,
-        critic_generation_sha256=critic.content_sha256,
-        anchor_calibration_policy_sha256=policy.content_sha256,
+        evaluation_plan=plan.ref.authority_identity,
+        critic_generation=critic.ref.authority_identity,
+        anchor_calibration_policy_sha256=executable_anchor_calibration_policy_commitment(policy),
         executable_anchor_sha256s=(_sha("unrelated-anchor"),),
         evaluation_outcomes=(outcome.reference,),
         completed=True,
@@ -1193,7 +1199,7 @@ def test_release_binds_completed_executable_anchor_calibration_when_declared(
             critic_spec=critic,
             human_approval=approval.reference,
             event_id="authority.release-calibrated",
-            kernel_sha256=_sha("kernel"),
+            kernel_ref=_kernel_ref(),
             evaluation_plan=plan,
             anchor_calibration_policy=policy,
             anchor_calibration_evidence=mismatched_basis.reference,
@@ -1201,9 +1207,9 @@ def test_release_binds_completed_executable_anchor_calibration_when_declared(
 
     evidence = ExecutableAnchorCalibrationEvidence(
         calibration_id="critic.acceptance@2.0.0#release-calibration",
-        evaluation_plan_sha256=plan.content_sha256,
-        critic_generation_sha256=critic.content_sha256,
-        anchor_calibration_policy_sha256=policy.content_sha256,
+        evaluation_plan=plan.ref.authority_identity,
+        critic_generation=critic.ref.authority_identity,
+        anchor_calibration_policy_sha256=executable_anchor_calibration_policy_commitment(policy),
         executable_anchor_sha256s=(outcome_model.evidence_set_sha256,),
         evaluation_outcomes=(outcome.reference,),
         completed=True,
@@ -1236,7 +1242,7 @@ def test_release_binds_completed_executable_anchor_calibration_when_declared(
         critic_spec=critic,
         human_approval=approval.reference,
         event_id="authority.release-calibrated",
-        kernel_sha256=_sha("kernel"),
+        kernel_ref=_kernel_ref(),
         evaluation_plan=plan,
         anchor_calibration_policy=policy,
         anchor_calibration_evidence=evidence_basis.reference,

@@ -1,54 +1,17 @@
 # ABOUTME: Defines the fixed execution-kernel capability catalogue for adaptive harness compilation.
-# ABOUTME: Provides immutable content-addressed capability and kernel references without executable import hooks.
+# ABOUTME: Provides immutable capability contracts and stable kernel references without executable import hooks.
 
 from __future__ import annotations
 
-import hashlib
-import json
 from enum import StrEnum
-from typing import Any, Literal, Self
+from typing import Literal, Self
 
-from pydantic import Field, field_validator, model_validator
+from pydantic import field_validator, model_validator
 
-from aec_bench.contracts.validators import (
-    FrozenStrictModel as FrozenStrictModel,
-)
+from aec_bench.contracts.commitments import canonical_json_sha256 as canonical_json_sha256
+from aec_bench.contracts.commitments import validate_sha256 as validate_sha256
+from aec_bench.contracts.validators import FrozenStrictModel as FrozenStrictModel
 from aec_bench.contracts.validators import NonEmptyStr
-
-
-def validate_sha256(value: str) -> str:
-    """Validate a lowercase hexadecimal SHA-256 digest."""
-    if len(value) != 64 or any(character not in "0123456789abcdef" for character in value):
-        raise ValueError("SHA-256 digest must contain 64 lowercase hexadecimal characters")
-    return value
-
-
-def canonical_content_sha256(payload: Any) -> str:
-    """Return a deterministic SHA-256 digest for JSON-compatible contract content."""
-    encoded = json.dumps(
-        payload,
-        sort_keys=True,
-        separators=(",", ":"),
-        ensure_ascii=False,
-    ).encode("utf-8")
-    return hashlib.sha256(encoded).hexdigest()
-
-
-class ContentAddressedModel(FrozenStrictModel):
-    """Frozen model whose identity is the canonical digest of all other fields."""
-
-    content_sha256: str = Field(default="", repr=False)
-
-    @model_validator(mode="after")
-    def validate_content_address(self) -> Self:
-        payload = self.model_dump(mode="json", exclude={"content_sha256"})
-        expected = canonical_content_sha256(payload)
-        if self.content_sha256:
-            validate_sha256(self.content_sha256)
-            if self.content_sha256 != expected:
-                raise ValueError("content_sha256 does not match canonical model content")
-        object.__setattr__(self, "content_sha256", expected)
-        return self
 
 
 class KernelCapabilityKind(StrEnum):
@@ -82,19 +45,13 @@ class KernelPortSpec(FrozenStrictModel):
 
 
 class KernelCapabilityRef(FrozenStrictModel):
-    """Content-pinned reference to one trusted kernel capability."""
+    """Stable reference to one trusted kernel capability version."""
 
     capability_id: NonEmptyStr
     version: NonEmptyStr
-    content_sha256: str
-
-    @field_validator("content_sha256")
-    @classmethod
-    def validate_content_sha256(cls, value: str) -> str:
-        return validate_sha256(value)
 
 
-class KernelCapabilitySpec(ContentAddressedModel):
+class KernelCapabilitySpec(FrozenStrictModel):
     """Serializable descriptor for one capability implemented by trusted kernel code."""
 
     capability_id: NonEmptyStr
@@ -116,7 +73,6 @@ class KernelCapabilitySpec(ContentAddressedModel):
         return KernelCapabilityRef(
             capability_id=self.capability_id,
             version=self.version,
-            content_sha256=self.content_sha256,
         )
 
 
@@ -132,7 +88,7 @@ class KernelSourceDigest(FrozenStrictModel):
         return validate_sha256(value)
 
 
-class KernelImplementationIdentity(ContentAddressedModel):
+class KernelImplementationIdentity(FrozenStrictModel):
     """Legacy whole-package source inventory used by fixed-K manifests."""
 
     kind: Literal["python_source_inventory"] = "python_source_inventory"
@@ -154,7 +110,7 @@ class KernelImplementationIdentity(ContentAddressedModel):
         return value
 
 
-class KernelExecutorImplementationIdentity(ContentAddressedModel):
+class KernelExecutorImplementationIdentity(FrozenStrictModel):
     """Explicit allowlist of executable source bytes owned by fixed K."""
 
     kind: Literal["python_executor_surface"] = "python_executor_surface"
@@ -177,19 +133,24 @@ class KernelExecutorImplementationIdentity(ContentAddressedModel):
 
 
 class KernelRef(FrozenStrictModel):
-    """Content-pinned reference to a complete fixed-kernel manifest."""
+    """Stable reference to one fixed-kernel manifest version."""
 
     kernel_id: NonEmptyStr
     version: NonEmptyStr
-    content_sha256: str
-
-    @field_validator("content_sha256")
-    @classmethod
-    def validate_content_sha256(cls, value: str) -> str:
-        return validate_sha256(value)
 
 
-class KernelManifest(ContentAddressedModel):
+def kernel_abi_commitment(ref: KernelRef) -> str:
+    """Return the named compatibility commitment used by harness-program studies."""
+
+    return canonical_json_sha256(
+        {
+            "domain": "aecbench.kernel-abi.v1",
+            "kernel_ref": ref.model_dump(mode="json"),
+        }
+    )
+
+
+class KernelManifest(FrozenStrictModel):
     """Versioned fixed-kernel surface available to harness compilation."""
 
     kernel_id: NonEmptyStr
@@ -211,7 +172,6 @@ class KernelManifest(ContentAddressedModel):
         return KernelRef(
             kernel_id=self.kernel_id,
             version=self.version,
-            content_sha256=self.content_sha256,
         )
 
     @property

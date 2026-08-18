@@ -14,7 +14,7 @@ from typing import Any, cast
 from pydantic import JsonValue
 
 from aec_bench.contracts.harness_kernel import (
-    canonical_content_sha256,
+    canonical_json_sha256,
     validate_sha256,
 )
 from aec_bench.contracts.output_completion import (
@@ -200,7 +200,7 @@ def _validated_semantic_contract_sha256(
             "contract_binding_invalid",
             "semantic node requires the host-built outputs/provenance completion contract",
         )
-    return canonical_content_sha256(output_contract.model_dump(mode="json"))
+    return canonical_json_sha256(output_contract.model_dump(mode="json"))
 
 
 def _require_semantic_output_bytes(raw_output_bytes: bytes) -> bytes:
@@ -493,7 +493,7 @@ def check_finalizer_output(
     completion_commit: OutputCommitAttestation | None,
 ) -> ProposalNodeContractCheck:
     """Check only public final-output completion and commit integrity."""
-    output_contract_sha256 = canonical_content_sha256(
+    output_contract_sha256 = canonical_json_sha256(
         output_contract.model_dump(mode="json"),
     )
     if finalizer.output_completion_contract_sha256 != output_contract_sha256:

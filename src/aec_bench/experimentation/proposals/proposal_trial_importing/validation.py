@@ -10,8 +10,8 @@ from typing import Literal
 
 from aec_bench.contracts.harness_instance import AgentBindingConfig
 from aec_bench.contracts.harness_kernel import (
-    ContentAddressedModel,
-    canonical_content_sha256,
+    FrozenStrictModel,
+    canonical_json_sha256,
 )
 from aec_bench.contracts.program_proposal.types import OptimizationSplit, ProgramCandidateKind
 from aec_bench.contracts.proposal_execution.graph import MonolithicIncumbentProgram
@@ -132,7 +132,7 @@ def resolve_task_review_lineage(
         ledger=ledger,
         event=authorization.freeze_authority_event,
         model_type=StructuralSplitManifest,
-        expected_content_sha256=freeze.structural_split_sha256,
+        matches_expected=lambda candidate: candidate.content_sha256 == freeze.structural_split_sha256,
         label="structural split",
     )
     selected_sha256 = freeze.selected_structural_item_sha256
@@ -146,7 +146,7 @@ def resolve_task_review_lineage(
         OptimizationSplit.STRUCTURAL_HOLDOUT: structural.holdout,
     }[freeze.split]
     structural_matches = tuple(
-        item for item in split.items if canonical_content_sha256(item.model_dump(mode="json")) == selected_sha256
+        item for item in split.items if canonical_json_sha256(item.model_dump(mode="json")) == selected_sha256
     )
     if len(structural_matches) != 1:
         raise ProposalTrialImportError(
@@ -334,7 +334,7 @@ def validate_candidate_failure_artifacts(
     bundle = authorization.dispatch.bundle
     compilation = bundle.compilation
     freeze = compilation.proposal_freeze
-    expected_models: tuple[tuple[str, ContentAddressedModel], ...] = (
+    expected_models: tuple[tuple[str, FrozenStrictModel], ...] = (
         ("candidate-manifest", freeze.candidate_manifest),
         ("proposal-decomposition-graph", compilation.proposal_graph),
         ("proposal-freeze", freeze),
@@ -484,9 +484,7 @@ def bound_tool_versions(
     bundle = authorization.dispatch.bundle
     expected = {
         **{
-            f"kernel:{binding.capability_ref.capability_id}": (
-                f"{binding.capability_ref.version}@sha256:{binding.capability_ref.content_sha256}"
-            )
+            f"kernel:{binding.capability_ref.capability_id}": binding.capability_ref.version
             for binding in bundle.fixed_harness.bindings
         },
         "source-task-package": (f"sha256:{authorization.dispatch.source_task_package_sha256}"),

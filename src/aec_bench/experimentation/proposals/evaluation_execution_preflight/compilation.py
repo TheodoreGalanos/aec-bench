@@ -181,8 +181,8 @@ def _order_compilation_results(
             closed_result.candidate != scheduled_assignment.candidate
             or closed_result.coordinate_sha256 != scheduled_assignment.coordinate_sha256
             or closed_result.proposal_freeze_sha256 != task_plan.proposal_freeze_sha256
-            or closed_result.kernel_sha256 != task_plan.kernel_sha256
-            or closed_result.fixed_harness_sha256 != task_plan.fixed_harness_sha256
+            or closed_result.kernel_ref != task_plan.kernel_ref
+            or closed_result.fixed_harness_ref != task_plan.fixed_harness_ref
             or closed_result.evaluation_plan_ref != task_plan.evaluation_plan_ref
             or closed_result.aggregate_budget != task_plan.aggregate_budget
         ):

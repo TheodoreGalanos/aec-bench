@@ -11,6 +11,7 @@ from aec_bench.contracts.authority import (
     AuthorityPrincipalKind,
     BasisKind,
     BasisReference,
+    EvaluationPlanIdentity,
     MotifPromotionAssurance,
     MotifPromotionQualification,
     PromotionMonitorAttestation,
@@ -23,7 +24,7 @@ from aec_bench.contracts.evaluation_outcome import (
     EvaluationOutcome,
 )
 from aec_bench.contracts.evaluation_plane import CriticRole
-from aec_bench.contracts.harness_kernel import ContentAddressedModel
+from aec_bench.contracts.harness_kernel import FrozenStrictModel, KernelRef
 from aec_bench.experimentation.governance.authority_ledger import (
     AuthorityLedger,
     AuthorityLedgerError,
@@ -66,7 +67,8 @@ def issue_governed_promotion(
     event_id: str,
     subject_id: str,
     subject_sha256: str,
-    kernel_sha256: str,
+    kernel_ref: KernelRef,
+    kernel_abi_sha256: str,
     evaluation_outcome: BasisReference,
     monitor_plan: StandingMonitorPlan,
     monitor_report: CycleMonitorReport,
@@ -98,13 +100,14 @@ def issue_governed_promotion(
         )
     except ValueError as error:
         raise GovernedPromotionError(f"monitor gate blocked promotion: {error}") from error
-    if outcome.evaluation_plan_sha256 != plan.evaluation_plan_sha256:
+    if critic_outcome.evaluation_plan_ref.authority_identity != plan.evaluation_plan:
         raise GovernedPromotionError("evaluation outcome and monitor plan do not bind the same evaluation plan")
     _assert_promotion_eligible(outcome)
     selected_motif, assurance = _resolve_motif_transition(
         action=action,
         subject_sha256=subject_sha256,
-        kernel_sha256=kernel_sha256,
+        kernel_ref=kernel_ref,
+        kernel_abi_sha256=kernel_abi_sha256,
         critic_outcome=critic_outcome,
         assurance_snapshot_sha256=assurance_snapshot_sha256,
         motif=motif,
@@ -125,7 +128,8 @@ def issue_governed_promotion(
         event_id=event_id,
         subject_id=subject_id,
         subject_sha256=subject_sha256,
-        kernel_sha256=kernel_sha256,
+        kernel_ref=kernel_ref,
+        kernel_abi_sha256=kernel_abi_sha256,
         outcome_basis=outcome_basis,
         critic_outcome=critic_outcome,
         promotion_lineage=lineage,
@@ -134,7 +138,7 @@ def issue_governed_promotion(
         monitor_basis_model=report,
         monitor_artifact_id=f"cycle-monitor-report.{cycle_id}",
         monitor_process_id="aecbench.standing-monitors",
-        evaluation_plan_sha256=outcome.evaluation_plan_sha256,
+        evaluation_plan=critic_outcome.evaluation_plan_ref.authority_identity,
         assurance_snapshot_sha256=assurance_snapshot_sha256,
         cycle_id=cycle_id,
         cycle_index=cycle_index,
@@ -148,7 +152,8 @@ def issue_governed_production_promotion(
     event_id: str,
     subject_id: str,
     subject_sha256: str,
-    kernel_sha256: str,
+    kernel_ref: KernelRef,
+    kernel_abi_sha256: str,
     evaluation_outcome: BasisReference,
     monitor_policy: StandingMonitorPolicy,
     monitor_envelope: ProductionCycleMonitorEnvelope,
@@ -174,7 +179,7 @@ def issue_governed_production_promotion(
         assert_current_production_cycle_monitor_envelope(
             envelope,
             policy=policy,
-            evaluation_plan_sha256=outcome.evaluation_plan_sha256,
+            evaluation_plan=critic_outcome.evaluation_plan_ref.authority_identity,
             cycle_id=cycle_id,
             cycle_index=cycle_index,
             assurance_snapshot_sha256=assurance_snapshot_sha256,
@@ -185,7 +190,8 @@ def issue_governed_production_promotion(
     selected_motif, assurance = _resolve_motif_transition(
         action=action,
         subject_sha256=subject_sha256,
-        kernel_sha256=kernel_sha256,
+        kernel_ref=kernel_ref,
+        kernel_abi_sha256=kernel_abi_sha256,
         critic_outcome=critic_outcome,
         assurance_snapshot_sha256=assurance_snapshot_sha256,
         motif=motif,
@@ -206,7 +212,8 @@ def issue_governed_production_promotion(
         event_id=event_id,
         subject_id=subject_id,
         subject_sha256=subject_sha256,
-        kernel_sha256=kernel_sha256,
+        kernel_ref=kernel_ref,
+        kernel_abi_sha256=kernel_abi_sha256,
         outcome_basis=outcome_basis,
         critic_outcome=critic_outcome,
         promotion_lineage=lineage,
@@ -215,7 +222,7 @@ def issue_governed_production_promotion(
         monitor_basis_model=envelope,
         monitor_artifact_id=f"production-cycle-monitor-envelope.{cycle_id}",
         monitor_process_id="aecbench.production-cycle-monitors",
-        evaluation_plan_sha256=outcome.evaluation_plan_sha256,
+        evaluation_plan=critic_outcome.evaluation_plan_ref.authority_identity,
         assurance_snapshot_sha256=assurance_snapshot_sha256,
         cycle_id=cycle_id,
         cycle_index=cycle_index,
@@ -265,8 +272,7 @@ def _resolve_acceptance_outcome(
     if (
         release_event.action is not AuthorityAction.RELEASE_CRITIC_GENERATION
         or release_event.decision is not AuthorityDecision.GRANTED
-        or release_event.subject_sha256 != critic_outcome.critic.content_sha256
-        or release_event.critic_generation_sha256 != critic_outcome.critic.content_sha256
+        or release_event.critic_generation != critic_outcome.critic.authority_identity
     ):
         raise GovernedPromotionError("acceptance outcome does not bind its exact released critic generation")
     return stored, critic_outcome
@@ -285,7 +291,7 @@ def _resolve_promotion_lineage(
     if motif is not None:
         expected = PromotionSubjectLineage(
             action=action,
-            critic_evaluation_outcome_sha256=critic_outcome.content_sha256,
+            critic_evaluation_outcome=critic_outcome.authority_identity,
             candidate_sha256=outcome.candidate_sha256,
             subject_id=subject_id,
             subject_sha256=subject_sha256,
@@ -303,7 +309,7 @@ def _resolve_promotion_lineage(
             )
         return PromotionSubjectLineage(
             action=action,
-            critic_evaluation_outcome_sha256=critic_outcome.content_sha256,
+            critic_evaluation_outcome=critic_outcome.authority_identity,
             candidate_sha256=outcome.candidate_sha256,
             subject_id=subject_id,
             subject_sha256=subject_sha256,
@@ -311,7 +317,7 @@ def _resolve_promotion_lineage(
     lineage = PromotionSubjectLineage.model_validate(supplied.model_dump(mode="python"))
     if (
         lineage.action is not action
-        or lineage.critic_evaluation_outcome_sha256 != critic_outcome.content_sha256
+        or lineage.critic_evaluation_outcome != critic_outcome.authority_identity
         or lineage.candidate_sha256 != outcome.candidate_sha256
         or lineage.subject_id != subject_id
         or lineage.subject_sha256 != subject_sha256
@@ -324,7 +330,8 @@ def _resolve_motif_transition(
     *,
     action: AuthorityAction,
     subject_sha256: str,
-    kernel_sha256: str,
+    kernel_ref: KernelRef,
+    kernel_abi_sha256: str,
     critic_outcome: CriticEvaluationOutcome,
     assurance_snapshot_sha256: str,
     motif: HarnessProgramMotif | None,
@@ -338,7 +345,8 @@ def _resolve_motif_transition(
     selected_motif = _validated_transition_motif(
         action=action,
         subject_sha256=subject_sha256,
-        kernel_sha256=kernel_sha256,
+        kernel_ref=kernel_ref,
+        kernel_abi_sha256=kernel_abi_sha256,
         critic_outcome=critic_outcome,
         motif=motif,
     )
@@ -350,7 +358,8 @@ def _resolve_motif_transition(
         raise GovernedPromotionError(f"unsupported motif transition action: {action.value}")
     assurance = _resolve_current_motif_assurance(
         subject_sha256=subject_sha256,
-        kernel_sha256=kernel_sha256,
+        kernel_ref=kernel_ref,
+        kernel_abi_sha256=kernel_abi_sha256,
         critic_outcome=critic_outcome,
         assurance_snapshot_sha256=assurance_snapshot_sha256,
         pin=pin,
@@ -363,7 +372,8 @@ def _validated_transition_motif(
     *,
     action: AuthorityAction,
     subject_sha256: str,
-    kernel_sha256: str,
+    kernel_ref: KernelRef,
+    kernel_abi_sha256: str,
     critic_outcome: CriticEvaluationOutcome,
     motif: HarnessProgramMotif | None,
 ) -> HarnessProgramMotif:
@@ -376,8 +386,8 @@ def _validated_transition_motif(
     if (
         selected_motif.motif_sha256 != critic_outcome.outcome.candidate_sha256
         or motif_subject_sha256(selected_motif) != subject_sha256
-        or selected_motif.kernel_abi_sha256 != kernel_sha256
-        or critic_outcome.kernel_sha256 != kernel_sha256
+        or selected_motif.kernel_abi_sha256 != kernel_abi_sha256
+        or critic_outcome.kernel_ref != kernel_ref
     ):
         raise GovernedPromotionError(
             "motif transition does not bind the evaluated candidate, stable subject, and kernel"
@@ -388,7 +398,8 @@ def _validated_transition_motif(
 def _resolve_current_motif_assurance(
     *,
     subject_sha256: str,
-    kernel_sha256: str,
+    kernel_ref: KernelRef,
+    kernel_abi_sha256: str,
     critic_outcome: CriticEvaluationOutcome,
     assurance_snapshot_sha256: str,
     pin: MotifAssurancePin | None,
@@ -409,7 +420,11 @@ def _resolve_current_motif_assurance(
     if current.content_sha256 != assurance_snapshot_sha256 or selected.motif_subject_sha256 != subject_sha256:
         raise GovernedPromotionError("motif assurance does not bind the transition subject and monitor snapshot")
     entry = current.require(subject_sha256)
-    if entry.kernel_sha256 != kernel_sha256 or entry.critic_generation_sha256 != critic_outcome.critic.content_sha256:
+    if (
+        entry.kernel_ref != kernel_ref
+        or entry.kernel_abi_sha256 != kernel_abi_sha256
+        or entry.critic_generation != critic_outcome.critic.authority_identity
+    ):
         raise GovernedPromotionError("motif assurance does not bind the transition kernel and critic generation")
     assurance = MotifPromotionAssurance(
         motif_subject_sha256=selected.motif_subject_sha256,
@@ -427,16 +442,17 @@ def _persist_governed_promotion(
     event_id: str,
     subject_id: str,
     subject_sha256: str,
-    kernel_sha256: str,
+    kernel_ref: KernelRef,
+    kernel_abi_sha256: str,
     outcome_basis: StoredBasis,
     critic_outcome: CriticEvaluationOutcome,
     promotion_lineage: PromotionSubjectLineage,
     motif: HarnessProgramMotif | None,
     motif_assurance: MotifPromotionAssurance | None,
-    monitor_basis_model: ContentAddressedModel,
+    monitor_basis_model: FrozenStrictModel,
     monitor_artifact_id: str,
     monitor_process_id: str,
-    evaluation_plan_sha256: str,
+    evaluation_plan: EvaluationPlanIdentity,
     assurance_snapshot_sha256: str,
     cycle_id: str,
     cycle_index: int,
@@ -497,8 +513,8 @@ def _persist_governed_promotion(
     )
     monitor_attestation = PromotionMonitorAttestation(
         monitor_basis_sha256=monitor_basis.reference.artifact_sha256,
-        monitor_report_sha256=monitor_basis_model.content_sha256,
-        evaluation_plan_sha256=evaluation_plan_sha256,
+        monitor_report_sha256=monitor_basis.reference.artifact_sha256,
+        evaluation_plan=evaluation_plan,
         assurance_snapshot_sha256=assurance_snapshot_sha256,
         cycle_id=cycle_id,
         cycle_index=cycle_index,
@@ -557,14 +573,15 @@ def _persist_governed_promotion(
             provisional_motif_sha256=motif.motif_sha256,
             motif_subject_sha256=subject_sha256,
             candidate_sha256=resolved_outcome.outcome.candidate_sha256,
-            critic_evaluation_outcome_sha256=resolved_outcome.content_sha256,
+            critic_evaluation_outcome=resolved_outcome.authority_identity,
             promotion_lineage_sha256=resolved_lineage.content_sha256,
             promotion_monitor_attestation_sha256=(resolved_monitor_attestation.content_sha256),
             monitor_report_sha256=resolved_monitor_attestation.monitor_report_sha256,
-            evaluation_plan_sha256=(resolved_outcome.evaluation_plan_ref.content_sha256),
+            evaluation_plan=resolved_outcome.evaluation_plan_ref.authority_identity,
             critic_release_authority_event_sha256=resolved_release.content_sha256,
-            critic_generation_sha256=resolved_outcome.critic.content_sha256,
-            kernel_sha256=resolved_outcome.kernel_sha256,
+            critic_generation=resolved_outcome.critic.authority_identity,
+            kernel_ref=resolved_outcome.kernel_ref,
+            kernel_abi_sha256=kernel_abi_sha256,
         )
         qualification_basis = ledger.observe_model_basis(
             kind=BasisKind.MOTIF_QUALIFICATION,
@@ -605,8 +622,8 @@ def _persist_governed_promotion(
             *((assurance_basis.reference,) if assurance_basis is not None else ()),
             *((qualification_basis.reference,) if qualification_basis is not None else ()),
         ),
-        kernel_sha256=kernel_sha256,
-        critic_generation_sha256=critic_outcome.critic.content_sha256,
+        kernel_ref=kernel_ref,
+        critic_generation=critic_outcome.critic.authority_identity,
         reasons=("evaluation and current standing-monitor gates passed",),
         revalidation_triggers=(
             "assurance_snapshot_change",

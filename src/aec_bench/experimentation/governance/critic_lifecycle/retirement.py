@@ -14,6 +14,7 @@ from aec_bench.contracts.evaluation_plane import (
     CriticRole,
     CriticSpec,
 )
+from aec_bench.contracts.harness_kernel import KernelRef
 from aec_bench.experimentation.governance.authority_ledger import (
     AuthorityLedger,
     AuthorityLedgerIntegrityError,
@@ -61,9 +62,7 @@ def prepare_critic_generation_retirement(
     )
     return CriticGenerationRetirement(
         retirement_id=f"{_critic_subject_id(selected)}#retirement",
-        critic_id=selected.critic_id,
-        critic_version=selected.version,
-        critic_generation_sha256=selected.content_sha256,
+        critic_generation=selected.ref,
         release_authority_event_sha256=released.event.content_sha256,
         evaluation_outcome_sha256s=outcome_sha256s,
         promotion_authority_event_sha256s=promotion_sha256s,
@@ -80,7 +79,7 @@ def retire_critic_generation(
     promotion_authority_events: tuple[StoredAuthorityEvent, ...],
     human_approval: BasisReference,
     event_id: str,
-    kernel_sha256: str,
+    kernel_ref: KernelRef,
 ) -> StoredCriticGenerationRetirement:
     """Retire one critic under human authority over its exact declared history."""
     selected = CriticSpec.model_validate(critic_spec.model_dump(mode="python"))
@@ -101,7 +100,7 @@ def retire_critic_generation(
         stored=release_authority,
         critic_spec=selected,
     )
-    if released.event.kernel_sha256 != kernel_sha256:
+    if released.event.kernel_ref != kernel_ref:
         raise AuthorityLedgerIntegrityError("critic retirement kernel does not match its release authority")
     approval = _resolve_human_approval(
         ledger=ledger,
@@ -167,8 +166,8 @@ def retire_critic_generation(
                 *(basis.reference for basis in promotion_bases),
             ]
         ),
-        kernel_sha256=kernel_sha256,
-        critic_generation_sha256=selected.content_sha256,
+        kernel_ref=kernel_ref,
+        critic_generation=selected.ref.authority_identity,
         reasons=(f"human retired exact {selected.role.value} critic generation with complete declared history",),
         revalidation_triggers=(("acceptance_manifest_reveal_due",) if selected.role is CriticRole.ACCEPTANCE else ()),
     )
@@ -190,7 +189,7 @@ def retire_acceptance_critic_generation(
     promotion_authority_events: tuple[StoredAuthorityEvent, ...],
     human_approval: BasisReference,
     event_id: str,
-    kernel_sha256: str,
+    kernel_ref: KernelRef,
 ) -> StoredCriticGenerationRetirement:
     """Retire one escrowed acceptance critic under exact human authority."""
     selected = _require_acceptance_critic(critic_spec)
@@ -203,7 +202,7 @@ def retire_acceptance_critic_generation(
         promotion_authority_events=promotion_authority_events,
         human_approval=human_approval,
         event_id=event_id,
-        kernel_sha256=kernel_sha256,
+        kernel_ref=kernel_ref,
     )
 
 

@@ -11,7 +11,7 @@ from pathlib import Path
 
 from pydantic import JsonValue, TypeAdapter
 
-from aec_bench.contracts.harness_kernel import ContentAddressedModel
+from aec_bench.contracts.harness_kernel import FrozenStrictModel
 from aec_bench.experimentation.governance.monitor_repository import (
     MonitorRuntimeCollisionError,
     MonitorRuntimeConfinementError,
@@ -101,7 +101,7 @@ def publish_surface_exact(
         temporary.unlink(missing_ok=True)
 
 
-def load_external_model[ModelT: ContentAddressedModel](
+def load_external_model[ModelT: FrozenStrictModel](
     path: Path,
     model_type: type[ModelT],
     *,
@@ -224,7 +224,7 @@ def validate_canary_surface(
         raise MonitorRuntimeConfinementError("monitored canary surface must be inside a supplied candidate root")
 
 
-def canonical_model_bytes(model: ContentAddressedModel) -> bytes:
+def canonical_model_bytes(model: FrozenStrictModel) -> bytes:
     """Encode one content-addressed model in the repository canonical form."""
 
     return (

@@ -15,7 +15,7 @@ from typing import Any
 
 from pydantic import JsonValue
 
-from aec_bench.contracts.harness_kernel import canonical_content_sha256
+from aec_bench.contracts.harness_kernel import canonical_json_sha256
 from aec_bench.contracts.run_bundle import RunBundle, TaskSnapshotRef
 from aec_bench.contracts.stage_execution import (
     DeclaredStage,
@@ -110,7 +110,7 @@ def prepare_stage_instruction(
     )
     namespace = (
         Path(artifacts_root)
-        / bundle.content_sha256
+        / _safe_segment(bundle.bundle_id)
         / "runs"
         / _safe_segment(run_id)
         / "stage-contexts"
@@ -126,9 +126,9 @@ def prepare_stage_instruction(
     )
     manifest = StageContextManifest(
         task_id=task_id,
-        stage_graph_sha256=graph.content_sha256,
+        stage_graph_ref=graph.ref,
         consumer_stage_id=stage_id,
-        base_context_sha256=canonical_content_sha256(
+        base_context_sha256=canonical_json_sha256(
             {
                 "instruction_sha256": hashlib.sha256(instruction.encode("utf-8")).hexdigest(),
                 "system_prompt_sha256": hashlib.sha256(system_prompt.encode("utf-8")).hexdigest(),
@@ -156,7 +156,7 @@ def prepare_stage_instruction(
         original_instruction_sha256=hashlib.sha256(instruction.encode("utf-8")).hexdigest(),
         effective_instruction=effective_instruction,
         stage_id=stage_id,
-        context_manifest_sha256=manifest.content_sha256,
+        context_manifest=manifest_reference,
     )
     return override, manifest, manifest_reference, upstream
 
@@ -190,7 +190,7 @@ def persist_stage_execution(
     )
     namespace = (
         Path(artifacts_root)
-        / bundle.content_sha256
+        / _safe_segment(bundle.bundle_id)
         / "runs"
         / _safe_segment(run_id)
         / "stage-outputs"
@@ -210,16 +210,14 @@ def persist_stage_execution(
     upstream_references = tuple(_receipt_reference(receipt) for receipt in upstream_receipts)
     receipt = StageExecutionReceipt(
         bundle_id=bundle.bundle_id,
-        bundle_sha256=bundle.content_sha256,
         run_id=run_id,
-        program_sha256=bundle.program.content_sha256,
+        program_ref=bundle.program.ref,
         program_node_id=context.node_id,
-        operation_sha256=context.operation_ref.content_sha256,
+        operation_ref=context.operation_ref,
         attempt=context.attempt_index,
         task_id=task_id,
         task_package_sha256=snapshot.package_sha256,
-        review_sidecar_sha256=graph.review_sidecar_sha256,
-        stage_graph_sha256=graph.content_sha256,
+        stage_graph_ref=graph.ref,
         stage_id=stage_id,
         context_manifest=context_manifest_reference,
         upstream_receipts=upstream_references,
@@ -239,7 +237,9 @@ def persist_stage_execution(
         resources=resources,
     )
     receipt_reference = _store_model(
-        namespace=(Path(artifacts_root) / bundle.content_sha256 / "runs" / _safe_segment(run_id) / "stage-receipts"),
+        namespace=(
+            Path(artifacts_root) / _safe_segment(bundle.bundle_id) / "runs" / _safe_segment(run_id) / "stage-receipts"
+        ),
         filename="stage-execution-receipt.json",
         kind="stage-execution-receipt",
         model=receipt,
@@ -419,23 +419,19 @@ def _validate_receipt_lineage(
 ) -> None:
     expected = (
         bundle.bundle_id,
-        bundle.content_sha256,
         run_id,
-        bundle.program.content_sha256,
+        bundle.program.ref,
         snapshot.task_id,
         snapshot.package_sha256,
-        graph.review_sidecar_sha256,
-        graph.content_sha256,
+        graph.ref,
     )
     observed = (
         receipt.bundle_id,
-        receipt.bundle_sha256,
         receipt.run_id,
-        receipt.program_sha256,
+        receipt.program_ref,
         receipt.task_id,
         receipt.task_package_sha256,
-        receipt.review_sidecar_sha256,
-        receipt.stage_graph_sha256,
+        receipt.stage_graph_ref,
     )
     if observed != expected:
         raise DeclaredStageRuntimeError(
@@ -487,7 +483,7 @@ def _render_stage_context(
 ) -> str:
     stage_payload = {
         "task_id": task_id,
-        "stage_graph_sha256": graph.content_sha256,
+        "stage_graph_ref": graph.ref.model_dump(mode="json"),
         "stage": stage.model_dump(mode="json"),
         "routed_inputs": dict(context_payload),
     }

@@ -9,13 +9,13 @@ from typing import Literal, Self
 from pydantic import ConfigDict, Field, field_validator, model_validator
 
 from aec_bench.contracts.harness_kernel import (
-    ContentAddressedModel,
     validate_sha256,
 )
+from aec_bench.contracts.legacy_content_address import LegacyContentAddressedModel
 from aec_bench.contracts.validators import NonEmptyStr
 
 
-class FrozenProgramProposerPolicy(ContentAddressedModel):
+class FrozenProgramProposerPolicy(LegacyContentAddressedModel):
     """Exact zero-shot proposer bytes, identities, and provider budget."""
 
     model_config = ConfigDict(

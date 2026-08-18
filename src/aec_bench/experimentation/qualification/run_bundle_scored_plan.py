@@ -18,10 +18,11 @@ from pydantic import (
 )
 
 from aec_bench.contracts.harness_kernel import (
-    ContentAddressedModel,
-    canonical_content_sha256,
+    FrozenStrictModel,
+    canonical_json_sha256,
     validate_sha256,
 )
+from aec_bench.contracts.legacy_content_address import LegacyContentAddressedModel
 from aec_bench.contracts.run_bundle import RunBundle
 from aec_bench.contracts.stage_execution import KernelInstructionOverride
 from aec_bench.contracts.trial_record import ArtifactReference
@@ -46,24 +47,19 @@ from aec_bench.harness.program_execution import OperationExecutionContext
 from aec_bench.ledger.durability import fsync_directory, mkdir_durable
 
 
-class RunBundleScoredAttemptPlan(ContentAddressedModel):
+class RunBundleScoredAttemptPlan(LegacyContentAddressedModel):
     """Durable host plan that freezes lowering inputs before a governed effect."""
 
     schema_version: Literal["aecbench.run-bundle-scored-attempt-plan.v1"] = "aecbench.run-bundle-scored-attempt-plan.v1"
-    bundle_sha256: str
+    bundle_id: NonEmptyStr
     run_id: NonEmptyStr
     program_node_id: NonEmptyStr
     attempt: PositiveInt
     fanout_index: NonNegativeInt | None = None
     task_refs: tuple[NonEmptyStr, ...]
     remaining_runtime_seconds: PositiveInt
-    instruction_override_sha256: str | None = None
+    instruction_override: KernelInstructionOverride | None = None
     additional_artifact_sha256s: tuple[str, ...] = ()
-
-    @field_validator("bundle_sha256", "instruction_override_sha256")
-    @classmethod
-    def validate_hash(cls, value: str | None) -> str | None:
-        return None if value is None else validate_sha256(value)
 
     @field_validator("task_refs")
     @classmethod
@@ -219,29 +215,27 @@ def scored_attempt_preflight(
         lowered=lowered,
     )
     coordinate = {
-        "bundle_sha256": inputs.bundle.content_sha256,
+        "bundle_id": inputs.bundle.bundle_id,
         "run_id": inputs.study.run_id,
         "program_node_id": inputs.context.node_id,
         "attempt": inputs.context.attempt_index,
         "fanout_index": inputs.context.fanout_index,
     }
     required = {
-        inputs.bundle.content_sha256,
         inputs.candidate.sha256,
         plan.content_sha256,
         dispatch_sha256,
         *(artifact.sha256 for artifact in inputs.additional_artifacts),
     }
-    if inputs.instruction_override is not None:
-        required.add(inputs.instruction_override.content_sha256)
     return GovernedAttemptPreflight(
-        attempt_id=("run-bundle-scored." + canonical_content_sha256(coordinate)),
-        workload_sha256=canonical_content_sha256(
+        attempt_id=("run-bundle-scored." + canonical_json_sha256(coordinate)),
+        workload_sha256=canonical_json_sha256(
             {
                 **coordinate,
                 "plan_sha256": plan.content_sha256,
-                "harness_sha256": inputs.bundle.harness.content_sha256,
-                "program_sha256": inputs.bundle.program.content_sha256,
+                "kernel_ref": inputs.bundle.kernel_ref.model_dump(mode="json"),
+                "harness_ref": inputs.bundle.harness.ref.model_dump(mode="json"),
+                "program_ref": inputs.bundle.program.ref.model_dump(mode="json"),
             }
         ),
         dispatch_payload_sha256=dispatch_sha256,
@@ -262,9 +256,9 @@ def dispatch_payload_sha256(
 ) -> str:
     """Hash the exact concrete Harbor payload and fixed invocation coordinate."""
 
-    return canonical_content_sha256(
+    return canonical_json_sha256(
         {
-            "bundle_sha256": inputs.bundle.content_sha256,
+            "bundle_id": inputs.bundle.bundle_id,
             "run_id": inputs.study.run_id,
             "operation_context": {
                 "node_id": inputs.context.node_id,
@@ -302,8 +296,8 @@ def has_reservation_claim(invocation_root: Path) -> bool:
     """Return whether the generic engine already made reservation durable."""
 
     return any(
-        (invocation_root / "governed-attempt-state" / "governed-attempt" / "claims" / "budget_reservation").glob(
-            "*/claim.json"
+        (invocation_root / "governed-attempt-state" / "governed-attempt" / "records" / "budget_reservation").glob(
+            "*/record.json"
         )
     )
 
@@ -319,7 +313,7 @@ def invocation_root_for(
 
     return (
         Path(artifacts_root)
-        / bundle.content_sha256
+        / safe_segment(bundle.bundle_id)
         / "runs"
         / safe_segment(run_id)
         / "invocations"
@@ -342,21 +336,19 @@ def _plan(
     remaining_runtime_seconds: int,
 ) -> RunBundleScoredAttemptPlan:
     return RunBundleScoredAttemptPlan(
-        bundle_sha256=inputs.bundle.content_sha256,
+        bundle_id=inputs.bundle.bundle_id,
         run_id=inputs.study.run_id,
         program_node_id=inputs.context.node_id,
         attempt=inputs.context.attempt_index,
         fanout_index=inputs.context.fanout_index,
         task_refs=inputs.task_refs,
         remaining_runtime_seconds=remaining_runtime_seconds,
-        instruction_override_sha256=(
-            None if inputs.instruction_override is None else inputs.instruction_override.content_sha256
-        ),
+        instruction_override=inputs.instruction_override,
         additional_artifact_sha256s=tuple(sorted({artifact.sha256 for artifact in inputs.additional_artifacts})),
     )
 
 
-def _pretty_model_bytes(model: ContentAddressedModel) -> bytes:
+def _pretty_model_bytes(model: FrozenStrictModel) -> bytes:
     return (
         json.dumps(
             model.model_dump(mode="json"),

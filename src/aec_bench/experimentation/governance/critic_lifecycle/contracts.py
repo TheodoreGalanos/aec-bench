@@ -11,11 +11,12 @@ from pydantic import field_validator
 
 from aec_bench.contracts.evaluation_plane import (
     AcceptanceManifestReveal,
+    CriticRef,
 )
 from aec_bench.contracts.harness_kernel import (
-    ContentAddressedModel,
     validate_sha256,
 )
+from aec_bench.contracts.legacy_content_address import LegacyContentAddressedModel
 from aec_bench.contracts.validators import NonEmptyStr
 from aec_bench.experimentation.governance.authority_ledger import (
     StoredAuthorityEvent,
@@ -23,20 +24,17 @@ from aec_bench.experimentation.governance.authority_ledger import (
 )
 
 
-class CriticGenerationRetirement(ContentAddressedModel):
+class CriticGenerationRetirement(LegacyContentAddressedModel):
     """Human-signable retirement proposal binding one critic to its complete history."""
 
     schema_version: Literal["aecbench.critic-generation-retirement.v1"] = "aecbench.critic-generation-retirement.v1"
     retirement_id: NonEmptyStr
-    critic_id: NonEmptyStr
-    critic_version: NonEmptyStr
-    critic_generation_sha256: str
+    critic_generation: CriticRef
     release_authority_event_sha256: str
     evaluation_outcome_sha256s: tuple[str, ...] = ()
     promotion_authority_event_sha256s: tuple[str, ...] = ()
 
     @field_validator(
-        "critic_generation_sha256",
         "release_authority_event_sha256",
     )
     @classmethod

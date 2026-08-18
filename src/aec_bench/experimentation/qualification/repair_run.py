@@ -13,7 +13,8 @@ from typing import Literal, Never, Self
 from pydantic import field_validator, model_validator
 
 from aec_bench.contracts.harness_instance import TaskSourceBindingConfig
-from aec_bench.contracts.harness_kernel import ContentAddressedModel, validate_sha256
+from aec_bench.contracts.harness_kernel import FrozenStrictModel, validate_sha256
+from aec_bench.contracts.legacy_content_address import LegacyContentAddressedModel
 from aec_bench.contracts.run_bundle import TaskSnapshotRef
 from aec_bench.contracts.trial_record import ArtifactReference
 from aec_bench.contracts.validators import NonEmptyStr
@@ -42,7 +43,7 @@ from aec_bench.harness.harbor_workflow import SynchronousHarborWorkflow
 from aec_bench.harness.kernel_catalogue import KernelRuntimeRegistry
 
 
-class RepairRunSpec(ContentAddressedModel):
+class RepairRunSpec(LegacyContentAddressedModel):
     """Immutable inputs needed to execute exactly one evidence-gated paired repair."""
 
     schema_version: Literal["aecbench.repair-run-spec.v3"] = "aecbench.repair-run-spec.v3"
@@ -89,7 +90,7 @@ class RepairAttemptClaimError(RuntimeError):
     """Fail-closed attempt-identity error that never authorises an automatic resume."""
 
 
-class RepairAttemptClaim(ContentAddressedModel):
+class RepairAttemptClaim(LegacyContentAddressedModel):
     """Exclusive declaration that one exact repair spec owns an attempt identity."""
 
     schema_version: Literal["aecbench.repair-attempt-claim.v1"] = "aecbench.repair-attempt-claim.v1"
@@ -115,7 +116,7 @@ class RepairAttemptClaim(ContentAddressedModel):
         return self
 
 
-class RepairAttemptCompletion(ContentAddressedModel):
+class RepairAttemptCompletion(LegacyContentAddressedModel):
     """Immutable success receipt joining an exclusive attempt claim to its terminal artifact."""
 
     schema_version: Literal["aecbench.repair-attempt-completion.v2"] = "aecbench.repair-attempt-completion.v2"
@@ -518,7 +519,7 @@ def _repair_attempt_claim_key(*, loop_id: str, attempt_id: str) -> str:
     return hashlib.sha256(encoded).hexdigest()
 
 
-def _model_bytes(model: ContentAddressedModel) -> bytes:
+def _model_bytes(model: FrozenStrictModel) -> bytes:
     return (json.dumps(model.model_dump(mode="json"), indent=2, sort_keys=True) + "\n").encode("utf-8")
 
 
@@ -566,7 +567,7 @@ def _fsync_directory(path: Path) -> None:
         os.close(descriptor)
 
 
-def _require_canonical_model[ModelT: ContentAddressedModel](
+def _require_canonical_model[ModelT: FrozenStrictModel](
     path: Path,
     model_type: type[ModelT],
     *,

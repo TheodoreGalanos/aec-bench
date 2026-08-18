@@ -29,7 +29,7 @@ from aec_bench.contracts.harness_instance import (
     TaskSourceBindingConfig,
     VerificationBindingConfig,
 )
-from aec_bench.contracts.harness_kernel import ContentAddressedModel, FrozenStrictModel, KernelRef, validate_sha256
+from aec_bench.contracts.harness_kernel import FrozenStrictModel, KernelRef, validate_sha256
 from aec_bench.contracts.stage_execution import DeclaredStageGraph
 from aec_bench.contracts.task_definition import Visibility
 from aec_bench.contracts.validators import NonEmptyStr
@@ -124,8 +124,8 @@ class HarborRunPayload(FrozenStrictModel):
         return value
 
 
-class RunBundle(ContentAddressedModel):
-    """Executable, content-addressed K/Hx/px package for one trusted runtime target."""
+class RunBundle(FrozenStrictModel):
+    """Executable K/Hx/px package for one trusted runtime target."""
 
     bundle_id: NonEmptyStr
     kernel_ref: KernelRef
@@ -153,8 +153,8 @@ class RunBundle(ContentAddressedModel):
             raise ValueError("bundle kernel_ref does not match compiled harness kernel_ref")
         if self.program.harness_ref != self.harness.ref:
             raise ValueError("program harness_ref does not match bundled harness")
-        if self.program.surface_sha256 != self.harness.program_surface.content_sha256:
-            raise ValueError("program surface_sha256 does not match bundled harness program surface")
+        if self.program.surface_id != self.harness.program_surface.surface_id:
+            raise ValueError("program surface_id does not match bundled harness program surface")
 
     def _resolve_invoked_operations(self) -> tuple[ProgramOperationSpec, ...]:
         invoked_operations: list[ProgramOperationSpec] = []

@@ -6,7 +6,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from pathlib import Path
 
-from aec_bench.contracts.harness_kernel import ContentAddressedModel
+from aec_bench.contracts.harness_kernel import FrozenStrictModel
 
 from .chain_validation import (
     budget_closure_error,
@@ -412,14 +412,10 @@ class GovernedAttemptEngine:
     ) -> GovernedAttemptTerminal:
         terminal = GovernedAttemptTerminal(
             attempt_id=preflight.attempt_id,
-            preflight_sha256=preflight.content_sha256,
-            reservation_sha256=reservation.content_sha256,
-            monitor_permit_sha256=permit.content_sha256,
-            dispatch_intent_sha256=intent.content_sha256,
-            dispatch_receipt_sha256=receipt.content_sha256,
-            import_receipt_sha256=imported.content_sha256,
-            budget_closure_sha256=budget_closure.content_sha256,
-            monitor_closure_sha256=monitor_closure.content_sha256,
+            reservation_id=reservation.reservation_id,
+            permit_id=permit.permit_id,
+            backend_receipt_id=receipt.backend_receipt_id,
+            import_id=imported.import_id,
             effect_evidence_sha256s=receipt.effect_evidence_sha256s,
             imported_evidence_sha256s=imported.imported_evidence_sha256s,
         )
@@ -490,7 +486,7 @@ class GovernedAttemptEngine:
             ) from error
 
 
-def _validated_model[ModelT: ContentAddressedModel](
+def _validated_model[ModelT: FrozenStrictModel](
     value: object,
     model_type: type[ModelT],
     *,

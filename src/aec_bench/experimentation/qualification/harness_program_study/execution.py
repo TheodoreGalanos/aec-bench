@@ -11,7 +11,7 @@ from pathlib import Path
 from statistics import fmean
 from typing import Any, Literal
 
-from aec_bench.contracts.harness_kernel import canonical_content_sha256
+from aec_bench.contracts.harness_kernel import canonical_json_sha256
 from aec_bench.contracts.run_bundle import TaskSnapshotRef
 from aec_bench.contracts.trial_record import ArtifactReference, Completeness, TrialRecord
 from aec_bench.experimentation.qualification.harness_program_study.analysis import (
@@ -59,6 +59,7 @@ class HarnessProgramTrialExecution:
     trial: HarnessProgramTrial
     execution_seed: int
     candidate_reference: HarnessProgramCandidateReference
+    bundle_id: str
     execution: RunBundleExecution
     records: tuple[TrialRecord, ...]
 
@@ -155,6 +156,7 @@ def execute_harness_program_study(
                 trial=trial,
                 execution_seed=execution_seed,
                 candidate_reference=candidate.reference,
+                bundle_id=candidate.bundle.bundle_id,
                 execution=execution,
                 records=records,
             )
@@ -264,7 +266,7 @@ def _validate_study_inputs(
 
 def _factor_semantics(materialized: MaterializedHarnessProgramCandidateSet) -> str:
     request = materialized.request
-    return canonical_content_sha256(
+    return canonical_json_sha256(
         {
             "schema_version": "1",
             "kernel_ref": request.kernel_ref.model_dump(mode="json"),
@@ -456,13 +458,10 @@ def validate_harness_program_record_lineage(
         or provenance.paired_block_id != trial.block_id
         or provenance.harness_program_plan != plan_artifact
         or provenance.bundle_id != candidate.bundle.bundle_id
-        or provenance.bundle_sha256 != candidate.bundle.content_sha256
         or provenance.kernel_id != candidate.bundle.kernel_ref.kernel_id
-        or provenance.harness_sha256 != candidate.reference.harness_sha256
+        or provenance.harness_id != candidate.reference.harness_ref.instance_id
         or provenance.harness_id != candidate.bundle.harness.instance_id
-        or provenance.kernel_sha256 != candidate.reference.kernel_sha256
         or provenance.program_id != candidate.bundle.program.program_id
-        or provenance.program_sha256 != candidate.bundle.program.content_sha256
         or provenance.review_sidecar_sha256 != expected_review_sidecar
         or provenance.declared_surface_sha256 != expected_declared_surface
         or provenance.repetition != 1
@@ -480,7 +479,7 @@ def _snapshot_review_lineage(snapshot: TaskSnapshotRef) -> tuple[str, str]:
         return snapshot.task_review.review_sidecar_sha256, snapshot.task_review.declared_surface_sha256
     return (
         snapshot.package_sha256,
-        canonical_content_sha256(
+        canonical_json_sha256(
             {
                 "kind": "atomic-task",
                 "task_id": snapshot.task_id,

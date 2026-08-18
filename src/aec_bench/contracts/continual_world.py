@@ -8,8 +8,9 @@ from typing import Annotated, Literal, Self
 
 from pydantic import Field, JsonValue, field_validator, model_validator
 
-from aec_bench.contracts.harness_kernel import ContentAddressedModel, validate_sha256
+from aec_bench.contracts.harness_kernel import validate_sha256
 from aec_bench.contracts.interactive_world import InteractiveWorldProfileRef, WorldBuildRef
+from aec_bench.contracts.legacy_content_address import LegacyContentAddressedModel
 from aec_bench.contracts.validators import FrozenStrictModel, NonEmptyStr
 
 
@@ -105,7 +106,7 @@ class ContinualWorldSnapshotRef(FrozenStrictModel):
         return self
 
 
-class ContinualRolloutChildRequest(ContentAddressedModel):
+class ContinualRolloutChildRequest(LegacyContentAddressedModel):
     """One isolated child identity without actor, session, or treatment settings."""
 
     child_id: NonEmptyStr
@@ -114,7 +115,7 @@ class ContinualRolloutChildRequest(ContentAddressedModel):
     world_branch_id: NonEmptyStr
 
 
-class ContinualRolloutGroupRequest(ContentAddressedModel):
+class ContinualRolloutGroupRequest(LegacyContentAddressedModel):
     """One exact host request for ordered children from a verified snapshot."""
 
     request_id: NonEmptyStr
@@ -157,7 +158,7 @@ class ContinualRolloutGroupRequest(ContentAddressedModel):
         return self
 
 
-class ContinualRolloutChildReceipt(ContentAddressedModel):
+class ContinualRolloutChildReceipt(LegacyContentAddressedModel):
     """Immutable shared evidence for one verified child materialization."""
 
     group_id: NonEmptyStr
@@ -199,7 +200,7 @@ class ContinualRolloutChildReceipt(ContentAddressedModel):
         return self
 
 
-class ContinualRolloutLineage(ContentAddressedModel):
+class ContinualRolloutLineage(LegacyContentAddressedModel):
     """Complete immutable lineage for one ready rollout group."""
 
     request_id: NonEmptyStr

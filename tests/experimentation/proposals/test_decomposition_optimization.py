@@ -23,8 +23,14 @@ from aec_bench.contracts.evaluation_outcome import (
     UtilityEvaluation,
     ValidityEvaluation,
 )
-from aec_bench.contracts.evaluation_plane import CriticRef, CriticRole, EvaluationPlanRef
-from aec_bench.contracts.harness_instance import HarnessBudget
+from aec_bench.contracts.evaluation_plane import (
+    AcceptanceManifestCommitment,
+    CriticRef,
+    CriticRole,
+    EvaluationPlanRef,
+)
+from aec_bench.contracts.harness_instance import HarnessBudget, HarnessInstanceRef
+from aec_bench.contracts.harness_kernel import KernelRef
 from aec_bench.contracts.program_proposal.candidate import (
     CandidateGenerationCoordinate,
     CandidateGenerationManifest,
@@ -98,7 +104,7 @@ def _view() -> DecompositionProblemView:
                 "require_single_final_json_block": True,
             },
             "fixed_harness": {
-                "kernel_sha256": _sha("kernel"),
+                "kernel_ref": {"kernel_id": "fixed-kernel", "version": "1"},
                 "harness_policy_sha256": _sha("h0-policy"),
                 "capability_ids": ["context.public", "tool.read"],
                 "aggregate_budget": _budget().model_dump(mode="json"),
@@ -142,7 +148,6 @@ def _development_critic(
         version="1",
         role=CriticRole.DEVELOPMENT,
         compatibility_generation=compatibility_generation,
-        content_sha256=_sha("critic.development"),
     )
 
 
@@ -174,13 +179,12 @@ def _freeze() -> ProposalFreeze:
         evaluation_plan_ref=EvaluationPlanRef(
             plan_id="plan.phase-9",
             evaluation_generation="critic-generation-1",
-            content_sha256=_sha("evaluation-plan"),
         ),
         evaluation_plan_candidate_manifest_sha256=manifest.content_sha256,
         structural_split_sha256=_sha("structural-split"),
         selected_structural_item_sha256=_sha("selected-structural-item"),
         selected_review_lineage_id=_sha("selected-review-lineage"),
-        fixed_harness_sha256=_sha("compiled-h0"),
+        fixed_harness_ref=HarnessInstanceRef(instance_id="compiled-h0"),
         operator_authority=operator_authority_for(
             "optimizer.proposer",
             OperatorRole.PERFORMANCE_OPTIMIZATION,
@@ -241,8 +245,8 @@ def _schedule(
         proposal_freeze=freeze,
         incumbent_candidate=incumbent or _incumbent(),
         coordinates=coordinates or _coordinates(),
-        kernel_sha256=freeze.problem_view.fixed_harness.kernel_sha256,
-        fixed_harness_sha256=freeze.fixed_harness_sha256,
+        kernel_ref=freeze.problem_view.fixed_harness.kernel_ref,
+        fixed_harness_ref=freeze.fixed_harness_ref,
         evaluation_plan_ref=freeze.evaluation_plan_ref,
         aggregate_budget=freeze.problem_view.fixed_harness.aggregate_budget,
     )
@@ -287,7 +291,6 @@ def _outcome(
     label = f"{candidate.candidate_id}:{coordinate.coordinate_id}"
     if not integrity:
         return EvaluationOutcome(
-            evaluation_plan_sha256=schedule.evaluation_plan_ref.content_sha256,
             candidate_sha256=candidate.candidate_artifact_sha256,
             evidence_set_sha256=_sha(f"evidence-set:{label}"),
             integrity=IntegrityEvaluation.create(
@@ -306,7 +309,6 @@ def _outcome(
         )
     if not complete:
         return EvaluationOutcome(
-            evaluation_plan_sha256=schedule.evaluation_plan_ref.content_sha256,
             candidate_sha256=candidate.candidate_artifact_sha256,
             evidence_set_sha256=_sha(f"evidence-set:{label}"),
             integrity=IntegrityEvaluation.create(checks=(IntegrityCheck(check_id="runtime-integrity", passed=True),)),
@@ -325,7 +327,6 @@ def _outcome(
         )
     if kind is not CandidateEvidenceKind.TRIAL_RECORD:
         return EvaluationOutcome(
-            evaluation_plan_sha256=schedule.evaluation_plan_ref.content_sha256,
             candidate_sha256=candidate.candidate_artifact_sha256,
             evidence_set_sha256=_sha(f"evidence-set:{label}"),
             integrity=IntegrityEvaluation.create(checks=(IntegrityCheck(check_id="runtime-integrity", passed=True),)),
@@ -344,7 +345,6 @@ def _outcome(
             reasons=(f"{kind.value} prevented a valid output",),
         )
     return EvaluationOutcome(
-        evaluation_plan_sha256=schedule.evaluation_plan_ref.content_sha256,
         candidate_sha256=candidate.candidate_artifact_sha256,
         evidence_set_sha256=_sha(f"evidence-set:{label}"),
         integrity=IntegrityEvaluation.create(checks=(IntegrityCheck(check_id="runtime-integrity", passed=True),)),
@@ -370,7 +370,6 @@ def _outcome(
 def _evidence(
     candidate: ProgramCandidateRef,
     coordinate: MatchedEvaluationCoordinate,
-    outcome: EvaluationOutcome,
     *,
     kind: CandidateEvidenceKind = CandidateEvidenceKind.TRIAL_RECORD,
     complete: bool = True,
@@ -383,7 +382,6 @@ def _evidence(
         coordinate_sha256=coordinate.content_sha256,
         kind=kind,
         trial_record_sha256=(_sha(f"trial:{label}") if kind is CandidateEvidenceKind.TRIAL_RECORD else None),
-        evaluation_outcome_sha256=outcome.content_sha256,
         evidence_complete=complete,
         integrity_passed=integrity,
     )
@@ -425,7 +423,6 @@ def _evidence_bundle(
         reference = _evidence(
             assignment.candidate,
             assignment.coordinate,
-            outcome,
             kind=kind,
             complete=complete,
             integrity=integrity,
@@ -497,20 +494,19 @@ def test_schedule_is_order_invariant_and_rejects_binding_drift() -> None:
         "proposal_freeze": freeze,
         "incumbent_candidate": _incumbent(),
         "coordinates": _coordinates(),
-        "kernel_sha256": freeze.problem_view.fixed_harness.kernel_sha256,
-        "fixed_harness_sha256": freeze.fixed_harness_sha256,
+        "kernel_ref": freeze.problem_view.fixed_harness.kernel_ref,
+        "fixed_harness_ref": freeze.fixed_harness_ref,
         "evaluation_plan_ref": freeze.evaluation_plan_ref,
         "aggregate_budget": freeze.problem_view.fixed_harness.aggregate_budget,
     }
     for field, value, message in (
-        ("kernel_sha256", _sha("wrong-kernel"), "kernel"),
-        ("fixed_harness_sha256", _sha("wrong-h0"), "fixed H0"),
+        ("kernel_ref", KernelRef(kernel_id="wrong-kernel", version="1"), "kernel"),
+        ("fixed_harness_ref", HarnessInstanceRef(instance_id="wrong-h0"), "fixed H0"),
         (
             "evaluation_plan_ref",
             EvaluationPlanRef(
                 plan_id="other",
                 evaluation_generation="critic-generation-1",
-                content_sha256=_sha("other-plan"),
             ),
             "evaluation plan",
         ),
@@ -807,8 +803,12 @@ def test_development_selection_rejects_non_development_critic_or_generation() ->
         version="1",
         role=CriticRole.ACCEPTANCE,
         compatibility_generation=schedule.evaluation_plan_ref.evaluation_generation,
-        content_sha256=_sha("critic.acceptance"),
-        acceptance_manifest_commitment_sha256=_sha("acceptance-manifest"),
+        acceptance_manifest_commitment=AcceptanceManifestCommitment(
+            critic_id="critic.acceptance",
+            critic_version="1",
+            salted_commitment_sha256=_sha("acceptance-manifest"),
+            publication_receipt_sha256=_sha("acceptance-publication"),
+        ),
     )
 
     with pytest.raises(OptimizationExperimentError, match="development critic"):
@@ -825,26 +825,7 @@ def test_development_selection_rejects_non_development_critic_or_generation() ->
         )
 
 
-@pytest.mark.parametrize(
-    ("outcome_field", "wrong_digest", "message"),
-    (
-        (
-            "evaluation_plan_sha256",
-            _sha("wrong-evaluation-plan"),
-            "frozen evaluation plan",
-        ),
-        (
-            "candidate_sha256",
-            _sha("wrong-candidate-artifact"),
-            "exact candidate artifact",
-        ),
-    ),
-)
-def test_outcomes_bind_exact_plan_and_candidate_artifact(
-    outcome_field: str,
-    wrong_digest: str,
-    message: str,
-) -> None:
+def test_outcomes_bind_the_exact_candidate_artifact() -> None:
     schedule = _schedule()
     evidence, outcomes = _evidence_bundle(
         schedule,
@@ -861,91 +842,31 @@ def test_outcomes_bind_exact_plan_and_candidate_artifact(
                 mode="json",
                 exclude={"content_sha256"},
             ),
-            outcome_field: wrong_digest,
+            "candidate_sha256": _sha("wrong-candidate-artifact"),
         }
-    )
-    original_reference = next(
-        reference for reference in evidence if reference.evidence_id == original_binding.evidence_id
-    )
-    mutated_reference = MatchedCandidateEvidenceRef.model_validate(
-        {
-            **original_reference.model_dump(
-                mode="json",
-                exclude={"content_sha256"},
-            ),
-            "evaluation_outcome_sha256": mutated_outcome.content_sha256,
-        }
-    )
-    mutated_evidence = tuple(
-        mutated_reference if reference.evidence_id == mutated_reference.evidence_id else reference
-        for reference in evidence
     )
     mutated_bindings = tuple(
         EvidenceOutcomeBinding(
-            evidence_id=mutated_reference.evidence_id,
-            evidence_sha256=mutated_reference.content_sha256,
+            evidence_id=original_binding.evidence_id,
+            evidence_sha256=original_binding.evidence_sha256,
             outcome=mutated_outcome,
         )
-        if binding.evidence_id == mutated_reference.evidence_id
+        if binding.evidence_id == original_binding.evidence_id
         else binding
         for binding in outcomes
     )
     study = complete_program_candidate_study(
-        study_id=f"study.wrong-{outcome_field}",
-        schedule=schedule,
-        evidence_refs=mutated_evidence,
-    )
-
-    with pytest.raises(OptimizationExperimentError, match=message):
-        complete_decomposition_optimization_cycle(
-            cycle_id=f"cycle.wrong-{outcome_field}",
-            schedule=schedule,
-            study=study,
-            outcome_bindings=mutated_bindings,
-            selection_rule=_selection_rule(),
-            development_critic=_development_critic(),
-        )
-
-
-def test_declared_outcome_digest_must_resolve_exactly() -> None:
-    schedule = _schedule()
-    evidence, outcomes = _evidence_bundle(
-        schedule,
-        {
-            "candidate.incumbent": 0.5,
-            "candidate.1": 0.6,
-            "candidate.2": 0.4,
-        },
-    )
-    study = complete_program_candidate_study(
-        study_id="study.outcome-digest",
+        study_id="study.wrong-candidate-artifact",
         schedule=schedule,
         evidence_refs=evidence,
     )
-    mutated_outcome = EvaluationOutcome.model_validate(
-        {
-            **outcomes[0].outcome.model_dump(
-                mode="json",
-                exclude={"content_sha256"},
-            ),
-            "evidence_set_sha256": _sha("different-evidence-set"),
-        }
-    )
-    mismatched = EvidenceOutcomeBinding(
-        evidence_id=outcomes[0].evidence_id,
-        evidence_sha256=outcomes[0].evidence_sha256,
-        outcome=mutated_outcome,
-    )
 
-    with pytest.raises(
-        OptimizationExperimentError,
-        match="does not resolve its declared evaluation outcome",
-    ):
+    with pytest.raises(OptimizationExperimentError, match="exact candidate artifact"):
         complete_decomposition_optimization_cycle(
-            cycle_id="cycle.outcome-digest",
+            cycle_id="cycle.wrong-candidate-artifact",
             schedule=schedule,
             study=study,
-            outcome_bindings=(mismatched, *outcomes[1:]),
+            outcome_bindings=mutated_bindings,
             selection_rule=_selection_rule(),
             development_critic=_development_critic(),
         )
@@ -972,27 +893,13 @@ def test_abstaining_outcome_cannot_be_promoted_by_its_scalar_utility() -> None:
             "promotion_eligible": False,
         }
     )
-    target_reference = next(reference for reference in evidence if reference.evidence_id == target.evidence_id)
-    abstaining_reference = MatchedCandidateEvidenceRef.model_validate(
-        {
-            **target_reference.model_dump(
-                mode="json",
-                exclude={"content_sha256"},
-            ),
-            "evaluation_outcome_sha256": abstaining_outcome.content_sha256,
-        }
-    )
-    evidence = tuple(
-        abstaining_reference if reference.evidence_id == abstaining_reference.evidence_id else reference
-        for reference in evidence
-    )
     outcomes = tuple(
         EvidenceOutcomeBinding(
-            evidence_id=abstaining_reference.evidence_id,
-            evidence_sha256=abstaining_reference.content_sha256,
+            evidence_id=target.evidence_id,
+            evidence_sha256=target.evidence_sha256,
             outcome=abstaining_outcome,
         )
-        if binding.evidence_id == abstaining_reference.evidence_id
+        if binding.evidence_id == target.evidence_id
         else binding
         for binding in outcomes
     )

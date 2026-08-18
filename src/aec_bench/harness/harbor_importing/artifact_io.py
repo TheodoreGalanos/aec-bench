@@ -9,7 +9,7 @@ import stat
 from pathlib import Path
 from typing import Any, cast
 
-from aec_bench.contracts.harness_kernel import canonical_content_sha256
+from aec_bench.contracts.harness_kernel import canonical_json_sha256
 from aec_bench.contracts.trial_record import ArtifactReference
 from aec_bench.harness.harbor_importing.contracts import HarborImportError
 
@@ -86,7 +86,7 @@ def read_content_addressed_trial_json(
     payload = cast(dict[str, Any], parsed)
     content_sha256 = payload.get("content_sha256")
     without_identity = {key: value for key, value in payload.items() if key != "content_sha256"}
-    if not isinstance(content_sha256, str) or canonical_content_sha256(without_identity) != content_sha256:
+    if not isinstance(content_sha256, str) or canonical_json_sha256(without_identity) != content_sha256:
         raise HarborImportError(f"{label} content identity changed")
     return raw, payload
 

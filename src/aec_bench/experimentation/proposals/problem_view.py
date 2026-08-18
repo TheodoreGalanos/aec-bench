@@ -15,7 +15,7 @@ from aec_bench.contracts.harness_instance import (
     CompiledHarnessInstance,
     TaskSourceBindingConfig,
 )
-from aec_bench.contracts.harness_kernel import canonical_content_sha256
+from aec_bench.contracts.harness_kernel import canonical_json_sha256
 from aec_bench.contracts.output_completion import OutputCompletionContract
 from aec_bench.contracts.program_proposal.problem import (
     DecompositionLeakageAudit,
@@ -55,7 +55,7 @@ _AUDIT_POLICY = {
     ),
     "source_path_policy": "relative regular files inside the exact task package only",
 }
-_AUDIT_POLICY_SHA256 = canonical_content_sha256(_AUDIT_POLICY)
+_AUDIT_POLICY_SHA256 = canonical_json_sha256(_AUDIT_POLICY)
 _COMPOSITE_MARKERS = (
     PurePosixPath("template.json"),
     PurePosixPath("hidden/world_state.json"),
@@ -305,7 +305,7 @@ def build_decomposition_problem_view(
         )
 
     fixed_harness = FixedHarnessCapabilityProjection(
-        kernel_sha256=harness.kernel_ref.content_sha256,
+        kernel_ref=harness.kernel_ref,
         harness_policy_sha256=fixed_harness_policy_sha256(harness),
         capability_ids=capability_ids,
         aggregate_budget=harness.budget,
@@ -540,7 +540,7 @@ def fixed_harness_policy_sha256(harness: CompiledHarnessInstance) -> str:
         payload["allowed_task_refs"] = ["<task>"] if operation.allowed_task_refs else []
         normalized_operations.append(payload)
 
-    return canonical_content_sha256(
+    return canonical_json_sha256(
         {
             "schema_version": "aecbench.fixed-harness-policy.v1",
             "kernel_ref": harness.kernel_ref.model_dump(mode="json"),
@@ -604,12 +604,12 @@ def _audited_input_sha256(
     data_gap_boundaries: tuple[PublicDataGapBoundary, ...],
     authority_boundaries: tuple[PublicAuthorityBoundary, ...],
 ) -> str:
-    return canonical_content_sha256(
+    return canonical_json_sha256(
         {
-            "task_definition_sha256": canonical_content_sha256(task.model_dump(mode="json")),
+            "task_definition_sha256": canonical_json_sha256(task.model_dump(mode="json")),
             "task_snapshot": task_snapshot.model_dump(mode="json"),
             "output_contract": output_contract.model_dump(mode="json"),
-            "compiled_harness_sha256": harness.content_sha256,
+            "compiled_harness": harness.model_dump(mode="json"),
             "public_sources": [
                 {
                     "source_id": binding.source_id,

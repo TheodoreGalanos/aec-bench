@@ -187,7 +187,6 @@ def test_task_enumeration_has_one_phase_neutral_kernel_operation_definition() ->
     assert definition is not None
     assert definition.version == "1.0.0"
     assert definition.capability == capability
-    assert definition.capability.content_sha256 == "22a89e39a543dde827bb04071ac4a624b8e6c1fb03e6d2a8ef961696f11c9af2"
     assert definition.runtime == primitive.runtime
     assert definition.input_schema_ref == "aecbench://empty/v1"
     assert definition.output_schema_ref == "aecbench://task-ref-set/v1"
@@ -212,7 +211,6 @@ def test_three_low_effect_operations_have_phase_neutral_kernel_definitions() -> 
     expected = {
         "check_subtask_contract.v1": {
             "capability_id": "aecbench.operation.proposal.check-subtask-contract",
-            "capability_sha256": "2ff31de8a2a65fe1b4004597c641934eb2882aad2fdc14577b27eb492b32f1da",
             "input_schema_ref": "aecbench://subtask-contract-check-selection/v1",
             "output_schema_ref": "aecbench://subtask-contract-check-ref/v1",
             "argument": (
@@ -234,7 +232,6 @@ def test_three_low_effect_operations_have_phase_neutral_kernel_definitions() -> 
         },
         "finalize_proposed_plan.v1": {
             "capability_id": "aecbench.operation.proposal.finalize-proposed-plan",
-            "capability_sha256": "a61139d9bb994e3caec7d81d7b45b604ff0dd3c2d8464c88f9aa891d7d86ef7b",
             "input_schema_ref": "aecbench://finalize-proposed-plan-selection/v1",
             "output_schema_ref": "aecbench://trial-record-set/v1",
             "argument": (
@@ -256,7 +253,6 @@ def test_three_low_effect_operations_have_phase_neutral_kernel_definitions() -> 
         },
         "finalize_task.v1": {
             "capability_id": "aecbench.operation.harbor.finalize-task",
-            "capability_sha256": "4d966b725c0fd89818b8bac592e98e9456c31d225e5ba9fd4ffaefbb16ff1748",
             "input_schema_ref": "aecbench://finalize-task-selection/v1",
             "output_schema_ref": "aecbench://trial-record-set/v1",
             "argument": (
@@ -287,7 +283,6 @@ def test_three_low_effect_operations_have_phase_neutral_kernel_definitions() -> 
         assert definition is not None
         assert definition.version == "1.0.0"
         assert definition.capability == capability
-        assert definition.capability.content_sha256 == details["capability_sha256"]
         assert definition.runtime == registry.resolve(capability.ref).runtime
         assert definition.input_schema_ref == details["input_schema_ref"]
         assert definition.output_schema_ref == details["output_schema_ref"]
@@ -322,7 +317,6 @@ def test_harbor_execution_operations_have_phase_neutral_kernel_definitions() -> 
     expected = {
         "run_batch.v1": {
             "capability_id": "aecbench.operation.harbor.run-batch",
-            "capability_sha256": "7a9fd818388b37dc90c5d2d8456a864e82ed76d21f812c6a66b246e87686115d",
             "input_schema_ref": "aecbench://run-batch-selection/v1",
             "output_schema_ref": "aecbench://trial-record-set/v1",
             "handler_key": KernelOperationHandlerKey.RUN_BATCH,
@@ -337,7 +331,6 @@ def test_harbor_execution_operations_have_phase_neutral_kernel_definitions() -> 
         },
         "run_stage.v1": {
             "capability_id": "aecbench.operation.harbor.run-stage",
-            "capability_sha256": "bab615dc0c4c811cfb21129c32475321d0ac4e697affa6efe3fd481227f25765",
             "input_schema_ref": "aecbench://run-stage-selection/v1",
             "output_schema_ref": "aecbench://stage-execution-receipt-ref/v1",
             "handler_key": KernelOperationHandlerKey.RUN_STAGE,
@@ -370,7 +363,6 @@ def test_harbor_execution_operations_have_phase_neutral_kernel_definitions() -> 
 
         assert definition is not None
         assert definition.capability == capability
-        assert definition.capability.content_sha256 == details["capability_sha256"]
         assert definition.runtime == registry.resolve(capability.ref).runtime
         assert definition.input_schema_ref == details["input_schema_ref"]
         assert definition.output_schema_ref == details["output_schema_ref"]
@@ -440,7 +432,6 @@ def test_proposal_execution_operations_have_phase_neutral_kernel_definitions() -
     expected = {
         "run_proposal_session.v1": {
             "capability_id": "aecbench.operation.proposal.run-session",
-            "capability_sha256": "afda1c7f2673c58171f31c093273685b4db5b64d186e08c8967dbc22b7e1efd1",
             "input_schema_ref": "aecbench://proposal-session-internal/v1",
             "output_schema_ref": "aecbench://proposal-session-receipt/v1",
             "handler_key": KernelOperationHandlerKey.RUN_PROPOSAL_SESSION,
@@ -457,7 +448,6 @@ def test_proposal_execution_operations_have_phase_neutral_kernel_definitions() -
         },
         "run_semantic_subtask.v1": {
             "capability_id": "aecbench.operation.proposal.run-semantic-subtask",
-            "capability_sha256": "3c8287c9d1c6aa7feda394a841ce694d36216b7bde12510ca611e919b5d1b64e",
             "input_schema_ref": "aecbench://semantic-subtask-internal/v1",
             "output_schema_ref": "aecbench://semantic-subtask-result/v1",
             "handler_key": KernelOperationHandlerKey.RUN_SEMANTIC_SUBTASK,
@@ -480,7 +470,6 @@ def test_proposal_execution_operations_have_phase_neutral_kernel_definitions() -
 
         assert definition is not None
         assert definition.capability == capability
-        assert definition.capability.content_sha256 == details["capability_sha256"]
         assert definition.runtime == registry.resolve(capability.ref).runtime
         assert definition.input_schema_ref == details["input_schema_ref"]
         assert definition.output_schema_ref == details["output_schema_ref"]
@@ -750,18 +739,17 @@ def test_program_operation_runtime_accepts_an_explicit_pre_dispatch_retry_code()
     assert runtime.retry_safe_error_codes == ("pre_dispatch_capacity_timeout",)
 
 
-def test_registry_resolves_only_the_exact_content_pinned_capability() -> None:
+def test_registry_resolves_only_the_exact_capability_version() -> None:
     registry = default_kernel_registry()
     capability = registry.capability("aecbench.adapter.lambda-rlm")
 
     assert registry.resolve(capability.ref).spec == capability
 
-    with pytest.raises(KernelRuntimeRegistryError, match="content-pinned capability"):
+    with pytest.raises(KernelRuntimeRegistryError, match="capability version"):
         registry.resolve(
             KernelCapabilityRef(
                 capability_id=capability.capability_id,
-                version=capability.version,
-                content_sha256="0" * 64,
+                version="other-version",
             )
         )
 
@@ -808,7 +796,6 @@ def test_default_kernel_identity_is_deterministic() -> None:
     second = default_kernel_registry()
 
     assert first.manifest == second.manifest
-    assert first.manifest.content_sha256 == second.manifest.content_sha256
 
 
 def test_default_kernel_identity_owns_only_the_explicit_executor_surface() -> None:
@@ -868,7 +855,7 @@ def test_default_registry_records_whole_package_fingerprint_outside_fixed_kernel
     assert executor_paths < package_paths
     assert "aec_bench/experimentation/governance/critic_lifecycle/contracts.py" in package_paths
     assert "aec_bench/experimentation/qualification/motif_learning.py" in package_paths
-    assert registry.package_fingerprint.content_sha256 != registry.manifest.implementation.content_sha256
+    assert registry.package_fingerprint != registry.manifest.implementation
 
 
 def test_non_executor_package_drift_does_not_change_fixed_kernel_identity(

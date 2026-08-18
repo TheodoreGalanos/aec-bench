@@ -174,7 +174,7 @@ def _build_budget_plan(
             candidate_id=graph.candidate_id,
             proposal_graph_sha256=graph.content_sha256,
             proposal_freeze_sha256=proposal_freeze.content_sha256,
-            fixed_harness_sha256=fixed_harness.content_sha256,
+            fixed_harness_ref=fixed_harness.ref,
             allocation_policy_sha256=allocation_policy_sha256,
             aggregate_budget=aggregate_budget,
             execution_semantics=ProposalExecutionSemantics(execution_profile.scheduling.semantics.value),

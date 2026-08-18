@@ -10,11 +10,11 @@ from pydantic import Field, field_validator, model_validator
 
 from aec_bench.contracts.harness_instance import ProgramOperationScope
 from aec_bench.contracts.harness_kernel import (
-    ContentAddressedModel,
     FrozenStrictModel,
     KernelCapabilityRef,
     validate_sha256,
 )
+from aec_bench.contracts.legacy_content_address import LegacyContentAddressedModel
 from aec_bench.contracts.validators import NonEmptyStr
 
 
@@ -136,7 +136,7 @@ class ProposalSchedulingPolicy(FrozenStrictModel):
         return self
 
 
-class ProposalExecutionProfile(ContentAddressedModel):
+class ProposalExecutionProfile(LegacyContentAddressedModel):
     """Content-addressed policy shared by freeze, compiler, dispatch, and import."""
 
     schema_version: Literal["aecbench.proposal-execution-profile.v1"] = "aecbench.proposal-execution-profile.v1"
@@ -165,7 +165,6 @@ class ProposalExecutionProfile(ContentAddressedModel):
             (
                 item.capability_ref.capability_id,
                 item.capability_ref.version,
-                item.capability_ref.content_sha256,
             )
             for item in value
         )

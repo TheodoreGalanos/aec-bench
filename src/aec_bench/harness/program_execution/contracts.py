@@ -11,8 +11,10 @@ from typing import Literal, Self
 from pydantic import Field, JsonValue, model_validator
 
 from aec_bench.contracts.execution_program import (
+    ExecutionProgramRef,
     ProgramNodeKind,
 )
+from aec_bench.contracts.harness_instance import ProgramOperationRef
 from aec_bench.contracts.harness_kernel import (
     FrozenStrictModel,
 )
@@ -109,8 +111,7 @@ class InputBindingLineage(FrozenStrictModel):
 class OperationLineage(FrozenStrictModel):
     """Compiled operation identity and Hx binding path used for one executable node."""
 
-    operation_id: NonEmptyStr
-    operation_sha256: str
+    operation_ref: ProgramOperationRef
     binding_ids: tuple[NonEmptyStr, ...]
 
 
@@ -118,8 +119,7 @@ class OperationAttemptEvidence(FrozenStrictModel):
     """Auditable evidence for one bounded handler invocation."""
 
     node_id: NonEmptyStr
-    operation_id: NonEmptyStr
-    operation_sha256: str
+    operation_ref: ProgramOperationRef
     attempt_index: int = Field(ge=1)
     fanout_index: int | None = Field(default=None, ge=0)
     arguments_sha256: str
@@ -150,7 +150,7 @@ class NodeExecutionEvidence(FrozenStrictModel):
 class ProgramExecutionResult(FrozenStrictModel):
     """Terminal px result with complete node evidence and consumed runtime budgets."""
 
-    program_sha256: str
+    program_ref: ExecutionProgramRef
     status: ProgramExecutionStatus
     stop_node_id: NonEmptyStr | None = None
     result: JsonValue = None

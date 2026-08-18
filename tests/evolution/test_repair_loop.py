@@ -427,8 +427,8 @@ def test_incomplete_reward_coverage_requires_exact_execution_observations(tmp_pa
             verification_id="verification.incomplete",
             run_id=run.run_id,
             candidate_id=compiled.candidate_id,
-            harness_sha256=compiled.harness.content_sha256,
-            program_sha256=compiled.program.content_sha256,
+            harness_ref=compiled.harness.ref,
+            program_ref=compiled.program.ref,
             run_artifact_sha256=run.artifact_sha256,
             pairing=run.pairing,
             passed=False,
@@ -567,7 +567,7 @@ class _DeterministicWorkflow:
                     repetition=repetition,
                     split=run.pairing.split,
                     candidate_id=candidate.candidate_id,
-                    kernel_sha256=candidate.harness.kernel_ref.content_sha256,
+                    kernel_ref=candidate.harness.kernel_ref,
                     resource_sha256=snapshots[task_id].package_sha256,
                     review_lineage_sha256=_review_lineage_sha256(snapshots[task_id]),
                     reward=reward,
@@ -614,8 +614,8 @@ class _DeterministicWorkflow:
             verification_id=f"verification.{candidate.candidate_id}",
             run_id=run.run_id,
             candidate_id=candidate.candidate_id,
-            harness_sha256=candidate.harness.content_sha256,
-            program_sha256=candidate.program.content_sha256,
+            harness_ref=candidate.harness.ref,
+            program_ref=candidate.program.ref,
             run_artifact_sha256=(
                 self.parent_verification.run_artifact_sha256
                 if self.reuse_parent_artifact_for_child and self.parent_verification is not None

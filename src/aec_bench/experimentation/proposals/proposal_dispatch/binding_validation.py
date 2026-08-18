@@ -148,8 +148,8 @@ def validate_freeze_compilation_join(
         )
     if (
         execution_schedule.proposal_freeze != governed_freeze.freeze
-        or execution_schedule.kernel_sha256 != bundle.compilation.kernel_sha256
-        or execution_schedule.fixed_harness_sha256 != bundle.fixed_harness.content_sha256
+        or execution_schedule.kernel_ref != bundle.compilation.kernel_ref
+        or execution_schedule.fixed_harness_ref != bundle.fixed_harness.ref
         or execution_schedule.aggregate_budget != bundle.fixed_harness.budget
         or execution_schedule.evaluation_plan_ref != governed_freeze.freeze.evaluation_plan_ref
     ):

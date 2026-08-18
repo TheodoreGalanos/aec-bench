@@ -14,12 +14,13 @@ from aec_bench.contracts.authority import (
 from aec_bench.contracts.evaluation_plane import (
     CandidateManifestScope,
     EvaluationPlan,
+    candidate_manifest_scope_commitment,
 )
 from aec_bench.contracts.harness_instance import (
     CompiledHarnessInstance,
     TaskSourceBindingConfig,
 )
-from aec_bench.contracts.harness_kernel import canonical_content_sha256
+from aec_bench.contracts.harness_kernel import canonical_json_sha256
 from aec_bench.contracts.program_proposal.candidate import CandidateGenerationManifest
 from aec_bench.contracts.program_proposal.problem import DecompositionLeakageAudit, DecompositionProblemView
 from aec_bench.contracts.program_proposal.types import OptimizationSplit, ProgramCandidateKind
@@ -143,7 +144,9 @@ def _validate_problem_view_candidate_bindings(
                 "evaluation plan candidate manifest does not match the proposal manifest",
             )
         return
-    if evaluation_plan.candidate_manifest_sha256 != evaluation_plan_candidate_scope.content_sha256:
+    if evaluation_plan.candidate_manifest_sha256 != candidate_manifest_scope_commitment(
+        evaluation_plan_candidate_scope
+    ):
         raise GovernedProposalFreezeError(
             "evaluation plan candidate manifest does not match the candidate scope",
         )
@@ -168,7 +171,7 @@ def _validate_evaluation_manifest_bindings(
         raise GovernedProposalFreezeError(
             "evaluation plan task manifest does not match the selected task manifest",
         )
-    if evaluation_plan.kernel_sha256 != fixed_harness.kernel_ref.content_sha256:
+    if evaluation_plan.kernel_ref != fixed_harness.kernel_ref:
         raise GovernedProposalFreezeError(
             "evaluation plan kernel does not match the compiled fixed harness",
         )
@@ -188,7 +191,7 @@ def _validate_harness_projection_bindings(
     problem_view: DecompositionProblemView,
     fixed_harness: CompiledHarnessInstance,
 ) -> None:
-    if problem_view.fixed_harness.kernel_sha256 != fixed_harness.kernel_ref.content_sha256:
+    if problem_view.fixed_harness.kernel_ref != fixed_harness.kernel_ref:
         raise GovernedProposalFreezeError(
             "problem-view kernel does not match the compiled fixed harness",
         )
@@ -338,7 +341,7 @@ def _validate_selected_task(
             "problem-view task snapshot does not match the selected public structural snapshot",
         )
     return SelectedTaskBinding(
-        content_sha256=canonical_content_sha256(
+        content_sha256=canonical_json_sha256(
             structural_item.model_dump(mode="json"),
         ),
         review_lineage_id=structural_item.review_lineage_id,

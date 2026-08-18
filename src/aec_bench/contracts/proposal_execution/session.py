@@ -8,7 +8,9 @@ from typing import Literal
 
 from pydantic import Field, field_validator, model_validator
 
-from aec_bench.contracts.harness_kernel import ContentAddressedModel, validate_sha256
+from aec_bench.contracts.harness_instance import HarnessInstanceRef
+from aec_bench.contracts.harness_kernel import KernelRef, validate_sha256
+from aec_bench.contracts.legacy_content_address import LegacyContentAddressedModel
 from aec_bench.contracts.program_proposal.study import MatchedEvaluationCoordinate
 from aec_bench.contracts.proposal_execution._canonical import (
     canonical_unique_models,
@@ -26,7 +28,7 @@ from aec_bench.contracts.stage_execution import StageResourceEvidence
 from aec_bench.contracts.validators import NonEmptyStr
 
 
-class ProposalSessionPlan(ContentAddressedModel):
+class ProposalSessionPlan(LegacyContentAddressedModel):
     """One task-resident dispatch plan over a complete compiled proposal."""
 
     schema_version: Literal["aecbench.proposal-session-plan.v1"] = "aecbench.proposal-session-plan.v1"
@@ -62,7 +64,7 @@ class ProposalSessionPlan(ContentAddressedModel):
         return self
 
 
-class ProposalSessionExecutionRef(ContentAddressedModel):
+class ProposalSessionExecutionRef(LegacyContentAddressedModel):
     """Runtime-known identity of one task-resident Harbor sandbox execution."""
 
     schema_version: Literal["aecbench.proposal-session-execution-ref.v1"] = "aecbench.proposal-session-execution-ref.v1"
@@ -90,7 +92,7 @@ class ProposalSessionExecutionRef(ContentAddressedModel):
         return validate_sha256(value)
 
 
-class ProposalNodeExecutionResultRef(ContentAddressedModel):
+class ProposalNodeExecutionResultRef(LegacyContentAddressedModel):
     """Persisted child AdapterResult identity for one attempted proposal node."""
 
     schema_version: Literal["aecbench.proposal-node-execution-result-ref.v1"] = (
@@ -120,7 +122,7 @@ class ProposalNodeExecutionResultRef(ContentAddressedModel):
         return value
 
 
-class ProposalContractCheckResultRef(ContentAddressedModel):
+class ProposalContractCheckResultRef(LegacyContentAddressedModel):
     """Persisted structural contract-check result for one attempted proposal node."""
 
     schema_version: Literal["aecbench.proposal-contract-check-result-ref.v1"] = (
@@ -161,7 +163,7 @@ class ProposalContractCheckResultRef(ContentAddressedModel):
         return self
 
 
-class ProposalContainerTransitionRef(ContentAddressedModel):
+class ProposalContainerTransitionRef(LegacyContentAddressedModel):
     """Persisted proof that one model invocation received a fresh candidate container."""
 
     schema_version: Literal["aecbench.proposal-container-transition-ref.v1"] = (
@@ -203,7 +205,7 @@ class ProposalContainerTransitionRef(ContentAddressedModel):
         return self
 
 
-class ProposalHandoffArtifactRef(ContentAddressedModel):
+class ProposalHandoffArtifactRef(LegacyContentAddressedModel):
     """One canonical semantic output bound to an exact frozen graph edge."""
 
     schema_version: Literal["aecbench.proposal-handoff-artifact-ref.v1"] = "aecbench.proposal-handoff-artifact-ref.v1"
@@ -235,7 +237,7 @@ class ProposalHandoffArtifactRef(ContentAddressedModel):
         return value
 
 
-class ProposalNodeReceipt(ContentAddressedModel):
+class ProposalNodeReceipt(LegacyContentAddressedModel):
     """Per-node evidence inside one task-resident proposal session."""
 
     schema_version: Literal["aecbench.proposal-node-receipt.v1"] = "aecbench.proposal-node-receipt.v1"
@@ -247,8 +249,8 @@ class ProposalNodeReceipt(ContentAddressedModel):
     candidate_id: NonEmptyStr
     proposal_graph_sha256: str
     problem_view_sha256: str
-    kernel_sha256: str
-    fixed_harness_sha256: str
+    kernel_ref: KernelRef
+    fixed_harness_ref: HarnessInstanceRef
     proposal_policy_sha256: str
     node_id: NonEmptyStr
     attempt: Literal[1] | None
@@ -277,8 +279,6 @@ class ProposalNodeReceipt(ContentAddressedModel):
         "compilation_sha256",
         "proposal_graph_sha256",
         "problem_view_sha256",
-        "kernel_sha256",
-        "fixed_harness_sha256",
         "proposal_policy_sha256",
         "node_source_scope_sha256",
         "node_budget_reservation_sha256",
@@ -405,7 +405,7 @@ class ProposalNodeReceipt(ContentAddressedModel):
         return self
 
 
-class ProposalSessionReceipt(ContentAddressedModel):
+class ProposalSessionReceipt(LegacyContentAddressedModel):
     """Complete planned-node evidence for one task-resident candidate execution."""
 
     schema_version: Literal["aecbench.proposal-session-receipt.v1"] = "aecbench.proposal-session-receipt.v1"

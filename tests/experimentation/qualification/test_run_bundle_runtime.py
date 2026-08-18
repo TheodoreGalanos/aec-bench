@@ -24,6 +24,7 @@ from aec_bench.contracts.execution_program import (
     StopOutcome,
 )
 from aec_bench.contracts.harness_instance import HarnessBudget
+from aec_bench.contracts.harness_kernel import canonical_json_sha256
 from aec_bench.contracts.trial_record import Completeness, TrialRecord
 from aec_bench.experimentation.governance.authority_ledger import AuthorityLedger
 from aec_bench.experimentation.qualification.run_bundle_governed_attempt import (
@@ -208,7 +209,6 @@ def test_execute_run_bundle_crosses_program_harbor_import_and_lineage_boundary(t
     evaluation_plan_ref = EvaluationPlanRef(
         plan_id="evaluation-plan.stage-9",
         evaluation_generation="evaluation-generation-1",
-        content_sha256="9" * 64,
     )
     registry = default_kernel_registry()
     batch_operation = bundle.harness.program_surface.operation("run_batch.v1")
@@ -252,10 +252,10 @@ def test_execute_run_bundle_crosses_program_harbor_import_and_lineage_boundary(t
     provenance = record.meta_harness_provenance
     assert provenance is not None
     assert provenance.run_id == "run.harness-program-study.001"
-    assert provenance.kernel_sha256 == bundle.kernel_ref.content_sha256
-    assert provenance.harness_sha256 == bundle.harness.content_sha256
-    assert provenance.program_sha256 == bundle.program.content_sha256
-    assert provenance.bundle_sha256 == bundle.content_sha256
+    assert provenance.kernel_sha256 == canonical_json_sha256(bundle.kernel_ref.model_dump(mode="json"))
+    assert provenance.harness_sha256 == canonical_json_sha256(bundle.harness.model_dump(mode="json"))
+    assert provenance.program_sha256 == canonical_json_sha256(bundle.program.model_dump(mode="json"))
+    assert provenance.bundle_sha256 == canonical_json_sha256(bundle.model_dump(mode="json"))
     assert provenance.review_sidecar_sha256 == bundle.task_snapshots[0].package_sha256
     assert provenance.repetition == 1
     assert provenance.execution_seed == 91
@@ -271,9 +271,7 @@ def test_execute_run_bundle_crosses_program_harbor_import_and_lineage_boundary(t
     assert provenance.candidate_manifest in record.outputs.artifacts
     assert record.completeness is Completeness.COMPLETE
     expected_runtime_versions = {
-        f"kernel:{binding.capability_ref.capability_id}": (
-            f"{binding.capability_ref.version}@sha256:{binding.capability_ref.content_sha256}"
-        )
+        f"kernel:{binding.capability_ref.capability_id}": binding.capability_ref.version
         for binding in bundle.harness.bindings
     }
     assert record.environment.tool_versions == {
@@ -282,23 +280,23 @@ def test_execute_run_bundle_crosses_program_harbor_import_and_lineage_boundary(t
     }
     assert execution.candidate_manifest.path.exists()
     candidate_payload = json.loads(execution.candidate_manifest.path.read_text(encoding="utf-8"))
-    assert candidate_payload["bundle"]["content_sha256"] == bundle.content_sha256
+    assert candidate_payload["bundle"]["bundle_id"] == bundle.bundle_id
+    assert "content_sha256" not in candidate_payload["bundle"]
     assert "target_settings" not in candidate_payload
-    assert evaluation_plan_ref.content_sha256 not in execution.candidate_manifest.path.read_text(encoding="utf-8")
+    assert evaluation_plan_ref.plan_id not in execution.candidate_manifest.path.read_text(encoding="utf-8")
 
     receipt_artifact = invocation.receipt
     assert receipt_artifact.path.parent.name == receipt_artifact.reference.sha256
     receipt = load_harbor_invocation_receipt(receipt_artifact.path)
     assert receipt == receipt_artifact.receipt
     assert receipt.bundle_id == bundle.bundle_id
-    assert receipt.bundle_sha256 == bundle.content_sha256
     assert receipt.run_id == "run.harness-program-study.001"
     assert receipt.program_node_id == "run"
     assert receipt.attempt == 1
     assert receipt.fanout_index is None
     assert receipt.experiment_id == invocation.experiment_id
     assert receipt.harbor_config.path.endswith("/harbor.yaml")
-    assert evaluation_plan_ref.content_sha256 not in Path(receipt.harbor_config.path).read_text(encoding="utf-8")
+    assert evaluation_plan_ref.plan_id not in Path(receipt.harbor_config.path).read_text(encoding="utf-8")
     assert receipt.job_dir == str(invocation.job_dir.resolve())
     assert {item.relative_path for item in receipt.job_files} == {
         path.relative_to(invocation.job_dir).as_posix() for path in invocation.job_dir.rglob("*") if path.is_file()
@@ -368,7 +366,7 @@ def test_governed_attempt_boundary_reports_exact_run_bundle_terminal_parity(
     assert boundary.execution.program.status is ProgramExecutionStatus.SUCCEEDED
     assert executor.calls == 1
     assert boundary.assessment.ready is True
-    assert boundary.assessment.bundle_sha256 == bundle.content_sha256
+    assert boundary.assessment.bundle_id == bundle.bundle_id
     assert boundary.assessment.run_id == study.run_id
     assert boundary.assessment.blockers == ()
     assert boundary.assessment.invocation_receipt_sha256s == (
@@ -379,7 +377,7 @@ def test_governed_attempt_boundary_reports_exact_run_bundle_terminal_parity(
     assert (
         tmp_path
         / "meta-harness-artifacts"
-        / bundle.content_sha256
+        / bundle.bundle_id
         / "runs"
         / study.run_id
         / "invocations"

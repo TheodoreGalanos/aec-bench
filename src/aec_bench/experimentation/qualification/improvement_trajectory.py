@@ -15,9 +15,9 @@ from aec_bench.contracts.evaluation_plane import (
     EvaluationBudgetPlan,
 )
 from aec_bench.contracts.harness_kernel import (
-    ContentAddressedModel,
     FrozenStrictModel,
 )
+from aec_bench.contracts.legacy_content_address import LegacyContentAddressedModel
 from aec_bench.contracts.validators import NonEmptyStr
 
 
@@ -33,7 +33,7 @@ class EvaluationAccountingPlane(StrEnum):
     HUMAN_AUDIT = "human_audit"
 
 
-class EvaluationWorkReceipt(ContentAddressedModel):
+class EvaluationWorkReceipt(LegacyContentAddressedModel):
     """One immutable unit of observed work that may serve more than one plane."""
 
     schema_version: Literal["aecbench.evaluation-work-receipt.v1"] = "aecbench.evaluation-work-receipt.v1"
@@ -95,7 +95,7 @@ class EvaluationPlaneAccounting(FrozenStrictModel):
     totals: EvaluationUsageTotals
 
 
-class GenerationEvaluationAccounting(ContentAddressedModel):
+class GenerationEvaluationAccounting(LegacyContentAddressedModel):
     """Complete receipt-addressed accounting for one evaluation generation."""
 
     schema_version: Literal["aecbench.generation-evaluation-accounting.v1"] = (

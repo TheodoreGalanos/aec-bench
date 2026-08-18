@@ -511,6 +511,14 @@ every read. Its canonical model encoding uses JSON field aliases, sorted object
 keys, stable set order, preserved list order, UTF-8, compact separators, and
 one final newline. It rejects non-finite numbers.
 
+Kernel, Harness, execution-program, evaluation, stage, task-snapshot, and
+run-bundle models do not carry a generic self-digest. They use stable domain
+references, direct embedded-value validation, named commitments, or one
+`ArtifactRef` when bytes are retained independently. A schema that still emits
+self-addressed JSON must use the explicit legacy base until its owner migrates
+the format. The legacy reader validates the old digest and returns a plain
+migrated model without that field.
+
 The protected `TrialRecord` still uses `ArtifactReference`, which binds kind,
 path, media type, and SHA-256 for trial evidence. That current reference does
 not gain the new repository read guarantees until its owning format migration.

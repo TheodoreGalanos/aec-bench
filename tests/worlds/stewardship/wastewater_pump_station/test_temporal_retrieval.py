@@ -3,7 +3,7 @@
 
 from __future__ import annotations
 
-from aec_bench.contracts.harness_kernel import canonical_content_sha256
+from aec_bench.contracts.harness_kernel import canonical_json_sha256
 from aec_bench.worlds.stewardship.wastewater_pump_station import (
     load_reference_package,
 )
@@ -45,7 +45,7 @@ def _state() -> TemporalRetrievalState:
     return TemporalRetrievalState(
         state_sequence=0,
         previous_state_id=None,
-        reference_namespace_id=canonical_content_sha256(
+        reference_namespace_id=canonical_json_sha256(
             {"session": "session-temporal", "tenure": "tenure-temporal"},
         ),
         remaining_budget=RetrievalBudgetVector(

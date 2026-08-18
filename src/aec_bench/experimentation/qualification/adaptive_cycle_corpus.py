@@ -9,10 +9,10 @@ from typing import Literal, Self
 from pydantic import Field, field_validator, model_validator
 
 from aec_bench.contracts.harness_kernel import (
-    ContentAddressedModel,
     FrozenStrictModel,
     validate_sha256,
 )
+from aec_bench.contracts.legacy_content_address import LegacyContentAddressedModel
 from aec_bench.contracts.task_definition import Visibility
 from aec_bench.contracts.validators import NonEmptyStr
 from aec_bench.experimentation.governance.applicability import (
@@ -59,7 +59,7 @@ class AdaptiveCycleCorpusSplit(FrozenStrictModel):
         return self
 
 
-class AdaptiveCycleCorpusManifest(ContentAddressedModel):
+class AdaptiveCycleCorpusManifest(LegacyContentAddressedModel):
     """Immutable 2/2/2-or-larger corpus boundary for one adaptive research cycle."""
 
     schema_version: Literal["aecbench.adaptive-cycle-corpus.v2"] = "aecbench.adaptive-cycle-corpus.v2"

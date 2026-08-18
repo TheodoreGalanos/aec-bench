@@ -19,10 +19,10 @@ from aec_bench.contracts.evaluation_outcome import (
     NonNegativeFiniteFloat,
 )
 from aec_bench.contracts.harness_kernel import (
-    ContentAddressedModel,
     FrozenStrictModel,
     validate_sha256,
 )
+from aec_bench.contracts.legacy_content_address import LegacyContentAddressedModel
 from aec_bench.contracts.validators import NonEmptyStr
 
 
@@ -38,7 +38,7 @@ class RecordReceiptBinding(FrozenStrictModel):
         return validate_sha256(value)
 
 
-class SeedEvidenceClaim(ContentAddressedModel):
+class SeedEvidenceClaim(LegacyContentAddressedModel):
     """Derived claim surface used to seed integrity attacks without changing source bytes."""
 
     schema_version: Literal["aecbench.seed-evidence-claim.v1"] = "aecbench.seed-evidence-claim.v1"
@@ -116,7 +116,7 @@ class AcceptanceGrounding(FrozenStrictModel):
         return validate_sha256(value)
 
 
-class CriticStressMeasurement(ContentAddressedModel):
+class CriticStressMeasurement(LegacyContentAddressedModel):
     """Raw critic gains and null decomposition before any exploit classification."""
 
     schema_version: Literal["aecbench.adaptive-critic-stress-measurement.v1"] = (
@@ -133,7 +133,7 @@ class CriticStressMeasurement(ContentAddressedModel):
         return validate_sha256(value)
 
 
-class CriticStressClassificationPolicy(ContentAddressedModel):
+class CriticStressClassificationPolicy(LegacyContentAddressedModel):
     """Preregistered residual threshold and exact generation transition."""
 
     schema_version: Literal["aecbench.critic-stress-classification-policy.v1"] = (
@@ -159,7 +159,7 @@ class CriticStressClassificationPolicy(ContentAddressedModel):
         return self
 
 
-class VRedChallengeEvidence(ContentAddressedModel):
+class VRedChallengeEvidence(LegacyContentAddressedModel):
     """Host-observed red-team challenge that can modify only the next critic."""
 
     schema_version: Literal["aecbench.vred-challenge-evidence.v1"] = "aecbench.vred-challenge-evidence.v1"
@@ -193,7 +193,7 @@ class VRedChallengeEvidence(ContentAddressedModel):
         return self
 
 
-class VerifiedCausalSeamEvidence(ContentAddressedModel):
+class VerifiedCausalSeamEvidence(LegacyContentAddressedModel):
     """Host-verified replay linking one candidate action to one critic seam."""
 
     schema_version: Literal["aecbench.verified-causal-seam-evidence.v1"] = "aecbench.verified-causal-seam-evidence.v1"
@@ -221,7 +221,7 @@ class VerifiedCausalSeamEvidence(ContentAddressedModel):
         return self
 
 
-class ReplayedBoundaryEvidence(ContentAddressedModel):
+class ReplayedBoundaryEvidence(LegacyContentAddressedModel):
     """Host-replayed forbidden flow or integrity failure bound to one measurement."""
 
     schema_version: Literal["aecbench.replayed-boundary-evidence.v1"] = "aecbench.replayed-boundary-evidence.v1"
@@ -242,7 +242,7 @@ class ReplayedBoundaryEvidence(ContentAddressedModel):
         return self
 
 
-class CriticStressFinding(ContentAddressedModel):
+class CriticStressFinding(LegacyContentAddressedModel):
     """Causal interpretation derived separately from the raw gap measurement."""
 
     schema_version: Literal["aecbench.critic-stress-finding.v1"] = "aecbench.critic-stress-finding.v1"
@@ -283,7 +283,7 @@ class CriticStressFinding(ContentAddressedModel):
         return self
 
 
-class CriticRegressionCase(ContentAddressedModel):
+class CriticRegressionCase(LegacyContentAddressedModel):
     """Immutable grounded case available only to the next critic generation."""
 
     schema_version: Literal["aecbench.critic-regression-case.v1"] = "aecbench.critic-regression-case.v1"
@@ -327,7 +327,7 @@ class CriticRegressionCase(ContentAddressedModel):
         return self
 
 
-class CriticStressReport(ContentAddressedModel):
+class CriticStressReport(LegacyContentAddressedModel):
     """Provider-free causal classification and next-generation regression output."""
 
     schema_version: Literal["aecbench.adaptive-critic-stress-report.v1"] = "aecbench.adaptive-critic-stress-report.v1"

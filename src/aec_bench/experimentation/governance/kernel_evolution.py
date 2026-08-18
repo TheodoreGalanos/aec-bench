@@ -11,12 +11,13 @@ from typing import Literal, Self
 from pydantic import Field, field_validator, model_validator
 
 from aec_bench.contracts.harness_kernel import (
-    ContentAddressedModel,
     FrozenStrictModel,
+    KernelCapabilityRef,
     KernelCapabilitySpec,
     KernelRef,
     validate_sha256,
 )
+from aec_bench.contracts.legacy_content_address import LegacyContentAddressedModel
 from aec_bench.contracts.validators import NonEmptyStr
 from aec_bench.harness.compilation import CompilationError
 from aec_bench.harness.kernel_catalogue import KernelRuntimeRegistry
@@ -128,7 +129,7 @@ class MissingPrimitiveEvidenceRef(FrozenStrictModel):
         return validate_sha256(value)
 
 
-class MissingPrimitiveEvidence(ContentAddressedModel):
+class MissingPrimitiveEvidence(LegacyContentAddressedModel):
     """One immutable observation that fixed K lacks a requested capability."""
 
     evidence_id: NonEmptyStr
@@ -145,20 +146,15 @@ class MissingPrimitiveEvidence(ContentAddressedModel):
         )
 
 
-class MissingPrimitiveEvidenceSet(ContentAddressedModel):
+class MissingPrimitiveEvidenceSet(LegacyContentAddressedModel):
     """Frozen reward-free selection of evidence used for one promotion decision."""
 
     evidence_set_id: NonEmptyStr
     source_kernel_ref: KernelRef
-    requested_capability_sha256: str
+    requested_capability_ref: KernelCapabilityRef
     selection_basis: EvidenceSelectionBasis = EvidenceSelectionBasis.CAPABILITY_RECURRENCE
     minimum_distinct_task_families: int = Field(default=2, ge=2)
     evidence_refs: tuple[MissingPrimitiveEvidenceRef, ...]
-
-    @field_validator("requested_capability_sha256")
-    @classmethod
-    def validate_requested_capability_hash(cls, value: str) -> str:
-        return validate_sha256(value)
 
     @field_validator("evidence_refs")
     @classmethod
@@ -175,43 +171,43 @@ class MissingPrimitiveEvidenceSet(ContentAddressedModel):
         return tuple(sorted(value, key=lambda reference: (reference.evidence_id, reference.content_sha256)))
 
 
-class HumanApprovalArtifact(ContentAddressedModel):
+class HumanApprovalArtifact(LegacyContentAddressedModel):
     """Human decision bound to the exact source K, evidence set, capability, and target version."""
 
     approval_id: NonEmptyStr
     approved_by: NonEmptyStr
     approved: bool
     source_kernel_ref: KernelRef
-    requested_capability_sha256: str
+    requested_capability_ref: KernelCapabilityRef
     evidence_set_sha256: str
     target_kernel_version: NonEmptyStr
     artifact_sha256: str
 
-    @field_validator("requested_capability_sha256", "evidence_set_sha256", "artifact_sha256")
+    @field_validator("evidence_set_sha256", "artifact_sha256")
     @classmethod
     def validate_hashes(cls, value: str) -> str:
         return validate_sha256(value)
 
 
-class KernelRegressionEvidence(ContentAddressedModel):
+class KernelRegressionEvidence(LegacyContentAddressedModel):
     """Regression-suite result bound to one exact proposed kernel transition."""
 
     regression_id: NonEmptyStr
     suite_id: NonEmptyStr
     source_kernel_ref: KernelRef
-    requested_capability_sha256: str
+    requested_capability_ref: KernelCapabilityRef
     evidence_set_sha256: str
     target_kernel_version: NonEmptyStr
     passed: bool
     artifact_sha256: str
 
-    @field_validator("requested_capability_sha256", "evidence_set_sha256", "artifact_sha256")
+    @field_validator("evidence_set_sha256", "artifact_sha256")
     @classmethod
     def validate_hashes(cls, value: str) -> str:
         return validate_sha256(value)
 
 
-class KernelChangeRequest(ContentAddressedModel):
+class KernelChangeRequest(LegacyContentAddressedModel):
     """Closed request evaluated by the fixed-kernel governance gate."""
 
     request_id: NonEmptyStr
@@ -236,7 +232,7 @@ class KernelChangeRequest(ContentAddressedModel):
         return tuple(sorted(value, key=lambda evidence: (evidence.regression_id, evidence.content_sha256)))
 
 
-class KernelChangeProposal(ContentAddressedModel):
+class KernelChangeProposal(LegacyContentAddressedModel):
     """Governed authorization to implement a new kernel version, never a registry mutation."""
 
     proposal_id: NonEmptyStr
@@ -250,7 +246,7 @@ class KernelChangeProposal(ContentAddressedModel):
     regression_evidence: tuple[KernelRegressionEvidence, ...]
 
 
-class KernelChangeDecision(ContentAddressedModel):
+class KernelChangeDecision(LegacyContentAddressedModel):
     """Deterministic output of evaluating one kernel-change request."""
 
     request_sha256: str
@@ -348,7 +344,7 @@ def decide_kernel_change(
         for capability in installed_registry.manifest.capabilities
     ):
         rejection_codes.add(KernelChangeRejectionCode.PRIMITIVE_ALREADY_INSTALLED)
-    if request.evidence_set.requested_capability_sha256 != request.requested_capability.content_sha256:
+    if request.evidence_set.requested_capability_ref != request.requested_capability.ref:
         rejection_codes.add(KernelChangeRejectionCode.REQUESTED_CAPABILITY_MISMATCH)
     if not _is_valid_version_progression(
         source=request.source_kernel_ref.version,
@@ -435,9 +431,7 @@ def _validate_evidence_content(
     rejections: set[KernelChangeRejectionCode] = set()
     if any(record.kernel_ref != request.source_kernel_ref for record in records):
         rejections.add(KernelChangeRejectionCode.EVIDENCE_KERNEL_MISMATCH)
-    if any(
-        record.requested_capability.content_sha256 != request.requested_capability.content_sha256 for record in records
-    ):
+    if any(record.requested_capability.ref != request.requested_capability.ref for record in records):
         rejections.add(KernelChangeRejectionCode.REQUESTED_CAPABILITY_MISMATCH)
     allowed_splits = {PromotionEvidenceSplit.OPTIMIZATION, PromotionEvidenceSplit.DEVELOPMENT}
     if any(record.source.split not in allowed_splits for record in records):
@@ -456,13 +450,13 @@ def _validate_approval(request: KernelChangeRequest) -> set[KernelChangeRejectio
         return {KernelChangeRejectionCode.APPROVAL_NOT_GRANTED}
     expected = (
         request.source_kernel_ref,
-        request.requested_capability.content_sha256,
+        request.requested_capability.ref,
         request.evidence_set.content_sha256,
         request.target_kernel_version,
     )
     actual = (
         approval.source_kernel_ref,
-        approval.requested_capability_sha256,
+        approval.requested_capability_ref,
         approval.evidence_set_sha256,
         approval.target_kernel_version,
     )
@@ -479,14 +473,14 @@ def _validate_regression_evidence(request: KernelChangeRequest) -> set[KernelCha
         rejections.add(KernelChangeRejectionCode.REGRESSION_TESTS_FAILED)
     expected = (
         request.source_kernel_ref,
-        request.requested_capability.content_sha256,
+        request.requested_capability.ref,
         request.evidence_set.content_sha256,
         request.target_kernel_version,
     )
     if any(
         (
             evidence.source_kernel_ref,
-            evidence.requested_capability_sha256,
+            evidence.requested_capability_ref,
             evidence.evidence_set_sha256,
             evidence.target_kernel_version,
         )

@@ -14,7 +14,7 @@ from pydantic import ValidationError, field_validator
 
 from aec_bench.contracts.harness_kernel import (
     FrozenStrictModel,
-    canonical_content_sha256,
+    canonical_json_sha256,
     validate_sha256,
 )
 from aec_bench.contracts.program_proposal.study import MatchedEvaluationCoordinate
@@ -197,7 +197,7 @@ def _load_source_task(
         raise ProposalSessionHostConfigError(f"proposal source task definition is invalid: {error}") from error
     if (
         source_task.task_id != bundle.task_snapshot.task_id
-        or canonical_content_sha256(source_task.model_dump(mode="json")) != bundle.task_snapshot.definition_sha256
+        or canonical_json_sha256(source_task.model_dump(mode="json")) != bundle.task_snapshot.definition_sha256
     ):
         raise ProposalSessionHostConfigError("proposal source task definition differs from the compiled session")
     return _LoadedSourceTask(

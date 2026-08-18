@@ -1,4 +1,4 @@
-# ABOUTME: Tests content-addressed declared-stage graphs and stage execution evidence contracts.
+# ABOUTME: Tests directly referenced declared-stage graphs and stage execution evidence contracts.
 # ABOUTME: Verifies dataflow routing, terminal outputs, and tamper-evident artifact lineage.
 
 from __future__ import annotations
@@ -9,6 +9,8 @@ from typing import Any, cast
 import pytest
 from pydantic import ValidationError
 
+from aec_bench.contracts.execution_program import ExecutionProgramRef
+from aec_bench.contracts.harness_instance import ProgramOperationRef
 from aec_bench.contracts.stage_execution import (
     DeclaredHandoff,
     DeclaredStage,
@@ -71,7 +73,7 @@ def _stage_graph() -> DeclaredStageGraph:
     )
 
 
-def test_declared_stage_graph_derives_content_addressed_routes_and_required_outputs() -> None:
+def test_declared_stage_graph_derives_routes_and_required_outputs() -> None:
     graph = _stage_graph()
 
     assert graph.schema_version == "aecbench.declared-stage-graph.v2"
@@ -82,14 +84,14 @@ def test_declared_stage_graph_derives_content_addressed_routes_and_required_outp
     assert graph.routed_artifact_ids("inventory", "decision") == ("packet_id",)
     assert graph.required_output_ids("inventory") == ("packet_id", "source_inventory")
     assert graph.required_output_ids("decision") == ("readiness_decision",)
-    assert len(graph.content_sha256) == 64
+    assert "content_sha256" not in graph.model_dump(mode="json")
 
-    pre_cutover = graph.model_dump(mode="json", exclude={"content_sha256"})
+    pre_cutover = graph.model_dump(mode="json")
     pre_cutover["world_package_sha256"] = pre_cutover.pop("review_sidecar_sha256")
     with pytest.raises(ValidationError):
         DeclaredStageGraph.model_validate(pre_cutover)
 
-    pre_cutover_version = graph.model_dump(mode="json", exclude={"content_sha256"})
+    pre_cutover_version = graph.model_dump(mode="json")
     pre_cutover_version["schema_version"] = "aecbench.declared-stage-graph.v1"
     with pytest.raises(ValidationError):
         DeclaredStageGraph.model_validate(pre_cutover_version)
@@ -169,7 +171,7 @@ def test_declared_stage_graph_payload_decoder_preserves_collection_order() -> No
         )
 
 
-def test_declared_stage_graph_payload_decoder_preserves_content_identity() -> None:
+def test_declared_stage_graph_payload_decoder_preserves_value() -> None:
     decoded = declared_stage_graph_from_payload(
         task_id="civil/review/drainage",
         review_sidecar_sha256="a" * 64,
@@ -229,7 +231,6 @@ def test_declared_stage_graph_payload_decoder_preserves_content_identity() -> No
 
     assert decoded == expected
     assert decoded is not None
-    assert decoded.content_sha256 == expected.content_sha256
 
 
 def test_declared_stage_graph_payload_decoder_ignores_handoffs_without_stages() -> None:
@@ -249,7 +250,7 @@ def test_stage_output_and_receipt_bind_exact_context_and_physical_artifacts(tmp_
     rendered_context = _artifact(tmp_path / "context.json", kind="stage-context", digest="2" * 64)
     context = StageContextManifest(
         task_id=graph.task_id,
-        stage_graph_sha256=graph.content_sha256,
+        stage_graph_ref=graph.ref,
         consumer_stage_id="authority",
         base_context_sha256="3" * 64,
         routes=(
@@ -268,16 +269,14 @@ def test_stage_output_and_receipt_bind_exact_context_and_physical_artifacts(tmp_
     )
     receipt = StageExecutionReceipt(
         bundle_id="bundle-stage",
-        bundle_sha256="4" * 64,
         run_id="run-stage",
-        program_sha256="5" * 64,
+        program_ref=ExecutionProgramRef(program_id="program-stage", version="1.0.0"),
         program_node_id="authority",
-        operation_sha256="6" * 64,
+        operation_ref=ProgramOperationRef(operation_id="run-stage"),
         attempt=1,
         task_id=graph.task_id,
         task_package_sha256="7" * 64,
-        review_sidecar_sha256=graph.review_sidecar_sha256,
-        stage_graph_sha256=graph.content_sha256,
+        stage_graph_ref=graph.ref,
         stage_id="authority",
         context_manifest=_artifact(
             tmp_path / "context-manifest.json",
@@ -301,25 +300,25 @@ def test_stage_output_and_receipt_bind_exact_context_and_physical_artifacts(tmp_
         ),
     )
 
-    assert parsed.content_sha256
-    assert context.content_sha256
+    assert "content_sha256" not in parsed.model_dump(mode="json")
+    assert "content_sha256" not in context.model_dump(mode="json")
     assert receipt.schema_version == "aecbench.stage-execution-receipt.v2"
-    assert receipt.content_sha256
+    assert "content_sha256" not in receipt.model_dump(mode="json")
     assert receipt.upstream_receipts == (upstream,)
     assert receipt.resources.tokens_in == 1_200
 
-    pre_cutover = receipt.model_dump(mode="json", exclude={"content_sha256"})
-    pre_cutover["world_package_sha256"] = pre_cutover.pop("review_sidecar_sha256")
+    pre_cutover = receipt.model_dump(mode="json")
+    pre_cutover["world_package_sha256"] = graph.review_sidecar_sha256
     with pytest.raises(ValidationError):
         StageExecutionReceipt.model_validate(pre_cutover)
 
-    pre_cutover_version = receipt.model_dump(mode="json", exclude={"content_sha256"})
+    pre_cutover_version = receipt.model_dump(mode="json")
     pre_cutover_version["schema_version"] = "aecbench.stage-execution-receipt.v1"
     with pytest.raises(ValidationError):
         StageExecutionReceipt.model_validate(pre_cutover_version)
 
 
-def test_stage_output_nested_containers_are_immutable_without_changing_identity() -> None:
+def test_stage_output_nested_containers_are_immutable() -> None:
     output = StageOutput(
         task_id="civil/review/drainage",
         stage_id="authority",
@@ -330,8 +329,6 @@ def test_stage_output_nested_containers_are_immutable_without_changing_identity(
             },
         },
     )
-    original_sha256 = "010d18237f513b87ec9942e330be24c8adbf8d451820877f8f93d235de94cbb0"
-    assert output.content_sha256 == original_sha256
     original_dump = output.model_dump(mode="json")
     nested_output = cast(dict[str, Any], output.outputs["provenance_ledger"])
     nested_checks = cast(list[str], nested_output["checks"])
@@ -341,7 +338,6 @@ def test_stage_output_nested_containers_are_immutable_without_changing_identity(
     with pytest.raises(TypeError):
         nested_checks.append("forged-check")
 
-    assert output.content_sha256 == original_sha256
     assert output.model_dump(mode="json") == original_dump
     assert output.model_copy(deep=True).model_dump(mode="json") == original_dump
 
@@ -364,7 +360,7 @@ def test_stage_contracts_reject_wrong_artifact_kinds_and_duplicate_routes(tmp_pa
     with pytest.raises(ValidationError, match="stage context routes must be unique"):
         StageContextManifest(
             task_id="civil/review/drainage",
-            stage_graph_sha256="3" * 64,
+            stage_graph_ref=_stage_graph().ref,
             consumer_stage_id="authority",
             base_context_sha256="4" * 64,
             routes=(route, route),
@@ -377,13 +373,14 @@ def test_stage_contracts_reject_wrong_artifact_kinds_and_duplicate_routes(tmp_pa
 
 
 def test_kernel_instruction_override_binds_exact_stage_and_finalization_shapes() -> None:
+    context_manifest = _artifact(Path("context-manifest.json"), kind="stage-context-manifest", digest="2" * 64)
     stage = KernelInstructionOverride(
         mode="declared_stage",
         task_id="civil/review/drainage",
         original_instruction_sha256="1" * 64,
         effective_instruction="Execute only the authority stage.",
         stage_id="authority",
-        context_manifest_sha256="2" * 64,
+        context_manifest=context_manifest,
     )
     finalization = KernelInstructionOverride(
         mode="task_finalization",
@@ -392,8 +389,8 @@ def test_kernel_instruction_override_binds_exact_stage_and_finalization_shapes()
         effective_instruction="Finalize the task from the complete receipt set.",
     )
 
-    assert stage.content_sha256
-    assert finalization.content_sha256
+    assert stage.context_manifest == context_manifest
+    assert "content_sha256" not in finalization.model_dump(mode="json")
     with pytest.raises(ValidationError, match="declared-stage override requires"):
         KernelInstructionOverride(
             mode="declared_stage",

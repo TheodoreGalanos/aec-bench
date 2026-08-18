@@ -11,7 +11,8 @@ from typing import Any, Final, Literal, Self
 
 from pydantic import ConfigDict, Field, field_validator, model_validator
 
-from aec_bench.contracts.harness_kernel import ContentAddressedModel, validate_sha256
+from aec_bench.contracts.harness_kernel import validate_sha256
+from aec_bench.contracts.legacy_content_address import LegacyContentAddressedModel
 from aec_bench.contracts.validators import NonEmptyStr, StrictModel
 
 OUTPUT_COMPLETION_CONTRACT_SCHEMA_VERSION: Final = "aecbench.output-completion-contract.v1"
@@ -81,7 +82,7 @@ class OutputCompletionEvaluation(_FrozenStrictModel):
     final_json_block_count: int = Field(default=0, ge=0)
 
 
-class OutputCommitAttestation(ContentAddressedModel):
+class OutputCommitAttestation(LegacyContentAddressedModel):
     """Content-addressed evidence for one explicit, structurally valid output commit."""
 
     schema_version: Literal["aecbench.output-commit-attestation.v1"]

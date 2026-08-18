@@ -14,11 +14,11 @@ from typing import Literal, Self
 from pydantic import Field, FiniteFloat, NonNegativeFloat, PositiveInt, field_validator, model_validator
 
 from aec_bench.contracts.harness_kernel import (
-    ContentAddressedModel,
     FrozenStrictModel,
-    canonical_content_sha256,
+    canonical_json_sha256,
     validate_sha256,
 )
+from aec_bench.contracts.legacy_content_address import LegacyContentAddressedModel
 from aec_bench.contracts.run_bundle import RunBundle
 from aec_bench.contracts.task_definition import Visibility
 from aec_bench.contracts.trial_record import ArtifactReference, TrialRecord
@@ -82,7 +82,7 @@ class MotifTransferTrialEvidence(FrozenStrictModel):
     trial: HarnessProgramTrial
     execution_seed: int
     candidate_reference: HarnessProgramCandidateReference
-    bundle_sha256: str
+    bundle_id: NonEmptyStr
     candidate_manifest: ArtifactReference
     trial_record_ids: tuple[NonEmptyStr, ...]
     trial_records: tuple[ArtifactReference, ...]
@@ -90,11 +90,6 @@ class MotifTransferTrialEvidence(FrozenStrictModel):
     validity_rate: float = Field(ge=0.0, le=1.0)
     estimated_cost_usd: NonNegativeFloat
     cost_evidence_complete: Literal[True] = True
-
-    @field_validator("bundle_sha256")
-    @classmethod
-    def validate_bundle_hash(cls, value: str) -> str:
-        return validate_sha256(value)
 
     @model_validator(mode="after")
     def validate_trial_identity(self) -> Self:
@@ -107,7 +102,7 @@ class MotifTransferTrialEvidence(FrozenStrictModel):
         return self
 
 
-class MotifTransferEvaluationReport(ContentAddressedModel):
+class MotifTransferEvaluationReport(LegacyContentAddressedModel):
     """Content-addressed holdout study from which transfer evidence is mechanically derived."""
 
     schema_version: Literal["aecbench.motif-transfer-evaluation.v2"] = "aecbench.motif-transfer-evaluation.v2"
@@ -179,9 +174,9 @@ def _validate_transfer_report_bindings(report: MotifTransferEvaluationReport) ->
         raise ValueError("transfer evaluation ancestry does not contain its selected motif")
     if report.plan.plan_sha256 != report.analysis.plan_sha256:
         raise ValueError("transfer analysis does not bind its harness-program plan")
-    if report.plan.manifest_sha256 != canonical_content_sha256(report.manifest.model_dump(mode="json")):
+    if report.plan.manifest_sha256 != canonical_json_sha256(report.manifest.model_dump(mode="json")):
         raise ValueError("transfer harness-program plan does not bind its manifest")
-    if report.analysis_sha256 != canonical_content_sha256(report.analysis.model_dump(mode="json")):
+    if report.analysis_sha256 != canonical_json_sha256(report.analysis.model_dump(mode="json")):
         raise ValueError("transfer analysis hash does not bind its full analysis")
 
 
@@ -595,7 +590,7 @@ def _load_verified_transfer_candidate(
 ) -> tuple[MaterializedHarnessProgramCandidate, RunBundle]:
     _verify_artifact(trial.candidate_manifest)
     bundle = _load_candidate_bundle(trial.candidate_manifest)
-    if bundle.content_sha256 != trial.bundle_sha256:
+    if bundle.bundle_id != trial.bundle_id:
         raise ValueError("transfer candidate manifest does not match its reported bundle")
     expected_reference = build_harness_program_candidate_reference(
         request=request,
@@ -607,7 +602,7 @@ def _load_verified_transfer_candidate(
     expected_seed = request.seeds[trial.trial.repetition - 1]
     if trial.execution_seed != expected_seed:
         raise ValueError("transfer trial seed does not match its preregistered repetition")
-    snapshot_sha256 = canonical_content_sha256([snapshot.model_dump(mode="json") for snapshot in bundle.task_snapshots])
+    snapshot_sha256 = canonical_json_sha256([snapshot.model_dump(mode="json") for snapshot in bundle.task_snapshots])
     if snapshot_sha256 != source.transfer_plan.target_applicability.source_snapshot_sha256:
         raise ValueError("transfer candidate snapshots do not match pre-execution applicability")
     candidate = MaterializedHarnessProgramCandidate(
@@ -742,7 +737,7 @@ def _build_transfer_evaluation(
     if lineages != plan.target_applicability.review_lineage_ids:
         raise ValueError("executed holdout lineages do not match the pre-selection applicability attestation")
     analysis = execution.analysis
-    analysis_sha256 = canonical_content_sha256(analysis.model_dump(mode="json"))
+    analysis_sha256 = canonical_json_sha256(analysis.model_dump(mode="json"))
     estimated_cost = sum(float(item.estimated_cost_usd) for item in trials)
     validity_rate = sum(_valid(record) for record in records) / len(records)
     transfer = _derive_transfer_evidence(
@@ -794,14 +789,14 @@ def _trial_evidence(execution: HarnessProgramTrialExecution) -> MotifTransferTri
     provenances = tuple(record.meta_harness_provenance for record in records)
     if any(provenance is None for provenance in provenances):
         raise ValueError("transfer TrialRecords require meta-harness provenance")
-    bundle_sha256s = {provenance.bundle_sha256 for provenance in provenances if provenance is not None}
-    if len(bundle_sha256s) != 1:
+    bundle_ids = {provenance.bundle_id for provenance in provenances if provenance is not None}
+    if len(bundle_ids) != 1:
         raise ValueError("transfer trial records do not share one candidate bundle")
     return MotifTransferTrialEvidence(
         trial=execution.trial,
         execution_seed=execution.execution_seed,
         candidate_reference=execution.candidate_reference,
-        bundle_sha256=next(iter(bundle_sha256s)),
+        bundle_id=next(iter(bundle_ids)),
         candidate_manifest=execution.execution.candidate_manifest.reference,
         trial_record_ids=tuple(record.trial_id for record in records),
         trial_records=artifacts,
@@ -840,7 +835,7 @@ def _derive_transfer_evidence(
     estimated_cost_usd: float,
 ) -> TransferEvidenceReference:
     return TransferEvidenceReference.create(
-        evaluation_sha256=canonical_content_sha256(analysis.model_dump(mode="json")),
+        evaluation_sha256=canonical_json_sha256(analysis.model_dump(mode="json")),
         review_lineage_ids=review_lineage_ids,
         split="holdout",
         objective_reward=float(analysis.cell_means[HarnessProgramCell.HX_PX]),

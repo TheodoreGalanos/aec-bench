@@ -33,7 +33,7 @@ from aec_bench.contracts.execution_program import (
     VerifyNode,
 )
 from aec_bench.contracts.harness_kernel import (
-    canonical_content_sha256,
+    canonical_json_sha256,
 )
 
 from .budget import (
@@ -395,7 +395,7 @@ class _ProgramExecutor:
                 binding = InputBindingLineage(
                     argument_name=argument.name,
                     source_kind="literal",
-                    value_sha256=canonical_content_sha256(value),
+                    value_sha256=canonical_json_sha256(value),
                 )
             elif isinstance(argument.value, OutputValue):
                 value = self._resolve_output(argument.value.ref)
@@ -451,7 +451,7 @@ class _ProgramExecutor:
 
             recursion = BoundedRecursionContext(self.budget, recursion_state)
             context = OperationExecutionContext(
-                program_sha256=self.program.content_sha256,
+                program_ref=self.program.ref,
                 node_id=node.node_id,
                 operation_ref=registration.reference,
                 binding_ids=registration.binding_ids,
@@ -467,14 +467,13 @@ class _ProgramExecutor:
 
             attempt = OperationAttemptEvidence(
                 node_id=node.node_id,
-                operation_id=registration.reference.operation_id,
-                operation_sha256=registration.reference.content_sha256,
+                operation_ref=registration.reference,
                 attempt_index=attempt_index,
                 fanout_index=fanout_index,
-                arguments_sha256=canonical_content_sha256(arguments),
+                arguments_sha256=canonical_json_sha256(arguments),
                 status=result.status,
                 outputs_sha256=(
-                    canonical_content_sha256(result.outputs)
+                    canonical_json_sha256(result.outputs)
                     if result.status is OperationExecutionStatus.SUCCEEDED
                     else None
                 ),
@@ -540,7 +539,7 @@ class _ProgramExecutor:
         failure = fatal_fault or first_failure
         if failure is not None:
             return ProgramExecutionResult(
-                program_sha256=self.program.content_sha256,
+                program_ref=self.program.ref,
                 status=ProgramExecutionStatus.FAILED,
                 error_code=failure[0],
                 error_message=failure[1],
@@ -558,7 +557,7 @@ class _ProgramExecutor:
                 StopOutcome.STOPPED: ProgramExecutionStatus.STOPPED,
             }[stop.outcome]
             return ProgramExecutionResult(
-                program_sha256=self.program.content_sha256,
+                program_ref=self.program.ref,
                 status=status,
                 stop_node_id=stop.node_id,
                 result=result,
@@ -573,7 +572,7 @@ class _ProgramExecutor:
             )
         failure = ("no_active_stop", "program completed without an active stop node")
         return ProgramExecutionResult(
-            program_sha256=self.program.content_sha256,
+            program_ref=self.program.ref,
             status=ProgramExecutionStatus.FAILED,
             error_code=failure[0],
             error_message=failure[1],
@@ -638,8 +637,7 @@ def _aggregate_fanout_outputs(invocations: tuple[_InvocationResult, ...]) -> dic
 
 def _operation_lineage(registration: OperationRegistration) -> OperationLineage:
     return OperationLineage(
-        operation_id=registration.reference.operation_id,
-        operation_sha256=registration.reference.content_sha256,
+        operation_ref=registration.reference,
         binding_ids=registration.binding_ids,
     )
 
@@ -666,7 +664,7 @@ def _input_binding(
         source_node_id=reference.node_id,
         source_output_port=reference.output_port,
         fanout_index=fanout_index,
-        value_sha256=canonical_content_sha256(value),
+        value_sha256=canonical_json_sha256(value),
     )
 
 

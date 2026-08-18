@@ -8,8 +8,9 @@ from typing import Literal, Self
 from pydantic import Field, FiniteFloat, field_validator, model_validator
 
 from aec_bench.contracts.evaluation_plane import EvaluationPlanRef
-from aec_bench.contracts.harness_instance import HarnessBudget
-from aec_bench.contracts.harness_kernel import ContentAddressedModel, validate_sha256
+from aec_bench.contracts.harness_instance import HarnessBudget, HarnessInstanceRef
+from aec_bench.contracts.harness_kernel import KernelRef, validate_sha256
+from aec_bench.contracts.legacy_content_address import LegacyContentAddressedModel
 from aec_bench.contracts.program_proposal._canonical import (
     canonical_unique_models,
     canonical_unique_strings,
@@ -25,7 +26,7 @@ from aec_bench.contracts.program_proposal.types import (
 from aec_bench.contracts.validators import NonEmptyStr
 
 
-class MatchedEvaluationCoordinate(ContentAddressedModel):
+class MatchedEvaluationCoordinate(LegacyContentAddressedModel):
     """One task-lineage-seed repetition shared by every candidate in a study."""
 
     schema_version: Literal["aecbench.matched-evaluation-coordinate.v2"] = "aecbench.matched-evaluation-coordinate.v2"
@@ -43,7 +44,7 @@ class MatchedEvaluationCoordinate(ContentAddressedModel):
         return validate_sha256(value)
 
 
-class MatchedCandidateEvidenceRef(ContentAddressedModel):
+class MatchedCandidateEvidenceRef(LegacyContentAddressedModel):
     """Evidence identity for one candidate evaluated on one matched coordinate."""
 
     schema_version: Literal["aecbench.matched-candidate-evidence-ref.v1"] = "aecbench.matched-candidate-evidence-ref.v1"
@@ -52,13 +53,11 @@ class MatchedCandidateEvidenceRef(ContentAddressedModel):
     coordinate_sha256: str
     kind: CandidateEvidenceKind
     trial_record_sha256: str | None
-    evaluation_outcome_sha256: str
     evidence_complete: bool
     integrity_passed: bool
 
     @field_validator(
         "coordinate_sha256",
-        "evaluation_outcome_sha256",
     )
     @classmethod
     def validate_hashes(cls, value: str) -> str:
@@ -78,24 +77,19 @@ class MatchedCandidateEvidenceRef(ContentAddressedModel):
         return self
 
 
-class ProgramCandidateStudy(ContentAddressedModel):
+class ProgramCandidateStudy(LegacyContentAddressedModel):
     """Complete fixed-K/H0 matched evidence matrix for an incumbent and frozen proposals."""
 
     schema_version: Literal["aecbench.program-candidate-study.v1"] = "aecbench.program-candidate-study.v1"
     study_id: NonEmptyStr
-    kernel_sha256: str
-    fixed_harness_sha256: str
+    kernel_ref: KernelRef
+    fixed_harness_ref: HarnessInstanceRef
     evaluation_plan_ref: EvaluationPlanRef
     proposal_freeze: ProposalFreeze
     aggregate_budget: HarnessBudget
     incumbent_candidate: ProgramCandidateRef
     coordinates: tuple[MatchedEvaluationCoordinate, ...] = Field(min_length=1)
     evidence_refs: tuple[MatchedCandidateEvidenceRef, ...] = Field(min_length=1)
-
-    @field_validator("kernel_sha256", "fixed_harness_sha256")
-    @classmethod
-    def validate_hashes(cls, value: str) -> str:
-        return validate_sha256(value)
 
     @field_validator("coordinates")
     @classmethod
@@ -154,7 +148,7 @@ class ProgramCandidateStudy(ContentAddressedModel):
         return self
 
 
-class PairedCandidateComparison(ContentAddressedModel):
+class PairedCandidateComparison(LegacyContentAddressedModel):
     """Fail-closed comparison of one frozen proposal with the incumbent."""
 
     schema_version: Literal["aecbench.paired-candidate-comparison.v1"] = "aecbench.paired-candidate-comparison.v1"
@@ -206,7 +200,7 @@ class PairedCandidateComparison(ContentAddressedModel):
         return self
 
 
-class DecompositionOptimizationCycle(ContentAddressedModel):
+class DecompositionOptimizationCycle(LegacyContentAddressedModel):
     """Complete frozen-candidate optimization cycle with no diagnostic-repair semantics."""
 
     schema_version: Literal["aecbench.decomposition-optimization-cycle.v1"] = (
@@ -317,9 +311,9 @@ class DecompositionOptimizationCycle(ContentAddressedModel):
 
 def _validate_study_harness_bindings(study: ProgramCandidateStudy) -> None:
     fixed_harness = study.proposal_freeze.problem_view.fixed_harness
-    if study.kernel_sha256 != fixed_harness.kernel_sha256:
+    if study.kernel_ref != fixed_harness.kernel_ref:
         raise ValueError("study kernel does not match the frozen H0 projection")
-    if study.fixed_harness_sha256 != study.proposal_freeze.fixed_harness_sha256:
+    if study.fixed_harness_ref != study.proposal_freeze.fixed_harness_ref:
         raise ValueError("study fixed H0 does not match the proposal freeze")
     if study.aggregate_budget != fixed_harness.aggregate_budget:
         raise ValueError("study aggregate budget does not match frozen H0")

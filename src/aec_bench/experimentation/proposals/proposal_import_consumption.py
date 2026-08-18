@@ -13,7 +13,8 @@ from typing import Literal, Self
 
 from pydantic import field_validator, model_validator
 
-from aec_bench.contracts.harness_kernel import ContentAddressedModel, validate_sha256
+from aec_bench.contracts.harness_kernel import FrozenStrictModel, validate_sha256
+from aec_bench.contracts.legacy_content_address import LegacyContentAddressedModel
 from aec_bench.contracts.trial_record import ArtifactReference
 from aec_bench.contracts.validators import NonEmptyStr
 from aec_bench.ledger.durability import fsync_directory, mkdir_durable
@@ -23,7 +24,7 @@ class ProposalImportConsumptionError(RuntimeError):
     """Reject a corrupt, conflicting, or unconfined import-consumption index."""
 
 
-class ProposalImportConsumptionClaim(ContentAddressedModel):
+class ProposalImportConsumptionClaim(LegacyContentAddressedModel):
     """First-writer claim fixing the one import identity for an execution receipt."""
 
     schema_version: Literal["aecbench.proposal-import-consumption-claim.v1"] = (
@@ -52,7 +53,7 @@ class ProposalImportConsumptionClaim(ContentAddressedModel):
         return value
 
 
-class ProposalImportTerminalRecord(ContentAddressedModel):
+class ProposalImportTerminalRecord(LegacyContentAddressedModel):
     """Terminal index entry proving the execution was consumed exactly once."""
 
     schema_version: Literal["aecbench.proposal-import-terminal-record.v1"] = (
@@ -215,7 +216,7 @@ def _consumption_root(
     return target
 
 
-def _publish_first_model[ModelT: ContentAddressedModel](
+def _publish_first_model[ModelT: FrozenStrictModel](
     *,
     path: Path,
     proposed: ModelT,
@@ -255,7 +256,7 @@ def _publish_first_model[ModelT: ContentAddressedModel](
     )
 
 
-def _load_canonical_model[ModelT: ContentAddressedModel](
+def _load_canonical_model[ModelT: FrozenStrictModel](
     *,
     path: Path,
     model_type: type[ModelT],
@@ -312,7 +313,7 @@ def _reject_symlink_components(
             )
 
 
-def _canonical_model_bytes(model: ContentAddressedModel) -> bytes:
+def _canonical_model_bytes(model: FrozenStrictModel) -> bytes:
     return (
         json.dumps(
             model.model_dump(mode="json"),

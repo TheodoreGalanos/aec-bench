@@ -17,6 +17,7 @@ from aec_bench.contracts.authority import (
     AuthorityPrincipalKind,
     BasisKind,
     BasisReference,
+    CriticGenerationIdentity,
     HumanAuthorityApproval,
     TaintLabel,
 )
@@ -30,6 +31,7 @@ from aec_bench.contracts.evaluation_outcome import (
     IntegrityEvaluation,
     ResourceCost,
 )
+from aec_bench.contracts.harness_kernel import KernelRef
 from aec_bench.experimentation.governance.authority_ledger import (
     AuthorityLedger,
     AuthorityLedgerCollisionError,
@@ -45,6 +47,10 @@ def _sha(label: str) -> str:
 
 def _principal(principal_id: str, kind: AuthorityPrincipalKind) -> AuthorityPrincipal:
     return AuthorityPrincipal(principal_id=principal_id, kind=kind)
+
+
+def _kernel_ref() -> KernelRef:
+    return KernelRef(kernel_id="test-kernel", version="1.0.0")
 
 
 def _ledger(tmp_path: Path) -> AuthorityLedger:
@@ -97,8 +103,12 @@ def _critic_release_event(
         subject_id="critic.acceptance.v2",
         subject_sha256=_sha("critic.acceptance.v2"),
         basis=(basis,),
-        kernel_sha256=_sha("kernel"),
-        critic_generation_sha256=_sha("critic-generation-v2"),
+        kernel_ref=_kernel_ref(),
+        critic_generation=CriticGenerationIdentity(
+            critic_id="critic.acceptance",
+            version="2",
+            compatibility_generation="critic-generation-v2",
+        ),
         reasons=(reason,),
         revalidation_triggers=("critic_generation_change",),
     )
@@ -138,7 +148,6 @@ def _failed_evaluation_outcome() -> EvaluationOutcome:
         wall_time_seconds=0.0,
     )
     return EvaluationOutcome(
-        evaluation_plan_sha256=_sha("evaluation-plan"),
         candidate_sha256=_sha("candidate"),
         evidence_set_sha256=_sha("evidence-set"),
         integrity=IntegrityEvaluation.create(
@@ -304,7 +313,7 @@ def test_summary_bytes_cannot_satisfy_a_typed_evaluation_outcome_basis(
         )
 
 
-def test_content_addressed_evaluation_outcome_can_be_observed_as_its_exact_typed_basis(
+def test_evaluation_outcome_can_be_observed_as_its_exact_typed_basis(
     tmp_path: Path,
 ) -> None:
     ledger = _ledger(tmp_path)
@@ -356,7 +365,7 @@ def test_raw_authority_ledger_rejects_granted_promotion_without_required_typed_b
         subject_id=f"subject.{action.value}",
         subject_sha256=_sha(f"subject.{action.value}"),
         basis=(generic_evidence.reference,),
-        kernel_sha256=_sha("kernel"),
+        kernel_ref=_kernel_ref(),
         reasons=("generic evidence claimed the subject was safe",),
     )
 

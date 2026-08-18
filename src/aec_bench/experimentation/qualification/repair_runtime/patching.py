@@ -448,9 +448,9 @@ def _apply_program_retry_rule(
 ) -> _RepairPatchResult:
     return _RepairPatchResult(
         harness_request=context.parent.harness_request,
-        program_template=_patch_program_retry(
-            context.parent.program_template,
-            patch,
+        program_template=_versioned_program_patch(
+            _patch_program_retry(context.parent.program_template, patch),
+            iteration=context.iteration,
         ),
     )
 
@@ -461,9 +461,9 @@ def _apply_program_attempt_limit_rule(
 ) -> _RepairPatchResult:
     return _RepairPatchResult(
         harness_request=context.parent.harness_request,
-        program_template=_patch_program_max_total_attempts(
-            context.parent.program_template,
-            patch,
+        program_template=_versioned_program_patch(
+            _patch_program_max_total_attempts(context.parent.program_template, patch),
+            iteration=context.iteration,
         ),
     )
 
@@ -475,13 +475,13 @@ def _apply_program_batch_coalescing_rule(
     compiled_parent = context.compiled_parent
     if compiled_parent is None:
         raise ValueError("program batch-coalescing patch requires the exact compiled parent")
-    if compiled_parent.program.content_sha256 != patch.expected_program_sha256:
-        raise ValueError("program batch-coalescing patch expected program hash does not match the parent")
+    if compiled_parent.program.ref != patch.expected_program_ref:
+        raise ValueError("program batch-coalescing patch expected program does not match the parent")
     return _RepairPatchResult(
         harness_request=context.parent.harness_request,
-        program_template=_patch_program_coalesce_task_batch(
-            context.parent.program_template,
-            patch,
+        program_template=_versioned_program_patch(
+            _patch_program_coalesce_task_batch(context.parent.program_template, patch),
+            iteration=context.iteration,
         ),
     )
 
@@ -493,18 +493,24 @@ def _apply_declared_stage_graph_rule(
     compiled_parent = context.compiled_parent
     if compiled_parent is None:
         raise ValueError("declared-stage graph patch requires the exact compiled parent")
-    if compiled_parent.program.content_sha256 != patch.expected_program_sha256:
-        raise ValueError("declared-stage graph patch expected program hash does not match the parent")
+    if compiled_parent.program.ref != patch.expected_program_ref:
+        raise ValueError("declared-stage graph patch expected program does not match the parent")
     expected_graphs = _declared_stage_graph_evidence(compiled_parent.bundle)
     if patch.task_graphs != expected_graphs:
         raise ValueError("declared-stage graph patch task-review evidence does not match the parent")
     return _RepairPatchResult(
         harness_request=context.parent.harness_request,
-        program_template=materialize_program_declared_stage_graph(
-            context.parent.program_template,
-            patch,
+        program_template=_versioned_program_patch(
+            materialize_program_declared_stage_graph(context.parent.program_template, patch),
+            iteration=context.iteration,
         ),
     )
+
+
+def _versioned_program_patch(template: RepairProgramTemplate, *, iteration: int) -> RepairProgramTemplate:
+    """Give a changed px a new stable reference instead of a whole-object digest."""
+
+    return template.model_copy(update={"version": f"{template.version}+repair.{iteration}"})
 
 
 _REPAIR_RULE_REGISTRY = RepairRuleRegistry[_RepairPatchContext, _RepairPatchResult](
@@ -622,7 +628,6 @@ def _declared_stage_graph_evidence(
             RepairDeclaredStageGraphEvidence(
                 task_id=snapshot.task_id,
                 task_package_sha256=snapshot.package_sha256,
-                review_sidecar_sha256=task_review.review_sidecar_sha256,
                 stage_graph=graph,
             )
         )

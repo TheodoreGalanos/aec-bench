@@ -29,10 +29,10 @@ from aec_bench.contracts.authority import (
 )
 from aec_bench.contracts.evaluation_plane import EvaluationPlanRef
 from aec_bench.contracts.harness_kernel import (
-    ContentAddressedModel,
     FrozenStrictModel,
     validate_sha256,
 )
+from aec_bench.contracts.legacy_content_address import LegacyContentAddressedModel
 from aec_bench.contracts.run_bundle import RunBundle
 from aec_bench.contracts.trial_record import ArtifactReference, TrialRecord
 from aec_bench.contracts.validators import NonEmptyStr
@@ -135,12 +135,11 @@ class HarborJobFileDigest(FrozenStrictModel):
         return validate_sha256(value)
 
 
-class HarborInvocationReceipt(ContentAddressedModel):
+class HarborInvocationReceipt(LegacyContentAddressedModel):
     """Durable byte-level receipt for one completed external Harbor invocation."""
 
     schema_version: Literal["aecbench.harbor-invocation-receipt.v1"] = "aecbench.harbor-invocation-receipt.v1"
     bundle_id: NonEmptyStr
-    bundle_sha256: str
     run_id: NonEmptyStr
     program_node_id: NonEmptyStr
     attempt: PositiveInt
@@ -150,11 +149,6 @@ class HarborInvocationReceipt(ContentAddressedModel):
     job_dir: NonEmptyStr
     job_files: tuple[HarborJobFileDigest, ...]
     imported_trial_records: tuple[ArtifactReference, ...]
-
-    @field_validator("bundle_sha256")
-    @classmethod
-    def validate_bundle_sha256(cls, value: str) -> str:
-        return validate_sha256(value)
 
     @model_validator(mode="after")
     def validate_file_inventories(self) -> Self:
@@ -261,7 +255,6 @@ def persist_harbor_invocation_receipt(
 
     receipt = HarborInvocationReceipt(
         bundle_id=bundle.bundle_id,
-        bundle_sha256=bundle.content_sha256,
         run_id=study.run_id,
         program_node_id=context.node_id,
         attempt=context.attempt_index,
@@ -294,7 +287,7 @@ def persist_harbor_invocation_receipt(
     physical_sha256 = hashlib.sha256(encoded).hexdigest()
     receipt_path = (
         Path(artifacts_root)
-        / bundle.content_sha256
+        / _safe_segment(bundle.bundle_id)
         / "runs"
         / _safe_segment(study.run_id)
         / "receipts"
@@ -380,7 +373,7 @@ def record_scored_import_authority(
             *(item.reference for item in trial_bases),
             receipt_basis.reference,
         ),
-        kernel_sha256=bundle.kernel_ref.content_sha256,
+        kernel_ref=bundle.kernel_ref,
         reasons=("exact imported trials and invocation receipt persisted",),
         revalidation_triggers=(
             "basis_replay_due",
@@ -407,7 +400,7 @@ def write_candidate_manifest(
         "bundle": bundle.model_dump(mode="json"),
     }
     encoded = (json.dumps(payload, indent=2, sort_keys=True) + "\n").encode("utf-8")
-    path = Path(artifacts_root) / bundle.content_sha256 / "candidate-manifest.json"
+    path = Path(artifacts_root) / _safe_segment(bundle.bundle_id) / "candidate-manifest.json"
     path.parent.mkdir(parents=True, exist_ok=True)
     if path.exists() and path.read_bytes() != encoded:
         raise ValueError("candidate manifest path already contains different content")

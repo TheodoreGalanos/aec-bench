@@ -15,7 +15,9 @@ from aec_bench.contracts.authority import (
 from aec_bench.contracts.evaluation_plane import (
     AcceptanceManifestReveal,
     CriticSpec,
+    acceptance_manifest_reveal_commitment,
 )
+from aec_bench.contracts.harness_kernel import KernelRef, canonical_json_sha256
 from aec_bench.experimentation.governance.acceptance_manifest_escrow import (
     load_acceptance_manifest_escrow,
 )
@@ -117,7 +119,7 @@ def reveal_retired_acceptance_manifest(
     promotion_authority_events: tuple[StoredAuthorityEvent, ...],
     human_approval: BasisReference,
     event_id: str,
-    kernel_sha256: str,
+    kernel_ref: KernelRef,
 ) -> StoredAcceptanceManifestReveal:
     """Persist and authorize one independently reloadable retirement-bound reveal."""
     selected_reveal = AcceptanceManifestReveal.model_validate(reveal.model_dump(mode="python"))
@@ -137,7 +139,7 @@ def reveal_retired_acceptance_manifest(
         ledger=ledger,
         stored=retirement_authority,
     )
-    if retired.authority_event.event.kernel_sha256 != kernel_sha256:
+    if retired.authority_event.event.kernel_ref != kernel_ref:
         raise AuthorityLedgerIntegrityError("acceptance reveal kernel does not match retirement authority")
     subject_id = _reveal_subject_id(selected_reveal.critic_spec)
     approval = _resolve_human_approval(
@@ -145,7 +147,7 @@ def reveal_retired_acceptance_manifest(
         reference=human_approval,
         action=AuthorityAction.REVEAL_ACCEPTANCE_MANIFEST,
         subject_id=subject_id,
-        subject_sha256=selected_reveal.content_sha256,
+        subject_sha256=canonical_json_sha256(selected_reveal.model_dump(mode="json")),
         mismatch_message="human approval does not match the exact acceptance manifest reveal",
     )
     critic_basis = _observe_critic_spec(
@@ -193,7 +195,7 @@ def reveal_retired_acceptance_manifest(
         action=AuthorityAction.REVEAL_ACCEPTANCE_MANIFEST,
         decision=AuthorityDecision.GRANTED,
         subject_id=subject_id,
-        subject_sha256=selected_reveal.content_sha256,
+        subject_sha256=canonical_json_sha256(selected_reveal.model_dump(mode="json")),
         basis=tuple(
             [
                 human_approval,
@@ -205,8 +207,8 @@ def reveal_retired_acceptance_manifest(
                 *(basis.reference for basis in promotion_bases),
             ]
         ),
-        kernel_sha256=kernel_sha256,
-        critic_generation_sha256=selected_reveal.critic_spec.content_sha256,
+        kernel_ref=kernel_ref,
+        critic_generation=selected_reveal.critic_spec.ref.authority_identity,
         reasons=("human revealed exact retired acceptance manifest and complete historical coverage",),
         revalidation_triggers=("historical_acceptance_replay_due",),
     )
@@ -245,8 +247,8 @@ def load_acceptance_manifest_reveal(
     subject_id = _reveal_subject_id(reveal.critic_spec)
     if (
         event.subject_id != subject_id
-        or event.subject_sha256 != reveal.content_sha256
-        or event.critic_generation_sha256 != reveal.critic_spec.content_sha256
+        or event.subject_sha256 != acceptance_manifest_reveal_commitment(reveal)
+        or event.critic_generation != reveal.critic_spec.ref.authority_identity
     ):
         raise AuthorityLedgerIntegrityError("reveal authority does not match the exact acceptance critic subject")
     _require_event_human_authority(

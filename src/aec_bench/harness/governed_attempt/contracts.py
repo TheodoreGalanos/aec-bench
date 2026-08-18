@@ -14,10 +14,7 @@ from pydantic import (
     model_validator,
 )
 
-from aec_bench.contracts.harness_kernel import (
-    ContentAddressedModel,
-    validate_sha256,
-)
+from aec_bench.contracts.harness_kernel import validate_sha256
 from aec_bench.contracts.validators import FrozenStrictModel, NonEmptyStr
 
 
@@ -74,7 +71,7 @@ class GovernedAttemptUsageLimits(FrozenStrictModel):
     wall_time_seconds: NonNegativeFloat
 
 
-class GovernedAttemptPreflight(ContentAddressedModel):
+class GovernedAttemptPreflight(FrozenStrictModel):
     """Frozen input and effect ceilings validated before budget reservation."""
 
     schema_version: Literal["aecbench.governed-attempt-preflight.v1"] = "aecbench.governed-attempt-preflight.v1"
@@ -101,57 +98,41 @@ class GovernedAttemptPreflight(ContentAddressedModel):
         )
 
 
-class GovernedAttemptBudgetReservation(ContentAddressedModel):
+class GovernedAttemptBudgetReservation(FrozenStrictModel):
     """Budget-port evidence selected before any backend effect is permitted."""
 
     schema_version: Literal["aecbench.governed-attempt-budget-reservation.v1"] = (
         "aecbench.governed-attempt-budget-reservation.v1"
     )
     attempt_id: NonEmptyStr
-    preflight_sha256: str
     reservation_id: NonEmptyStr
     maximum_usage: GovernedAttemptUsageLimits
 
-    @field_validator("preflight_sha256")
-    @classmethod
-    def validate_hash(cls, value: str) -> str:
-        return validate_sha256(value)
 
-
-class GovernedAttemptMonitorPermit(ContentAddressedModel):
+class GovernedAttemptMonitorPermit(FrozenStrictModel):
     """Standing-monitor permit bound to the exact preflight and reservation."""
 
     schema_version: Literal["aecbench.governed-attempt-monitor-permit.v1"] = (
         "aecbench.governed-attempt-monitor-permit.v1"
     )
     attempt_id: NonEmptyStr
-    preflight_sha256: str
-    reservation_sha256: str
+    reservation_id: NonEmptyStr
     permit_id: NonEmptyStr
 
-    @field_validator("preflight_sha256", "reservation_sha256")
-    @classmethod
-    def validate_hashes(cls, value: str) -> str:
-        return validate_sha256(value)
 
-
-class GovernedAttemptDispatchIntent(ContentAddressedModel):
+class GovernedAttemptDispatchIntent(FrozenStrictModel):
     """Host-owned durable intent that must exist before backend dispatch."""
 
     schema_version: Literal["aecbench.governed-attempt-dispatch-intent.v1"] = (
         "aecbench.governed-attempt-dispatch-intent.v1"
     )
     attempt_id: NonEmptyStr
-    preflight_sha256: str
-    reservation_sha256: str
-    monitor_permit_sha256: str
+    reservation_id: NonEmptyStr
+    permit_id: NonEmptyStr
     dispatch_payload_sha256: str
     dispatch_key_sha256: str
 
     @field_validator(
-        "preflight_sha256",
-        "reservation_sha256",
-        "monitor_permit_sha256",
         "dispatch_payload_sha256",
         "dispatch_key_sha256",
     )
@@ -160,20 +141,19 @@ class GovernedAttemptDispatchIntent(ContentAddressedModel):
         return validate_sha256(value)
 
 
-class GovernedAttemptBackendReceipt(ContentAddressedModel):
+class GovernedAttemptBackendReceipt(FrozenStrictModel):
     """Typed backend receipt retained before import or terminal accounting."""
 
     schema_version: Literal["aecbench.governed-attempt-backend-receipt.v1"] = (
         "aecbench.governed-attempt-backend-receipt.v1"
     )
     attempt_id: NonEmptyStr
-    dispatch_intent_sha256: str
     dispatch_key_sha256: str
     backend_receipt_id: NonEmptyStr
     observed_usage: GovernedAttemptUsage
     effect_evidence_sha256s: tuple[str, ...] = Field(min_length=1)
 
-    @field_validator("dispatch_intent_sha256", "dispatch_key_sha256")
+    @field_validator("dispatch_key_sha256")
     @classmethod
     def validate_hashes(cls, value: str) -> str:
         return validate_sha256(value)
@@ -190,23 +170,18 @@ class GovernedAttemptBackendReceipt(ContentAddressedModel):
         )
 
 
-class GovernedAttemptImportReceipt(ContentAddressedModel):
+class GovernedAttemptImportReceipt(FrozenStrictModel):
     """Typed import extension output bound to source usage and effect evidence."""
 
     schema_version: Literal["aecbench.governed-attempt-import-receipt.v1"] = (
         "aecbench.governed-attempt-import-receipt.v1"
     )
     attempt_id: NonEmptyStr
-    dispatch_receipt_sha256: str
+    backend_receipt_id: NonEmptyStr
     import_id: NonEmptyStr
     observed_usage: GovernedAttemptUsage
     source_effect_evidence_sha256s: tuple[str, ...] = Field(min_length=1)
     imported_evidence_sha256s: tuple[str, ...] = Field(min_length=1)
-
-    @field_validator("dispatch_receipt_sha256")
-    @classmethod
-    def validate_hash(cls, value: str) -> str:
-        return validate_sha256(value)
 
     @field_validator(
         "source_effect_evidence_sha256s",
@@ -223,27 +198,18 @@ class GovernedAttemptImportReceipt(ContentAddressedModel):
         )
 
 
-class GovernedAttemptBudgetClosure(ContentAddressedModel):
+class GovernedAttemptBudgetClosure(FrozenStrictModel):
     """Budget-port terminal accounting over the exact imported backend effect."""
 
     schema_version: Literal["aecbench.governed-attempt-budget-closure.v1"] = (
         "aecbench.governed-attempt-budget-closure.v1"
     )
     attempt_id: NonEmptyStr
-    reservation_sha256: str
-    dispatch_receipt_sha256: str
-    import_receipt_sha256: str
+    reservation_id: NonEmptyStr
+    backend_receipt_id: NonEmptyStr
+    import_id: NonEmptyStr
     observed_usage: GovernedAttemptUsage
     effect_evidence_sha256s: tuple[str, ...] = Field(min_length=1)
-
-    @field_validator(
-        "reservation_sha256",
-        "dispatch_receipt_sha256",
-        "import_receipt_sha256",
-    )
-    @classmethod
-    def validate_hashes(cls, value: str) -> str:
-        return validate_sha256(value)
 
     @field_validator("effect_evidence_sha256s")
     @classmethod
@@ -257,30 +223,19 @@ class GovernedAttemptBudgetClosure(ContentAddressedModel):
         )
 
 
-class GovernedAttemptMonitorClosure(ContentAddressedModel):
+class GovernedAttemptMonitorClosure(FrozenStrictModel):
     """Standing-monitor terminal closure over imported and accounted evidence."""
 
     schema_version: Literal["aecbench.governed-attempt-monitor-closure.v1"] = (
         "aecbench.governed-attempt-monitor-closure.v1"
     )
     attempt_id: NonEmptyStr
-    permit_sha256: str
-    dispatch_receipt_sha256: str
-    import_receipt_sha256: str
-    budget_closure_sha256: str
+    permit_id: NonEmptyStr
+    backend_receipt_id: NonEmptyStr
+    import_id: NonEmptyStr
     observed_usage: GovernedAttemptUsage
     effect_evidence_sha256s: tuple[str, ...] = Field(min_length=1)
     closure_permitted: Literal[True] = True
-
-    @field_validator(
-        "permit_sha256",
-        "dispatch_receipt_sha256",
-        "import_receipt_sha256",
-        "budget_closure_sha256",
-    )
-    @classmethod
-    def validate_hashes(cls, value: str) -> str:
-        return validate_sha256(value)
 
     @field_validator("effect_evidence_sha256s")
     @classmethod
@@ -294,35 +249,17 @@ class GovernedAttemptMonitorClosure(ContentAddressedModel):
         )
 
 
-class GovernedAttemptTerminal(ContentAddressedModel):
+class GovernedAttemptTerminal(FrozenStrictModel):
     """Final immutable join over every stage in one governed attempt."""
 
     schema_version: Literal["aecbench.governed-attempt-terminal.v1"] = "aecbench.governed-attempt-terminal.v1"
     attempt_id: NonEmptyStr
-    preflight_sha256: str
-    reservation_sha256: str
-    monitor_permit_sha256: str
-    dispatch_intent_sha256: str
-    dispatch_receipt_sha256: str
-    import_receipt_sha256: str
-    budget_closure_sha256: str
-    monitor_closure_sha256: str
+    reservation_id: NonEmptyStr
+    permit_id: NonEmptyStr
+    backend_receipt_id: NonEmptyStr
+    import_id: NonEmptyStr
     effect_evidence_sha256s: tuple[str, ...] = Field(min_length=1)
     imported_evidence_sha256s: tuple[str, ...] = Field(min_length=1)
-
-    @field_validator(
-        "preflight_sha256",
-        "reservation_sha256",
-        "monitor_permit_sha256",
-        "dispatch_intent_sha256",
-        "dispatch_receipt_sha256",
-        "import_receipt_sha256",
-        "budget_closure_sha256",
-        "monitor_closure_sha256",
-    )
-    @classmethod
-    def validate_hashes(cls, value: str) -> str:
-        return validate_sha256(value)
 
     @field_validator(
         "effect_evidence_sha256s",
@@ -384,20 +321,6 @@ class GovernedAttemptStage(StrEnum):
     BUDGET_CLOSURE = "budget_closure"
     MONITOR_CLOSURE = "monitor_closure"
     TERMINAL = "terminal"
-
-
-class GovernedAttemptStageClaim(ContentAddressedModel):
-    """Logical attempt-stage identity pointing to one content-addressed record."""
-
-    schema_version: Literal["aecbench.governed-attempt-stage-claim.v1"] = "aecbench.governed-attempt-stage-claim.v1"
-    attempt_id: NonEmptyStr
-    stage: GovernedAttemptStage
-    record_sha256: str
-
-    @field_validator("record_sha256")
-    @classmethod
-    def validate_hash(cls, value: str) -> str:
-        return validate_sha256(value)
 
 
 def _validate_sorted_unique_hashes(

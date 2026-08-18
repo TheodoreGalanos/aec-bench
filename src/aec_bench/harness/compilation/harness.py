@@ -353,11 +353,11 @@ def compile_harness_instance(
         supports_retry=bool(enumeration_retry_codes),
         retry_safe_error_codes=enumeration_retry_codes,
     )
-    instance_id = f"hx.{request.recipe.recipe_id}.{request.recipe.content_sha256[:12]}"
+    instance_id = f"hx.{request.recipe.recipe_id}.{request.recipe.version}"
     return CompiledHarnessInstance(
         instance_id=instance_id,
         kernel_ref=registry.manifest.ref,
-        source_recipe_sha256=request.recipe.content_sha256,
+        source_recipe_ref=request.recipe.ref,
         contracts=request.recipe.contracts,
         budget=request.recipe.budget,
         recursion_policy=request.recipe.recursion_policy,

@@ -9,7 +9,7 @@ from aec_bench.contracts.harness_instance import (
     HarnessBudget,
     ToolBindingConfig,
 )
-from aec_bench.contracts.harness_kernel import canonical_content_sha256, validate_sha256
+from aec_bench.contracts.harness_kernel import canonical_json_sha256, validate_sha256
 from aec_bench.contracts.program_proposal.candidate import ProgramCandidateRef
 from aec_bench.contracts.program_proposal.freeze import ProposalFreeze
 from aec_bench.contracts.program_proposal.types import ProgramCandidateKind
@@ -168,9 +168,9 @@ def _validate_kernel_harness_and_budget(
         )
     if fixed_harness.kernel_ref != registry.manifest.ref:
         raise ProposalCompilationHostError("fixed harness does not target the exact profiled kernel manifest")
-    if fixed_harness.content_sha256 != proposal_freeze.fixed_harness_sha256:
+    if fixed_harness.ref != proposal_freeze.fixed_harness_ref:
         raise ProposalCompilationHostError("fixed harness differs from the exact governed ProposalFreeze")
-    if proposal_freeze.problem_view.fixed_harness.kernel_sha256 != registry.manifest.content_sha256:
+    if proposal_freeze.problem_view.fixed_harness.kernel_ref != registry.manifest.ref:
         raise ProposalCompilationHostError("problem view does not bind the exact profiled kernel manifest")
     if (
         aggregate_budget != fixed_harness.budget
@@ -185,7 +185,7 @@ def _validate_output_contract_and_task(
     task_snapshot: TaskSnapshotRef,
     output_contract_sha256: str,
 ) -> str:
-    expected_output_contract_sha256 = canonical_content_sha256(
+    expected_output_contract_sha256 = canonical_json_sha256(
         proposal_freeze.problem_view.output_contract.model_dump(mode="json")
     )
     if output_contract_sha256 != expected_output_contract_sha256:

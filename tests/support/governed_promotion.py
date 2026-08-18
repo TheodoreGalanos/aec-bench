@@ -15,6 +15,7 @@ from aec_bench.contracts.authority import (
     AuthorityPrincipal,
     AuthorityPrincipalKind,
     BasisKind,
+    EvaluationPlanIdentity,
     HumanAuthorityApproval,
     PromotionSubjectLineage,
     TaintLabel,
@@ -32,7 +33,13 @@ from aec_bench.contracts.evaluation_outcome import (
     UtilityEvaluation,
     ValidityEvaluation,
 )
-from aec_bench.contracts.evaluation_plane import CriticRef, CriticRole, EvaluationPlanRef
+from aec_bench.contracts.evaluation_plane import (
+    AcceptanceManifestCommitment,
+    CriticRef,
+    CriticRole,
+    EvaluationPlanRef,
+)
+from aec_bench.contracts.harness_kernel import KernelRef, canonical_json_sha256
 from aec_bench.experimentation.governance.authority_ledger import AuthorityLedger, StoredAuthorityEvent
 from aec_bench.experimentation.governance.governance_gate import issue_governed_promotion
 from aec_bench.experimentation.governance.motif_assurance import (
@@ -72,7 +79,8 @@ def issue_test_governed_promotion(
     event_id: str,
     subject_id: str,
     subject_sha256: str,
-    kernel_sha256: str,
+    kernel_ref: KernelRef,
+    kernel_abi_sha256: str,
     critic: CriticRef | None = None,
     critic_execution_principal_id: str | None = None,
     critic_release: StoredAuthorityEvent | None = None,
@@ -89,7 +97,7 @@ def issue_test_governed_promotion(
     }:
         if motif is None:
             raise ValueError(f"{action.value} fixture requires the exact motif")
-        if motif_subject_sha256(motif) != subject_sha256 or motif.kernel_abi_sha256 != kernel_sha256:
+        if motif_subject_sha256(motif) != subject_sha256 or motif.kernel_abi_sha256 != kernel_abi_sha256:
             raise ValueError("motif fixture does not bind the requested subject and kernel")
         candidate_digest = motif.motif_sha256
     else:
@@ -101,19 +109,23 @@ def issue_test_governed_promotion(
         version="1",
         role=CriticRole.ACCEPTANCE,
         compatibility_generation=f"evaluation-generation.{event_id}",
-        content_sha256=_sha(f"critic:{event_id}"),
-        acceptance_manifest_commitment_sha256=_sha(f"acceptance-manifest:{event_id}"),
+        acceptance_manifest_commitment=AcceptanceManifestCommitment.create(
+            critic_id=f"critic.acceptance.{event_id}",
+            critic_version="1",
+            case_manifest={"event_id": event_id},
+            scoring_policy={"threshold": 1.0},
+            salt=f"salt.{event_id}",
+            publication_receipt_sha256=_sha(f"acceptance-manifest:{event_id}"),
+        ),
     )
     execution_principal_id = critic_execution_principal_id or f"critic-runtime.{event_id}"
     release = critic_release or _release_critic(
         ledger=ledger,
         critic=critic_ref,
         event_id=event_id,
-        kernel_sha256=kernel_sha256,
+        kernel_ref=kernel_ref,
     )
-    evaluation_plan_sha256 = _sha(f"evaluation-plan:{event_id}")
     outcome = EvaluationOutcome(
-        evaluation_plan_sha256=evaluation_plan_sha256,
         candidate_sha256=candidate_digest,
         evidence_set_sha256=_sha(f"evidence-set:{event_id}"),
         integrity=IntegrityEvaluation.create(
@@ -141,13 +153,12 @@ def issue_test_governed_promotion(
         evaluation_plan_ref=EvaluationPlanRef(
             plan_id=f"evaluation-plan.{event_id}",
             evaluation_generation=critic_ref.compatibility_generation,
-            content_sha256=evaluation_plan_sha256,
         ),
         critic=critic_ref,
         execution_principal_id=execution_principal_id,
         critic_release_authority_event_id=release.event.event_id,
         critic_release_authority_event_sha256=release.event.content_sha256,
-        kernel_sha256=kernel_sha256,
+        kernel_ref=kernel_ref,
         outcome=outcome,
     )
     outcome_basis = ledger.observe_model_basis(
@@ -178,7 +189,7 @@ def issue_test_governed_promotion(
     )
     monitor_plan, monitor_report = _passing_monitor(
         event_id=event_id,
-        evaluation_plan_sha256=evaluation_plan_sha256,
+        evaluation_plan=bound_outcome.evaluation_plan_ref.authority_identity,
         assurance_snapshot_sha256=assurance_snapshot_sha256,
     )
     lineage = None
@@ -197,7 +208,8 @@ def issue_test_governed_promotion(
         event_id=event_id,
         subject_id=subject_id,
         subject_sha256=subject_sha256,
-        kernel_sha256=kernel_sha256,
+        kernel_ref=kernel_ref,
+        kernel_abi_sha256=kernel_abi_sha256,
         evaluation_outcome=outcome_basis.reference,
         monitor_plan=monitor_plan,
         monitor_report=monitor_report,
@@ -222,19 +234,20 @@ def _release_critic(
     ledger: AuthorityLedger,
     critic: CriticRef,
     event_id: str,
-    kernel_sha256: str,
+    kernel_ref: KernelRef,
 ) -> StoredAuthorityEvent:
     human = AuthorityPrincipal(
         principal_id="human.theo",
         kind=AuthorityPrincipalKind.HUMAN,
     )
     subject_id = f"{critic.critic_id}@{critic.version}"
+    critic_commitment = canonical_json_sha256(critic.model_dump(mode="json"))
     approval = HumanAuthorityApproval(
         approval_id=f"approval.release.{event_id}",
         principal=human,
         action=AuthorityAction.RELEASE_CRITIC_GENERATION,
         subject_id=subject_id,
-        subject_sha256=critic.content_sha256,
+        subject_sha256=critic_commitment,
         approved=True,
         reason="release the exact provider-free acceptance critic fixture",
     )
@@ -260,10 +273,10 @@ def _release_critic(
             action=AuthorityAction.RELEASE_CRITIC_GENERATION,
             decision=AuthorityDecision.GRANTED,
             subject_id=subject_id,
-            subject_sha256=critic.content_sha256,
+            subject_sha256=critic_commitment,
             basis=(approval_basis.reference,),
-            kernel_sha256=kernel_sha256,
-            critic_generation_sha256=critic.content_sha256,
+            kernel_ref=kernel_ref,
+            critic_generation=critic.authority_identity,
             reasons=("human released the exact acceptance critic fixture",),
         )
     )
@@ -272,7 +285,7 @@ def _release_critic(
 def _passing_monitor(
     *,
     event_id: str,
-    evaluation_plan_sha256: str,
+    evaluation_plan: EvaluationPlanIdentity,
     assurance_snapshot_sha256: str,
 ) -> tuple[StandingMonitorPlan, CycleMonitorReport]:
     payload: dict[str, JsonValue] = {
@@ -287,7 +300,7 @@ def _passing_monitor(
     plan = StandingMonitorPlan(
         monitor_id=f"monitor.{event_id}",
         version="1",
-        evaluation_plan_sha256=evaluation_plan_sha256,
+        evaluation_plan=evaluation_plan,
         canaries=(canary,),
     )
     report = run_standing_monitors(

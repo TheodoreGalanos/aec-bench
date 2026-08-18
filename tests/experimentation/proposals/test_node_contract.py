@@ -9,7 +9,7 @@ from typing import cast
 
 import pytest
 
-from aec_bench.contracts.harness_kernel import canonical_content_sha256
+from aec_bench.contracts.harness_kernel import canonical_json_sha256
 from aec_bench.contracts.output_completion import (
     OutputCommitAttestation,
     OutputCompletionContract,
@@ -139,7 +139,7 @@ def _finalizer() -> tuple[FinalSynthesisSpec, OutputCompletionContract]:
                     kind=ProposalPortKind.DECISION_RECORD,
                 ),
             ),
-            output_completion_contract_sha256=canonical_content_sha256(
+            output_completion_contract_sha256=canonical_json_sha256(
                 contract.model_dump(mode="json"),
             ),
         ),
@@ -166,7 +166,7 @@ def _output_commit(
         output_path=contract.output_path,
         output_sha256=hashlib.sha256(output).hexdigest(),
         output_size_bytes=len(output),
-        completion_contract_sha256=canonical_content_sha256(
+        completion_contract_sha256=canonical_json_sha256(
             contract.model_dump(mode="json"),
         ),
         completion_evaluation=evaluation,

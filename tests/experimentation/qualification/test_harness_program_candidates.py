@@ -33,7 +33,7 @@ from aec_bench.contracts.harness_instance import (
     TaskSourceBindingConfig,
     VerificationBindingConfig,
 )
-from aec_bench.contracts.harness_kernel import KernelRef
+from aec_bench.contracts.harness_kernel import KernelRef, canonical_json_sha256
 from aec_bench.contracts.trial_record import TrialRecord
 from aec_bench.experimentation.qualification.harness_program_study.candidates import (
     HarnessProgramCandidateRequest,
@@ -142,10 +142,10 @@ def test_factory_compiles_a_deterministic_genuine_matched_two_by_two(tmp_path: P
     assert h0_p0.bundle.harness == h0_px.bundle.harness
     assert hx_p0.bundle.harness == hx_px.bundle.harness
     assert h0_p0.bundle.harness != hx_p0.bundle.harness
-    assert h0_p0.reference.program_sha256 == hx_p0.reference.program_sha256 == request.fixed_program.content_sha256
-    assert h0_px.reference.program_sha256 == hx_px.reference.program_sha256 == request.learned_program.content_sha256
-    assert h0_p0.bundle.program.content_sha256 != hx_p0.bundle.program.content_sha256
-    assert h0_px.bundle.program.content_sha256 != hx_px.bundle.program.content_sha256
+    assert h0_p0.reference.program_ref == hx_p0.reference.program_ref == request.fixed_program.ref
+    assert h0_px.reference.program_ref == hx_px.reference.program_ref == request.learned_program.ref
+    assert h0_p0.bundle.program != hx_p0.bundle.program
+    assert h0_px.bundle.program != hx_px.bundle.program
     assert len({candidate.bundle.kernel_ref for candidate in first.candidates}) == 1
     assert all(candidate.bundle.harbor.task_refs == request.task_refs for candidate in first.candidates)
     assert request.repetitions == 2
@@ -193,7 +193,6 @@ def test_factory_request_rejects_factor_leakage(tmp_path: Path, leakage: str, me
         )
     elif leakage == "harness_budget":
         recipe_payload = learned_recipe.model_dump(mode="python")
-        recipe_payload.pop("content_sha256")
         learned_recipe = HarnessRecipe.model_validate(
             recipe_payload | {"budget": HarnessBudget(max_total_attempts=request.harness_budget.max_total_attempts - 1)}
         )
@@ -221,11 +220,7 @@ def test_factory_rejects_seed_repetition_and_kernel_leakage(tmp_path: Path) -> N
     with pytest.raises(ValidationError, match="one unique seed per repetition"):
         HarnessProgramCandidateRequest.model_validate(payload)
 
-    foreign_kernel = KernelRef(
-        kernel_id=request.kernel_ref.kernel_id,
-        version=request.kernel_ref.version,
-        content_sha256="f" * 64,
-    )
+    foreign_kernel = KernelRef(kernel_id=request.kernel_ref.kernel_id, version="foreign")
     foreign_payload = request.model_dump(mode="python") | {"kernel_ref": foreign_kernel}
     foreign_payload.pop("content_sha256")
     foreign_request = HarnessProgramCandidateRequest.model_validate(foreign_payload)
@@ -324,7 +319,7 @@ def test_all_four_bundles_execute_through_the_real_run_bundle_runtime_seam(tmp_p
         observed_bundle_ids = {
             record.meta_harness_provenance.bundle_sha256 for record in records if record.meta_harness_provenance
         }
-        assert observed_bundle_ids == {candidate.bundle.content_sha256}
+        assert observed_bundle_ids == {canonical_json_sha256(candidate.bundle.model_dump(mode="json"))}
 
     assert executor.calls == 4
 
@@ -473,5 +468,4 @@ def _replace_binding_configuration(
         for binding in recipe.bindings
     )
     payload = recipe.model_dump(mode="python")
-    payload.pop("content_sha256")
     return HarnessRecipe.model_validate(payload | {"bindings": bindings})

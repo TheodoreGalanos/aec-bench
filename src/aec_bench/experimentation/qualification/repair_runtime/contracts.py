@@ -10,15 +10,16 @@ from pydantic import Field, JsonValue, field_validator, model_validator
 
 from aec_bench.adapters.base import AdapterStopReason
 from aec_bench.contracts.agent_output import AgentOutputStatus
-from aec_bench.contracts.execution_program import ProgramLimits, RetryPolicy
-from aec_bench.contracts.harness_instance import prohibited_retry_safe_error_codes
+from aec_bench.contracts.execution_program import ExecutionProgramRef, ProgramLimits, RetryPolicy
+from aec_bench.contracts.harness_instance import HarnessInstanceRef, prohibited_retry_safe_error_codes
 from aec_bench.contracts.harness_kernel import (
-    ContentAddressedModel,
     FrozenStrictModel,
     KernelCapabilityRef,
-    canonical_content_sha256,
+    KernelRef,
+    canonical_json_sha256,
     validate_sha256,
 )
+from aec_bench.contracts.legacy_content_address import LegacyContentAddressedModel
 from aec_bench.contracts.output_completion import OutputCompletionEvaluation
 from aec_bench.contracts.stage_execution import DeclaredStageGraph
 from aec_bench.contracts.trial_record import ArtifactReference
@@ -43,10 +44,9 @@ class RepairDeclaredStageGraphEvidence(FrozenStrictModel):
 
     task_id: NonEmptyStr
     task_package_sha256: str
-    review_sidecar_sha256: str
     stage_graph: DeclaredStageGraph
 
-    @field_validator("task_package_sha256", "review_sidecar_sha256")
+    @field_validator("task_package_sha256")
     @classmethod
     def validate_sha256_fields(cls, value: str) -> str:
         return validate_sha256(value)
@@ -55,8 +55,6 @@ class RepairDeclaredStageGraphEvidence(FrozenStrictModel):
     def validate_graph_identity(self) -> Self:
         if self.stage_graph.task_id != self.task_id:
             raise ValueError("declared-stage repair evidence graph does not match its task")
-        if self.stage_graph.review_sidecar_sha256 != self.review_sidecar_sha256:
-            raise ValueError("declared-stage repair evidence graph does not match its task-review sidecar")
         return self
 
 
@@ -137,15 +135,10 @@ class ProgramCoalesceTaskBatchPatch(FrozenStrictModel):
     """Replace one exact two-action serial px fragment with one literal batch action."""
 
     kind: Literal["program_coalesce_task_batch"] = "program_coalesce_task_batch"
-    expected_program_sha256: str
+    expected_program_ref: ExecutionProgramRef
     source_node_ids: tuple[NonEmptyStr, NonEmptyStr]
     replacement_node_id: NonEmptyStr
     task_refs: tuple[NonEmptyStr, NonEmptyStr]
-
-    @field_validator("expected_program_sha256")
-    @classmethod
-    def validate_expected_program_sha256(cls, value: str) -> str:
-        return validate_sha256(value)
 
     @model_validator(mode="after")
     def validate_coordinates(self) -> Self:
@@ -162,13 +155,8 @@ class ProgramMaterializeDeclaredStageGraphPatch(FrozenStrictModel):
     """Replace one exact monolithic px with its pinned task-review stage graphs."""
 
     kind: Literal["program_materialize_declared_stage_graph"] = "program_materialize_declared_stage_graph"
-    expected_program_sha256: str
+    expected_program_ref: ExecutionProgramRef
     task_graphs: tuple[RepairDeclaredStageGraphEvidence, ...] = Field(min_length=1)
-
-    @field_validator("expected_program_sha256")
-    @classmethod
-    def validate_expected_program_sha256(cls, value: str) -> str:
-        return validate_sha256(value)
 
     @model_validator(mode="after")
     def validate_task_graphs(self) -> Self:
@@ -358,7 +346,7 @@ class RepairVerifierEvidence(FrozenStrictModel):
 
     @model_validator(mode="after")
     def validate_breakdown_hash(self) -> Self:
-        expected = canonical_content_sha256(self.breakdown) if self.breakdown is not None else None
+        expected = canonical_json_sha256(self.breakdown) if self.breakdown is not None else None
         if self.breakdown_sha256 is not None:
             validate_sha256(self.breakdown_sha256)
             if self.breakdown_sha256 != expected:
@@ -420,15 +408,15 @@ class RepairProgramExecutionEvidence(FrozenStrictModel):
         return self
 
 
-class RepairRuntimeEvidence(ContentAddressedModel):
+class RepairRuntimeEvidence(LegacyContentAddressedModel):
     """Content-addressed verifier/runtime evidence supplied to a typed diagnoser."""
 
     candidate_id: NonEmptyStr
     run_id: NonEmptyStr
-    kernel_sha256: str
-    harness_sha256: str
-    program_sha256: str
-    compiled_bundle_sha256: str
+    kernel_ref: KernelRef
+    harness_ref: HarnessInstanceRef
+    program_ref: ExecutionProgramRef
+    bundle_id: NonEmptyStr
     run_artifact_sha256: str
     pairing: RepairPairingSpec
     trials: tuple[RepairTrialEvidence, ...] = ()
@@ -440,10 +428,6 @@ class RepairRuntimeEvidence(ContentAddressedModel):
     diagnostic_codes: tuple[NonEmptyStr, ...]
 
     @field_validator(
-        "kernel_sha256",
-        "harness_sha256",
-        "program_sha256",
-        "compiled_bundle_sha256",
         "run_artifact_sha256",
     )
     @classmethod
@@ -479,13 +463,13 @@ class RepairRuntimeEvidence(ContentAddressedModel):
                 graph = graphs_by_task[trial.task_id]
                 if (
                     trial.resource_sha256 != graph.task_package_sha256
-                    or trial.review_lineage_sha256 != graph.review_sidecar_sha256
+                    or trial.review_lineage_sha256 != graph.stage_graph.review_sidecar_sha256
                 ):
                     raise ValueError("trial evidence does not match its declared task-review graph identity")
         return self
 
 
-class RepairAttemptPlan(ContentAddressedModel):
+class RepairAttemptPlan(LegacyContentAddressedModel):
     """Pre-run causal artifact shared by both arms of one paired repair attempt."""
 
     schema_version: Literal["aecbench.repair-attempt-plan.v2"] = "aecbench.repair-attempt-plan.v2"
@@ -501,16 +485,11 @@ class RepairSeedExecution(FrozenStrictModel):
     repetition: int = Field(ge=1)
     seed: int
     run_id: NonEmptyStr
-    execution_bundle_sha256: str
+    execution_bundle_id: NonEmptyStr
     program_execution: ProgramExecutionResult
     budget: HarnessBudgetObservation
     trial_records: tuple[ArtifactReference, ...] = ()
     harbor_invocation_receipts: tuple[ArtifactReference, ...] = ()
-
-    @field_validator("execution_bundle_sha256")
-    @classmethod
-    def validate_bundle_hash(cls, value: str) -> str:
-        return validate_sha256(value)
 
     @model_validator(mode="after")
     def validate_trial_records(self) -> Self:
@@ -525,7 +504,7 @@ class RepairSeedExecution(FrozenStrictModel):
         return self
 
 
-class RepairRunArtifactManifest(ContentAddressedModel):
+class RepairRunArtifactManifest(LegacyContentAddressedModel):
     """Persisted, tamper-evident manifest for every seeded execution of one candidate."""
 
     schema_version: Literal["aecbench.repair-run.v3"] = "aecbench.repair-run.v3"
@@ -534,23 +513,13 @@ class RepairRunArtifactManifest(ContentAddressedModel):
     run_id: NonEmptyStr
     candidate_id: NonEmptyStr
     parent_candidate_id: NonEmptyStr | None
-    kernel_sha256: str
-    harness_sha256: str
-    program_sha256: str
-    compiled_bundle_sha256: str
+    kernel_ref: KernelRef
+    harness_ref: HarnessInstanceRef
+    program_ref: ExecutionProgramRef
+    bundle_id: NonEmptyStr
     attempt_plan: ArtifactReference
     pairing: RepairPairingSpec
     executions: tuple[RepairSeedExecution, ...] = Field(min_length=1)
-
-    @field_validator(
-        "kernel_sha256",
-        "harness_sha256",
-        "program_sha256",
-        "compiled_bundle_sha256",
-    )
-    @classmethod
-    def validate_hashes(cls, value: str) -> str:
-        return validate_sha256(value)
 
     @model_validator(mode="after")
     def validate_seed_matrix(self) -> Self:
@@ -559,7 +528,7 @@ class RepairRunArtifactManifest(ContentAddressedModel):
         if coordinates != expected:
             raise ValueError("repair run must execute every paired repetition under its exact seed")
         expected_trial_count = len(self.pairing.task_ids)
-        if any(item.program_execution.program_sha256 != self.program_sha256 for item in self.executions):
+        if any(item.program_execution.program_ref != self.program_ref for item in self.executions):
             raise ValueError("repair seed program evidence must match the manifested px identity")
         if any(len(item.trial_records) > expected_trial_count for item in self.executions):
             raise ValueError("repair seed execution cannot exceed the exact paired task matrix")
@@ -572,7 +541,7 @@ class RepairRunArtifactManifest(ContentAddressedModel):
         return self
 
 
-class RepairTerminalRecord(ContentAddressedModel):
+class RepairTerminalRecord(LegacyContentAddressedModel):
     """Final content-addressed repair decision linked to its controlling attempt plan."""
 
     schema_version: Literal["aecbench.repair-terminal.v3"] = "aecbench.repair-terminal.v3"

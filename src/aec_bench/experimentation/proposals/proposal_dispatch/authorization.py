@@ -15,7 +15,7 @@ from aec_bench.contracts.authority import (
     BasisKind,
     TaintLabel,
 )
-from aec_bench.contracts.harness_kernel import canonical_content_sha256
+from aec_bench.contracts.harness_kernel import canonical_json_sha256
 from aec_bench.contracts.program_proposal.candidate import ProgramCandidateRef
 from aec_bench.contracts.program_proposal.study import MatchedEvaluationCoordinate
 from aec_bench.experimentation.governance.authority_ledger import (
@@ -244,7 +244,7 @@ def authorize_governed_proposal_dispatch(
                 execution_assignment_basis.reference,
                 compilation_basis.reference,
             ),
-            kernel_sha256=selected_bundle.compilation.kernel_sha256,
+            kernel_ref=selected_bundle.compilation.kernel_ref,
             reasons=("host runtime authorized the exact authority-frozen proposal compilation",),
             revalidation_triggers=(
                 "bundle_change",
@@ -267,7 +267,7 @@ def authorize_governed_proposal_dispatch(
             bundle_sha256=selected_bundle.content_sha256,
             compilation_sha256=(selected_bundle.compilation.content_sha256),
             host_config=selected_host_config,
-            host_config_sha256=canonical_content_sha256(
+            host_config_sha256=canonical_json_sha256(
                 selected_host_config.model_dump(mode="json"),
             ),
             runtime_archive_path=selected_host_config.runtime_archive_path,
@@ -280,12 +280,12 @@ def authorize_governed_proposal_dispatch(
             derived_task_json=canonical_json(
                 selected_dispatch.derived_task.model_dump(mode="json"),
             ),
-            derived_task_sha256=canonical_content_sha256(
+            derived_task_sha256=canonical_json_sha256(
                 selected_dispatch.derived_task.model_dump(mode="json"),
             ),
             derived_task_manifest=selected_dispatch.derived_task_manifest,
             harbor_job_config_json=canonical_job_json,
-            harbor_job_config_sha256=canonical_content_sha256(canonical_job),
+            harbor_job_config_sha256=canonical_json_sha256(canonical_job),
             compile_authority_event_sha256=compile_event.content_sha256,
         )
         stored_compile = ledger.issue_authority_event(compile_event)
@@ -332,7 +332,7 @@ def authorize_governed_proposal_dispatch(
                 compile_event_basis.reference,
                 dispatch_basis.reference,
             ),
-            kernel_sha256=selected_bundle.compilation.kernel_sha256,
+            kernel_ref=selected_bundle.compilation.kernel_ref,
             reasons=("host runtime authorized the exact canonical proposal Harbor job",),
             revalidation_triggers=(
                 "compile_authority_change",

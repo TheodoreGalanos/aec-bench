@@ -7,13 +7,14 @@ from typing import Literal, Self
 
 from pydantic import Field, field_validator, model_validator
 
-from aec_bench.contracts.harness_instance import HarnessBudget
-from aec_bench.contracts.harness_kernel import ContentAddressedModel, validate_sha256
+from aec_bench.contracts.harness_instance import HarnessBudget, HarnessInstanceRef
+from aec_bench.contracts.harness_kernel import validate_sha256
+from aec_bench.contracts.legacy_content_address import LegacyContentAddressedModel
 from aec_bench.contracts.proposal_execution_types import ProposalExecutionSemantics
 from aec_bench.contracts.validators import NonEmptyStr
 
 
-class NodeBudgetReservation(ContentAddressedModel):
+class NodeBudgetReservation(LegacyContentAddressedModel):
     """Maximum candidate capacity reserved for one model-bearing node."""
 
     schema_version: Literal["aecbench.node-budget-reservation.v1"] = "aecbench.node-budget-reservation.v1"
@@ -27,14 +28,14 @@ class NodeBudgetReservation(ContentAddressedModel):
     max_cost_usd: float | None = Field(default=None, gt=0.0)
 
 
-class CandidateBudgetPlan(ContentAddressedModel):
+class CandidateBudgetPlan(LegacyContentAddressedModel):
     """Deterministic reservation partition beneath one unchanged harness budget."""
 
     schema_version: Literal["aecbench.candidate-budget-plan.v1"] = "aecbench.candidate-budget-plan.v1"
     candidate_id: NonEmptyStr
     proposal_graph_sha256: str
     proposal_freeze_sha256: str
-    fixed_harness_sha256: str
+    fixed_harness_ref: HarnessInstanceRef
     allocation_policy_sha256: str
     aggregate_budget: HarnessBudget
     execution_semantics: ProposalExecutionSemantics = ProposalExecutionSemantics.SEQUENTIAL_DATAFLOW
@@ -44,7 +45,6 @@ class CandidateBudgetPlan(ContentAddressedModel):
     @field_validator(
         "proposal_graph_sha256",
         "proposal_freeze_sha256",
-        "fixed_harness_sha256",
         "allocation_policy_sha256",
     )
     @classmethod

@@ -9,7 +9,7 @@ from typing import cast
 
 from pydantic import JsonValue
 
-from aec_bench.contracts.harness_kernel import canonical_content_sha256
+from aec_bench.contracts.harness_kernel import canonical_json_sha256
 from aec_bench.contracts.world_interface import (
     WorldActorActionRequest,
     WorldActorActionResult,
@@ -107,7 +107,7 @@ def _artifact_payload(value: object) -> dict[str, JsonValue]:
 
 
 def _request_content_id(request: WorldActorActionRequest) -> str:
-    return canonical_content_sha256(
+    return canonical_json_sha256(
         {
             "request_id": request.request_id,
             "decision_id": request.decision_id,
@@ -333,7 +333,7 @@ class PumpStationEpisodeHost:
             session_id=_EPISODE_SESSION_ID,
             base_view_id=information_set.base_view.view_id,
             prior_information_set_id=information_set.information_set_id,
-            tool_contract_id=canonical_content_sha256(self.capabilities().model_dump(mode="json")),
+            tool_contract_id=canonical_json_sha256(self.capabilities().model_dump(mode="json")),
             branch_ancestor_ids=manifest.initial_state_source.ancestor_branch_ids,
         )
         if temporal.has_access(request.request_id):
@@ -585,7 +585,7 @@ class PumpStationEpisodeHost:
         state: PumpStationStewardshipState,
         step_index: int,
     ) -> str:
-        return canonical_content_sha256(
+        return canonical_json_sha256(
             {
                 "task_world_id": manifest.task_world_id,
                 "world_build": manifest.world_build_artifact_sha256,

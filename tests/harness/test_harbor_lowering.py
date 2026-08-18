@@ -67,10 +67,10 @@ def test_lowering_materializes_every_selected_harness_binding_and_exact_task(tmp
     assert "max_context_tokens" not in agent.parameters
     assert "output_completion_contract" not in agent.parameters
     lineage = agent.parameters["meta_harness_context"]
-    assert lineage["kernel_sha256"] == bundle.kernel_ref.content_sha256
-    assert lineage["harness_sha256"] == bundle.harness.content_sha256
-    assert lineage["program_sha256"] == bundle.program.content_sha256
-    assert lineage["bundle_sha256"] == bundle.content_sha256
+    assert lineage["kernel_ref"] == bundle.kernel_ref.model_dump(mode="json")
+    assert lineage["harness_ref"] == bundle.harness.ref.model_dump(mode="json")
+    assert lineage["program_ref"] == bundle.program.ref.model_dump(mode="json")
+    assert lineage["bundle_id"] == bundle.bundle_id
     assert lineage["program_node_id"] == "run"
     assert lineage["attempt"] == 2
     assert lineage["execution_seed"] == 91

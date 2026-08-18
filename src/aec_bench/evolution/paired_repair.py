@@ -12,6 +12,7 @@ from typing import Literal
 
 from pydantic import Field, NonNegativeFloat, PositiveInt, field_validator, model_validator
 
+from aec_bench.contracts.harness_kernel import KernelRef
 from aec_bench.contracts.trial_record import ArtifactReference
 from aec_bench.contracts.validators import NonEmptyStr, StrictModel
 
@@ -28,7 +29,7 @@ class RepairTrialOutcome(StrictModel):
     repetition: PositiveInt
     split: Literal["discovery", "repair_gate", "calibration", "holdout"]
     candidate_id: NonEmptyStr
-    kernel_sha256: NonEmptyStr
+    kernel_ref: KernelRef
     resource_sha256: NonEmptyStr
     review_lineage_sha256: NonEmptyStr
     reward: float
@@ -39,7 +40,7 @@ class RepairTrialOutcome(StrictModel):
     interference_score: float = Field(default=0.0, ge=0.0, le=1.0)
     guard_reward: float = Field(default=1.0, ge=0.0, le=1.0)
 
-    @field_validator("kernel_sha256", "resource_sha256", "review_lineage_sha256")
+    @field_validator("resource_sha256", "review_lineage_sha256")
     @classmethod
     def validate_hash(cls, value: str) -> str:
         return ArtifactReference.validate_sha256(value)
@@ -297,7 +298,7 @@ def _validate_block_identity(parent: RepairTrialOutcome, child: RepairTrialOutco
 
 
 def _validate_kernel_identity(parent: RepairTrialOutcome, child: RepairTrialOutcome) -> None:
-    if parent.kernel_sha256 != child.kernel_sha256:
+    if parent.kernel_ref != child.kernel_ref:
         raise ValueError("parent and child kernel identities must match")
 
 

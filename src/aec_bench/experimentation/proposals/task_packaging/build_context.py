@@ -6,7 +6,7 @@ from __future__ import annotations
 import hashlib
 from pathlib import Path
 
-from aec_bench.contracts.harness_kernel import canonical_content_sha256
+from aec_bench.contracts.harness_kernel import canonical_json_sha256
 from aec_bench.contracts.output_completion import OutputCompletionContract
 from aec_bench.experimentation.proposals.task_packaging.contracts import (
     ProposalTaskPackageError,
@@ -146,7 +146,7 @@ def _validate_build_context_output_contract(
         raise ProposalTaskPackageError("proposal build context output contract is invalid") from error
     if (
         output_contract.output_path != "/workspace/output.md"
-        or canonical_content_sha256(output_contract.model_dump(mode="json")) != manifest.output_contract_sha256
+        or canonical_json_sha256(output_contract.model_dump(mode="json")) != manifest.output_contract_sha256
     ):
         raise ProposalTaskPackageError("proposal build context output contract identity mismatch")
 

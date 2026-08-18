@@ -9,7 +9,7 @@ from typing import Annotated, Literal, Self
 from pydantic import Field, JsonValue, field_validator, model_validator
 
 from aec_bench.contracts.harness_instance import HarnessInstanceRef, ProgramOperationRef
-from aec_bench.contracts.harness_kernel import ContentAddressedModel, FrozenStrictModel, validate_sha256
+from aec_bench.contracts.harness_kernel import FrozenStrictModel
 from aec_bench.contracts.validators import NonEmptyStr
 
 
@@ -248,19 +248,13 @@ ProgramNode = Annotated[
 
 
 class ExecutionProgramRef(FrozenStrictModel):
-    """Content-pinned reference to one proposed or compiled execution program."""
+    """Stable reference to one proposed or compiled execution program version."""
 
     program_id: NonEmptyStr
     version: NonEmptyStr
-    content_sha256: str
-
-    @field_validator("content_sha256")
-    @classmethod
-    def validate_content_sha256(cls, value: str) -> str:
-        return validate_sha256(value)
 
 
-class ExecutionProgram(ContentAddressedModel):
+class ExecutionProgram(FrozenStrictModel):
     """Immutable px proposal expressed as a validated full control-flow DAG."""
 
     program_id: NonEmptyStr
@@ -279,27 +273,21 @@ class ExecutionProgram(ContentAddressedModel):
         return ExecutionProgramRef(
             program_id=self.program_id,
             version=self.version,
-            content_sha256=self.content_sha256,
         )
 
 
-class CompiledExecutionProgram(ContentAddressedModel):
+class CompiledExecutionProgram(FrozenStrictModel):
     """Immutable px accepted against one exact Hx program surface."""
 
     program_id: NonEmptyStr
     version: NonEmptyStr
     harness_ref: HarnessInstanceRef
-    source_program_sha256: str
-    surface_sha256: str
+    source_program_ref: ExecutionProgramRef
+    surface_id: NonEmptyStr
     nodes: tuple[ProgramNode, ...]
     limits: ProgramLimits
     topological_order: tuple[NonEmptyStr, ...]
     operation_refs: tuple[ProgramOperationRef, ...]
-
-    @field_validator("source_program_sha256", "surface_sha256")
-    @classmethod
-    def validate_sha256_fields(cls, value: str) -> str:
-        return validate_sha256(value)
 
     @model_validator(mode="after")
     def validate_compiled_program(self) -> Self:
@@ -313,7 +301,6 @@ class CompiledExecutionProgram(ContentAddressedModel):
         return ExecutionProgramRef(
             program_id=self.program_id,
             version=self.version,
-            content_sha256=self.content_sha256,
         )
 
 

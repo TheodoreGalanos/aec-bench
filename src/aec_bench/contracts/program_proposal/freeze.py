@@ -15,8 +15,14 @@ from pydantic import (
 
 from aec_bench.contracts.authority import OperatorAuthority, OperatorRole
 from aec_bench.contracts.evaluation_generation.cohort import EvaluationCohortBinding
-from aec_bench.contracts.evaluation_plane import CandidateManifestScope, EvaluationPlanRef
-from aec_bench.contracts.harness_kernel import ContentAddressedModel, validate_sha256
+from aec_bench.contracts.evaluation_plane import (
+    CandidateManifestScope,
+    EvaluationPlanRef,
+    candidate_manifest_scope_commitment,
+)
+from aec_bench.contracts.harness_instance import HarnessInstanceRef
+from aec_bench.contracts.harness_kernel import validate_sha256
+from aec_bench.contracts.legacy_content_address import LegacyContentAddressedModel
 from aec_bench.contracts.program_proposal._canonical import canonical_unique_models
 from aec_bench.contracts.program_proposal.candidate import (
     CandidateGenerationManifest,
@@ -48,7 +54,7 @@ class ProposalFreezeBindings(Protocol):
     incumbent_candidate: ProgramCandidateRef | None
 
 
-class ProposalFreeze(ContentAddressedModel):
+class ProposalFreeze(LegacyContentAddressedModel):
     """Phase-neutral host freeze binding proposals to an optional evaluation cohort."""
 
     schema_version: Literal["aecbench.evaluation-proposal-freeze.v3"] = "aecbench.evaluation-proposal-freeze.v3"
@@ -60,7 +66,7 @@ class ProposalFreeze(ContentAddressedModel):
     selected_structural_item_sha256: str | None = None
     evaluation_cohort: EvaluationCohortBinding | None = None
     selected_review_lineage_id: str
-    fixed_harness_sha256: str
+    fixed_harness_ref: HarnessInstanceRef
     execution_profile_sha256: str | None = None
     operator_authority: OperatorAuthority
     split: OptimizationSplit
@@ -78,7 +84,6 @@ class ProposalFreeze(ContentAddressedModel):
         "evaluation_plan_candidate_manifest_sha256",
         "structural_split_sha256",
         "selected_review_lineage_id",
-        "fixed_harness_sha256",
         "proposal_policy_sha256",
         "policy_checkpoint_sha256",
     )
@@ -164,7 +169,7 @@ def _validate_freeze_evaluation_manifest_binding(
         if freeze.evaluation_plan_candidate_manifest_sha256 != freeze.candidate_manifest.content_sha256:
             raise ValueError("evaluation plan candidate manifest identity does not match the freeze")
         return
-    if freeze.evaluation_plan_candidate_manifest_sha256 != scope.content_sha256:
+    if freeze.evaluation_plan_candidate_manifest_sha256 != candidate_manifest_scope_commitment(scope):
         raise ValueError("evaluation plan candidate scope identity does not match the freeze")
     if freeze.candidate_manifest.content_sha256 not in scope.candidate_manifest_sha256s:
         raise ValueError("candidate manifest is not a member of the evaluation plan candidate scope")

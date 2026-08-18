@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from aec_bench.contracts.harness_kernel import canonical_content_sha256
+from aec_bench.contracts.harness_kernel import canonical_json_sha256
 from aec_bench.evolution.repair_lifecycle import RepairLoopStatus
 from aec_bench.experimentation.governance.motifs import MotifStatus
 from aec_bench.experimentation.qualification.adaptive_cycle_runtime.artifacts import (
@@ -156,7 +156,7 @@ def _run_adaptive_cycle(
     repaired_candidate = repair_runtime.apply_patch(terminal.patch_proposal)
     repaired_candidate_reference = write_json_artifact(
         repaired_candidate.model_dump(mode="json"),
-        identity=canonical_content_sha256(repaired_candidate.model_dump(mode="json")),
+        identity=canonical_json_sha256(repaired_candidate.model_dump(mode="json")),
         root=root / "repair-candidates",
         filename="repair-candidate.json",
         kind="repair-candidate",

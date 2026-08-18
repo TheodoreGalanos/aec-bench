@@ -226,8 +226,8 @@ def lower_run_bundle(
         experiment_id=experiment_id,
         name=f"Adaptive harness {bundle.bundle_id} / {program_node_id} / attempt {attempt}",
         description=(
-            f"Content-pinned RunBundle {bundle.content_sha256}; "
-            f"Hx {bundle.harness.content_sha256}; px {bundle.program.content_sha256}."
+            f"RunBundle {bundle.bundle_id}; "
+            f"Hx {bundle.harness.instance_id}; px {bundle.program.program_id}@{bundle.program.version}."
         ),
         tasks=TaskSelector(include_patterns=list(selected_task_refs)),
         agents=[
@@ -556,13 +556,10 @@ def _agent_parameters(
         )
     )
     lineage = MetaHarnessTrajectoryContext(
-        kernel_sha256=bundle.kernel_ref.content_sha256,
-        harness_id=bundle.harness.instance_id,
-        harness_sha256=bundle.harness.content_sha256,
-        program_id=bundle.program.program_id,
-        program_sha256=bundle.program.content_sha256,
+        kernel_ref=bundle.kernel_ref,
+        harness_ref=bundle.harness.ref,
+        program_ref=bundle.program.ref,
         bundle_id=bundle.bundle_id,
-        bundle_sha256=bundle.content_sha256,
         program_node_id=program_node_id,
         binding_ids=tuple(sorted(selected_bindings)),
         repair_iteration=repair_iteration,

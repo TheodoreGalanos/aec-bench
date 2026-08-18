@@ -23,11 +23,11 @@ from aec_bench.contracts.authority import (
     AuthorityPrincipalKind,
 )
 from aec_bench.contracts.harness_kernel import (
-    ContentAddressedModel,
     FrozenStrictModel,
-    canonical_content_sha256,
+    canonical_json_sha256,
     validate_sha256,
 )
+from aec_bench.contracts.legacy_content_address import LegacyContentAddressedModel
 from aec_bench.contracts.pricing import estimate_cost_usd, match_pricing
 from aec_bench.contracts.program_proposal.candidate import CandidateGenerationManifest, ProgramCandidateRef
 from aec_bench.contracts.program_proposal.problem import DecompositionProblemView
@@ -71,7 +71,7 @@ class BoundedProgramProposalClient(Protocol):
     ) -> DirectCompletionResponse: ...
 
 
-class ProgramProposalTurnReceipt(ContentAddressedModel):
+class ProgramProposalTurnReceipt(LegacyContentAddressedModel):
     """Exact raw response and metered usage for one grammar-bounded turn."""
 
     schema_version: Literal["aecbench.program-proposal-turn-receipt.v1"] = "aecbench.program-proposal-turn-receipt.v1"
@@ -117,7 +117,7 @@ class ProgramProposalTurnReceipt(ContentAddressedModel):
         return self
 
 
-class ProgramProposalArtifact(ContentAddressedModel):
+class ProgramProposalArtifact(LegacyContentAddressedModel):
     """Canonical proposal bytes and the exact candidate reference they realize."""
 
     schema_version: Literal["aecbench.program-proposal-artifact.v1"] = "aecbench.program-proposal-artifact.v1"
@@ -145,7 +145,7 @@ class ProgramProposalArtifact(ContentAddressedModel):
         return self
 
 
-class ProgramProposalInvocation(ContentAddressedModel):
+class ProgramProposalInvocation(LegacyContentAddressedModel):
     """Complete result of one policy-pinned proposer session over one public view."""
 
     schema_version: Literal["aecbench.program-proposal-invocation.v1"] = "aecbench.program-proposal-invocation.v1"
@@ -333,7 +333,7 @@ def generate_frozen_program_proposals(
                 "timeout_seconds": remaining_wall_time,
             },
         )
-        request_sha256 = canonical_content_sha256(
+        request_sha256 = canonical_json_sha256(
             {
                 "model": request.model,
                 "instruction": request.instruction,
@@ -720,7 +720,7 @@ def _initial_instruction(
             "proposal_policy_sha256": policy.content_sha256,
             "policy_checkpoint_sha256": policy.policy_checkpoint_sha256,
             "grammar_sha256": policy.grammar_sha256,
-            "output_completion_contract_sha256": canonical_content_sha256(
+            "output_completion_contract_sha256": canonical_json_sha256(
                 problem_view.output_contract.model_dump(mode="json")
             ),
         },

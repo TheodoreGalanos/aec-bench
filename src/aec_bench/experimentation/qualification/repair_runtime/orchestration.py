@@ -16,7 +16,7 @@ from aec_bench.contracts.authority import (
     BasisKind,
     TaintLabel,
 )
-from aec_bench.contracts.harness_kernel import ContentAddressedModel, validate_sha256
+from aec_bench.contracts.harness_kernel import FrozenStrictModel, canonical_json_sha256, validate_sha256
 from aec_bench.contracts.run_bundle import RunBundle, TaskSnapshotRef
 from aec_bench.contracts.trial_record import ArtifactReference, TrialRecord
 from aec_bench.evolution.repair_lifecycle import (
@@ -384,7 +384,7 @@ class RepairRuntime:
                         repetition=repetition,
                         seed=seed,
                         run_id=seeded_run_id,
-                        execution_bundle_sha256=execution_bundle.content_sha256,
+                        execution_bundle_id=execution_bundle.bundle_id,
                         program_execution=execution.program,
                         budget=execution.budget,
                         trial_records=tuple(_file_reference(path) for path, _ in records),
@@ -403,10 +403,10 @@ class RepairRuntime:
             run_id=run_id,
             candidate_id=candidate.candidate_id,
             parent_candidate_id=candidate.parent_candidate_id,
-            kernel_sha256=candidate.harness.kernel_ref.content_sha256,
-            harness_sha256=candidate.harness.content_sha256,
-            program_sha256=candidate.program.content_sha256,
-            compiled_bundle_sha256=candidate.bundle.content_sha256,
+            kernel_ref=candidate.harness.kernel_ref,
+            harness_ref=candidate.harness.ref,
+            program_ref=candidate.program.ref,
+            bundle_id=candidate.bundle.bundle_id,
             attempt_plan=self.attempt_plan.reference,
             pairing=pairing,
             executions=tuple(item.manifest for item in seed_captures),
@@ -457,10 +457,10 @@ class RepairRuntime:
         evidence = RepairRuntimeEvidence(
             candidate_id=candidate.candidate_id,
             run_id=run.run_id,
-            kernel_sha256=candidate.harness.kernel_ref.content_sha256,
-            harness_sha256=candidate.harness.content_sha256,
-            program_sha256=candidate.program.content_sha256,
-            compiled_bundle_sha256=candidate.bundle.content_sha256,
+            kernel_ref=candidate.harness.kernel_ref,
+            harness_ref=candidate.harness.ref,
+            program_ref=candidate.program.ref,
+            bundle_id=candidate.bundle.bundle_id,
             run_artifact_sha256=run.artifact_sha256,
             pairing=run.pairing,
             trials=trial_evidence,
@@ -479,8 +479,8 @@ class RepairRuntime:
             verification_id=f"verification.{run.artifact_sha256[:20]}",
             run_id=run.run_id,
             candidate_id=candidate.candidate_id,
-            harness_sha256=candidate.harness.content_sha256,
-            program_sha256=candidate.program.content_sha256,
+            harness_ref=candidate.harness.ref,
+            program_ref=candidate.program.ref,
             run_artifact_sha256=run.artifact_sha256,
             pairing=run.pairing,
             passed=passed,
@@ -624,10 +624,10 @@ class RepairRuntime:
             if (
                 provenance.run_id != seeded_run_id
                 or provenance.policy_id != self.policy_id
-                or provenance.kernel_sha256 != bundle.kernel_ref.content_sha256
-                or provenance.harness_sha256 != bundle.harness.content_sha256
-                or provenance.program_sha256 != bundle.program.content_sha256
-                or provenance.bundle_sha256 != bundle.content_sha256
+                or provenance.kernel_sha256 != canonical_json_sha256(bundle.kernel_ref.model_dump(mode="json"))
+                or provenance.harness_sha256 != canonical_json_sha256(bundle.harness.model_dump(mode="json"))
+                or provenance.program_sha256 != canonical_json_sha256(bundle.program.model_dump(mode="json"))
+                or provenance.bundle_sha256 != canonical_json_sha256(bundle.model_dump(mode="json"))
                 or provenance.split != self.request.pairing.split
                 or provenance.execution_seed != seed
                 or provenance.parent_bundle_id != parent_bundle_id
@@ -708,7 +708,7 @@ class RepairRuntime:
     @staticmethod
     def _validate_seed_capture_manifest(seed_capture: _SeedCapture) -> None:
         manifest = seed_capture.manifest
-        if manifest.execution_bundle_sha256 != seed_capture.bundle.content_sha256:
+        if manifest.execution_bundle_id != seed_capture.bundle.bundle_id:
             raise ValueError("repair run artifact does not bind the exact seed execution bundle")
         if manifest.program_execution != seed_capture.execution.program:
             raise ValueError("repair run artifact does not bind the exact seed program execution")
@@ -773,7 +773,7 @@ class RepairRuntime:
         for reference in execution.harbor_invocation_receipts:
             _verify_artifact_reference(reference, label="Harbor invocation receipt")
             receipt = load_harbor_invocation_receipt(Path(reference.path))
-            if receipt.bundle_sha256 != execution.execution_bundle_sha256:
+            if receipt.bundle_id != execution.execution_bundle_id:
                 raise ValueError("Harbor invocation receipt does not bind the seed execution bundle")
             if receipt.run_id != execution.run_id:
                 raise ValueError("Harbor invocation receipt does not bind the seeded repair run")
@@ -787,7 +787,7 @@ class RepairRuntime:
             )
             for node in execution.program_execution.node_evidence
             for attempt in node.attempts
-            if attempt.operation_id in {"run_batch.v1", "finalize_task.v1"}
+            if attempt.operation_ref.operation_id in {"run_batch.v1", "finalize_task.v1"}
             and attempt.status is OperationExecutionStatus.SUCCEEDED
         )
         observed_coordinates = sorted(
@@ -897,7 +897,7 @@ class RepairRuntime:
                 *(item.reference for item in run_bases),
                 terminal_basis.reference,
             ),
-            kernel_sha256=self.registry.manifest.content_sha256,
+            kernel_ref=self.registry.manifest.ref,
             reasons=("accepted paired repair and terminal evidence persisted",),
             revalidation_triggers=(
                 "basis_replay_due",
@@ -940,7 +940,7 @@ class RepairRuntime:
 
     def _store_model(
         self,
-        model: ContentAddressedModel,
+        model: FrozenStrictModel,
         *,
         kind: str,
         filename: str,

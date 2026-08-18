@@ -28,17 +28,17 @@ from aec_bench.contracts.adapter_execution import (
 )
 from aec_bench.contracts.agent_output import AgentOutput, AgentOutputStatus
 from aec_bench.contracts.harness_kernel import (
-    ContentAddressedModel,
-    canonical_content_sha256,
+    canonical_json_sha256,
     validate_sha256,
 )
+from aec_bench.contracts.legacy_content_address import LegacyContentAddressedModel
 from aec_bench.contracts.output_completion import OutputCommitAttestation
 from aec_bench.contracts.task_definition import ToolSpec
 from aec_bench.contracts.trajectory import MetaHarnessTrajectoryContext
 from aec_bench.contracts.validators import NonEmptyStr
 
 
-class RuntimeExecutionAttestation(ContentAddressedModel):
+class RuntimeExecutionAttestation(LegacyContentAddressedModel):
     """Kernel-owned evidence of the driver and request that actually executed."""
 
     schema_version: Literal["aecbench.runtime-execution-attestation.v1"] = "aecbench.runtime-execution-attestation.v1"
@@ -145,7 +145,7 @@ def write_execution_bundle(*, path: Path, bundle: ExecutionBundle) -> Path:
 
 def execution_request_sha256(bundle: ExecutionBundle) -> str:
     """Hash the exact canonical execution request bytes used by runtime attestation."""
-    return canonical_content_sha256(_bundle_payload(bundle))
+    return canonical_json_sha256(_bundle_payload(bundle))
 
 
 def read_execution_bundle(path: Path) -> ExecutionBundle:

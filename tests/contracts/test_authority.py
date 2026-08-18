@@ -16,6 +16,9 @@ from aec_bench.contracts.authority import (
     AuthorityPrincipalKind,
     BasisKind,
     BasisReference,
+    CriticEvaluationOutcomeIdentity,
+    CriticGenerationIdentity,
+    EvaluationPlanIdentity,
     HumanAuthorityApproval,
     MotifPromotionQualification,
     OperatorCapability,
@@ -25,6 +28,7 @@ from aec_bench.contracts.authority import (
     derive_origin_stamp,
     operator_authority_for,
 )
+from aec_bench.contracts.harness_kernel import KernelRef, kernel_abi_commitment
 
 
 def _sha(label: str) -> str:
@@ -55,8 +59,12 @@ def _event(
         subject_id="subject.candidate-1",
         subject_sha256=_sha("candidate-1"),
         basis=(_basis(),),
-        kernel_sha256=_sha("kernel"),
-        critic_generation_sha256=_sha("critic-generation"),
+        kernel_ref=KernelRef(kernel_id="aec-bench", version="1.0.0"),
+        critic_generation=CriticGenerationIdentity(
+            critic_id="critic.acceptance",
+            version="1",
+            compatibility_generation="evaluation-generation.1",
+        ),
         reasons=("all_integrity_gates_passed",),
         revalidation_triggers=("critic_generation_change",),
     )
@@ -201,19 +209,35 @@ def test_human_approval_binds_the_exact_principal_action_and_subject() -> None:
 
 
 def test_motif_promotion_qualification_binds_the_exact_provisional_candidate() -> None:
+    evaluation_plan = EvaluationPlanIdentity(
+        plan_id="evaluation-plan",
+        evaluation_generation="evaluation-generation.1",
+    )
+    critic_generation = CriticGenerationIdentity(
+        critic_id="critic.acceptance",
+        version="1",
+        compatibility_generation="evaluation-generation.1",
+    )
+    critic_outcome = CriticEvaluationOutcomeIdentity(
+        evaluation_plan=evaluation_plan,
+        critic_generation=critic_generation,
+        candidate_sha256=_sha("provisional-motif"),
+    )
+    kernel_ref = KernelRef(kernel_id="aec-bench", version="1.0.0")
     qualification = MotifPromotionQualification(
         subject_id="motif.subject",
         provisional_motif_sha256=_sha("provisional-motif"),
         motif_subject_sha256=_sha("motif-subject"),
         candidate_sha256=_sha("provisional-motif"),
-        critic_evaluation_outcome_sha256=_sha("critic-outcome"),
+        critic_evaluation_outcome=critic_outcome,
         promotion_lineage_sha256=_sha("promotion-lineage"),
         promotion_monitor_attestation_sha256=_sha("promotion-monitor"),
         monitor_report_sha256=_sha("monitor-report"),
-        evaluation_plan_sha256=_sha("evaluation-plan"),
+        evaluation_plan=evaluation_plan,
         critic_release_authority_event_sha256=_sha("critic-release"),
-        critic_generation_sha256=_sha("critic-generation"),
-        kernel_sha256=_sha("kernel"),
+        critic_generation=critic_generation,
+        kernel_ref=kernel_ref,
+        kernel_abi_sha256=kernel_abi_commitment(kernel_ref),
     )
 
     assert MotifPromotionQualification.model_validate(qualification.model_dump(mode="json")) == qualification
