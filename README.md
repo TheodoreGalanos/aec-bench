@@ -141,12 +141,25 @@ uv run aec-bench run tasks/mechanical/heat-load --model "<model-id>" --dry-run
 
 # Run through Morph Cloud via Harbor
 uv run aec-bench run tasks/electrical/pf-droop --model "<model-id>" --backend morph
+
+# Export one already published run package
+uv run aec-bench run export <run-id> --output run-package.tar.zst
+
+# Verify and import a portable run package
+uv run aec-bench run import run-package.tar.zst
 ```
 
 `aec-bench run` defaults to Harbor's `modal` backend. Morph Cloud runs use Harbor's normal task, agent, artifact, and verifier lifecycle through `--backend morph`; set `MORPH_API_KEY` in `.env` before using it.
 Remote runs use the same synchronous Harbor dispatch-and-import workflow and
 produce current `TrialRecord` ledger entries. `aec-bench run-local` remains the
 separate no-Harbor path for local execution.
+
+A published run package is one deterministic `tar.zst` archive. It contains
+the plain run plan, exact trial references, and all referenced artifact bytes.
+The ledger stores the archive once under one `ArtifactRef`. Export copies those
+bytes; import verifies every member, size, and SHA-256 digest before it writes
+them to the destination ledger. Use `--ledger-root <path>` when the package is
+not in the configured ledger.
 
 #### DeepSeek Harness adapter (experimental)
 

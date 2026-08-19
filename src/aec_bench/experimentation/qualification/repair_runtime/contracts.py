@@ -22,6 +22,8 @@ from aec_bench.contracts.harness_kernel import (
 from aec_bench.contracts.legacy_content_address import LegacyContentAddressedModel
 from aec_bench.contracts.output_completion import OutputCompletionEvaluation
 from aec_bench.contracts.stage_execution import DeclaredStageGraph
+from aec_bench.contracts.task_review_snapshot import TaskReviewSnapshot
+from aec_bench.contracts.task_snapshot import TaskSnapshotRef, task_snapshot_commitment
 from aec_bench.contracts.trial_record import ArtifactReference
 from aec_bench.contracts.validators import NonEmptyStr
 from aec_bench.evolution.repair_lifecycle import (
@@ -43,19 +45,25 @@ class RepairDeclaredStageGraphEvidence(FrozenStrictModel):
     """Exact task, task-review, and declared-stage graph identity exposed to diagnosis."""
 
     task_id: NonEmptyStr
-    task_package_sha256: str
-    stage_graph: DeclaredStageGraph
-
-    @field_validator("task_package_sha256")
-    @classmethod
-    def validate_sha256_fields(cls, value: str) -> str:
-        return validate_sha256(value)
+    task_snapshot: TaskSnapshotRef
+    review: TaskReviewSnapshot
 
     @model_validator(mode="after")
     def validate_graph_identity(self) -> Self:
-        if self.stage_graph.task_id != self.task_id:
+        if self.task_snapshot.task_id != self.task_id or self.review.task_id != self.task_id:
+            raise ValueError("declared-stage repair evidence does not match its task")
+        if self.review.stage_graph is None:
+            raise ValueError("declared-stage repair evidence requires a stage graph")
+        if self.review.stage_graph.task_id != self.task_id:
             raise ValueError("declared-stage repair evidence graph does not match its task")
         return self
+
+    @property
+    def stage_graph(self) -> DeclaredStageGraph:
+        """Return the graph carried by the one embedded review value."""
+
+        assert self.review.stage_graph is not None
+        return self.review.stage_graph
 
 
 class RepairMonolithicRunBatchEvidence(FrozenStrictModel):
@@ -461,10 +469,9 @@ class RepairRuntimeEvidence(LegacyContentAddressedModel):
             graphs_by_task = {item.task_id: item for item in self.declared_stage_graphs}
             for trial in self.trials:
                 graph = graphs_by_task[trial.task_id]
-                if (
-                    trial.resource_sha256 != graph.task_package_sha256
-                    or trial.review_lineage_sha256 != graph.stage_graph.review_sidecar_sha256
-                ):
+                if trial.resource_sha256 != task_snapshot_commitment(
+                    graph.task_snapshot
+                ) or trial.review_lineage_sha256 != canonical_json_sha256(graph.review.model_dump(mode="json")):
                     raise ValueError("trial evidence does not match its declared task-review graph identity")
         return self
 

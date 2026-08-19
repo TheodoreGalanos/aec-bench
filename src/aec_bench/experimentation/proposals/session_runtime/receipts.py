@@ -65,11 +65,6 @@ def _validate_session_execution_binding(
     bundle: ProposalRunSessionBundle,
     execution: ProposalSessionExecutionRef,
 ) -> None:
-    if execution.source_task_package_sha256 != bundle.compilation.source_scope_manifest.task_package_sha256:
-        raise ProposalSessionRuntimeError(
-            "session_execution_mismatch",
-            "proposal execution does not bind the compiled source task package",
-        )
     _validate_evaluation_coordinate(
         bundle=bundle,
         coordinate=execution.evaluation_coordinate,
@@ -84,7 +79,7 @@ def _validate_evaluation_coordinate(
     freeze = bundle.compilation.proposal_freeze
     if (
         coordinate.task_id != bundle.task_snapshot.task_id
-        or coordinate.task_revision != bundle.task_snapshot.definition_sha256
+        or coordinate.task_revision != bundle.task_snapshot.commitment_sha256
         or coordinate.split is not freeze.split
         or coordinate.review_lineage_id != freeze.selected_review_lineage_id
     ):

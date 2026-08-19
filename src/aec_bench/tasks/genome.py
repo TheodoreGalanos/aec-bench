@@ -13,7 +13,6 @@ from typing import Any
 import yaml
 
 from aec_bench.contracts.artifacts import ArtifactRef
-from aec_bench.contracts.run_bundle import TaskSnapshotRef
 from aec_bench.contracts.task_genome import (
     TASK_GENOME_REVIEW_MEDIA_TYPE,
     DomainFrame,
@@ -27,6 +26,7 @@ from aec_bench.contracts.task_genome import (
     TaskGenomeReview,
     VerifierContract,
 )
+from aec_bench.contracts.task_snapshot import TaskSnapshotRef
 from aec_bench.ledger.artifact_repository import ArtifactRepository
 from aec_bench.tasks.loader import load_task_definition
 

@@ -1,5 +1,5 @@
-# ABOUTME: CLI run command for executing experiments via Harbor.
-# ABOUTME: Supports both config-file and inline argument invocation.
+# ABOUTME: CLI run command for Harbor experiments and portable run-package transfer.
+# ABOUTME: Preserves config and inline invocation while adding explicit export and import modes.
 
 from __future__ import annotations
 
@@ -24,10 +24,62 @@ from aec_bench.harness.model_execution.llm_reviewer import (
 )
 
 
+def export_package(
+    run_id: str = typer.Argument(help="Published run ID"),
+    output: Path = typer.Option(..., "--output", "-o", help="Output .tar.zst path"),
+    ledger_root: str | None = typer.Option(None, "--ledger-root", help="Ledger directory"),
+) -> None:
+    """Export one published run as exact portable archive bytes."""
+
+    start = time.monotonic()
+    from aec_bench.ledger.run_package import export_run_package
+
+    resolved_ledger = resolve_path("ledger_root", cli_override=ledger_root)
+    try:
+        reference = export_run_package(ledger_root=resolved_ledger, run_id=run_id, output=output)
+    except (FileNotFoundError, FileExistsError, ValueError) as error:
+        emit("run export", data=None, errors=[str(error)], start_time=start)
+        raise typer.Exit(1) from error
+    emit(
+        "run export",
+        data={"run_id": run_id, "output": str(output), "artifact": reference.model_dump(mode="json")},
+        start_time=start,
+    )
+
+
+def import_package(
+    archive: Path = typer.Argument(help="Portable .tar.zst run package"),
+    ledger_root: str | None = typer.Option(None, "--ledger-root", help="Ledger directory"),
+) -> None:
+    """Verify and import one portable run package."""
+
+    start = time.monotonic()
+    from aec_bench.ledger.run_package import import_run_package
+
+    if not archive.is_file():
+        emit("run import", data=None, errors=[f"run package not found: {archive}"], start_time=start)
+        raise typer.Exit(1)
+    resolved_ledger = resolve_path("ledger_root", cli_override=ledger_root)
+    try:
+        package, reference = import_run_package(ledger_root=resolved_ledger, data=archive.read_bytes())
+    except ValueError as error:
+        emit("run import", data=None, errors=[str(error)], start_time=start)
+        raise typer.Exit(1) from error
+    emit(
+        "run import",
+        data={
+            "run_id": package.run_plan.run_manifest.run_id,
+            "artifact": reference.model_dump(mode="json"),
+        },
+        start_time=start,
+    )
+
+
 def run_experiment(
     config: Path | None = typer.Option(None, "--config", "-c", help="Experiment config YAML"),
     tasks_root: str | None = typer.Option(None, "--tasks-root", help="Tasks directory"),
     tasks_path: str | None = typer.Argument(None, help="Task path (simple invocation)"),
+    package_value: str | None = typer.Argument(None, help="Run ID or archive path for export/import"),
     model: str | None = typer.Option(None, "--model", help="Model name"),
     adapter: str = typer.Option(
         "tool_loop",
@@ -56,6 +108,8 @@ def run_experiment(
         "--fail-on-reviewer-error",
         help="Fail the run when the reviewer stage cannot complete",
     ),
+    output: Path | None = typer.Option(None, "--output", "-o", help="Exported .tar.zst path"),
+    ledger_root: str | None = typer.Option(None, "--ledger-root", help="Ledger directory"),
 ) -> None:
     """Run an experiment.
 
@@ -72,8 +126,22 @@ def run_experiment(
 
     Examples:
       aec-bench run tasks/electrical/voltage-drop --model gpt-4.1-mini --dry-run
+      aec-bench run export run-001 --output run-package.tar.zst
+      aec-bench run import run-package.tar.zst
       aec-bench --json run --config experiment.yaml | jq '.data.experiment_id'
     """
+    if tasks_path == "export":
+        if package_value is None or output is None:
+            raise typer.BadParameter("run export requires <run-id> and --output <path>")
+        export_package(run_id=package_value, output=output, ledger_root=ledger_root)
+        return
+    if tasks_path == "import":
+        if package_value is None:
+            raise typer.BadParameter("run import requires <archive-path>")
+        import_package(archive=Path(package_value), ledger_root=ledger_root)
+        return
+    if package_value is not None:
+        raise typer.BadParameter(f"unexpected run argument: {package_value}")
     start = time.monotonic()
     reviewer_config = _reviewer_config_from_cli(
         enabled=reviewer,

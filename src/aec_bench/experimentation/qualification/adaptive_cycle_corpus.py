@@ -10,6 +10,7 @@ from pydantic import Field, field_validator, model_validator
 
 from aec_bench.contracts.harness_kernel import (
     FrozenStrictModel,
+    canonical_json_sha256,
     validate_sha256,
 )
 from aec_bench.contracts.legacy_content_address import LegacyContentAddressedModel
@@ -49,7 +50,7 @@ class AdaptiveCycleCorpusSplit(FrozenStrictModel):
         if projected_task_refs != self.task_refs:
             raise ValueError("corpus split applicability must cover its exact task refs")
         for projection in self.applicability.projections:
-            task_review = projection.snapshot.task_review
+            task_review = projection.review
             if task_review is None:
                 raise ValueError("adaptive corpus tasks must declare task-review sidecars")
             if task_review.visibility is not self.visibility:
@@ -120,13 +121,13 @@ class AdaptiveCycleCorpusManifest(LegacyContentAddressedModel):
             raise ValueError("corpus descriptor does not match its split attestations")
 
         projections = tuple(projection for split in splits for projection in split.applicability.projections)
-        package_hashes = tuple(projection.snapshot.package_sha256 for projection in projections)
+        package_hashes = tuple(projection.snapshot.commitment_sha256 for projection in projections)
         if len(package_hashes) != len(set(package_hashes)):
             raise ValueError("corpus task package snapshots must be unique")
         declared_surfaces = {
-            projection.snapshot.task_review.declared_surface_sha256
+            canonical_json_sha256(projection.review.stage_graph.model_dump(mode="json"))
             for projection in projections
-            if projection.snapshot.task_review is not None
+            if projection.review is not None and projection.review.stage_graph is not None
         }
         if declared_surfaces != {self.declared_surface_sha256}:
             raise ValueError("adaptive corpus must use exactly one declared surface")
@@ -229,10 +230,10 @@ def _single_declared_surface(
     ],
 ) -> str:
     surfaces = {
-        projection.snapshot.task_review.declared_surface_sha256
+        canonical_json_sha256(projection.review.stage_graph.model_dump(mode="json"))
         for split in splits
         for projection in split.applicability.projections
-        if projection.snapshot.task_review is not None
+        if projection.review is not None and projection.review.stage_graph is not None
     }
     if len(surfaces) != 1:
         raise ValueError("adaptive corpus must use exactly one declared surface")

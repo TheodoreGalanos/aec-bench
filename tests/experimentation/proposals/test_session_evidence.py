@@ -85,7 +85,7 @@ def _context(
         kernel_ref=KernelRef(kernel_id="aec-bench.adaptive-harness", version="1.6.0"),
         harness_ref=HarnessInstanceRef(instance_id="harness.fixed"),
         program_ref=ExecutionProgramRef(program_id="program.proposal", version="1.0.0"),
-        bundle_id="bundle.1",
+        plan_run_id="bundle.1",
         program_node_id=node_id,
         proposal_session_id=session_id,
         proposal_invocation_id=invocation_id,

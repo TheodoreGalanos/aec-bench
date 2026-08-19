@@ -488,7 +488,7 @@ class PreparedExecutionBatch(LegacyContentAddressedModel):
         expected_task_identities = {
             (
                 task_plan.cohort_task.task.task_id,
-                task_plan.cohort_task.task.public_snapshot.definition_sha256,
+                task_plan.cohort_task.task.public_snapshot.commitment_sha256,
             )
             for task_plan in self.source_batch.task_plans
         }

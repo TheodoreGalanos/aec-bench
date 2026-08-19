@@ -39,13 +39,10 @@ from aec_bench.harness.execution_payload import (
 
 def _meta_harness_context() -> dict[str, object]:
     return {
-        "kernel_sha256": "a" * 64,
-        "harness_id": "hx-review",
-        "harness_sha256": "b" * 64,
-        "program_id": "px-review",
-        "program_sha256": "c" * 64,
-        "bundle_id": "bundle-review",
-        "bundle_sha256": "d" * 64,
+        "kernel_ref": {"kernel_id": "kernel.fixed", "version": "1"},
+        "harness_ref": {"instance_id": "hx-review"},
+        "program_ref": {"program_id": "px-review", "version": "1"},
+        "plan_run_id": "bundle-review",
         "program_node_id": "node.review",
         "binding_ids": ["binding.agent", "binding.tools"],
         "repair_iteration": 2,
@@ -66,9 +63,9 @@ def _assert_execution_events_have_meta_harness_lineage(
     assert execution_entries[0].meta_harness is not None
     assert execution_entries[0].meta_harness.program_node_id == "node.review"
     assert execution_entries[0].meta_harness.binding_ids == ("binding.agent", "binding.tools")
-    assert execution_entries[0].meta_harness.harness_sha256 == "b" * 64
-    assert execution_entries[0].meta_harness.program_sha256 == "c" * 64
-    assert execution_entries[0].meta_harness.bundle_sha256 == "d" * 64
+    assert execution_entries[0].meta_harness.harness_ref.instance_id == "hx-review"
+    assert execution_entries[0].meta_harness.program_ref.program_id == "px-review"
+    assert execution_entries[0].meta_harness.plan_run_id == "bundle-review"
 
 
 def test_execution_entrypoint_runs_direct_bundle_and_writes_result(

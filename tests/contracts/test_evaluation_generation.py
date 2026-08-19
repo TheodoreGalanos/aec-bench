@@ -8,6 +8,8 @@ import hashlib
 import pytest
 from pydantic import ValidationError
 
+from aec_bench.contracts.artifacts import ArtifactRef
+from aec_bench.contracts.evaluation_generation.cohort import EvaluationTaskIdentity
 from aec_bench.contracts.evaluation_generation.spec import (
     CandidateKindRequirement,
     EvaluationExecutionProfileRef,
@@ -15,6 +17,9 @@ from aec_bench.contracts.evaluation_generation.spec import (
     EvaluationGenerationSpec,
 )
 from aec_bench.contracts.program_proposal.types import ProgramCandidateKind
+from aec_bench.contracts.task_definition import Visibility
+from aec_bench.contracts.task_review_snapshot import TaskReviewSnapshot
+from aec_bench.contracts.task_snapshot import ArtifactTaskSnapshotRef
 
 
 def _sha(label: str) -> str:
@@ -27,6 +32,50 @@ def _execution_profile_ref() -> EvaluationExecutionProfileRef:
         version="1",
         content_sha256=_sha("proposal-execution-profile"),
     )
+
+
+def _task_snapshot(task_id: str, label: str) -> ArtifactTaskSnapshotRef:
+    digest = _sha(label)
+    return ArtifactTaskSnapshotRef(
+        task_id=task_id,
+        artifact=ArtifactRef(
+            artifact_id=f"artifacts/sha256/{digest}",
+            sha256=digest,
+            size_bytes=len(label),
+            media_type="application/vnd.aec-bench.task-snapshot+tar+zstd",
+        ),
+    )
+
+
+def test_evaluation_task_uses_exact_snapshots_and_one_review_value() -> None:
+    task_id = "civil/drainage/review"
+    public = _task_snapshot(task_id, "public")
+    identity = EvaluationTaskIdentity(
+        task_id=task_id,
+        public_snapshot=public,
+        snapshot=_task_snapshot(task_id, "sealed"),
+        review=TaskReviewSnapshot(
+            task_id=task_id,
+            profile_id="review.drainage",
+            visibility=Visibility.HOLDOUT,
+        ),
+    )
+
+    assert set(identity.model_dump(mode="json")) == {
+        "schema_version",
+        "task_id",
+        "public_snapshot",
+        "snapshot",
+        "review",
+        "content_sha256",
+    }
+    with pytest.raises(ValidationError, match="must be distinct"):
+        EvaluationTaskIdentity(
+            task_id=task_id,
+            public_snapshot=public,
+            snapshot=public,
+            review=identity.review,
+        )
 
 
 def _custom_budget() -> EvaluationGenerationBudget:

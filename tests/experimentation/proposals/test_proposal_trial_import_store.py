@@ -10,6 +10,8 @@ from pathlib import Path
 
 import pytest
 
+from aec_bench.contracts.task_definition import Visibility
+from aec_bench.contracts.task_review_snapshot import TaskReviewSnapshot
 from aec_bench.contracts.trial_record import ArtifactReference, TrialRecord
 from aec_bench.experimentation.proposals.proposal_trial_importing.contracts import (
     ProposalTrialImportError,
@@ -45,8 +47,11 @@ def _receipt() -> ProposalTrialImportReceipt:
         proposal_graph_sha256="f" * 64,
         compilation_sha256="1" * 64,
         session_plan_sha256="2" * 64,
-        review_sidecar_sha256="3" * 64,
-        declared_surface_sha256="4" * 64,
+        review=TaskReviewSnapshot(
+            task_id="task.1",
+            profile_id="review.1",
+            visibility=Visibility.PUBLIC,
+        ),
         verifier_evidence_sha256="5" * 64,
         node_receipt_sha256s=("6" * 64,),
     )
@@ -76,8 +81,8 @@ def test_import_receipt_preserves_physical_digest_path_and_bytes(
     physical_sha256 = hashlib.sha256(encoded).hexdigest()
     object_root = repository.root / "proposal-trial-imports" / ("7" * 64) / "objects"
 
-    assert receipt.content_sha256 == "dd79f23f16717b2ef4162b7d982e93e78eb1c8b12d25740ab777403ba6e8010b"
-    assert physical_sha256 == "d49e1a07c7940fd23ca1300b8e0886d09c7a7c93a884e0269cad391706aa9d97"
+    assert receipt.content_sha256 == "90a06e94031d727e1b636ca25574d1b5a369421f79ff6c73690b5a463c3159d4"
+    assert physical_sha256 == "34262766e6ce511f4dcc2cfbfeaf374b07f2cfb5b573e727f9c97f505bca87eb"
     path = persist_model_path(
         repository=repository,
         model=receipt,

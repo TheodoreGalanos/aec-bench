@@ -10,6 +10,7 @@ from typing import Protocol
 from aec_bench.contracts.evaluation_plane import EvaluationRegime
 from aec_bench.contracts.harness_kernel import canonical_json_sha256
 from aec_bench.contracts.proposal_execution_types import ProposalSessionStatus
+from aec_bench.contracts.task_review_snapshot import TaskReviewSnapshot
 from aec_bench.contracts.trial_record import (
     ArtifactReference,
     MetaHarnessTrialProvenance,
@@ -62,7 +63,6 @@ from aec_bench.experimentation.proposals.proposal_trial_importing.contracts impo
     ProposalTrialImportReceipt,
     ProposalTrialImportResult,
     ProposalVerifierEvidence,
-    TaskReviewLineage,
 )
 from aec_bench.experimentation.proposals.proposal_trial_importing.persistence import (
     copied_artifact,
@@ -386,7 +386,7 @@ def _finalize_completed_import(
     repository: EvidenceRepository,
     artifacts_root: Path,
     persisted: PersistedProposalArtifacts,
-    task_review: TaskReviewLineage,
+    task_review: TaskReviewSnapshot,
     consumption: StoredProposalImportConsumptionClaim,
     receipt_path: Path,
     services: FinalizationServices,
@@ -517,7 +517,7 @@ def _build_complete_trial_record(
     evidence: ProposalHarborImportEvidence,
     imported: TrialRecord,
     persisted: PersistedProposalArtifacts,
-    task_review: TaskReviewLineage,
+    task_review: TaskReviewSnapshot,
     completed: CompletedEvidenceArtifacts,
 ) -> TrialRecord:
     proposal_provenance = ProposalSessionTrialProvenance(
@@ -551,22 +551,15 @@ def _build_complete_trial_record(
     provenance = MetaHarnessTrialProvenance(
         run_id=authorization.dispatch.dispatch_id,
         policy_id=freeze.candidate_manifest.manifest_id,
+        plan_run_id=bundle.bundle_id,
         kernel_id=bundle.fixed_harness.kernel_ref.kernel_id,
-        kernel_sha256=canonical_json_sha256(bundle.fixed_harness.kernel_ref.model_dump(mode="json")),
         harness_id=bundle.fixed_harness.instance_id,
-        harness_sha256=canonical_json_sha256(bundle.fixed_harness.model_dump(mode="json")),
         program_id=bundle.compilation.compiled_program.program_id,
-        program_sha256=canonical_json_sha256(bundle.compilation.compiled_program.model_dump(mode="json")),
-        bundle_id=bundle.bundle_id,
-        bundle_sha256=canonical_json_sha256(bundle.model_dump(mode="json")),
-        review_sidecar_sha256=task_review.review_sidecar_sha256,
-        declared_surface_sha256=task_review.declared_surface_sha256,
         harness_generator_sha256=canonical_json_sha256(bundle.fixed_harness.source_recipe_ref.model_dump(mode="json")),
         program_generator_sha256=program_generator_sha256(authorization),
         split=meta_split(freeze.split),
         repetition=authorization.dispatch.evaluation_coordinate.repetition,
         execution_seed=authorization.dispatch.evaluation_coordinate.seed,
-        candidate_manifest=persisted.candidate_manifest,
         evaluation_regime_ref=freeze.evaluation_regime_ref,
         proposal_session=proposal_provenance,
     )
@@ -618,7 +611,7 @@ def _persist_scored_result(
     record: TrialRecord,
     repository: EvidenceRepository,
     artifacts_root: Path,
-    task_review: TaskReviewLineage,
+    task_review: TaskReviewSnapshot,
     completed: CompletedEvidenceArtifacts,
     consumption: StoredProposalImportConsumptionClaim,
     receipt_path: Path,
@@ -650,8 +643,7 @@ def _persist_scored_result(
         proposal_graph_sha256=evidence.proposal_graph_sha256,
         compilation_sha256=evidence.compilation_sha256,
         session_plan_sha256=evidence.session_plan_sha256,
-        review_sidecar_sha256=task_review.review_sidecar_sha256,
-        declared_surface_sha256=task_review.declared_surface_sha256,
+        review=task_review,
         verifier_evidence_sha256=completed.verifier_evidence.content_sha256,
         node_receipt_sha256s=tuple(node.content_sha256 for node in evidence.session_receipt.node_receipts),
     )

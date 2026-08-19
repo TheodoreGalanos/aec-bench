@@ -7,6 +7,8 @@ import hashlib
 import json
 from pathlib import Path
 
+from pydantic import TypeAdapter
+
 from aec_bench.contracts.authority import (
     AuthorityAction,
     AuthorityDecision,
@@ -16,8 +18,9 @@ from aec_bench.contracts.authority import (
     BasisKind,
     TaintLabel,
 )
-from aec_bench.contracts.harness_kernel import FrozenStrictModel, canonical_json_sha256, validate_sha256
-from aec_bench.contracts.run_bundle import RunBundle, TaskSnapshotRef
+from aec_bench.contracts.harness_kernel import FrozenStrictModel, validate_sha256
+from aec_bench.contracts.run_bundle import RunPlan
+from aec_bench.contracts.task_snapshot import TaskSnapshotRef
 from aec_bench.contracts.trial_record import ArtifactReference, TrialRecord
 from aec_bench.evolution.repair_lifecycle import (
     CompiledRepairCandidate,
@@ -69,7 +72,6 @@ from aec_bench.experimentation.qualification.repair_runtime.evidence import (
     _reward_coverage,
     _RunCapture,
     _SeedCapture,
-    _snapshot,
 )
 from aec_bench.experimentation.qualification.repair_runtime.patching import (
     _REPAIR_RULE_REGISTRY,
@@ -95,7 +97,7 @@ from aec_bench.experimentation.qualification.run_bundle_runtime import (
 from aec_bench.harness.compilation import (
     compile_execution_program,
     compile_harness_instance,
-    compile_run_bundle,
+    compile_run_plan,
 )
 from aec_bench.harness.harbor_dispatch import HarborCommandExecutor
 from aec_bench.harness.harbor_workflow import SynchronousHarborWorkflow
@@ -157,9 +159,9 @@ class RepairRuntime:
                 raise ValueError(
                     "standalone repair runtime requires the exploratory matched-repair evidence-use policy"
                 )
-        self.preregistered_task_snapshots = (
+        self.preregistered_task_snapshots: tuple[TaskSnapshotRef, ...] | None = (
             tuple(
-                TaskSnapshotRef.model_validate(snapshot.model_dump(mode="python"))
+                TypeAdapter(TaskSnapshotRef).validate_python(snapshot.model_dump(mode="python"))
                 for snapshot in preregistered_task_snapshots
             )
             if preregistered_task_snapshots is not None
@@ -282,14 +284,13 @@ class RepairRuntime:
         harness = compile_harness_instance(candidate.harness_request, registry=self.registry)
         source_program = candidate.program_template.bind(harness.ref)
         program = compile_execution_program(source_program, harness=harness, registry=self.registry)
-        bundle = compile_run_bundle(
-            bundle_id=f"{self.request.loop_id}.{candidate.candidate_id}",
+        bundle = compile_run_plan(
+            run_id=f"{self.request.loop_id}.{candidate.candidate_id}",
             harness=harness,
-            program=program,
+            execution_program=program,
             registry=self.registry,
             tasks_root=self.tasks_root,
             experiment_id=f"{self.request.loop_id}.{candidate.candidate_id}",
-            repetitions=pairing.repetitions,
         )
         if self.preregistered_task_snapshots is not None and bundle.task_snapshots != self.preregistered_task_snapshots:
             raise ValueError("repair spec task/task-review snapshots drifted before execution")
@@ -307,7 +308,7 @@ class RepairRuntime:
                 raise ValueError("repair child cannot compile before its exact parent")
             if bundle.task_snapshots != parent.bundle.task_snapshots:
                 raise ValueError("task/task-review snapshots changed within paired repair")
-            if bundle.kernel_ref != parent.bundle.kernel_ref:
+            if bundle.harness.kernel_ref != parent.bundle.harness.kernel_ref:
                 raise ValueError("fixed kernel changed within paired repair")
             if bundle.harness.budget != parent.bundle.harness.budget:
                 raise ValueError("harness budget changed within paired repair")
@@ -337,18 +338,17 @@ class RepairRuntime:
             parent = self._compiled.get(candidate.parent_candidate_id)
             if parent is None:
                 raise ValueError("repair child cannot run before its exact parent")
-            parent_bundle_id = parent.bundle.bundle_id
+            parent_bundle_id = parent.bundle.run_manifest.run_id
 
         seed_captures: list[_SeedCapture] = []
         for repetition, seed in enumerate(pairing.seeds, start=1):
-            execution_bundle = compile_run_bundle(
-                bundle_id=f"{candidate.bundle.bundle_id}.paired-{repetition}",
+            execution_bundle = compile_run_plan(
+                run_id=f"{candidate.bundle.run_manifest.run_id}.paired-{repetition}",
                 harness=candidate.harness,
-                program=candidate.program,
+                execution_program=candidate.program,
                 registry=self.registry,
                 tasks_root=self.tasks_root,
-                experiment_id=candidate.bundle.harbor.experiment_id,
-                repetitions=1,
+                experiment_id=candidate.bundle.run_manifest.experiment_id,
             )
             self._validate_execution_bundle(candidate, execution_bundle)
             seeded_run_id = f"{run_id}.r{repetition}.s{seed}"
@@ -385,7 +385,7 @@ class RepairRuntime:
                         repetition=repetition,
                         seed=seed,
                         run_id=seeded_run_id,
-                        execution_bundle_id=execution_bundle.bundle_id,
+                        execution_bundle_id=execution_bundle.run_manifest.run_id,
                         program_execution=execution.program,
                         budget=execution.budget,
                         trial_records=tuple(_file_reference(path) for path, _ in records),
@@ -407,7 +407,7 @@ class RepairRuntime:
             kernel_ref=candidate.harness.kernel_ref,
             harness_ref=candidate.harness.ref,
             program_ref=candidate.program.ref,
-            bundle_id=candidate.bundle.bundle_id,
+            bundle_id=candidate.bundle.run_manifest.run_id,
             attempt_plan=self.attempt_plan.reference,
             pairing=pairing,
             executions=tuple(item.manifest for item in seed_captures),
@@ -461,7 +461,7 @@ class RepairRuntime:
             kernel_ref=candidate.harness.kernel_ref,
             harness_ref=candidate.harness.ref,
             program_ref=candidate.program.ref,
-            bundle_id=candidate.bundle.bundle_id,
+            bundle_id=candidate.bundle.run_manifest.run_id,
             run_artifact_sha256=run.artifact_sha256,
             pairing=run.pairing,
             trials=trial_evidence,
@@ -580,19 +580,19 @@ class RepairRuntime:
     def _validate_execution_bundle(
         self,
         candidate: CompiledRepairCandidate,
-        execution_bundle: RunBundle,
+        execution_bundle: RunPlan,
     ) -> None:
         if (
-            execution_bundle.kernel_ref != candidate.bundle.kernel_ref
+            execution_bundle.harness.kernel_ref != candidate.bundle.harness.kernel_ref
             or execution_bundle.harness != candidate.harness
-            or execution_bundle.program != candidate.program
+            or execution_bundle.execution_program != candidate.program
             or execution_bundle.task_snapshots != candidate.bundle.task_snapshots
-            or execution_bundle.harbor.task_refs != candidate.bundle.harbor.task_refs
-            or execution_bundle.harbor.agent_binding_id != candidate.bundle.harbor.agent_binding_id
-            or execution_bundle.harbor.compute_binding_id != candidate.bundle.harbor.compute_binding_id
-            or execution_bundle.harbor.verification_binding_id != candidate.bundle.harbor.verification_binding_id
-            or execution_bundle.harbor.result_import_binding_id != candidate.bundle.harbor.result_import_binding_id
-            or execution_bundle.harbor.repetitions != 1
+            or execution_bundle.review != candidate.bundle.review
+            or execution_bundle.run_manifest.source != candidate.bundle.run_manifest.source
+            or execution_bundle.run_manifest.agent != candidate.bundle.run_manifest.agent
+            or execution_bundle.run_manifest.execution_environment
+            != candidate.bundle.run_manifest.execution_environment
+            or execution_bundle.run_manifest.provider_route != candidate.bundle.run_manifest.provider_route
         ):
             raise ValueError("seed execution bundle drifted from the compiled paired candidate")
 
@@ -600,7 +600,7 @@ class RepairRuntime:
         self,
         *,
         execution: RunBundleExecution,
-        bundle: RunBundle,
+        bundle: RunPlan,
         seeded_run_id: str,
         seed: int,
         parent_bundle_id: str | None,
@@ -612,10 +612,11 @@ class RepairRuntime:
         task_ids = tuple(record.task.task_id for _, record in loaded)
         if len(task_ids) != len(set(task_ids)):
             raise ValueError("repair seed execution requires at most one TrialRecord per task")
-        if not set(task_ids).issubset(bundle.harbor.task_refs):
+        planned_task_ids = tuple(snapshot.task_id for snapshot in bundle.task_snapshots)
+        if not set(task_ids).issubset(planned_task_ids):
             raise ValueError("repair seed TrialRecords must belong to the exact paired tasks")
         if execution.program.status is ProgramExecutionStatus.SUCCEEDED and (
-            len(loaded) != len(bundle.harbor.task_refs) or set(task_ids) != set(bundle.harbor.task_refs)
+            len(loaded) != len(planned_task_ids) or set(task_ids) != set(planned_task_ids)
         ):
             raise ValueError("successful repair seed execution must cover the exact paired tasks")
         for _, record in loaded:
@@ -625,30 +626,18 @@ class RepairRuntime:
             if (
                 provenance.run_id != seeded_run_id
                 or provenance.policy_id != self.policy_id
-                or provenance.kernel_sha256 != canonical_json_sha256(bundle.kernel_ref.model_dump(mode="json"))
-                or provenance.harness_sha256 != canonical_json_sha256(bundle.harness.model_dump(mode="json"))
-                or provenance.program_sha256 != canonical_json_sha256(bundle.program.model_dump(mode="json"))
-                or provenance.bundle_sha256 != canonical_json_sha256(bundle.model_dump(mode="json"))
+                or provenance.plan_run_id != bundle.run_manifest.run_id
+                or provenance.kernel_id != bundle.harness.kernel_ref.kernel_id
+                or provenance.harness_id != bundle.harness.instance_id
+                or provenance.program_id != bundle.execution_program.program_id
                 or provenance.split != self.request.pairing.split
                 or provenance.execution_seed != seed
-                or provenance.parent_bundle_id != parent_bundle_id
+                or provenance.parent_plan_run_id != parent_bundle_id
                 or provenance.repair_attempt_id != self.request.attempt_id
                 or provenance.repair_iteration != self.request.iteration
                 or provenance.repair_decision != self.attempt_plan.reference
             ):
                 raise ValueError("repair TrialRecord lineage does not match the exact seeded execution")
-            snapshot = _snapshot(bundle, record.task.task_id)
-            expected_world = (
-                snapshot.task_review.review_sidecar_sha256
-                if snapshot.task_review is not None
-                else snapshot.package_sha256
-            )
-            if provenance.review_sidecar_sha256 != expected_world:
-                raise ValueError("repair TrialRecord review lineage does not match its task snapshot")
-            _verify_artifact_reference(
-                provenance.candidate_manifest,
-                label="candidate manifest",
-            )
             assert provenance.repair_decision is not None
             _verify_artifact_reference(
                 provenance.repair_decision,
@@ -709,7 +698,7 @@ class RepairRuntime:
     @staticmethod
     def _validate_seed_capture_manifest(seed_capture: _SeedCapture) -> None:
         manifest = seed_capture.manifest
-        if manifest.execution_bundle_id != seed_capture.bundle.bundle_id:
+        if manifest.execution_bundle_id != seed_capture.bundle.run_manifest.run_id:
             raise ValueError("repair run artifact does not bind the exact seed execution bundle")
         if manifest.program_execution != seed_capture.execution.program:
             raise ValueError("repair run artifact does not bind the exact seed program execution")
@@ -750,7 +739,7 @@ class RepairRuntime:
         parent = self._compiled.get(parent_candidate_id)
         if parent is None:
             raise ValueError("repair child lost its compiled parent lineage")
-        return parent.bundle.bundle_id
+        return parent.bundle.run_manifest.run_id
 
     @staticmethod
     def _verified_trial_record_bytes(

@@ -27,7 +27,7 @@ from aec_bench.experimentation.qualification.run_bundle_runtime import (
     execute_run_bundle,
     load_stage_execution_receipt,
 )
-from aec_bench.harness.compilation import compile_execution_program, compile_run_bundle
+from aec_bench.harness.compilation import compile_execution_program, compile_run_plan
 from aec_bench.harness.harbor_workflow import SynchronousHarborWorkflow
 from aec_bench.harness.kernel_catalogue import default_kernel_registry
 from aec_bench.harness.program_execution import ProgramExecutionStatus
@@ -309,7 +309,7 @@ def test_declared_stage_missing_exact_usage_fails_closed_without_redispatch(
         len(
             tuple(
                 engine_root.glob(
-                    "governed-attempt/claims/dispatch_intent/*/claim.json",
+                    "governed-attempt/records/dispatch_intent/*/record.json",
                 )
             )
         )
@@ -317,12 +317,12 @@ def test_declared_stage_missing_exact_usage_fails_closed_without_redispatch(
     )
     assert not tuple(
         engine_root.glob(
-            "governed-attempt/claims/backend_receipt/*/claim.json",
+            "governed-attempt/records/backend_receipt/*/record.json",
         )
     )
     assert not tuple(
         engine_root.glob(
-            "governed-attempt/claims/terminal/*/claim.json",
+            "governed-attempt/records/terminal/*/record.json",
         )
     )
 
@@ -517,10 +517,10 @@ def _staged_bundle(*, tasks_root: Path, task_id: str):
         harness=base.harness,
         registry=registry,
     )
-    return compile_run_bundle(
-        bundle_id="bundle-declared-stage",
+    return compile_run_plan(
+        run_id="bundle-declared-stage",
         harness=base.harness,
-        program=program,
+        execution_program=program,
         registry=registry,
         tasks_root=tasks_root,
         experiment_id="declared-stage-experiment",

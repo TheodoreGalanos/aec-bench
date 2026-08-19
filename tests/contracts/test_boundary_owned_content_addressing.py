@@ -19,13 +19,15 @@ from aec_bench.contracts.legacy_content_address import (
     LegacyContentAddressedModel,
     read_legacy_content_addressed_model,
 )
-from aec_bench.contracts.run_bundle import RunBundle, TaskReviewSnapshotRef, TaskSnapshotRef
+from aec_bench.contracts.run_bundle import RunPlan
 from aec_bench.contracts.stage_execution import (
     DeclaredStageGraph,
     StageContextManifest,
     StageExecutionReceipt,
     StageOutput,
 )
+from aec_bench.contracts.task_review_snapshot import ReviewSnapshot, TaskReviewSnapshot
+from aec_bench.contracts.task_snapshot import ArtifactTaskSnapshotRef, RepositoryTaskSnapshotRef
 from aec_bench.contracts.validators import FrozenStrictModel
 from aec_bench.harness.program_execution.contracts import ProgramExecutionResult
 from aec_bench.ledger.immutable_artifact_store import ImmutableArtifactIntegrityError, ImmutableArtifactStore
@@ -102,9 +104,11 @@ def test_legacy_reader_rejects_missing_or_corrupted_digest(
         Critic,
         EvaluationRegime,
         EvaluationOutcome,
-        RunBundle,
-        TaskReviewSnapshotRef,
-        TaskSnapshotRef,
+        RunPlan,
+        ReviewSnapshot,
+        TaskReviewSnapshot,
+        ArtifactTaskSnapshotRef,
+        RepositoryTaskSnapshotRef,
         DeclaredStageGraph,
         StageContextManifest,
         StageOutput,

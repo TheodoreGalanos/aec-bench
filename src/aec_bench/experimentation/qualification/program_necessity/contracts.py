@@ -19,11 +19,8 @@ from aec_bench.contracts.legacy_content_address import LegacyContentAddressedMod
 from aec_bench.contracts.program_proposal.candidate import ProgramCandidateRef
 from aec_bench.contracts.program_proposal.study import MatchedCandidateEvidenceRef, MatchedEvaluationCoordinate
 from aec_bench.contracts.program_proposal.types import ProgramCandidateKind
-from aec_bench.contracts.run_bundle import TaskSnapshotRef
+from aec_bench.contracts.task_snapshot import TaskSnapshotRef
 from aec_bench.contracts.validators import NonEmptyStr
-from aec_bench.harness.compilation.task_snapshot import (
-    graph_hidden_task_snapshot_sha256,
-)
 
 
 class ProgramNecessityArm(StrEnum):
@@ -278,20 +275,18 @@ def _validate_sham_tolerances(
 class ProgramNecessityProblemViewRef(LegacyContentAddressedModel):
     """Opaque problem-view identity tied to one exact public task snapshot."""
 
-    schema_version: Literal["aecbench.program-necessity-problem-view-ref.v1"] = (
-        "aecbench.program-necessity-problem-view-ref.v1"
+    schema_version: Literal["aecbench.program-necessity-problem-view-ref.v2"] = (
+        "aecbench.program-necessity-problem-view-ref.v2"
     )
     problem_id: NonEmptyStr
     problem_view_sha256: str
     task_id: NonEmptyStr
     task_revision: str
-    public_task_snapshot_sha256: str
     fixed_harness_projection_sha256: str
 
     @field_validator(
         "problem_view_sha256",
         "task_revision",
-        "public_task_snapshot_sha256",
         "fixed_harness_projection_sha256",
     )
     @classmethod
@@ -477,11 +472,7 @@ class ProgramNecessityLineagePlan(LegacyContentAddressedModel):
     def validate_exact_lineage(self) -> Self:
         snapshot = self.task_snapshot
         view = self.problem_view
-        if (
-            view.task_id != snapshot.task_id
-            or view.task_revision != snapshot.definition_sha256
-            or view.public_task_snapshot_sha256 != graph_hidden_task_snapshot_sha256(snapshot)
-        ):
+        if view.task_id != snapshot.task_id or view.task_revision != snapshot.commitment_sha256:
             raise ValueError(
                 "program-necessity problem view does not bind its task snapshot",
             )
@@ -498,7 +489,7 @@ class ProgramNecessityLineagePlan(LegacyContentAddressedModel):
         }
         if actual_coordinates != expected_coordinates or any(
             coordinate.task_id != snapshot.task_id
-            or coordinate.task_revision != snapshot.definition_sha256
+            or coordinate.task_revision != snapshot.commitment_sha256
             or coordinate.review_lineage_id != self.review_lineage_id
             for coordinate in self.coordinates
         ):

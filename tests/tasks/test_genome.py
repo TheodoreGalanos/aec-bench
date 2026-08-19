@@ -5,8 +5,8 @@ from pathlib import Path
 
 import yaml
 
-from aec_bench.contracts.run_bundle import TaskSnapshotRef
 from aec_bench.contracts.task_genome import TaskGenomeReview
+from aec_bench.contracts.task_snapshot import TaskSnapshotRef
 from aec_bench.harness.compilation.task_snapshot import build_task_snapshot
 from aec_bench.ledger.artifact_repository import ArtifactRepository
 from aec_bench.tasks.genome import (
@@ -113,7 +113,7 @@ def test_review_evidence_resolves_only_against_its_task_snapshot() -> None:
     resolved = resolve_task_genome_evidence(review, task_dir=task_dir, current_task=snapshot)
 
     assert any("## Constraints" in excerpt for excerpt in resolved["instructions"])
-    changed_snapshot = snapshot.model_copy(update={"package_sha256": "f" * 64})
+    changed_snapshot = snapshot.model_copy(update={"task_id": "electrical/changed-voltage-drop"})
     try:
         resolve_task_genome_evidence(review, task_dir=task_dir, current_task=changed_snapshot)
     except ValueError as error:

@@ -1,4 +1,4 @@
-# ABOUTME: Exercises the complete RunBundle to px runtime to Harbor import and lineage path.
+# ABOUTME: Exercises the complete RunPlan to px runtime to Harbor import and lineage path.
 # ABOUTME: Uses a real task package and Harbor-shaped job artifacts without a runtime mock mode.
 
 from __future__ import annotations
@@ -37,7 +37,7 @@ from aec_bench.experimentation.qualification.run_bundle_runtime import (
     execute_run_bundle,
     load_harbor_invocation_receipt,
 )
-from aec_bench.harness.compilation import compile_execution_program, compile_run_bundle
+from aec_bench.harness.compilation import compile_execution_program, compile_run_plan
 from aec_bench.harness.harbor_workflow import SynchronousHarborWorkflow
 from aec_bench.harness.kernel_catalogue import (
     KernelRuntimeRegistry,
@@ -250,11 +250,10 @@ def test_execute_run_bundle_crosses_program_harbor_import_and_lineage_boundary(t
     provenance = record.meta_harness_provenance
     assert provenance is not None
     assert provenance.run_id == "run.harness-program-study.001"
-    assert provenance.kernel_sha256 == canonical_json_sha256(bundle.kernel_ref.model_dump(mode="json"))
-    assert provenance.harness_sha256 == canonical_json_sha256(bundle.harness.model_dump(mode="json"))
-    assert provenance.program_sha256 == canonical_json_sha256(bundle.program.model_dump(mode="json"))
-    assert provenance.bundle_sha256 == canonical_json_sha256(bundle.model_dump(mode="json"))
-    assert provenance.review_sidecar_sha256 == bundle.task_snapshots[0].package_sha256
+    assert provenance.plan_run_id == bundle.run_manifest.run_id
+    assert provenance.kernel_id == bundle.harness.kernel_ref.kernel_id
+    assert provenance.harness_id == bundle.harness.instance_id
+    assert provenance.program_id == bundle.execution_program.program_id
     assert provenance.repetition == 1
     assert provenance.execution_seed == 91
     assert provenance.execution_seed_semantics == "paired_repetition_label_only"
@@ -265,29 +264,17 @@ def test_execute_run_bundle_crosses_program_harbor_import_and_lineage_boundary(t
     assert record.cost.cache_read_tokens == 0
     assert record.cost.cache_write_tokens == 0
     assert record.cost.estimated_cost_usd == 0.001
-    assert record.outputs.artifacts is not None
-    assert any(
-        artifact.kind == provenance.candidate_manifest.kind and artifact.sha256 == provenance.candidate_manifest.sha256
-        for artifact in record.outputs.artifacts
-    )
     assert record.execution_status is ExecutionStatus.COMPLETED
     expected_runtime_versions = {
         f"kernel:{binding.capability_ref.capability_id}": binding.capability_ref.version
         for binding in bundle.harness.bindings
     }
     assert record.environment.tool_versions == expected_runtime_versions
-    assert execution.candidate_manifest.path.exists()
-    candidate_payload = json.loads(execution.candidate_manifest.path.read_text(encoding="utf-8"))
-    assert candidate_payload["bundle"]["bundle_id"] == bundle.bundle_id
-    assert "content_sha256" not in candidate_payload["bundle"]
-    assert "target_settings" not in candidate_payload
-    assert evaluation_regime_ref.regime_id not in execution.candidate_manifest.path.read_text(encoding="utf-8")
-
     receipt_artifact = invocation.receipt
     assert receipt_artifact.path.parent.name == receipt_artifact.reference.sha256
     receipt = load_harbor_invocation_receipt(receipt_artifact.path)
     assert receipt == receipt_artifact.receipt
-    assert receipt.bundle_id == bundle.bundle_id
+    assert receipt.bundle_id == bundle.run_manifest.run_id
     assert receipt.run_id == "run.harness-program-study.001"
     assert receipt.program_node_id == "run"
     assert receipt.attempt == 1
@@ -329,14 +316,16 @@ def test_governed_attempt_assessment_rejects_changed_run_bundle_evidence(
         study=study,
         executor=WritingHarborExecutor(model="claude-test-model"),
     )
-    execution.candidate_manifest.path.write_text("{}\n", encoding="utf-8")
+    changed_bundle = bundle.model_copy(
+        update={"execution_program": bundle.execution_program.model_copy(update={"program_id": "changed-program"})}
+    )
 
     with pytest.raises(
         ValueError,
-        match="candidate manifest differs from its evidence reference",
+        match="execution program differs from the assessed bundle",
     ):
         assess_run_bundle_governed_attempt(
-            bundle=bundle,
+            bundle=changed_bundle,
             study=study,
             execution=execution,
         )
@@ -364,18 +353,18 @@ def test_governed_attempt_boundary_reports_exact_run_bundle_terminal_parity(
     assert boundary.execution.program.status is ProgramExecutionStatus.SUCCEEDED
     assert executor.calls == 1
     assert boundary.assessment.ready is True
-    assert boundary.assessment.bundle_id == bundle.bundle_id
+    assert boundary.assessment.bundle_id == bundle.run_manifest.run_id
     assert boundary.assessment.run_id == study.run_id
     assert boundary.assessment.blockers == ()
     assert boundary.assessment.invocation_receipt_sha256s == (
         boundary.execution.harbor_invocations[0].receipt.reference.sha256,
     )
     assert len(boundary.assessment.governed_terminal_sha256s) == 1
-    assert boundary.assessment.candidate_manifest_sha256 == (boundary.execution.candidate_manifest.reference.sha256)
+    assert boundary.assessment.plan_commitment_sha256 == canonical_json_sha256(bundle.model_dump(mode="json"))
     assert (
         tmp_path
         / "meta-harness-artifacts"
-        / bundle.bundle_id
+        / bundle.run_manifest.run_id
         / "runs"
         / study.run_id
         / "invocations"
@@ -455,10 +444,10 @@ def test_completed_invocation_receipt_survives_a_later_process_interruption(tmp_
         limits=ProgramLimits(max_parallelism=1),
     )
     program = compile_execution_program(source, harness=base.harness, registry=registry)
-    bundle = compile_run_bundle(
-        bundle_id="bundle-receipt-interruption",
+    bundle = compile_run_plan(
+        run_id="bundle-receipt-interruption",
         harness=base.harness,
-        program=program,
+        execution_program=program,
         registry=registry,
         tasks_root=tasks_root,
         experiment_id="receipt-interruption",
@@ -554,7 +543,7 @@ def test_execute_run_bundle_rejects_tampered_retry_taxonomy_before_harbor_dispat
     )
     tampered_harness = bundle.harness.model_copy(update={"program_surface": tampered_surface})
     tampered_program = (
-        bundle.program.model_copy(
+        bundle.execution_program.model_copy(
             update={
                 "nodes": tuple(
                     node.model_copy(
@@ -567,17 +556,17 @@ def test_execute_run_bundle_rejects_tampered_retry_taxonomy_before_harbor_dispat
                     )
                     if isinstance(node, ActionNode) and node.node_id == "run"
                     else node
-                    for node in bundle.program.nodes
+                    for node in bundle.execution_program.nodes
                 )
             }
         )
         if operation_id == "run_batch.v1"
-        else bundle.program
+        else bundle.execution_program
     )
     tampered_bundle = bundle.model_copy(
         update={
             "harness": tampered_harness,
-            "program": tampered_program,
+            "execution_program": tampered_program,
         }
     )
     executor = WritingHarborExecutor(model="claude-test-model")
@@ -834,6 +823,7 @@ def test_run_bundle_runtime_requires_every_planned_task_repetition(tmp_path: Pat
         artifacts_root=tmp_path / "meta-harness-artifacts",
         study=_study("run.missing-repetition.001"),
         executor=WritingHarborExecutor(model="claude-test-model"),
+        repetitions=2,
     )
 
     assert execution.program.status is ProgramExecutionStatus.FAILED

@@ -15,7 +15,7 @@ from pydantic import field_validator, model_validator
 from aec_bench.contracts.harness_instance import TaskSourceBindingConfig
 from aec_bench.contracts.harness_kernel import FrozenStrictModel, validate_sha256
 from aec_bench.contracts.legacy_content_address import LegacyContentAddressedModel
-from aec_bench.contracts.run_bundle import TaskSnapshotRef
+from aec_bench.contracts.task_snapshot import TaskSnapshotRef
 from aec_bench.contracts.trial_record import ArtifactReference
 from aec_bench.contracts.validators import NonEmptyStr
 from aec_bench.evolution.repair_lifecycle import (

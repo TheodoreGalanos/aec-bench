@@ -38,7 +38,7 @@ class MatchedEvaluationCoordinate(LegacyContentAddressedModel):
     seed: int = Field(ge=0)
     repetition: int = Field(ge=0)
 
-    @field_validator("task_revision", "review_lineage_id")
+    @field_validator("task_revision")
     @classmethod
     def validate_snapshot_hashes(cls, value: str) -> str:
         return validate_sha256(value)

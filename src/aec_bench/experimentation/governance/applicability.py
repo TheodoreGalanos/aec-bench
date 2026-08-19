@@ -16,10 +16,11 @@ from aec_bench.contracts.harness_kernel import (
     validate_sha256,
 )
 from aec_bench.contracts.legacy_content_address import LegacyContentAddressedModel
-from aec_bench.contracts.run_bundle import TaskSnapshotRef
+from aec_bench.contracts.task_review_snapshot import TaskReviewSnapshot
+from aec_bench.contracts.task_snapshot import TaskSnapshotRef
 from aec_bench.contracts.validators import NonEmptyStr
 from aec_bench.experimentation.governance.motifs import MotifApplicabilityDescriptor
-from aec_bench.harness.compilation.task_snapshot import resolve_task_snapshots
+from aec_bench.harness.compilation.task_snapshot import resolve_task_material
 from aec_bench.harness.compilation.task_surface import (
     DeclaredTaskSurface,
     TopologyBasis,
@@ -38,24 +39,20 @@ class TaskApplicabilityProjection(FrozenStrictModel):
     """One exact task snapshot paired with its safe declared profiler input."""
 
     snapshot: TaskSnapshotRef
-    review_lineage_sha256: str
+    review: TaskReviewSnapshot | None = None
     surface: DeclaredTaskSurface
-
-    @field_validator("review_lineage_sha256")
-    @classmethod
-    def validate_review_lineage(cls, value: str) -> str:
-        return validate_sha256(value)
 
     @model_validator(mode="after")
     def validate_lineage(self) -> Self:
-        expected = (
-            self.snapshot.task_review.review_sidecar_sha256
-            if self.snapshot.task_review is not None
-            else self.snapshot.package_sha256
-        )
-        if self.review_lineage_sha256 != expected:
-            raise ValueError("applicability projection review lineage does not match its task snapshot")
+        if self.review is not None and self.review.task_id != self.snapshot.task_id:
+            raise ValueError("applicability projection review does not match its task snapshot")
         return self
+
+    @property
+    def review_id(self) -> str:
+        """Return one stable review identity without adding a second stored identity."""
+
+        return self.review.profile_id if self.review is not None else f"unreviewed:{self.snapshot.task_id}"
 
 
 class MotifApplicabilityAttestation(LegacyContentAddressedModel):
@@ -116,7 +113,7 @@ class MotifApplicabilityAttestation(LegacyContentAddressedModel):
         expected_profile = canonical_json_sha256(_profile_input_payload(self.projections))
         if self.profile_input_sha256 != expected_profile:
             raise ValueError("applicability profile hash does not bind its reward-blind inputs")
-        expected_lineages = tuple(sorted({projection.review_lineage_sha256 for projection in self.projections}))
+        expected_lineages = tuple(sorted({projection.review_id for projection in self.projections}))
         if self.review_lineage_ids != expected_lineages:
             raise ValueError("applicability review lineages do not match its task projections")
         expected_bases = tuple(sorted({projection.surface.topology_basis for projection in self.projections}))
@@ -139,24 +136,21 @@ def profile_task_applicability(
     runtime = registry.resolve(profiler.ref).runtime
     if not isinstance(runtime, ApplicabilityProfilerRuntime):
         raise ValueError("fixed-K applicability capability does not resolve to its trusted runtime")
-    snapshots = resolve_task_snapshots(task_refs=task_refs, tasks_root=tasks_root)
+    material = resolve_task_material(task_refs=task_refs, tasks_root=tasks_root)
+    reviews = {} if material.review is None else {review.task_id: review for review in material.review.tasks}
     task_registry = TaskRegistry(tasks_root=Path(tasks_root).resolve())
     task_registry.reload()
     tasks_by_id = {task.task_id: task for task in task_registry.all()}
     projections = tuple(
         TaskApplicabilityProjection(
             snapshot=snapshot,
-            review_lineage_sha256=(
-                snapshot.task_review.review_sidecar_sha256
-                if snapshot.task_review is not None
-                else snapshot.package_sha256
-            ),
+            review=reviews.get(snapshot.task_id),
             surface=project_declared_task_surface(
                 task=tasks_by_id[snapshot.task_id],
                 task_dir=Path(tasks_root).resolve() / snapshot.task_id,
             ),
         )
-        for snapshot in snapshots
+        for snapshot in material.references
     )
     ordered = tuple(sorted(projections, key=lambda projection: projection.snapshot.task_id))
     return MotifApplicabilityAttestation(
@@ -166,7 +160,7 @@ def profile_task_applicability(
             [projection.snapshot.model_dump(mode="json") for projection in ordered]
         ),
         profile_input_sha256=canonical_json_sha256(_profile_input_payload(ordered)),
-        review_lineage_ids=tuple(projection.review_lineage_sha256 for projection in ordered),
+        review_lineage_ids=tuple(projection.review_id for projection in ordered),
         topology_bases=tuple(projection.surface.topology_basis for projection in ordered),
         projections=ordered,
         descriptor=_aggregate_descriptor(ordered),

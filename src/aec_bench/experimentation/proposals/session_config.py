@@ -14,7 +14,6 @@ from pydantic import ValidationError, field_validator
 
 from aec_bench.contracts.harness_kernel import (
     FrozenStrictModel,
-    canonical_json_sha256,
     validate_sha256,
 )
 from aec_bench.contracts.program_proposal.study import MatchedEvaluationCoordinate
@@ -32,6 +31,10 @@ from aec_bench.experimentation.proposals.task_package import source_task_package
 from aec_bench.experimentation.proposals.task_packaging.contracts import (
     ProposalTaskPackageError,
     ProposalTaskPackageManifest,
+)
+from aec_bench.harness.compilation.task_snapshot import (
+    TaskSnapshotError,
+    assert_task_snapshot_matches_directory,
 )
 from aec_bench.tasks.loader import LoadError, load_task_definition
 
@@ -178,12 +181,7 @@ def _load_source_task(
         observed_source_sha256 = source_task_package_sha256(source_task_dir)
     except ProposalTaskPackageError as error:
         raise ProposalSessionHostConfigError(f"proposal source task package is unsafe: {error}") from error
-    expected_source_identities = (
-        config.source_task_package_sha256,
-        bundle.task_snapshot.package_sha256,
-        bundle.compilation.source_scope_manifest.task_package_sha256,
-    )
-    if any(identity != observed_source_sha256 for identity in expected_source_identities):
+    if config.source_task_package_sha256 != observed_source_sha256:
         raise ProposalSessionHostConfigError("proposal source task package identity differs from the compiled session")
     try:
         source_task = load_task_definition(
@@ -195,11 +193,12 @@ def _load_source_task(
         )
     except (LoadError, OSError, ValueError) as error:
         raise ProposalSessionHostConfigError(f"proposal source task definition is invalid: {error}") from error
-    if (
-        source_task.task_id != bundle.task_snapshot.task_id
-        or canonical_json_sha256(source_task.model_dump(mode="json")) != bundle.task_snapshot.definition_sha256
-    ):
+    if source_task.task_id != bundle.task_snapshot.task_id:
         raise ProposalSessionHostConfigError("proposal source task definition differs from the compiled session")
+    try:
+        assert_task_snapshot_matches_directory(reference=bundle.task_snapshot, task_dir=source_task_dir)
+    except (OSError, TaskSnapshotError, ValueError) as error:
+        raise ProposalSessionHostConfigError("proposal source task differs from its exact task reference") from error
     return _LoadedSourceTask(
         path=source_task_dir,
         package_sha256=observed_source_sha256,
@@ -255,7 +254,7 @@ def _validate_evaluation_coordinate(
     freeze = bundle.compilation.proposal_freeze
     if (
         coordinate.task_id != bundle.task_snapshot.task_id
-        or coordinate.task_revision != bundle.task_snapshot.definition_sha256
+        or coordinate.task_revision != bundle.task_snapshot.commitment_sha256
         or coordinate.split is not freeze.split
         or coordinate.review_lineage_id != freeze.selected_review_lineage_id
     ):
@@ -275,7 +274,7 @@ def _validate_derived_task_manifest(
     finalizer = bundle.compilation.proposal_graph.finalizer
     expected = (
         bundle.task_snapshot.task_id,
-        bundle.task_snapshot.definition_sha256,
+        bundle.task_snapshot.commitment_sha256,
         source_task_package_sha256,
         problem_view.content_sha256,
         finalizer.output_completion_contract_sha256,

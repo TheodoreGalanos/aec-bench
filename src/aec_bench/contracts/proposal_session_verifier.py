@@ -147,8 +147,6 @@ def _validate_session_execution_binding(
 ) -> None:
     if session.execution.session_id != session.session_id:
         raise ValueError("proposal execution session id does not match its receipt")
-    if session.execution.source_task_package_sha256 != compilation.source_scope_manifest.task_package_sha256:
-        raise ValueError("proposal execution does not bind the compiled source task package")
     coordinate = session.execution.evaluation_coordinate
     freeze = compilation.proposal_freeze
     if (

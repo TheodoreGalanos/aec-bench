@@ -15,8 +15,9 @@ from aec_bench.contracts.execution_program import (
     ProgramNode,
     VerifyNode,
 )
-from aec_bench.contracts.run_bundle import TaskSnapshotRef
 from aec_bench.contracts.stage_execution import DeclaredStageGraph
+from aec_bench.contracts.task_review_snapshot import ReviewSnapshot
+from aec_bench.contracts.task_snapshot import TaskSnapshotRef, task_snapshot_id
 
 from .diagnostics import CompilationOwner, _fail
 from .operations import _literal_string
@@ -33,6 +34,7 @@ def _validate_declared_stage_program(
     *,
     program: CompiledExecutionProgram,
     snapshots: tuple[TaskSnapshotRef, ...],
+    review: ReviewSnapshot | None,
 ) -> None:
     stage_candidates, finalize_candidates = _declared_stage_candidates(program)
     if not stage_candidates and not finalize_candidates:
@@ -42,7 +44,7 @@ def _validate_declared_stage_program(
         stage_candidates=stage_candidates,
         finalize_candidates=finalize_candidates,
     )
-    graphs = _declared_stage_graphs(snapshots)
+    graphs = _declared_stage_graphs(snapshots, review=review)
     nodes_by_id = {node.node_id: node for node in program.nodes}
     index = _index_declared_stage_nodes(
         stage_candidates=stage_candidates,
@@ -113,18 +115,23 @@ def _validate_declared_stage_program_shape(
 
 def _declared_stage_graphs(
     snapshots: tuple[TaskSnapshotRef, ...],
+    *,
+    review: ReviewSnapshot | None,
 ) -> dict[str, DeclaredStageGraph]:
+    reviews = {item.task_id: item for item in review.tasks} if review is not None else {}
     graphs: dict[str, DeclaredStageGraph] = {}
     for snapshot in snapshots:
-        graph = snapshot.task_review.stage_graph if snapshot.task_review is not None else None
+        task_id = task_snapshot_id(snapshot)
+        task_review = reviews.get(task_id)
+        graph = task_review.stage_graph if task_review is not None else None
         if graph is None:
             _fail(
                 owner=CompilationOwner.WORLD,
                 code="declared_stage_graph_missing",
-                message=f"staged px requires a pinned declared-stage graph for {snapshot.task_id}",
-                subject_ids=(snapshot.task_id,),
+                message=f"staged execution requires a declared-stage graph for {task_id}",
+                subject_ids=(task_id,),
             )
-        graphs[snapshot.task_id] = graph
+        graphs[task_id] = graph
     return graphs
 
 
@@ -174,7 +181,7 @@ def _add_declared_stage_node(
         _fail(
             owner=CompilationOwner.PROGRAM,
             code="declared_stage_task_outside_bundle",
-            message=f"stage node targets a task outside the RunBundle: {task_ref}",
+            message=f"stage node targets a task outside the run plan: {task_ref}",
             subject_ids=(candidate.node_id, task_ref),
         )
     if graph.stage(stage_id) is None:
@@ -210,7 +217,7 @@ def _index_declared_stage_finalizers(
             _fail(
                 owner=CompilationOwner.PROGRAM,
                 code="declared_stage_task_outside_bundle",
-                message=f"finalizer targets a task outside the RunBundle: {task_ref}",
+                message=f"finalizer targets a task outside the run plan: {task_ref}",
                 subject_ids=(candidate.node_id, task_ref),
             )
         finalizers_by_task.setdefault(task_ref, []).append(candidate)
@@ -229,7 +236,7 @@ def _validate_declared_stage_task_coverage(
         _fail(
             owner=CompilationOwner.PROGRAM,
             code="declared_stage_task_coverage_mismatch",
-            message="staged px must execute and finalize every task bound into the RunBundle",
+            message="staged execution must execute and finalize every task in the run plan",
             subject_ids=tuple(sorted(expected_task_ids | stage_task_ids | finalizer_task_ids)),
         )
 

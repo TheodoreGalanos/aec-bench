@@ -1,4 +1,4 @@
-# ABOUTME: Tests deterministic RunBundle lowering into exact Harbor runtime inputs.
+# ABOUTME: Tests deterministic RunPlan lowering into exact Harbor runtime inputs.
 # ABOUTME: Covers content drift, trusted primitive resolution, executable bindings, and lineage injection.
 
 from __future__ import annotations
@@ -34,9 +34,12 @@ def test_lowering_materializes_every_selected_harness_binding_and_exact_task(tmp
         attempt=2,
         execution_seed=91,
         motif_ids=("motif.serial-review",),
+        repetitions=3,
     )
 
-    assert tuple(task.task_id for task in lowered.tasks) == bundle.harbor.task_refs
+    assert tuple(task.task_id for task in lowered.tasks) == tuple(
+        snapshot.task_id for snapshot in bundle.task_snapshots
+    )
     assert lowered.manifest.experiment_id == "adaptive-experiment-run-a2"
     assert lowered.manifest.repetitions == 3
     assert lowered.manifest.compute.backend == "docker"
@@ -44,7 +47,7 @@ def test_lowering_materializes_every_selected_harness_binding_and_exact_task(tmp
     assert lowered.manifest.compute.timeout_override == 360
     assert lowered.manifest.disable_verification is False
     assert lowered.ledger_namespace == "adaptive-harness"
-    assert lowered.required_artifact_kinds == ("candidate-manifest",)
+    assert lowered.required_artifact_kinds == ()
     assert lowered.agent_turn_capacity == 24
     assert lowered.tool_call_capacity == 48
     assert lowered.context_token_capacity == 12_000
@@ -67,10 +70,10 @@ def test_lowering_materializes_every_selected_harness_binding_and_exact_task(tmp
     assert "max_context_tokens" not in agent.parameters
     assert "output_completion_contract" not in agent.parameters
     lineage = agent.parameters["meta_harness_context"]
-    assert lineage["kernel_ref"] == bundle.kernel_ref.model_dump(mode="json")
+    assert lineage["kernel_ref"] == bundle.harness.kernel_ref.model_dump(mode="json")
     assert lineage["harness_ref"] == bundle.harness.ref.model_dump(mode="json")
-    assert lineage["program_ref"] == bundle.program.ref.model_dump(mode="json")
-    assert lineage["bundle_id"] == bundle.bundle_id
+    assert lineage["program_ref"] == bundle.execution_program.ref.model_dump(mode="json")
+    assert lineage["plan_run_id"] == bundle.run_manifest.run_id
     assert lineage["program_node_id"] == "run"
     assert lineage["attempt"] == 2
     assert lineage["execution_seed"] == 91

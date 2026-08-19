@@ -3,8 +3,8 @@
 
 from pathlib import Path
 
-from aec_bench.contracts.run_bundle import TaskSnapshotRef
 from aec_bench.contracts.task_genome import PressurePoint, TaskGenomeReview
+from aec_bench.contracts.task_snapshot import TaskSnapshotRef
 from aec_bench.evolution.task_genome_decomposer import (
     build_decomposition_prompt,
     decompose_task_genome,

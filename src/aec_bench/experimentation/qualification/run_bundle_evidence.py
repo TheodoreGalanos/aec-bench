@@ -1,4 +1,4 @@
-# ABOUTME: Defines and persists RunBundle study, invocation, authority, and execution evidence.
+# ABOUTME: Defines and persists RunPlan study, invocation, authority, and execution evidence.
 # ABOUTME: Keeps canonical Harbor receipt bytes and replay validation outside runtime orchestration.
 
 from __future__ import annotations
@@ -33,7 +33,7 @@ from aec_bench.contracts.harness_kernel import (
     validate_sha256,
 )
 from aec_bench.contracts.legacy_content_address import LegacyContentAddressedModel
-from aec_bench.contracts.run_bundle import RunBundle
+from aec_bench.contracts.run_bundle import RunPlan
 from aec_bench.contracts.trial_record import ArtifactReference
 from aec_bench.contracts.validators import NonEmptyStr
 from aec_bench.experimentation.governance.authority_ledger import (
@@ -54,7 +54,7 @@ from aec_bench.ledger.reader import read_trial_record
 
 
 class MetaHarnessStudyContext(FrozenStrictModel):
-    """Invocation-specific study lineage kept separate from candidate RunBundle identity."""
+    """Invocation-specific study lineage kept separate from candidate RunPlan identity."""
 
     run_id: NonEmptyStr
     policy_id: NonEmptyStr
@@ -105,14 +105,6 @@ class MetaHarnessStudyContext(FrozenStrictModel):
         if self.split == "holdout" and any(value is not None for value in repair):
             raise ValueError("holdout execution cannot carry repair provenance")
         return self
-
-
-@dataclass(frozen=True)
-class CandidateManifestArtifact:
-    """Physical content-pinned candidate manifest and its TrialRecord reference."""
-
-    path: Path
-    reference: ArtifactReference
 
 
 class HarborJobFileDigest(FrozenStrictModel):
@@ -212,10 +204,9 @@ class StageExecutionEvidence:
 
 @dataclass(frozen=True)
 class RunBundleExecution:
-    """Terminal px evidence plus every materialized Harbor invocation and candidate artifact."""
+    """Terminal px evidence plus every materialized Harbor invocation."""
 
     program: ProgramExecutionResult
-    candidate_manifest: CandidateManifestArtifact
     stage_executions: tuple[StageExecutionEvidence, ...]
     harbor_invocations: tuple[HarborInvocationEvidence, ...]
     budget: HarnessBudgetObservation
@@ -244,7 +235,7 @@ def load_harbor_invocation_receipt(path: Path) -> HarborInvocationReceipt:
 def persist_harbor_invocation_receipt(
     *,
     artifacts_root: Path,
-    bundle: RunBundle,
+    bundle: RunPlan,
     study: MetaHarnessStudyContext,
     context: OperationExecutionContext,
     experiment_id: str,
@@ -255,7 +246,7 @@ def persist_harbor_invocation_receipt(
     """Persist the current receipt with canonical serialization."""
 
     receipt = HarborInvocationReceipt(
-        bundle_id=bundle.bundle_id,
+        bundle_id=bundle.run_manifest.run_id,
         run_id=study.run_id,
         program_node_id=context.node_id,
         attempt=context.attempt_index,
@@ -288,7 +279,7 @@ def persist_harbor_invocation_receipt(
     physical_sha256 = hashlib.sha256(encoded).hexdigest()
     receipt_path = (
         Path(artifacts_root)
-        / _safe_segment(bundle.bundle_id)
+        / _safe_segment(bundle.run_manifest.run_id)
         / "runs"
         / _safe_segment(study.run_id)
         / "receipts"
@@ -315,7 +306,7 @@ def persist_harbor_invocation_receipt(
 def record_scored_import_authority(
     *,
     ledger: AuthorityLedger,
-    bundle: RunBundle,
+    bundle: RunPlan,
     study: MetaHarnessStudyContext,
     receipt: HarborInvocationReceiptArtifact,
     imported_trial_paths: tuple[Path, ...],
@@ -374,7 +365,7 @@ def record_scored_import_authority(
             *(item.reference for item in trial_bases),
             receipt_basis.reference,
         ),
-        kernel_ref=bundle.kernel_ref,
+        kernel_ref=bundle.harness.kernel_ref,
         reasons=("exact imported trials and invocation receipt persisted",),
         revalidation_triggers=(
             "basis_replay_due",
@@ -387,33 +378,6 @@ def record_scored_import_authority(
         receipt_basis=receipt_basis,
         authority_event=authority_event,
     )
-
-
-def write_candidate_manifest(
-    *,
-    bundle: RunBundle,
-    artifacts_root: Path,
-) -> CandidateManifestArtifact:
-    """Persist the exact candidate payload used by every RunBundle trial."""
-
-    payload = {
-        "schema_version": "aecbench.meta-harness-candidate.v1",
-        "bundle": bundle.model_dump(mode="json"),
-    }
-    encoded = (json.dumps(payload, indent=2, sort_keys=True) + "\n").encode("utf-8")
-    path = Path(artifacts_root) / _safe_segment(bundle.bundle_id) / "candidate-manifest.json"
-    path.parent.mkdir(parents=True, exist_ok=True)
-    if path.exists() and path.read_bytes() != encoded:
-        raise ValueError("candidate manifest path already contains different content")
-    if not path.exists():
-        path.write_bytes(encoded)
-    reference = ArtifactReference(
-        kind="candidate-manifest",
-        path=str(path),
-        sha256=hashlib.sha256(encoded).hexdigest(),
-        media_type="application/json",
-    )
-    return CandidateManifestArtifact(path=path, reference=reference)
 
 
 def _job_file_digests(
@@ -496,7 +460,6 @@ def _safe_segment(value: str) -> str:
 
 
 __all__ = (
-    "CandidateManifestArtifact",
     "HarborInvocationEvidence",
     "HarborInvocationGovernance",
     "HarborInvocationReceipt",
@@ -508,5 +471,4 @@ __all__ = (
     "load_harbor_invocation_receipt",
     "persist_harbor_invocation_receipt",
     "record_scored_import_authority",
-    "write_candidate_manifest",
 )

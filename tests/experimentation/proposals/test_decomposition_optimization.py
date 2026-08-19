@@ -81,7 +81,6 @@ def _view() -> DecompositionProblemView:
             "problem_id": "problem.drainage-01",
             "task_id": "drainage-01",
             "task_revision": _sha("task-revision"),
-            "public_task_snapshot_sha256": _sha("public-task"),
             "public_instruction": "Review the drainage package.",
             "public_sources": [
                 {

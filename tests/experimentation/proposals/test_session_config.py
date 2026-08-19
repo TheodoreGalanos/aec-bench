@@ -25,6 +25,7 @@ from aec_bench.experimentation.proposals.session_config import (
 from aec_bench.experimentation.proposals.task_package import (
     ProposalTaskPackageIdentity,
     build_proposal_task_package,
+    source_task_package_sha256,
 )
 from tests.experimentation.proposals.test_program_compilation import (
     _compile_arguments,
@@ -48,7 +49,7 @@ def test_loads_exact_host_inputs_without_serializing_source_bytes(
     assert loaded.config == config
     assert loaded.bundle == expected_bundle
     assert loaded.source_task_dir.is_dir()
-    assert loaded.derived_task_manifest.source_task_package_sha256 == (expected_bundle.task_snapshot.package_sha256)
+    assert loaded.derived_task_manifest.source_task_package_sha256 == config.source_task_package_sha256
     assert loaded.runtime_archive.archive_sha256 == config.runtime_archive_sha256
     assert loaded.config.evaluation_coordinate.seed == 1701
     assert loaded.config.evaluation_coordinate.repetition == 2
@@ -242,6 +243,7 @@ def _host_fixture(
         archive_path=tmp_path / "proposal-runtime.tar.gz",
     )
     source_task_dir = fixture.ledger.root.parent / "tasks" / compiled.task_snapshot.task_id
+    source_package_sha256 = source_task_package_sha256(source_task_dir)
     output_contract = OutputCompletionContract.model_validate(
         compiled.compilation.proposal_freeze.problem_view.output_contract
     )
@@ -250,8 +252,8 @@ def _host_fixture(
         destination_task_dir=tmp_path / "derived-task",
         identity=ProposalTaskPackageIdentity(
             task_id=compiled.task_snapshot.task_id,
-            task_revision=compiled.task_snapshot.definition_sha256,
-            source_task_package_sha256=compiled.task_snapshot.package_sha256,
+            task_revision=compiled.task_snapshot.commitment_sha256,
+            source_task_package_sha256=source_package_sha256,
             problem_view_sha256=(compiled.compilation.proposal_freeze.problem_view.content_sha256),
             output_contract_sha256=(compiled.compilation.proposal_graph.finalizer.output_completion_contract_sha256),
             visibility=Visibility.PUBLIC,
@@ -262,7 +264,7 @@ def _host_fixture(
     evaluation_coordinate = MatchedEvaluationCoordinate(
         coordinate_id="evaluation.proposal-session-config.2",
         task_id=compiled.task_snapshot.task_id,
-        task_revision=compiled.task_snapshot.definition_sha256,
+        task_revision=compiled.task_snapshot.commitment_sha256,
         split=compiled.compilation.proposal_freeze.split,
         review_lineage_id=(compiled.compilation.proposal_freeze.selected_review_lineage_id),
         seed=1701,
@@ -274,7 +276,7 @@ def _host_fixture(
             bundle_file_sha256=_sha256(bundle_path.read_bytes()),
             bundle_content_sha256=compiled.content_sha256,
             source_task_dir=str(source_task_dir.resolve()),
-            source_task_package_sha256=compiled.task_snapshot.package_sha256,
+            source_task_package_sha256=source_package_sha256,
             runtime_archive_path=str(runtime_archive.path.resolve()),
             runtime_archive_sha256=runtime_archive.archive_sha256,
             runtime_archive_content_sha256=runtime_archive.content_sha256,

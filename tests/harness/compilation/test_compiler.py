@@ -1,4 +1,4 @@
-# ABOUTME: Tests deterministic compilation from fixed K plus Hx and px into executable RunBundles.
+# ABOUTME: Tests deterministic compilation from fixed K plus Hx and px into executable run plans.
 # ABOUTME: Verifies exact capability resolution, operation pinning, diagnostics, and real task snapshots.
 
 from __future__ import annotations
@@ -44,13 +44,14 @@ from aec_bench.contracts.harness_instance import (
     VerificationBindingConfig,
 )
 from aec_bench.contracts.harness_kernel import KernelCapabilityRef
+from aec_bench.contracts.task_review_snapshot import ReviewSnapshot
 from aec_bench.harness.compilation import (
     CompilationError,
     CompilationOwner,
     _operation_definition_for_compilation,
     compile_execution_program,
     compile_harness_instance,
-    compile_run_bundle,
+    compile_run_plan,
 )
 from aec_bench.harness.kernel_catalogue import (
     KernelRuntimePrimitive,
@@ -1124,34 +1125,32 @@ def test_run_bundle_compiler_binds_real_task_package_and_infers_typed_harbor_rol
         registry=registry,
     )
 
-    first = compile_run_bundle(
-        bundle_id="bundle-adaptive",
+    first = compile_run_plan(
+        run_id="bundle-adaptive",
         harness=harness,
-        program=program,
+        execution_program=program,
         registry=registry,
         tasks_root=tmp_path / "tasks",
         experiment_id="adaptive-experiment",
-        repetitions=3,
     )
-    second = compile_run_bundle(
-        bundle_id="bundle-adaptive",
+    second = compile_run_plan(
+        run_id="bundle-adaptive",
         harness=harness,
-        program=program,
+        execution_program=program,
         registry=registry,
         tasks_root=tmp_path / "tasks",
         experiment_id="adaptive-experiment",
-        repetitions=3,
     )
 
     assert first == second
     assert first.task_snapshots[0].task_id == task_id
-    assert first.task_snapshots[0].task_review is not None
-    assert first.task_snapshots[0].task_review.profile_id == "aec.task-review.civil.calculation"
-    assert first.harbor.agent_binding_id == "agent"
-    assert first.harbor.compute_binding_id == "compute"
-    assert first.harbor.verification_binding_id == "verify"
-    assert first.harbor.result_import_binding_id == "import"
-    assert first.harbor.repetitions == 3
+    assert isinstance(first.review, ReviewSnapshot)
+    assert first.review.tasks[0].profile_id == "aec.task-review.civil.calculation"
+    assert first.run_manifest.agent.adapter == "aecbench.adapter.tool-loop"
+    assert isinstance(first.harness.binding("compute").configuration, ComputeBindingConfig)
+    assert isinstance(first.harness.binding("verify").configuration, VerificationBindingConfig)
+    assert isinstance(first.harness.binding("import").configuration, ResultImportBindingConfig)
+    assert "repetitions" not in first.model_dump(mode="json")
     assert "target_settings" not in first.model_dump(mode="json")
 
 
@@ -1167,16 +1166,17 @@ def test_run_bundle_compiler_accepts_an_exact_declared_stage_program(tmp_path: P
         registry=registry,
     )
 
-    bundle = compile_run_bundle(
-        bundle_id="bundle-staged",
+    bundle = compile_run_plan(
+        run_id="bundle-staged",
         harness=harness,
-        program=program,
+        execution_program=program,
         registry=registry,
         tasks_root=tmp_path / "tasks",
         experiment_id="staged-experiment",
     )
 
-    graph = bundle.task_snapshots[0].task_review.stage_graph if bundle.task_snapshots[0].task_review else None
+    assert isinstance(bundle.review, ReviewSnapshot)
+    graph = bundle.review.tasks[0].stage_graph
     assert graph is not None
     assert graph.topological_order == ("inventory", "authority", "decision")
 
@@ -1216,10 +1216,10 @@ def test_run_bundle_compiler_rejects_unknown_declared_stage(tmp_path: Path) -> N
     )
 
     with pytest.raises(CompilationError) as captured:
-        compile_run_bundle(
-            bundle_id="bundle-unknown-stage",
+        compile_run_plan(
+            run_id="bundle-unknown-stage",
             harness=harness,
-            program=program,
+            execution_program=program,
             registry=registry,
             tasks_root=tmp_path / "tasks",
             experiment_id="staged-experiment",
@@ -1269,10 +1269,10 @@ def test_run_bundle_compiler_rejects_missing_declared_stage_predecessor_receipt(
     )
 
     with pytest.raises(CompilationError) as captured:
-        compile_run_bundle(
-            bundle_id="bundle-missing-predecessor",
+        compile_run_plan(
+            run_id="bundle-missing-predecessor",
             harness=harness,
-            program=program,
+            execution_program=program,
             registry=registry,
             tasks_root=tmp_path / "tasks",
             experiment_id="staged-experiment",
@@ -1303,10 +1303,10 @@ def test_run_bundle_compiler_rejects_context_larger_than_declared_bound(tmp_path
     )
 
     with pytest.raises(CompilationError) as captured:
-        compile_run_bundle(
-            bundle_id="bundle-context-overflow",
+        compile_run_plan(
+            run_id="bundle-context-overflow",
             harness=harness,
-            program=program,
+            execution_program=program,
             registry=registry,
             tasks_root=tmp_path / "tasks",
             experiment_id="context-overflow",
@@ -1336,10 +1336,10 @@ def test_run_bundle_compiler_rejects_task_tool_without_a_kernel_owned_runtime(tm
     )
 
     with pytest.raises(CompilationError) as captured:
-        compile_run_bundle(
-            bundle_id="bundle-unsupported-tool",
+        compile_run_plan(
+            run_id="bundle-unsupported-tool",
             harness=harness,
-            program=program,
+            execution_program=program,
             registry=registry,
             tasks_root=tmp_path / "tasks",
             experiment_id="unsupported-tool",
@@ -1456,7 +1456,6 @@ def _recipe(
                 topology_role=HarnessTopologyRole.SINK,
                 configuration=ResultImportBindingConfig(
                     ledger_namespace="adaptive-harness",
-                    required_artifacts=("candidate-manifest",),
                 ),
             ),
         ),

@@ -6,7 +6,6 @@ from __future__ import annotations
 from pathlib import Path
 from statistics import fmean
 
-from aec_bench.contracts.run_bundle import RunBundle
 from aec_bench.contracts.trial_record import ArtifactReference, TrialRecord
 from aec_bench.experimentation.qualification.harness_program_study.analysis import (
     HarnessProgramOutcome,
@@ -27,7 +26,6 @@ def verify_harness_program_study_report(report: HarnessProgramStudyReport) -> No
     validated = HarnessProgramStudyReport.model_validate(report.model_dump(mode="python"))
     spec = _load_bound_experiment_spec(validated)
     _verify_bound_plan_artifact(validated)
-    _verify_bound_candidate_artifacts(validated)
     outcomes, records = _load_bound_trial_evidence(validated)
     recomputed_analysis = analyse_harness_program_study(
         validated.plan,
@@ -96,28 +94,6 @@ def _verify_bound_plan_artifact(
         raise ValueError(
             "harness-program-study report plan seed schedule does not match its source factors",
         )
-
-
-def _verify_bound_candidate_artifacts(
-    report: HarnessProgramStudyReport,
-) -> None:
-    for candidate_set in report.candidates:
-        for cell in candidate_set.cells:
-            artifact = cell.candidate_manifest
-            if artifact.kind != "candidate-manifest":
-                raise ValueError(
-                    "harness-program-study report has an invalid candidate artifact kind",
-                )
-            _verify_artifact(artifact)
-            payload = _read_json_object(
-                Path(artifact.path),
-                label="candidate manifest",
-            )
-            bundle = RunBundle.model_validate(payload.get("bundle"))
-            if bundle.bundle_id != cell.bundle_id:
-                raise ValueError(
-                    "candidate manifest bundle identity does not match harness-program-study report",
-                )
 
 
 def _load_bound_trial_evidence(
@@ -196,7 +172,7 @@ def _validate_trial_record_lineage(
         provenance is None
         or provenance.run_id != trial.trial.trial_id
         or provenance.execution_seed != trial.execution_seed
-        or provenance.bundle_id != trial.bundle_id
+        or provenance.plan_run_id != trial.bundle_id
         or provenance.harness_program_cell != trial.trial.cell.value
         or provenance.paired_block_id != trial.trial.block_id
         or provenance.harness_program_plan != report.plan_artifact
@@ -268,15 +244,7 @@ def _verify_derived_report_aggregates(
         (record.cost.tokens_in or 0) + (record.cost.tokens_out or 0) for record in records if record.cost is not None
     )
     estimated_cost = sum(float(trial.estimated_cost_usd) for trial in report.trials)
-    review_lineage_ids = tuple(
-        sorted(
-            {
-                provenance.review_sidecar_sha256
-                for record in records
-                if (provenance := record.meta_harness_provenance) is not None
-            }
-        )
-    )
+    review_lineage_ids = report.applicability.review_lineage_ids
     if (
         report.review_lineage_ids != review_lineage_ids
         or report.trial_count != len(report.trials)

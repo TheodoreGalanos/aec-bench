@@ -7,7 +7,7 @@ from typing import Any, Literal, Self
 
 from pydantic import Field, PositiveInt, field_validator, model_validator
 
-from aec_bench.contracts.run_bundle import TaskSnapshotRef
+from aec_bench.contracts.task_snapshot import TaskSnapshotRef
 from aec_bench.contracts.validators import (
     FrozenStrictModel,
     NonEmptyStr,

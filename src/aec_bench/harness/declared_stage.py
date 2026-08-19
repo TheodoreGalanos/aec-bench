@@ -16,7 +16,7 @@ from typing import Any
 from pydantic import JsonValue
 
 from aec_bench.contracts.harness_kernel import canonical_json_sha256
-from aec_bench.contracts.run_bundle import RunBundle, TaskSnapshotRef
+from aec_bench.contracts.run_bundle import RunPlan
 from aec_bench.contracts.stage_execution import (
     DeclaredStage,
     DeclaredStageGraph,
@@ -28,6 +28,8 @@ from aec_bench.contracts.stage_execution import (
     StageOutput,
     StageResourceEvidence,
 )
+from aec_bench.contracts.task_review_snapshot import ReviewSnapshot
+from aec_bench.contracts.task_snapshot import TaskSnapshotRef
 from aec_bench.contracts.trial_record import ArtifactReference
 from aec_bench.harness.program_execution import OperationExecutionContext
 from aec_bench.ledger.durability import fsync_directory, mkdir_durable
@@ -60,7 +62,7 @@ class StoredStageExecutionReceipt:
 
 def prepare_stage_instruction(
     *,
-    bundle: RunBundle,
+    bundle: RunPlan,
     tasks_root: Path,
     task_id: str,
     stage_id: str,
@@ -110,7 +112,7 @@ def prepare_stage_instruction(
     )
     namespace = (
         Path(artifacts_root)
-        / _safe_segment(bundle.bundle_id)
+        / _safe_segment(bundle.run_manifest.run_id)
         / "runs"
         / _safe_segment(run_id)
         / "stage-contexts"
@@ -163,7 +165,7 @@ def prepare_stage_instruction(
 
 def persist_stage_execution(
     *,
-    bundle: RunBundle,
+    bundle: RunPlan,
     task_id: str,
     stage_id: str,
     run_id: str,
@@ -190,7 +192,7 @@ def persist_stage_execution(
     )
     namespace = (
         Path(artifacts_root)
-        / _safe_segment(bundle.bundle_id)
+        / _safe_segment(bundle.run_manifest.run_id)
         / "runs"
         / _safe_segment(run_id)
         / "stage-outputs"
@@ -209,14 +211,14 @@ def persist_stage_execution(
     )
     upstream_references = tuple(_receipt_reference(receipt) for receipt in upstream_receipts)
     receipt = StageExecutionReceipt(
-        bundle_id=bundle.bundle_id,
+        plan_run_id=bundle.run_manifest.run_id,
         run_id=run_id,
-        program_ref=bundle.program.ref,
+        program_ref=bundle.execution_program.ref,
         program_node_id=context.node_id,
         operation_ref=context.operation_ref,
         attempt=context.attempt_index,
         task_id=task_id,
-        task_package_sha256=snapshot.package_sha256,
+        task_snapshot=snapshot,
         stage_graph_ref=graph.ref,
         stage_id=stage_id,
         context_manifest=context_manifest_reference,
@@ -238,7 +240,11 @@ def persist_stage_execution(
     )
     receipt_reference = _store_model(
         namespace=(
-            Path(artifacts_root) / _safe_segment(bundle.bundle_id) / "runs" / _safe_segment(run_id) / "stage-receipts"
+            Path(artifacts_root)
+            / _safe_segment(bundle.run_manifest.run_id)
+            / "runs"
+            / _safe_segment(run_id)
+            / "stage-receipts"
         ),
         filename="stage-execution-receipt.json",
         kind="stage-execution-receipt",
@@ -259,7 +265,7 @@ def persist_stage_execution(
 
 def prepare_finalization_instruction(
     *,
-    bundle: RunBundle,
+    bundle: RunPlan,
     tasks_root: Path,
     task_id: str,
     stage_receipt_values: JsonValue,
@@ -385,7 +391,7 @@ def _load_upstream_receipts(value: JsonValue | None) -> tuple[StageExecutionRece
 
 def _validate_upstream_set(
     *,
-    bundle: RunBundle,
+    bundle: RunPlan,
     run_id: str,
     snapshot: TaskSnapshotRef,
     graph: DeclaredStageGraph,
@@ -412,25 +418,25 @@ def _validate_upstream_set(
 def _validate_receipt_lineage(
     receipt: StageExecutionReceipt,
     *,
-    bundle: RunBundle,
+    bundle: RunPlan,
     run_id: str,
     snapshot: TaskSnapshotRef,
     graph: DeclaredStageGraph,
 ) -> None:
     expected = (
-        bundle.bundle_id,
+        bundle.run_manifest.run_id,
         run_id,
-        bundle.program.ref,
+        bundle.execution_program.ref,
         snapshot.task_id,
-        snapshot.package_sha256,
+        snapshot,
         graph.ref,
     )
     observed = (
-        receipt.bundle_id,
+        receipt.plan_run_id,
         receipt.run_id,
         receipt.program_ref,
         receipt.task_id,
-        receipt.task_package_sha256,
+        receipt.task_snapshot,
         receipt.stage_graph_ref,
     )
     if observed != expected:
@@ -556,14 +562,20 @@ def _parse_stage_output(
 
 
 def _stage_graph(
-    bundle: RunBundle,
+    bundle: RunPlan,
     task_id: str,
 ) -> tuple[TaskSnapshotRef, DeclaredStageGraph]:
     snapshot = next(
         (candidate for candidate in bundle.task_snapshots if candidate.task_id == task_id),
         None,
     )
-    graph = snapshot.task_review.stage_graph if snapshot is not None and snapshot.task_review is not None else None
+    review = bundle.review
+    task_review = (
+        next((candidate for candidate in review.tasks if candidate.task_id == task_id), None)
+        if isinstance(review, ReviewSnapshot)
+        else None
+    )
+    graph = task_review.stage_graph if task_review is not None else None
     if snapshot is None or graph is None:
         raise DeclaredStageRuntimeError(
             "declared_stage_graph_missing",

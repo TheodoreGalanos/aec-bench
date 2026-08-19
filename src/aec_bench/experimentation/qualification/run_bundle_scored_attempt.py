@@ -1,4 +1,4 @@
-# ABOUTME: Routes scored RunBundle Harbor invocations through the durable governed-attempt engine.
+# ABOUTME: Routes scored RunPlan Harbor invocations through the durable governed-attempt engine.
 # ABOUTME: Owns real budget, standing-monitor, dispatch reconciliation, exact import, and replay ports.
 
 from __future__ import annotations
@@ -23,8 +23,9 @@ from aec_bench.contracts.authority import (
 from aec_bench.contracts.harness_kernel import (
     FrozenStrictModel,
 )
-from aec_bench.contracts.run_bundle import RunBundle
+from aec_bench.contracts.run_bundle import RunPlan
 from aec_bench.contracts.stage_execution import KernelInstructionOverride
+from aec_bench.contracts.task_snapshot import task_snapshot_id
 from aec_bench.contracts.trial_record import ArtifactReference, TrialRecord
 from aec_bench.experimentation.governance.authority_ledger import (
     AuthorityLedger,
@@ -145,7 +146,7 @@ class ScoredInvocationMaterialization:
 
 @dataclass(frozen=True, slots=True)
 class GovernedScoredAttempt:
-    """Complete governed replay joined to the preserved RunBundle evidence."""
+    """Complete governed replay joined to the preserved RunPlan evidence."""
 
     replay: GovernedAttemptReplay
     materialization: ScoredInvocationMaterialization
@@ -154,12 +155,11 @@ class GovernedScoredAttempt:
 
 def execute_governed_scored_attempt(
     *,
-    bundle: RunBundle,
+    bundle: RunPlan,
     registry: KernelRuntimeRegistry,
     workflow: SynchronousHarborWorkflow,
     artifacts_root: Path,
     study: MetaHarnessStudyContext,
-    candidate: ArtifactReference,
     budget: HarnessBudgetLedger,
     context: OperationExecutionContext,
     task_refs: tuple[str, ...] | None,
@@ -167,17 +167,17 @@ def execute_governed_scored_attempt(
     authority_ledger: AuthorityLedger | None,
     instruction_override: KernelInstructionOverride | None = None,
     additional_artifacts: tuple[ArtifactReference, ...] = (),
+    repetitions: int = 1,
 ) -> GovernedScoredAttempt:
     """Execute or replay one scored invocation without ambiguous redispatch."""
 
-    selected_task_refs = task_refs or bundle.harbor.task_refs
+    selected_task_refs = task_refs or tuple(task_snapshot_id(snapshot) for snapshot in bundle.task_snapshots)
     inputs = build_scored_attempt_inputs(
         bundle=bundle,
         registry=registry,
         workflow=workflow,
         artifacts_root=artifacts_root,
         study=study,
-        candidate=candidate,
         budget=budget,
         context=context,
         task_refs=selected_task_refs,
@@ -185,6 +185,7 @@ def execute_governed_scored_attempt(
         authority_ledger=authority_ledger,
         instruction_override=instruction_override,
         additional_artifacts=additional_artifacts,
+        repetitions=repetitions,
     )
     dispatch_started = False
     budget_port: _ScoredBudgetPort | None = None
@@ -351,7 +352,7 @@ class _ScoredBudgetPort:
 @dataclass(slots=True)
 class _ScoredMonitorPort:
     root: Path
-    bundle: RunBundle
+    bundle: RunPlan
     jobs_root: Path
     _ledger: AuthorityLedger = field(init=False)
     _host: AuthorityPrincipal = field(init=False)
@@ -394,7 +395,7 @@ class _ScoredMonitorPort:
                 preflight_basis.reference,
                 reservation_basis.reference,
             ),
-            kernel_ref=self.bundle.kernel_ref,
+            kernel_ref=self.bundle.harness.kernel_ref,
             reasons=("exact preflight and real Hx budget reservation passed",),
             revalidation_triggers=("governed_attempt_replay",),
         )
@@ -488,7 +489,7 @@ class _ScoredMonitorPort:
             stored is None
             or stored.event.action is not AuthorityAction.PROVIDER_DISPATCH
             or stored.event.decision is not AuthorityDecision.GRANTED
-            or stored.event.kernel_ref != self.bundle.kernel_ref
+            or stored.event.kernel_ref != self.bundle.harness.kernel_ref
             or (dispatch_payload_sha256 is not None and stored.event.subject_sha256 != dispatch_payload_sha256)
         ):
             raise AuthorityLedgerError(
@@ -597,7 +598,6 @@ class _ScoredBackendPort:
         transform = _TrialLineageTransform(
             bundle=self.inputs.bundle,
             study=self.inputs.study,
-            candidate=self.inputs.candidate,
             required_artifact_kinds=self.lowered.required_artifact_kinds,
             expected_adapter_kind=self.lowered.manifest.agents[0].adapter,
             expected_model=self.lowered.manifest.agents[0].model,
@@ -612,6 +612,7 @@ class _ScoredBackendPort:
                 for task in self.lowered.tasks
             },
             additional_artifacts=self.inputs.additional_artifacts,
+            repetitions=self.inputs.repetitions,
         )
         workflow_result = _invocation_workflow(
             self.inputs,
@@ -756,7 +757,7 @@ def _resolve_materialization(
 ) -> ScoredInvocationMaterialization | None:
     receipts_root = (
         inputs.artifacts_root
-        / _safe_segment(inputs.bundle.bundle_id)
+        / _safe_segment(inputs.bundle.run_manifest.run_id)
         / "runs"
         / _safe_segment(inputs.study.run_id)
         / "receipts"
@@ -767,7 +768,7 @@ def _resolve_materialization(
     for path in sorted(receipts_root.glob("*/harbor-invocation-receipt.json")):
         receipt = load_harbor_invocation_receipt(path)
         if (
-            receipt.bundle_id == inputs.bundle.bundle_id
+            receipt.bundle_id == inputs.bundle.run_manifest.run_id
             and receipt.run_id == inputs.study.run_id
             and receipt.program_node_id == inputs.context.node_id
             and receipt.attempt == inputs.context.attempt_index

@@ -14,10 +14,13 @@ from aec_bench.contracts.harness_kernel import (
     validate_sha256,
 )
 from aec_bench.contracts.legacy_content_address import LegacyContentAddressedModel
-from aec_bench.contracts.run_bundle import TaskSnapshotRef
 from aec_bench.contracts.task_definition import Visibility
+from aec_bench.contracts.task_review_snapshot import TaskReviewSnapshot
+from aec_bench.contracts.task_snapshot import (
+    TaskSnapshotRef,
+    task_snapshot_source_key,
+)
 from aec_bench.contracts.validators import NonEmptyStr
-from aec_bench.harness.compilation.task_snapshot import graph_hidden_task_snapshot_sha256
 
 StructuralSplitName = Literal["train", "dev", "holdout"]
 DirectedEdge = tuple[str, str]
@@ -133,12 +136,8 @@ class StructuralCorpusItem(FrozenStrictModel):
     visibility: Visibility
     public_snapshot: TaskSnapshotRef
     snapshot: TaskSnapshotRef
+    review: TaskReviewSnapshot
     topology: TopologyShapeRef
-
-    @field_validator("review_lineage_id")
-    @classmethod
-    def validate_review_lineage(cls, value: str) -> str:
-        return validate_sha256(value)
 
     @model_validator(mode="after")
     def validate_host_bindings(self) -> Self:
@@ -146,24 +145,15 @@ class StructuralCorpusItem(FrozenStrictModel):
             raise ValueError("structural corpus item public snapshot task id must match its task id")
         if self.snapshot.task_id != self.task_id:
             raise ValueError("structural corpus item snapshot task id must match its task id")
-        if self.public_snapshot.task_review is not None:
-            raise ValueError("structural corpus item public snapshot cannot contain a task review")
-        if self.snapshot.task_review is None:
-            raise ValueError("structural corpus item snapshot must include a task review")
-        if self.public_snapshot.definition_sha256 != self.snapshot.definition_sha256:
-            raise ValueError("public and sealed task definition identities must match")
-        if self.public_snapshot.package_sha256 == self.snapshot.package_sha256:
+        if self.review.task_id != self.task_id:
+            raise ValueError("structural corpus item review task id must match its task id")
+        if self.public_snapshot == self.snapshot:
             raise ValueError("public and sealed task packages must be physically distinct")
-        if self.review_lineage_id != self.snapshot.task_review.review_sidecar_sha256:
-            raise ValueError("structural corpus item review lineage must match snapshot task-review bytes")
-        if self.visibility is not self.snapshot.task_review.visibility:
+        if self.review_lineage_id != self.review.profile_id:
+            raise ValueError("structural corpus item review lineage must match the review profile id")
+        if self.visibility is not self.review.visibility:
             raise ValueError("structural corpus item task-review visibility must match item visibility")
         return self
-
-    @property
-    def public_task_snapshot_sha256(self) -> str:
-        """Return the exact safe task-package identity exposed through the problem view."""
-        return graph_hidden_task_snapshot_sha256(self.public_snapshot)
 
 
 class StructuralSplit(FrozenStrictModel):
@@ -259,11 +249,11 @@ class StructuralSplitManifest(LegacyContentAddressedModel):
         lineage_ids = tuple(item.review_lineage_id for item in items)
         if len(lineage_ids) != len(set(lineage_ids)):
             raise ValueError("structural manifest review lineage identities must be unique across splits")
-        package_hashes = tuple(item.snapshot.package_sha256 for item in items)
-        if len(package_hashes) != len(set(package_hashes)):
+        package_sources = tuple(task_snapshot_source_key(item.snapshot) for item in items)
+        if len(package_sources) != len(set(package_sources)):
             raise ValueError("structural manifest task package snapshots must be unique")
-        public_package_hashes = tuple(item.public_snapshot.package_sha256 for item in items)
-        if len(public_package_hashes) != len(set(public_package_hashes)):
+        public_package_sources = tuple(task_snapshot_source_key(item.public_snapshot) for item in items)
+        if len(public_package_sources) != len(set(public_package_sources)):
             raise ValueError("structural manifest public task package snapshots must be unique")
         _reject_cross_split_signature_collision(
             splits,
@@ -296,6 +286,7 @@ class StructuralSplitManifest(LegacyContentAddressedModel):
                         "visibility": item.visibility.value,
                         "public_snapshot": item.public_snapshot.model_dump(mode="json"),
                         "sealed_snapshot": item.snapshot.model_dump(mode="json"),
+                        "review": item.review.model_dump(mode="json"),
                     }
                     for split in (self.train, self.dev, self.holdout)
                     for item in split.items

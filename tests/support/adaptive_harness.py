@@ -1,4 +1,4 @@
-# ABOUTME: Builds deterministic fixed-K, Hx, px, RunBundle, and task fixtures for adaptive-harness tests.
+# ABOUTME: Builds deterministic fixed-K, Hx, px, RunPlan, and task fixtures for adaptive-harness tests.
 # ABOUTME: Keeps cross-layer tests focused on behavior rather than repeated contract construction.
 
 from __future__ import annotations
@@ -32,12 +32,12 @@ from aec_bench.contracts.harness_instance import (
     ToolBindingConfig,
     VerificationBindingConfig,
 )
-from aec_bench.contracts.run_bundle import RunBundle
+from aec_bench.contracts.run_bundle import RunPlan
 from aec_bench.contracts.trajectory import MetaHarnessTrajectoryContext
 from aec_bench.harness.compilation import (
     compile_execution_program,
     compile_harness_instance,
-    compile_run_bundle,
+    compile_run_plan,
 )
 from aec_bench.harness.execution_payload import (
     RuntimeExecutionAttestation,
@@ -50,6 +50,7 @@ from aec_bench.harness.kernel_catalogue import (
     KernelRuntimeRegistry,
     default_kernel_registry,
 )
+from aec_bench.ledger.artifact_repository import ArtifactRepository
 
 ADAPTIVE_TASK_INSTRUCTION = "Solve the task and write /workspace/output.md.\n"
 
@@ -129,7 +130,6 @@ def build_adaptive_harness_recipe(
                 topology_role=HarnessTopologyRole.SINK,
                 configuration=ResultImportBindingConfig(
                     ledger_namespace=f"adaptive-test-{backend}",
-                    required_artifacts=("candidate-manifest",),
                 ),
             ),
         ),
@@ -250,8 +250,9 @@ def build_adaptive_bundle(
     budget: HarnessBudget | None = None,
     agent_capability_id: str = "aecbench.adapter.tool-loop",
     include_tool_binding: bool = True,
-) -> RunBundle:
-    """Compile the complete deterministic K/Hx/px/RunBundle test path."""
+    artifact_repository: ArtifactRepository | None = None,
+) -> RunPlan:
+    """Compile the complete deterministic K/Hx/px/RunPlan test path."""
     resolved_registry = registry or default_kernel_registry()
     resolved_task_ids = task_ids or (task_id,)
     resolved_budget = budget or HarnessBudget()
@@ -331,7 +332,6 @@ def build_adaptive_bundle(
                 topology_role=HarnessTopologyRole.SINK,
                 configuration=ResultImportBindingConfig(
                     ledger_namespace="adaptive-harness",
-                    required_artifacts=("candidate-manifest",),
                 ),
             ),
         ),
@@ -382,12 +382,12 @@ def build_adaptive_bundle(
         harness=harness,
         registry=resolved_registry,
     )
-    return compile_run_bundle(
-        bundle_id="bundle-adaptive",
+    return compile_run_plan(
+        run_id="bundle-adaptive",
         harness=harness,
-        program=program,
+        execution_program=program,
         registry=resolved_registry,
         tasks_root=tasks_root,
         experiment_id="adaptive-experiment",
-        repetitions=repetitions,
+        artifact_repository=artifact_repository,
     )

@@ -371,7 +371,7 @@ def _workflow(tmp_path: Path, tasks_root: Path) -> SynchronousHarborWorkflow:
 
 def _reward(agent: dict[str, Any]) -> float:
     lineage = agent["kwargs"]["meta_harness_context"]
-    cell = str(lineage["bundle_id"]).rsplit(".", maxsplit=1)[-1]
+    cell = str(lineage["plan_run_id"]).rsplit(".", maxsplit=1)[-1]
     return {
         "h0_p0": 0.2,
         "hx_p0": 0.4,

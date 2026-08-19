@@ -17,6 +17,7 @@ from aec_bench.contracts.program_proposal.types import OptimizationSplit, Progra
 from aec_bench.contracts.proposal_execution.graph import MonolithicIncumbentProgram
 from aec_bench.contracts.proposal_execution_types import ProposalSessionStatus
 from aec_bench.contracts.task_definition import TaskDefinition
+from aec_bench.contracts.task_review_snapshot import TaskReviewSnapshot
 from aec_bench.contracts.trial_record import ArtifactReference, TrialRecord
 from aec_bench.experimentation.governance.authority_ledger import AuthorityLedger
 from aec_bench.experimentation.proposals.harbor import (
@@ -41,7 +42,6 @@ from aec_bench.experimentation.proposals.proposal_trial_importing.authority impo
 from aec_bench.experimentation.proposals.proposal_trial_importing.contracts import (
     ProposalCandidateFailureRecord,
     ProposalTrialImportError,
-    TaskReviewLineage,
 )
 from aec_bench.experimentation.proposals.proposal_trial_importing.persistence import (
     canonical_json,
@@ -125,7 +125,7 @@ def resolve_task_review_lineage(
     *,
     ledger: AuthorityLedger,
     authorization: GovernedProposalDispatchAuthorization,
-) -> TaskReviewLineage:
+) -> TaskReviewSnapshot:
     """Resolve the exact task-review sidecar and declared surface from frozen ledger evidence."""
     freeze = authorization.dispatch.bundle.compilation.proposal_freeze
     structural = resolve_unique_event_model(
@@ -153,19 +153,15 @@ def resolve_task_review_lineage(
             "structural proposal import has no unique selected task-review item",
         )
     selected_item = structural_matches[0]
-    task_review = selected_item.snapshot.task_review
+    task_review = selected_item.review
     if (
         selected_item.task_id != authorization.dispatch.task_id
-        or task_review is None
-        or task_review.review_sidecar_sha256 != freeze.selected_review_lineage_id
+        or task_review.profile_id != freeze.selected_review_lineage_id
     ):
         raise ProposalTrialImportError(
             "selected structural item lacks the exact authorized task review",
         )
-    return TaskReviewLineage(
-        review_sidecar_sha256=task_review.review_sidecar_sha256,
-        declared_surface_sha256=task_review.declared_surface_sha256,
-    )
+    return task_review
 
 
 def validate_exact_import(

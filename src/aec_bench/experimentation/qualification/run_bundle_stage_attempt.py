@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any, cast
 
 from aec_bench.contracts.harness_kernel import canonical_json_sha256
-from aec_bench.contracts.run_bundle import RunBundle
+from aec_bench.contracts.run_bundle import RunPlan
 from aec_bench.contracts.stage_execution import (
     KernelInstructionOverride,
     StageContextManifest,
@@ -60,7 +60,7 @@ class GovernedStageAttempt:
 
 @dataclass(frozen=True, slots=True)
 class _StageAttemptInputs:
-    bundle: RunBundle
+    bundle: RunPlan
     lowered: LoweredHarborRun
     workflow: SynchronousHarborWorkflow
     artifacts_root: Path
@@ -82,7 +82,7 @@ class _StageAttemptInputs:
 def execute_governed_stage_attempt(
     *,
     engine_root: Path,
-    bundle: RunBundle,
+    bundle: RunPlan,
     lowered: LoweredHarborRun,
     workflow: SynchronousHarborWorkflow,
     artifacts_root: Path,
@@ -330,7 +330,7 @@ def _preflight(
     dispatch_payload_sha256: str,
 ) -> GovernedAttemptPreflight:
     coordinate = {
-        "bundle_id": inputs.bundle.bundle_id,
+        "bundle_id": inputs.bundle.run_manifest.run_id,
         "run_id": inputs.run_id,
         "program_node_id": inputs.context.node_id,
         "attempt": inputs.context.attempt_index,
@@ -352,7 +352,7 @@ def _preflight(
         workload_sha256=canonical_json_sha256(
             {
                 **coordinate,
-                "program_ref": inputs.bundle.program.ref.model_dump(mode="json"),
+                "program_ref": inputs.bundle.execution_program.ref.model_dump(mode="json"),
                 "context_manifest": inputs.context_manifest_reference.model_dump(mode="json"),
                 "instruction_override": inputs.instruction_override.model_dump(mode="json"),
             }
@@ -492,7 +492,7 @@ def _resolve_stage_receipt(
 ) -> StoredStageExecutionReceipt | None:
     receipts_root = (
         inputs.artifacts_root
-        / _safe_segment(inputs.bundle.bundle_id)
+        / _safe_segment(inputs.bundle.run_manifest.run_id)
         / "runs"
         / _safe_segment(inputs.run_id)
         / "stage-receipts"
@@ -527,9 +527,9 @@ def _matches_inputs(
     inputs: _StageAttemptInputs,
 ) -> bool:
     return (
-        receipt.bundle_id == inputs.bundle.bundle_id
+        receipt.plan_run_id == inputs.bundle.run_manifest.run_id
         and receipt.run_id == inputs.run_id
-        and receipt.program_ref == inputs.bundle.program.ref
+        and receipt.program_ref == inputs.bundle.execution_program.ref
         and receipt.program_node_id == inputs.context.node_id
         and receipt.operation_ref == inputs.context.operation_ref
         and receipt.attempt == inputs.context.attempt_index
@@ -545,7 +545,7 @@ def _dispatch_payload_sha256(
 ) -> str:
     return canonical_json_sha256(
         {
-            "bundle_id": inputs.bundle.bundle_id,
+            "bundle_id": inputs.bundle.run_manifest.run_id,
             "run_id": inputs.run_id,
             "operation_context": {
                 "node_id": inputs.context.node_id,

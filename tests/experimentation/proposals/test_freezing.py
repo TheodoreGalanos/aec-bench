@@ -11,6 +11,7 @@ from typing import Any
 
 import pytest
 
+from aec_bench.contracts.artifacts import ArtifactRef
 from aec_bench.contracts.authority import (
     AuthorityAction,
     AuthorityDecision,
@@ -59,8 +60,9 @@ from aec_bench.contracts.program_proposal.types import OptimizationSplit, Progra
 from aec_bench.contracts.proposal_execution_profile import (
     ProposalExecutionProfile,
 )
-from aec_bench.contracts.run_bundle import TaskReviewSnapshotRef, TaskSnapshotRef
 from aec_bench.contracts.task_definition import Visibility
+from aec_bench.contracts.task_review_snapshot import TaskReviewSnapshot as TaskReviewSnapshotRef
+from aec_bench.contracts.task_snapshot import ArtifactTaskSnapshotRef as TaskSnapshotRef
 from aec_bench.evaluation.regime import expected_evaluation_regime_ref
 from aec_bench.experimentation.governance.authority_ledger import (
     AuthorityLedger,
@@ -567,11 +569,7 @@ def test_freeze_rejects_unrelated_or_mismatched_selected_structural_item(
     tmp_path: Path,
 ) -> None:
     fixture = _fixture(tmp_path)
-    unrelated_snapshot = TaskSnapshotRef(
-        task_id="civil/calculation/unrelated",
-        definition_sha256=_sha("definition:unrelated"),
-        package_sha256=_sha("public-package:unrelated"),
-    )
+    unrelated_snapshot = _task_snapshot("civil/calculation/unrelated", "public-package:unrelated")
     unrelated = _structural_manifest(
         "civil/calculation/unrelated",
         unrelated_snapshot,
@@ -589,11 +587,7 @@ def test_freeze_rejects_unrelated_or_mismatched_selected_structural_item(
     with pytest.raises(GovernedProposalFreezeError, match="selected structural split"):
         _issue(unrelated_fixture)
 
-    wrong_snapshot = TaskSnapshotRef(
-        task_id=fixture.problem_view.task_id,
-        definition_sha256=_sha("different-public-definition"),
-        package_sha256=_sha("different-public-package"),
-    )
+    wrong_snapshot = _task_snapshot(fixture.problem_view.task_id, "different-public-package")
     mismatched = _structural_manifest(
         fixture.problem_view.task_id,
         wrong_snapshot,
@@ -1206,29 +1200,31 @@ def _structural_item(
         )
     else:
         edges = tuple((nodes[index], nodes[index + 1]) for index in range(node_count - 1))
-    lineage_sha256 = _sha(lineage)
-    selected_public_snapshot = public_snapshot or TaskSnapshotRef(
-        task_id=task_id,
-        definition_sha256=_sha(f"definition:{task_id}"),
-        package_sha256=_sha(f"public-package:{task_id}"),
-    )
+    selected_public_snapshot = public_snapshot or _task_snapshot(task_id, f"public-package:{task_id}")
     return StructuralCorpusItem(
         task_id=task_id,
         semantic_family=family,
-        review_lineage_id=lineage_sha256,
+        review_lineage_id=lineage,
         visibility=visibility,
         public_snapshot=selected_public_snapshot,
-        snapshot=TaskSnapshotRef(
+        snapshot=_task_snapshot(task_id, f"sealed-package:{task_id}"),
+        review=TaskReviewSnapshotRef(
             task_id=task_id,
-            definition_sha256=selected_public_snapshot.definition_sha256,
-            package_sha256=_sha(f"sealed-package:{task_id}"),
-            task_review=TaskReviewSnapshotRef(
-                profile_id=f"review:{task_id}",
-                review_profile_sha256=_sha(f"review-profile:{task_id}"),
-                review_sidecar_sha256=lineage_sha256,
-                declared_surface_sha256=_sha(f"declared-surface:{task_id}"),
-                visibility=visibility,
-            ),
+            profile_id=lineage,
+            visibility=visibility,
         ),
         topology=topology_shape_ref(nodes=nodes, edges=edges),
+    )
+
+
+def _task_snapshot(task_id: str, label: str) -> TaskSnapshotRef:
+    digest = _sha(label)
+    return TaskSnapshotRef(
+        task_id=task_id,
+        artifact=ArtifactRef(
+            artifact_id=f"artifacts/sha256/{digest}",
+            sha256=digest,
+            size_bytes=len(label.encode("utf-8")),
+            media_type="application/vnd.aec-bench.task-snapshot+tar+zstd",
+        ),
     )

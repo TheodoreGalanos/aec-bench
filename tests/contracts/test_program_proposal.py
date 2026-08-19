@@ -64,7 +64,6 @@ def _view_payload() -> dict[str, object]:
         "problem_id": "problem.drainage-01",
         "task_id": "drainage-01",
         "task_revision": _sha("task-revision"),
-        "public_task_snapshot_sha256": _sha("public-task-snapshot"),
         "public_instruction": "Review the supplied drainage package and produce the declared response.",
         "public_sources": [
             {
@@ -651,11 +650,11 @@ def test_proposal_freeze_rejects_policy_drift() -> None:
             }
         )
 
-    with pytest.raises(ValidationError, match="SHA-256"):
+    with pytest.raises(ValidationError):
         ProposalFreeze.model_validate(
             {
                 **base,
-                "selected_review_lineage_id": "semantic-label-is-not-lineage",
+                "selected_review_lineage_id": "",
             }
         )
 

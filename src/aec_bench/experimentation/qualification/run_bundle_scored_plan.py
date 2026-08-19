@@ -1,4 +1,4 @@
-# ABOUTME: Freezes scored RunBundle invocation inputs and derives exact governed preflight evidence.
+# ABOUTME: Freezes scored RunPlan invocation inputs and derives exact governed preflight evidence.
 # ABOUTME: Owns durable plan selection, Harbor lowering, repository paths, and payload identities.
 
 from __future__ import annotations
@@ -23,7 +23,7 @@ from aec_bench.contracts.harness_kernel import (
     validate_sha256,
 )
 from aec_bench.contracts.legacy_content_address import LegacyContentAddressedModel
-from aec_bench.contracts.run_bundle import RunBundle
+from aec_bench.contracts.run_bundle import RunPlan
 from aec_bench.contracts.stage_execution import KernelInstructionOverride
 from aec_bench.contracts.trial_record import ArtifactReference
 from aec_bench.contracts.validators import NonEmptyStr
@@ -57,6 +57,7 @@ class RunBundleScoredAttemptPlan(LegacyContentAddressedModel):
     attempt: PositiveInt
     fanout_index: NonNegativeInt | None = None
     task_refs: tuple[NonEmptyStr, ...]
+    repetitions: PositiveInt = 1
     remaining_runtime_seconds: PositiveInt
     instruction_override: KernelInstructionOverride | None = None
     additional_artifact_sha256s: tuple[str, ...] = ()
@@ -91,15 +92,15 @@ class RunBundleScoredAttemptPlan(LegacyContentAddressedModel):
 class ScoredAttemptInputs:
     """All host-owned inputs required to derive one immutable scored attempt."""
 
-    bundle: RunBundle
+    bundle: RunPlan
     registry: KernelRuntimeRegistry
     workflow: SynchronousHarborWorkflow
     artifacts_root: Path
     study: MetaHarnessStudyContext
-    candidate: ArtifactReference
     budget: HarnessBudgetLedger
     context: OperationExecutionContext
     task_refs: tuple[str, ...]
+    repetitions: int
     executor: HarborCommandExecutor | None
     authority_ledger: AuthorityLedger | None
     instruction_override: KernelInstructionOverride | None
@@ -111,15 +112,15 @@ class ScoredAttemptInputs:
 
 def build_scored_attempt_inputs(
     *,
-    bundle: RunBundle,
+    bundle: RunPlan,
     registry: KernelRuntimeRegistry,
     workflow: SynchronousHarborWorkflow,
     artifacts_root: Path,
     study: MetaHarnessStudyContext,
-    candidate: ArtifactReference,
     budget: HarnessBudgetLedger,
     context: OperationExecutionContext,
     task_refs: tuple[str, ...],
+    repetitions: int,
     executor: HarborCommandExecutor | None,
     authority_ledger: AuthorityLedger | None,
     instruction_override: KernelInstructionOverride | None,
@@ -139,10 +140,10 @@ def build_scored_attempt_inputs(
         workflow=workflow,
         artifacts_root=Path(artifacts_root).resolve(),
         study=study,
-        candidate=candidate,
         budget=budget,
         context=context,
         task_refs=task_refs,
+        repetitions=repetitions,
         executor=executor,
         authority_ledger=authority_ledger,
         instruction_override=instruction_override,
@@ -199,6 +200,7 @@ def lower_scored_attempt(
         motif_ids=inputs.study.motif_ids,
         remaining_runtime_seconds=plan.remaining_runtime_seconds,
         instruction_override=inputs.instruction_override,
+        repetitions=inputs.repetitions,
     )
 
 
@@ -215,14 +217,13 @@ def scored_attempt_preflight(
         lowered=lowered,
     )
     coordinate = {
-        "bundle_id": inputs.bundle.bundle_id,
+        "bundle_id": inputs.bundle.run_manifest.run_id,
         "run_id": inputs.study.run_id,
         "program_node_id": inputs.context.node_id,
         "attempt": inputs.context.attempt_index,
         "fanout_index": inputs.context.fanout_index,
     }
     required = {
-        inputs.candidate.sha256,
         plan.content_sha256,
         dispatch_sha256,
         *(artifact.sha256 for artifact in inputs.additional_artifacts),
@@ -233,9 +234,9 @@ def scored_attempt_preflight(
             {
                 **coordinate,
                 "plan_sha256": plan.content_sha256,
-                "kernel_ref": inputs.bundle.kernel_ref.model_dump(mode="json"),
+                "kernel_ref": inputs.bundle.harness.kernel_ref.model_dump(mode="json"),
                 "harness_ref": inputs.bundle.harness.ref.model_dump(mode="json"),
-                "program_ref": inputs.bundle.program.ref.model_dump(mode="json"),
+                "program_ref": inputs.bundle.execution_program.ref.model_dump(mode="json"),
             }
         ),
         dispatch_payload_sha256=dispatch_sha256,
@@ -258,7 +259,7 @@ def dispatch_payload_sha256(
 
     return canonical_json_sha256(
         {
-            "bundle_id": inputs.bundle.bundle_id,
+            "bundle_id": inputs.bundle.run_manifest.run_id,
             "run_id": inputs.study.run_id,
             "operation_context": {
                 "node_id": inputs.context.node_id,
@@ -305,7 +306,7 @@ def has_reservation_claim(invocation_root: Path) -> bool:
 def invocation_root_for(
     *,
     artifacts_root: Path,
-    bundle: RunBundle,
+    bundle: RunPlan,
     run_id: str,
     context: OperationExecutionContext,
 ) -> Path:
@@ -313,7 +314,7 @@ def invocation_root_for(
 
     return (
         Path(artifacts_root)
-        / safe_segment(bundle.bundle_id)
+        / safe_segment(bundle.run_manifest.run_id)
         / "runs"
         / safe_segment(run_id)
         / "invocations"
@@ -336,12 +337,13 @@ def _plan(
     remaining_runtime_seconds: int,
 ) -> RunBundleScoredAttemptPlan:
     return RunBundleScoredAttemptPlan(
-        bundle_id=inputs.bundle.bundle_id,
+        bundle_id=inputs.bundle.run_manifest.run_id,
         run_id=inputs.study.run_id,
         program_node_id=inputs.context.node_id,
         attempt=inputs.context.attempt_index,
         fanout_index=inputs.context.fanout_index,
         task_refs=inputs.task_refs,
+        repetitions=inputs.repetitions,
         remaining_runtime_seconds=remaining_runtime_seconds,
         instruction_override=inputs.instruction_override,
         additional_artifact_sha256s=tuple(sorted({artifact.sha256 for artifact in inputs.additional_artifacts})),

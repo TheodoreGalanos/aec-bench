@@ -8,13 +8,14 @@ import hashlib
 import pytest
 from pydantic import ValidationError
 
+from aec_bench.contracts.artifacts import ArtifactRef
 from aec_bench.contracts.evaluation_refs import EvaluationRegimeRef
 from aec_bench.contracts.harness_instance import HarnessBudget
 from aec_bench.contracts.harness_kernel import canonical_json_sha256
 from aec_bench.contracts.program_proposal.candidate import ProgramCandidateRef
 from aec_bench.contracts.program_proposal.study import MatchedCandidateEvidenceRef, MatchedEvaluationCoordinate
 from aec_bench.contracts.program_proposal.types import CandidateEvidenceKind, OptimizationSplit, ProgramCandidateKind
-from aec_bench.contracts.run_bundle import TaskSnapshotRef
+from aec_bench.contracts.task_snapshot import ArtifactTaskSnapshotRef as TaskSnapshotRef
 from aec_bench.experimentation.qualification.program_necessity import (
     ProgramComplexityDerivationRef,
     ProgramComplexityEvidence,
@@ -41,7 +42,6 @@ from aec_bench.experimentation.qualification.program_necessity import (
     evaluate_program_necessity_gate,
     evaluate_program_necessity_study,
 )
-from aec_bench.harness.compilation.task_snapshot import graph_hidden_task_snapshot_sha256
 from tests.support.evaluation_regimes import fake_regime_ref
 
 
@@ -149,18 +149,25 @@ def _lineage(
     role: ProgramNecessityLineageRole,
 ) -> ProgramNecessityLineagePlan:
     review_lineage_id = _sha(f"{family_id}.review.{lineage_index}")
+    package_label = f"{family_id}.package.{lineage_index}"
+    package_sha256 = _sha(package_label)
     snapshot = TaskSnapshotRef(
         task_id=f"{family_id}.task.{lineage_index}",
-        definition_sha256=_sha(f"{family_id}.definition.{lineage_index}"),
-        package_sha256=_sha(f"{family_id}.package.{lineage_index}"),
+        artifact=ArtifactRef(
+            artifact_id=f"artifacts/sha256/{package_sha256}",
+            sha256=package_sha256,
+            size_bytes=len(package_label.encode("utf-8")),
+            media_type="application/vnd.aec-bench.task-snapshot+tar+zstd",
+        ),
     )
+    task_revision = snapshot.commitment_sha256
     candidates = tuple(_candidate(family_id, lineage_index, template) for template in templates)
     seeds = (10_000 + lineage_index,)
     coordinates = tuple(
         MatchedEvaluationCoordinate(
             coordinate_id=(f"{family_id}.lineage-{lineage_index}.seed-{seed}.rep-{repetition}"),
             task_id=snapshot.task_id,
-            task_revision=snapshot.definition_sha256,
+            task_revision=task_revision,
             split=OptimizationSplit.DEVELOPMENT,
             review_lineage_id=review_lineage_id,
             seed=seed,
@@ -204,10 +211,7 @@ def _lineage(
             problem_id=f"{family_id}.problem.{lineage_index}",
             problem_view_sha256=_sha(f"{family_id}.problem.{lineage_index}"),
             task_id=snapshot.task_id,
-            task_revision=snapshot.definition_sha256,
-            public_task_snapshot_sha256=graph_hidden_task_snapshot_sha256(
-                snapshot,
-            ),
+            task_revision=task_revision,
             fixed_harness_projection_sha256=_sha("fixed-h0-projection"),
         ),
         candidate_refs=candidates,
@@ -416,7 +420,7 @@ def test_family_uses_arm_templates_and_exact_lineage_specific_candidates() -> No
 
 def test_lineage_plan_binds_task_view_candidates_schedule_study_and_coordinates() -> None:
     lineage = _family(0).lineage_plans[0]
-    assert lineage.problem_view.task_revision == lineage.task_snapshot.definition_sha256
+    assert lineage.problem_view.task_revision == lineage.task_snapshot.commitment_sha256
     assert lineage.execution_schedule_ref.candidate_ref_sha256s == tuple(
         sorted(candidate.candidate.content_sha256 for candidate in lineage.candidate_refs),
     )
@@ -579,7 +583,7 @@ def test_preregistration_freezes_six_families_24_lineages_and_all_planes() -> No
         )
 
 
-def test_program_necessity_review_lineage_hashes_remain_stable() -> None:
+def test_program_necessity_commitments_remain_stable() -> None:
     preregistration = _preregistration()
     results = tuple(
         build_program_necessity_family_result(
@@ -593,9 +597,9 @@ def test_program_necessity_review_lineage_hashes_remain_stable() -> None:
         family_results=results,
     )
 
-    assert preregistration.content_sha256 == ("503dc816a922d17ea691f29d1b82dfa8573db28b3ac4e91740d19d92f85f23f8")
-    assert results[0].content_sha256 == ("6f6bb93ce57799472240b3352ddc751f72a0b6bdb3d7d911f17b92910bdebcf8")
-    assert gate.content_sha256 == ("a1dc6a5399e8f0c084e1f386a4da4f02ebedd8d0ed323c0f655fdcd66558a817")
+    assert preregistration.content_sha256 == ("dcbfc6b469c365bab714af5890dde3e20a79cf2a144d31ae98d7013ec590d297")
+    assert results[0].content_sha256 == ("1b0eebdd49c9c50d37019da9d753b30459435cfae9d5b47f9f2df871c7558e31")
+    assert gate.content_sha256 == ("90ffcd18cebdf6608ddcc4ec50f12e1891ea5dae6d08ff17ec89c162e90e89ca")
 
 
 def test_program_necessity_design_owns_cardinality_and_gate_thresholds() -> None:

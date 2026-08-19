@@ -10,11 +10,11 @@ from pydantic import Field, field_validator, model_validator
 
 from aec_bench.contracts.harness_kernel import (
     FrozenStrictModel,
-    canonical_json_sha256,
     validate_sha256,
 )
 from aec_bench.contracts.legacy_content_address import LegacyContentAddressedModel
-from aec_bench.contracts.run_bundle import TaskSnapshotRef
+from aec_bench.contracts.task_review_snapshot import TaskReviewSnapshot
+from aec_bench.contracts.task_snapshot import TaskSnapshotRef, task_snapshot_source_key
 from aec_bench.contracts.validators import NonEmptyStr
 
 
@@ -31,47 +31,22 @@ class EvaluationCohortPurpose(StrEnum):
 class EvaluationTaskIdentity(LegacyContentAddressedModel):
     """One public task identity paired with its hidden evaluation lineage."""
 
-    schema_version: Literal["aecbench.evaluation-task-identity.v3"] = "aecbench.evaluation-task-identity.v3"
+    schema_version: Literal["aecbench.evaluation-task-identity.v4"] = "aecbench.evaluation-task-identity.v4"
     task_id: NonEmptyStr
     public_snapshot: TaskSnapshotRef
-    public_task_snapshot_sha256: str
-    sealed_task_package_sha256: str
-    review_lineage_id: str
-    review_sidecar_sha256: str
-    declared_surface_sha256: str
-
-    @field_validator(
-        "public_task_snapshot_sha256",
-        "sealed_task_package_sha256",
-        "review_lineage_id",
-        "review_sidecar_sha256",
-        "declared_surface_sha256",
-    )
-    @classmethod
-    def validate_hashes(cls, value: str) -> str:
-        return validate_sha256(value)
+    snapshot: TaskSnapshotRef
+    review: TaskReviewSnapshot
 
     @model_validator(mode="after")
     def validate_public_identity(self) -> Self:
         if self.public_snapshot.task_id != self.task_id:
             raise ValueError("evaluation task id must match its public snapshot")
-        if self.public_snapshot.task_review is not None:
-            raise ValueError("evaluation public snapshot cannot contain a task review")
-        expected = canonical_json_sha256(
-            {
-                "task_id": self.public_snapshot.task_id,
-                "definition_sha256": self.public_snapshot.definition_sha256,
-                "package_sha256": self.public_snapshot.package_sha256,
-            }
-        )
-        if self.public_task_snapshot_sha256 != expected:
-            raise ValueError(
-                "evaluation public snapshot identity does not match its exact bytes",
-            )
-        if self.public_snapshot.package_sha256 == self.sealed_task_package_sha256:
+        if self.snapshot.task_id != self.task_id:
+            raise ValueError("evaluation task id must match its sealed snapshot")
+        if self.review.task_id != self.task_id:
+            raise ValueError("evaluation task id must match its review")
+        if task_snapshot_source_key(self.public_snapshot) == task_snapshot_source_key(self.snapshot):
             raise ValueError("evaluation public and sealed task packages must be distinct")
-        if self.review_lineage_id != self.review_sidecar_sha256:
-            raise ValueError("evaluation review lineage must match its exact task-review sidecar")
         return self
 
 
@@ -124,26 +99,22 @@ class EvaluationCohortManifest(LegacyContentAddressedModel):
             ("task identities", tuple(item.task.task_id for item in value)),
             (
                 "public snapshot identities",
-                tuple(item.task.public_task_snapshot_sha256 for item in value),
+                tuple(task_snapshot_source_key(item.task.public_snapshot) for item in value),
             ),
             (
-                "public package identities",
-                tuple(item.task.public_snapshot.package_sha256 for item in value),
-            ),
-            (
-                "sealed package identities",
-                tuple(item.task.sealed_task_package_sha256 for item in value),
+                "sealed snapshot identities",
+                tuple(task_snapshot_source_key(item.task.snapshot) for item in value),
             ),
             (
                 "review lineage identities",
-                tuple(item.task.review_lineage_id for item in value),
+                tuple(item.task.review.profile_id for item in value),
             ),
         )
         for label, identities in identity_fields:
             if len(identities) != len(set(identities)):
                 raise ValueError(f"evaluation cohort {label} must be unique")
-        public_packages = {item.task.public_snapshot.package_sha256 for item in value}
-        sealed_packages = {item.task.sealed_task_package_sha256 for item in value}
+        public_packages = {task_snapshot_source_key(item.task.public_snapshot) for item in value}
+        sealed_packages = {task_snapshot_source_key(item.task.snapshot) for item in value}
         if public_packages.intersection(sealed_packages):
             raise ValueError(
                 "evaluation cohort public and sealed package identities must be disjoint",
