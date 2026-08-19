@@ -1,6 +1,11 @@
 # ABOUTME: Tests for harness-side TrialRecord construction in aec-bench Python.
 # ABOUTME: Covers mapping adapter results into append-only provenance records.
 
+import hashlib
+from pathlib import Path
+
+import pytest
+
 from aec_bench.adapters.base import (
     AdapterCompletionReason,
     AdapterFailureKind,
@@ -16,6 +21,8 @@ from aec_bench.contracts.trial_record import (
     DerivationStepRecord,
 )
 from aec_bench.harness.trial_record_builder import build_trial_record
+from aec_bench.ledger.reader import read_trial_record
+from aec_bench.ledger.writer import write_trial_record
 from tests.support.output_completion import make_output_commit_attestation
 from tests.support.task_factories import make_task_definition
 
@@ -151,6 +158,77 @@ def test_build_trial_record_preserves_output_commit_attestation() -> None:
     assert record.outputs.agent_result is not None
     assert record.outputs.agent_result["completion_reason"] == "output_contract_committed"
     assert record.outputs.agent_result["completion_commit"] == attestation.model_dump(mode="json")
+
+
+def test_build_trial_record_stores_one_verified_provider_manifest_reference(tmp_path: Path) -> None:
+    task = make_task_definition()
+    manifest_path = tmp_path / "provider-evidence.json"
+    manifest_bytes = b'{"schema":"provider-evidence/1"}\n'
+    manifest_path.write_bytes(manifest_bytes)
+    request = AdapterRequest(
+        instruction=task.instruction,
+        output_path="/workspace/output.md",
+        output_format="markdown",
+    )
+    result = AdapterResult(
+        adapter_name="deepseek_harness",
+        resolved_model="deepseek-chat",
+        configuration_record={
+            "manifest_path": str(manifest_path),
+            "provider_evidence_manifest": {
+                "artifact_id": "logs/provider-evidence.json",
+                "sha256": hashlib.sha256(manifest_bytes).hexdigest(),
+                "size_bytes": len(manifest_bytes),
+                "media_type": "application/json",
+            },
+        },
+        agent_output=AgentOutput(
+            status=AgentOutputStatus.COMPLETED,
+            output_path="/workspace/output.md",
+            output_format="markdown",
+        ),
+        transcript=[],
+    )
+    evaluation = EvaluationResult(
+        reward=1.0,
+        validity=ValidityCheck(output_parseable=True, schema_valid=True, verifier_completed=True),
+    )
+
+    record = build_trial_record(
+        trial_id="trial-provider-evidence",
+        experiment_id="experiment-provider-evidence",
+        task=task,
+        task_revision="git-sha-task",
+        request=request,
+        result=result,
+        evaluation=evaluation,
+        total_seconds=1.0,
+        runtime_image="runtime:latest",
+        compute_backend="local",
+    )
+
+    assert set(record.pending_artifacts) == {"provider_evidence"}
+    assert "provider_evidence_manifest" not in record.agent.configuration
+
+    record_path = write_trial_record(ledger_root=tmp_path / "ledger", record=record)
+    stored = read_trial_record(record_path, ledger_root=tmp_path / "ledger")
+    assert stored.provider_evidence is not None
+    assert stored.provider_evidence.sha256 == hashlib.sha256(manifest_bytes).hexdigest()
+
+    manifest_path.write_bytes(b"drift")
+    with pytest.raises(ValueError, match="does not match its ArtifactRef"):
+        build_trial_record(
+            trial_id="trial-provider-evidence-drift",
+            experiment_id="experiment-provider-evidence",
+            task=task,
+            task_revision="git-sha-task",
+            request=request,
+            result=result,
+            evaluation=evaluation,
+            total_seconds=1.0,
+            runtime_image="runtime:latest",
+            compute_backend="local",
+        )
 
 
 def test_build_trial_record_preserves_failure_kind() -> None:

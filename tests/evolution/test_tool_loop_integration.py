@@ -79,7 +79,7 @@ def _make_observation(
                 agent_reasoning=agent_reasoning or [],
             ),
         ),
-        workspace_version="evo-1",
+        candidate_id="run:1",
         discipline="electrical",
     )
 
@@ -93,8 +93,8 @@ def _make_cycle_record(
     """Build a realistic EvolutionCycleRecord representing a prior cycle."""
     return EvolutionCycleRecord(
         cycle=cycle,
-        workspace_version_before=f"evo-{cycle}",
-        workspace_version_after=f"evo-{cycle + 1}",
+        candidate_id_before=f"run:{cycle}",
+        candidate_id_after=f"run:{cycle + 1}",
         batch_score=batch_score,
         structural_score=0.71,
         mutation=MutationSummary(

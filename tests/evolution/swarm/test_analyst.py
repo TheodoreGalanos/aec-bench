@@ -38,14 +38,14 @@ def _make_snapshot(version: str = "v1") -> WorkspaceSnapshot:
     return WorkspaceSnapshot(
         system_prompt="Test prompt.",
         skills=[],
-        workspace_version=version,
+        candidate_id=version,
     )
 
 
 def _make_record(version: str, agent: str = "agent-0", **overrides) -> LineageRecord:
     defaults = dict(
-        entry_version=version,
-        parent_version=None,
+        entry_candidate_id=version,
+        parent_candidate_id=None,
         source_agent_id=agent,
         cross_agent=False,
         mutation_type="evolution_cycle",
@@ -154,7 +154,7 @@ def test_repeated_failure_recommendation() -> None:
                 mutation_description=f"Added skill {i}",
                 score_before=0.5,
                 score_after=0.3,
-                workspace_version=f"v{i}",
+                candidate_id=f"v{i}",
                 failure_reason="Score dropped",
             ),
             bd=bd,
@@ -180,7 +180,7 @@ def test_surprise_findings_extracted() -> None:
     lineage.record(_make_record("v1", agent="agent-0", surprise=True))
     lineage.attach_narrative(
         LineageNarrative(
-            entry_version="v1",
+            entry_candidate_id="v1",
             agent_reasoning="Tried unusual approach.",
             surprise_explanation="Token efficiency improved despite adding more verification.",
         )
@@ -207,7 +207,7 @@ def test_lineage_insights_summary() -> None:
     lineage.record(_make_record("v2", agent="agent-1"))
     lineage.attach_narrative(
         LineageNarrative(
-            entry_version="v1",
+            entry_candidate_id="v1",
             agent_reasoning="First attempt.",
         )
     )

@@ -89,7 +89,7 @@ def test_archive_loads_persisted_data(tmp_path: Path) -> None:
     )
     snapshot = WorkspaceSnapshot(
         system_prompt="You are a helpful assistant.",
-        workspace_version="evo-1",
+        candidate_id="run:1",
     )
     archive.insert(bd, snapshot)
     archive.save(ws / "archive.json")
@@ -109,6 +109,6 @@ def test_archive_loads_persisted_data(tmp_path: Path) -> None:
     assert len(points) == 1
     point = points[0]
     assert point["reward"] == 0.75
-    assert point["version"] == "evo-1"
+    assert point["version"] == "run:1"
     assert "x" in point
     assert "y" in point

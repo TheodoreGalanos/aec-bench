@@ -27,6 +27,7 @@ from aec_bench.contracts.adapter_execution import (
     TranscriptRole,
 )
 from aec_bench.contracts.agent_output import AgentOutput, AgentOutputStatus
+from aec_bench.contracts.artifacts import ArtifactRef
 from aec_bench.contracts.harness_kernel import (
     canonical_json_sha256,
     validate_sha256,
@@ -41,13 +42,20 @@ from aec_bench.contracts.validators import NonEmptyStr
 class RuntimeExecutionAttestation(LegacyContentAddressedModel):
     """Kernel-owned evidence of the driver and request that actually executed."""
 
-    schema_version: Literal["aecbench.runtime-execution-attestation.v1"] = "aecbench.runtime-execution-attestation.v1"
+    schema_version: Literal[
+        "aecbench.runtime-execution-attestation.v1",
+        "aecbench.runtime-execution-attestation.v2",
+    ] = "aecbench.runtime-execution-attestation.v2"
     adapter_kind: NonEmptyStr
     adapter_name: NonEmptyStr
     requested_model: NonEmptyStr
     resolved_model: NonEmptyStr
     execution_request_sha256: str
     evidence_manifest_sha256: str | None = Field(default=None, exclude_if=lambda value: value is None)
+    provider_evidence_role: Literal["provider_evidence"] | None = Field(
+        default=None,
+        exclude_if=lambda value: value is None,
+    )
     meta_harness_context: MetaHarnessTrajectoryContext | None = None
 
     @field_validator("execution_request_sha256", "evidence_manifest_sha256")
@@ -56,6 +64,12 @@ class RuntimeExecutionAttestation(LegacyContentAddressedModel):
         if value is None:
             return None
         return validate_sha256(value)
+
+    def model_post_init(self, _context: Any) -> None:
+        if self.schema_version.endswith(".v1") and self.provider_evidence_role is not None:
+            raise ValueError("runtime attestation v1 cannot use provider_evidence_role")
+        if self.schema_version.endswith(".v2") and self.evidence_manifest_sha256 is not None:
+            raise ValueError("runtime attestation v2 cannot use evidence_manifest_sha256")
 
 
 @dataclass(frozen=True)
@@ -306,16 +320,16 @@ def build_runtime_execution_attestation(
     """Attest one result after the execution driver has resolved and returned."""
     context_payload = bundle.request.configuration.get("meta_harness_context")
     context = None if context_payload is None else MetaHarnessTrajectoryContext.model_validate(context_payload)
+    provider_evidence_payload = result.configuration_record.get("provider_evidence_manifest")
+    if provider_evidence_payload is not None:
+        ArtifactRef.model_validate(provider_evidence_payload)
     return RuntimeExecutionAttestation(
         adapter_kind=bundle.execution.adapter_kind,
         adapter_name=result.adapter_name,
         requested_model=bundle.execution.resolved_model,
         resolved_model=result.resolved_model,
         execution_request_sha256=execution_request_sha256(bundle),
-        evidence_manifest_sha256=cast(
-            str | None,
-            result.configuration_record.get("evidence_manifest_sha256"),
-        ),
+        provider_evidence_role=("provider_evidence" if provider_evidence_payload is not None else None),
         meta_harness_context=context,
     )
 

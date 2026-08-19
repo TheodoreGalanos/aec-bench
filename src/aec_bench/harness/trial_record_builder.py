@@ -1,6 +1,7 @@
 # ABOUTME: Builds schema-2 trial records and their shared run manifests from adapter results.
 # ABOUTME: Keeps provider evidence and optional forensic files as pending exact artifacts for the ledger writer.
 
+import hashlib
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -8,6 +9,7 @@ from pydantic import BaseModel
 
 from aec_bench.adapters.base import AdapterRequest, AdapterResult
 from aec_bench.contracts.agent_output import AgentOutputStatus
+from aec_bench.contracts.artifacts import ArtifactRef
 from aec_bench.contracts.authority_evidence import AuthorityEvidenceRef
 from aec_bench.contracts.dataset import DatasetRef
 from aec_bench.contracts.evaluation_result import EvaluationResult
@@ -41,6 +43,7 @@ _NON_CONFIGURATION_FIELDS = frozenset(
         "composition_path",
         "cordis_path",
         "evidence_manifest_sha256",
+        "provider_evidence_manifest",
         "manifest_path",
         "notifications_path",
         "optional_plugins",
@@ -196,6 +199,7 @@ def build_trial_record(
     _attach_existing_file(record, "trajectory", trajectory_path, "application/x-ndjson")
     manifest_path = result.configuration_record.get("manifest_path")
     if isinstance(manifest_path, str):
+        _validate_provider_evidence_manifest(result.configuration_record, Path(manifest_path))
         _attach_existing_file(record, "provider_evidence", manifest_path, "application/json")
     return record.bind_run_manifest(manifest)
 
@@ -213,3 +217,13 @@ def _attach_existing_file(record: TrialRecord, role: str, value: str | None, med
     path = Path(value)
     if path.is_file():
         record.attach_artifact(role, path, media_type=media_type)
+
+
+def _validate_provider_evidence_manifest(configuration: dict[str, object], path: Path) -> None:
+    reference_payload = configuration.get("provider_evidence_manifest")
+    if reference_payload is None or not path.is_file():
+        return
+    reference = ArtifactRef.model_validate(reference_payload)
+    content = path.read_bytes()
+    if len(content) != reference.size_bytes or hashlib.sha256(content).hexdigest() != reference.sha256:
+        raise ValueError("provider evidence manifest does not match its ArtifactRef")

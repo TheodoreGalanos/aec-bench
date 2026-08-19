@@ -101,11 +101,11 @@ def test_swarm_step_result_has_required_fields() -> None:
         deliberation_ratio=0.2,
         reward=0.7,
     )
-    result = SwarmStepResult(score=0.7, bd=bd, cost_usd=0.5, workspace_version="v1")
+    result = SwarmStepResult(score=0.7, bd=bd, cost_usd=0.5, candidate_id="v1")
     assert result.score == 0.7
     assert result.bd is not None
     assert result.cost_usd == 0.5
-    assert result.workspace_version == "v1"
+    assert result.candidate_id == "v1"
 
 
 def test_estimate_evolver_cost_reads_estimated_cost_from_record() -> None:

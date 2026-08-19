@@ -125,7 +125,7 @@ class SwarmManager:
         # Live status tracking
         self._total_evals = 0
         self._start_time: float = 0.0
-        self._global_best_version: str = ""
+        self._global_best_candidate_id: str = ""
 
     def _print_event(self, message: str) -> None:
         """Print a key event line to stderr (above the status line)."""
@@ -177,7 +177,7 @@ class SwarmManager:
         """
         score = getattr(result, "score", 0.0)
         cost = getattr(result, "cost_usd", 0.0)
-        version = getattr(result, "workspace_version", "")
+        candidate_id = getattr(result, "candidate_id", "")
         bd: BehaviourDescriptor | None = getattr(result, "bd", None)
 
         async with self._lock:
@@ -206,7 +206,7 @@ class SwarmManager:
                 snapshot = WorkspaceSnapshot(
                     system_prompt="swarm-generated",
                     skills=[],
-                    workspace_version=version,
+                    candidate_id=candidate_id,
                 )
                 inserted = self._archive.insert(
                     bd=bd,
@@ -217,7 +217,7 @@ class SwarmManager:
             # Track global best
             if score > self._global_best_score:
                 self._global_best_score = score
-                self._global_best_version = version
+                self._global_best_candidate_id = candidate_id
 
             # Track per-agent improvement for pivot detection
             agent_best = self._agent_best_scores.get(agent_id, 0.0)
@@ -245,7 +245,7 @@ class SwarmManager:
             eval_payload: dict[str, Any] = {
                 "score": score,
                 "cost_usd": cost,
-                "version": version,
+                "candidate_id": candidate_id,
                 "inserted": inserted,
                 "agent_best": self._agent_best_scores.get(agent_id, 0.0),
                 "non_improving": non_improving,
@@ -268,20 +268,20 @@ class SwarmManager:
                 self._emit(
                     SwarmEventType.ARCHIVE_UPDATED,
                     agent_id=agent_id,
-                    payload={"version": version, "score": score},
+                    payload={"candidate_id": candidate_id, "score": score},
                 )
 
                 # Record lineage with parent provenance and surprise detection
-                parent_version = getattr(result, "parent_version", "") or None
+                parent_candidate_id = getattr(result, "parent_candidate_id", "") or None
                 is_surprise = False
-                if parent_version and bd is not None:
-                    parent_entry = self._archive.get_entry_by_version(parent_version)
+                if parent_candidate_id and bd is not None:
+                    parent_entry = self._archive.get_entry_by_candidate_id(parent_candidate_id)
                     if parent_entry is not None:
                         is_surprise = self._lineage.is_surprise(parent_entry.bd, bd)
 
                 lineage_record = LineageRecord(
-                    entry_version=version,
-                    parent_version=parent_version,
+                    entry_candidate_id=candidate_id,
+                    parent_candidate_id=parent_candidate_id,
                     source_agent_id=agent_id,
                     cross_agent=False,
                     cross_agent_source=None,
@@ -294,7 +294,7 @@ class SwarmManager:
 
                 # Attach freeform narrative with structured reasoning context
                 narrative = LineageNarrative(
-                    entry_version=version,
+                    entry_candidate_id=candidate_id,
                     agent_reasoning=(
                         f"Score {score:.2f} achieved via evolution_cycle. "
                         f"Agent {agent_id} eval #{self._agent_eval_counts.get(agent_id, 0) + 1}."
@@ -310,7 +310,7 @@ class SwarmManager:
                 self._emit(
                     SwarmEventType.LINEAGE_RECORDED,
                     agent_id=agent_id,
-                    payload={"version": version},
+                    payload={"candidate_id": candidate_id},
                 )
 
             # Reflect heartbeat — create a structured note from eval data
@@ -318,7 +318,9 @@ class SwarmManager:
             self._agent_eval_counts[agent_id] = agent_evals
             if self._reflect_every > 0 and agent_evals % self._reflect_every == 0:
                 gate = "accepted" if inserted else "no change"
-                note_content = f"Eval {agent_evals}: score {score:.2f} ({gate}). Cost ${cost:.2f}. Version {version}."
+                note_content = (
+                    f"Eval {agent_evals}: score {score:.2f} ({gate}). Cost ${cost:.2f}. Candidate {candidate_id}."
+                )
                 if non_improving > 0:
                     note_content += f" Non-improving streak: {non_improving}."
 
@@ -370,7 +372,7 @@ class SwarmManager:
 
             # Print live status to terminal
             if inserted:
-                self._print_event(f"{agent_id} new archive entry: {score:.2f} ({version})")
+                self._print_event(f"{agent_id} new archive entry: {score:.2f} ({candidate_id})")
             if non_improving >= self._pivot_after and cooldown <= 0:
                 self._print_event(f"{agent_id} PIVOTING — {non_improving} non-improving evals")
             self._print_status(agent_id, score)
@@ -590,7 +592,7 @@ class SwarmManager:
             "totals": {
                 "evals": result.total_evals,
                 "best_score": result.best_score,
-                "best_version": result.best_workspace_version,
+                "best_candidate_id": result.best_candidate_id,
                 "elapsed_seconds": result.elapsed_seconds,
                 "lineage_records": result.lineage_record_count,
                 "events": result.event_count,
@@ -639,8 +641,7 @@ class SwarmManager:
         # Persist shared state
         self._save_state()
 
-        # Default best_workspace_version if no archive insertions occurred
-        best_version = self._global_best_version or "none"
+        best_candidate_id = self._global_best_candidate_id or "none"
 
         # Emit completion event with rich summary
         archive_summary = self._archive.to_summary()
@@ -651,7 +652,7 @@ class SwarmManager:
                 "total_evals": total_evals,
                 "total_cost_usd": self._budget.total_agent_spend,
                 "best_score": self._global_best_score,
-                "best_version": best_version,
+                "best_candidate_id": best_candidate_id,
                 "elapsed_seconds": elapsed,
                 "archive_size": archive_summary.get("size", 0),
                 "archive_coverage": archive_summary.get("coverage", 0.0),
@@ -671,7 +672,7 @@ class SwarmManager:
             eval_cost_usd=self._budget.eval_spend,
             elapsed_seconds=elapsed,
             best_score=self._global_best_score,
-            best_workspace_version=best_version,
+            best_candidate_id=best_candidate_id,
             converged=False,
             lineage_record_count=len(self._lineage.all_records()),
             event_count=self._event_writer.next_sequence,

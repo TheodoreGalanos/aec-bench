@@ -286,7 +286,7 @@ class TestSelectionPipeline:
             "mutation_description": "old failed mutation",
             "score_before": 0.4,
             "score_after": 0.3,
-            "workspace_version": "evo-old-1",
+            "candidate_id": "old:1",
             "failure_reason": "Score delta: -0.100",
         }
         (root / "graveyard.json").write_text(json.dumps([existing_entry]))

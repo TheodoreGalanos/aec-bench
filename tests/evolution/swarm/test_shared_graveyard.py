@@ -35,7 +35,7 @@ def _make_entry(cycle: int = 1, score_before: float = 0.5, score_after: float = 
         mutation_description=f"cycle-{cycle} mutation",
         score_before=score_before,
         score_after=score_after,
-        workspace_version="v1",
+        candidate_id="v1",
         failure_reason="score dropped",
     )
 

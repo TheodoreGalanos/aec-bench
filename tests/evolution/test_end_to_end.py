@@ -209,12 +209,11 @@ class TestEndToEnd:
 
         orchestrator.run()
 
-        versions = ws.list_versions()
-        version_tags = {v.tag for v in versions}
+        candidates = ws.list_candidates()
+        labels = {candidate.label for candidate in candidates}
 
-        # evo-0 is the initial tag, evo-1, evo-2, evo-3 are the cycle tags
-        assert "evo-0" in version_tags
-        assert len(versions) >= 2, f"Expected at least 2 version tags, got: {version_tags}"
+        assert "evo-0" in labels
+        assert len(candidates) >= 2, f"Expected at least 2 candidates, got: {labels}"
 
     def test_hill_climb_evolution_loop(self, tmp_path: Path) -> None:
         """Run orchestrator with hill_climb strategy; verify score tracking."""

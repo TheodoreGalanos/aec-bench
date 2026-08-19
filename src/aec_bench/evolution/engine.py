@@ -78,17 +78,17 @@ class AECEvolutionEngine:
 
         # Mutable tracking across cycles
         self._best_score: float = 0.0
-        self._best_version: str = "evo-0"
+        self._best_candidate_id: str = "baseline"
         self._cycles_without_improvement: int = 0
         self._run_id: str = ""
         self._strategy_name: str = ""
 
     def set_run_id(self, run_id: str) -> None:
-        """Set the run ID used for version tagging. Called by the orchestrator."""
+        """Set the run ID used for candidate IDs and labels. Called by the orchestrator."""
         self._run_id = run_id
 
     def set_strategy_name(self, name: str) -> None:
-        """Set the strategy name included in tag messages. Called by the orchestrator."""
+        """Set the strategy name included in candidate summaries. Called by the orchestrator."""
         self._strategy_name = name
 
     # ------------------------------------------------------------------
@@ -105,7 +105,9 @@ class AECEvolutionEngine:
     ) -> StepResult:
         """Run the 6-phase evolution cycle and return the result."""
         cycle_num = len(history) + 1
-        version_before = _current_version_tag(workspace, history)
+        candidate_id_before = _current_candidate_id(workspace, history, observations)
+        if not history:
+            self._best_candidate_id = candidate_id_before
 
         # Phase 1: CLASSIFY
         enriched_observations = self._phase_classify(observations)
@@ -145,14 +147,20 @@ class AECEvolutionEngine:
         gate_decision = self._phase_gate(batch_score, aggregate_structural, mutated, scope)
 
         # Phase 6: VERSION
-        version_after = self._phase_version(workspace, gate_decision, cycle_num, batch_score)
+        candidate_id_after = self._phase_candidate(
+            workspace,
+            gate_decision,
+            cycle_num,
+            batch_score,
+            parent_candidate_id=candidate_id_before,
+        )
 
         trial_ids = [obs.trial.trial_id for obs in observations]
 
         cycle_record = EvolutionCycleRecord(
             cycle=cycle_num,
-            workspace_version_before=version_before,
-            workspace_version_after=version_after,
+            candidate_id_before=candidate_id_before,
+            candidate_id_after=candidate_id_after,
             batch_score=batch_score,
             discipline_scores=discipline_scores,
             structural_score=aggregate_structural,
@@ -261,7 +269,7 @@ class AECEvolutionEngine:
             new_obs = EvolutionObservation(
                 trial=obs.trial,
                 enrichment=new_enrichment,
-                workspace_version=obs.workspace_version,
+                candidate_id=obs.candidate_id,
                 discipline=obs.discipline,
             )
             result.append(new_obs)
@@ -454,9 +462,9 @@ class AECEvolutionEngine:
             if selection:
                 brief += (
                     f"\n\n## Selection Context\n"
-                    f"Parent: {selection.parent_version}\n"
+                    f"Parent: {selection.parent_candidate_id}\n"
                     f"Strategy: {selection.strategy}\n"
-                    f"Inspiration: {', '.join(selection.inspiration_versions) or 'none'}\n"
+                    f"Inspiration: {', '.join(selection.inspiration_candidate_ids) or 'none'}\n"
                     f"Selection reasoning: {selection.reasoning}\n"
                 )
 
@@ -570,44 +578,51 @@ class AECEvolutionEngine:
     # Phase 6: VERSION
     # ------------------------------------------------------------------
 
-    def _phase_version(
+    def _phase_candidate(
         self,
         workspace: Workspace,
         gate_decision: GateDecision,
         cycle_num: int,
         batch_score: float,
+        *,
+        parent_candidate_id: str,
     ) -> str:
-        """Commit or rollback the workspace based on the gate decision.
+        """Commit or restore the workspace based on the gate decision.
 
-        Returns the workspace version tag after this phase completes.
+        Return the candidate ID after this phase completes.
         """
-        tag = f"evo-{self._run_id}-{cycle_num}" if self._run_id else f"evo-{cycle_num}"
+        candidate_id = f"{self._run_id}:{cycle_num}" if self._run_id else f"cycle:{cycle_num}"
+        label = f"evo-{self._run_id}-{cycle_num}" if self._run_id else f"evo-{cycle_num}"
 
         strategy_suffix = f" [{self._strategy_name}]" if self._strategy_name else ""
 
         if gate_decision == GateDecision.ACCEPTED:
-            version = workspace.commit_and_tag(
-                tag=tag,
+            candidate = workspace.commit_candidate(
+                candidate_id=candidate_id,
                 summary=f"cycle {cycle_num}: score {batch_score:.3f}{strategy_suffix}",
                 score=batch_score,
+                parent_candidate_id=parent_candidate_id,
+                label=label,
             )
-            self._best_version = tag
-            logger.info("Phase 6: committed %s", tag)
-            return version.tag
+            self._best_candidate_id = candidate_id
+            logger.info("Phase 6: committed candidate %s", candidate_id)
+            return candidate.candidate_id
 
         if gate_decision == GateDecision.REJECTED:
-            workspace.rollback_to_tag(self._best_version)
-            logger.info("Phase 6: rolled back to %s", self._best_version)
-            return self._best_version
+            workspace.rollback_to_candidate(self._best_candidate_id)
+            logger.info("Phase 6: restored candidate %s", self._best_candidate_id)
+            return self._best_candidate_id
 
         # SKIPPED — commit an empty snapshot to mark the cycle happened
-        version = workspace.commit_and_tag(
-            tag=tag,
+        candidate = workspace.commit_candidate(
+            candidate_id=candidate_id,
             summary=f"cycle {cycle_num}: skipped (score {batch_score:.3f}){strategy_suffix}",
             score=batch_score,
+            parent_candidate_id=parent_candidate_id,
+            label=label,
         )
-        logger.info("Phase 6: committed skip marker %s", tag)
-        return version.tag
+        logger.info("Phase 6: committed skip candidate %s", candidate_id)
+        return candidate.candidate_id
 
 
 # ---------------------------------------------------------------------------
@@ -615,17 +630,23 @@ class AECEvolutionEngine:
 # ---------------------------------------------------------------------------
 
 
-def _current_version_tag(
+def _current_candidate_id(
     workspace: Workspace,
     history: Sequence[EvolutionCycleRecord],
+    observations: Sequence[EvolutionObservation],
 ) -> str:
-    """Determine the workspace version tag before this cycle starts."""
+    """Determine the candidate that produced this cycle's observations."""
+    observed_candidate_ids = {observation.candidate_id for observation in observations}
+    if len(observed_candidate_ids) > 1:
+        raise ValueError("one evolution cycle cannot mix observations from different candidates")
+    if observed_candidate_ids:
+        return observed_candidate_ids.pop()
     if history:
-        return history[-1].workspace_version_after
-    versions = workspace.list_versions()
-    if versions:
-        return versions[-1].tag
-    return "evo-0"
+        return history[-1].candidate_id_after
+    candidates = workspace.list_candidates()
+    if candidates:
+        return candidates[-1].candidate_id
+    return "baseline"
 
 
 def _merge_mutation_summaries(

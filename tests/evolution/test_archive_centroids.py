@@ -22,7 +22,7 @@ def _make_bd(**overrides) -> BehaviourDescriptor:
 
 def _make_snapshot(version: str) -> WorkspaceSnapshot:
     return WorkspaceSnapshot(
-        workspace_version=version,
+        candidate_id=version,
         system_prompt="test",
         skills=[],
     )

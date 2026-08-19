@@ -158,7 +158,7 @@ def test_execution_result_roundtrips_through_json(tmp_path: Path) -> None:
     assert loaded == result
 
 
-def test_runtime_attestation_binds_adapter_evidence_manifest_without_changing_legacy_shape() -> None:
+def test_runtime_attestation_binds_one_provider_evidence_role_and_keeps_v1_readable() -> None:
     bundle = ExecutionBundle(
         execution=SerializedAdapterExecution(
             adapter_kind="deepseek_harness",
@@ -177,7 +177,14 @@ def test_runtime_attestation_binds_adapter_evidence_manifest_without_changing_le
     result = AdapterResult(
         adapter_name="deepseek-treatment",
         resolved_model="deepseek-v4-flash",
-        configuration_record={"evidence_manifest_sha256": "a" * 64},
+        configuration_record={
+            "provider_evidence_manifest": {
+                "artifact_id": "logs/provider/evidence-manifest.json",
+                "sha256": "a" * 64,
+                "size_bytes": 42,
+                "media_type": "application/json",
+            }
+        },
         agent_output=AgentOutput(
             status=AgentOutputStatus.COMPLETED,
             output_path="/workspace/output.md",
@@ -188,16 +195,19 @@ def test_runtime_attestation_binds_adapter_evidence_manifest_without_changing_le
 
     attestation = build_runtime_execution_attestation(bundle=bundle, result=result)
     legacy = RuntimeExecutionAttestation(
+        schema_version="aecbench.runtime-execution-attestation.v1",
         adapter_kind="direct",
         adapter_name="direct",
         requested_model="model",
         resolved_model="model",
         execution_request_sha256="b" * 64,
+        evidence_manifest_sha256="c" * 64,
     )
 
-    assert attestation.evidence_manifest_sha256 == "a" * 64
-    assert attestation.model_dump(mode="json")["evidence_manifest_sha256"] == "a" * 64
-    assert "evidence_manifest_sha256" not in legacy.model_dump(mode="json")
+    assert attestation.provider_evidence_role == "provider_evidence"
+    assert attestation.model_dump(mode="json")["provider_evidence_role"] == "provider_evidence"
+    assert "evidence_manifest_sha256" not in attestation.model_dump(mode="json")
+    assert legacy.model_dump(mode="json")["evidence_manifest_sha256"] == "c" * 64
     assert RuntimeExecutionAttestation.model_validate(legacy.model_dump(mode="json")) == legacy
 
 

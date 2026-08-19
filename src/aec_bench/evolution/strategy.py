@@ -43,7 +43,7 @@ class SelectionStrategy(Protocol):
 
     def select_parent(self, current_score: float) -> SelectionResult | None: ...
 
-    def get_snapshot(self, version: str) -> WorkspaceSnapshot | None: ...
+    def get_snapshot(self, candidate_id: str) -> WorkspaceSnapshot | None: ...
 
     def save(self, workspace_root: Path) -> None: ...
 
@@ -58,13 +58,13 @@ class SelectionStrategy(Protocol):
 class HillClimbStrategy:
     """Always mutate from the best-scoring workspace seen so far.
 
-    Tracks a single best version/score/snapshot triple. The first cycle
+    Tracks one best candidate/score/snapshot triple. The first cycle
     always becomes the initial best. Subsequent cycles replace best only
     when the batch score strictly improves.
     """
 
     def __init__(self) -> None:
-        self._best_version: str | None = None
+        self._best_candidate_id: str | None = None
         self._best_score: float | None = None
         self._best_snapshot: WorkspaceSnapshot | None = None
 
@@ -83,12 +83,12 @@ class HillClimbStrategy:
         """Update best-so-far if the cycle improved on the previous best."""
         score = cycle_record.batch_score
         if self._best_score is None or score > self._best_score:
-            self._best_version = cycle_record.workspace_version_after
+            self._best_candidate_id = cycle_record.candidate_id_after
             self._best_score = score
             self._best_snapshot = snapshot
             logger.debug(
                 "hill-climb: new best %s (score=%.4f)",
-                self._best_version,
+                self._best_candidate_id,
                 self._best_score,
             )
 
@@ -96,20 +96,20 @@ class HillClimbStrategy:
 
     def select_parent(self, current_score: float) -> SelectionResult | None:
         """Return the best workspace as the parent, or None if no cycle has run."""
-        if self._best_version is None:
+        if self._best_candidate_id is None:
             return None
         return SelectionResult(
-            parent_version=self._best_version,
-            inspiration_versions=[],
+            parent_candidate_id=self._best_candidate_id,
+            inspiration_candidate_ids=[],
             strategy="conservative",
-            reasoning=f"Hill-climb: selecting best-so-far {self._best_version} (score={self._best_score:.4f})",
+            reasoning=(f"Hill-climb: selecting best-so-far {self._best_candidate_id} (score={self._best_score:.4f})"),
         )
 
     # -- snapshot access -----------------------------------------------------
 
-    def get_snapshot(self, version: str) -> WorkspaceSnapshot | None:
-        """Return stored snapshot if version matches, otherwise None."""
-        if self._best_snapshot is not None and self._best_version == version:
+    def get_snapshot(self, candidate_id: str) -> WorkspaceSnapshot | None:
+        """Return the stored snapshot if its candidate ID matches."""
+        if self._best_snapshot is not None and self._best_candidate_id == candidate_id:
             return self._best_snapshot
         return None
 
@@ -123,8 +123,8 @@ class HillClimbStrategy:
     def summary(self) -> dict[str, Any]:
         """Return a summary dict describing current strategy state."""
         result: dict[str, Any] = {"mode": "hill_climb"}
-        if self._best_version is not None:
-            result["best_version"] = self._best_version
+        if self._best_candidate_id is not None:
+            result["best_candidate_id"] = self._best_candidate_id
             result["best_score"] = self._best_score
         return result
 
@@ -218,7 +218,7 @@ class QDStrategy:
 
         for entry in self._archive.top_k(k=self._archive.size):
             self._cell_selector.register_cell(
-                entry.snapshot.workspace_version,
+                entry.snapshot.candidate_id,
                 reward=entry.bd.reward,
                 discipline=entry.discipline,
             )
@@ -233,14 +233,14 @@ class QDStrategy:
             shortlist=shortlist,
             current_score=current_score,
         )
-        self._cell_selector.record_selection(result.parent_version)
+        self._cell_selector.record_selection(result.parent_candidate_id)
         return result
 
     # -- snapshot access -----------------------------------------------------
 
-    def get_snapshot(self, version: str) -> WorkspaceSnapshot | None:
-        """Return stored snapshot by version from the archive, or None."""
-        entry = self._archive.get_entry_by_version(version)
+    def get_snapshot(self, candidate_id: str) -> WorkspaceSnapshot | None:
+        """Return a stored snapshot by candidate ID from the archive."""
+        entry = self._archive.get_entry_by_candidate_id(candidate_id)
         if entry is not None:
             return entry.snapshot
         return None

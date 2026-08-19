@@ -15,6 +15,7 @@ from aec_bench.contracts.agent_output import (
     AgentOutput,
     AgentOutputStatus,
 )
+from aec_bench.contracts.artifacts import ArtifactRef
 from aec_bench.contracts.authority_evidence import ACTOR_INVOCATION_EVIDENCE_PROTOCOL, AuthorityEvidenceKind
 from aec_bench.contracts.dataset import DatasetRef, RepositoryDatasetRef
 from aec_bench.contracts.evaluation_result import EvaluationResult
@@ -228,6 +229,10 @@ def import_harbor_trial(
     expected_authorities = _expected_authorities(
         task_kind=task_kind,
         adapter=resolved_adapter,
+        provider_evidence_protocol=_provider_evidence_protocol(
+            configuration=configuration,
+            adapter=resolved_adapter,
+        ),
     )
     manifest = RunManifest(
         run_id=run_id,
@@ -297,7 +302,13 @@ def import_harbor_trial(
     manifest_path = configuration.get("manifest_path")
     if isinstance(manifest_path, str) and Path(manifest_path).is_file():
         provider_manifest = Path(manifest_path)
-        actual_manifest_sha256 = hashlib.sha256(provider_manifest.read_bytes()).hexdigest()
+        content = provider_manifest.read_bytes()
+        actual_manifest_sha256 = hashlib.sha256(content).hexdigest()
+        reference_payload = configuration.get("provider_evidence_manifest")
+        if reference_payload is not None:
+            reference = ArtifactRef.model_validate(reference_payload)
+            if reference.sha256 != actual_manifest_sha256 or reference.size_bytes != len(content):
+                raise HarborImportError("provider evidence manifest does not match its ArtifactRef")
         declared_manifest_sha256 = configuration.get("evidence_manifest_sha256")
         if isinstance(declared_manifest_sha256, str) and declared_manifest_sha256 != actual_manifest_sha256:
             raise HarborImportError("provider evidence manifest does not match its declared SHA-256")
@@ -731,7 +742,26 @@ def _provider_route(configuration: dict[str, Any], adapter: str) -> ProviderRout
     return ProviderRoute(provider=str(provider), route=str(route))
 
 
-def _expected_authorities(*, task_kind: str, adapter: str) -> tuple[AuthorityExpectation, ...]:
+def _provider_evidence_protocol(*, configuration: dict[str, Any], adapter: str) -> str | None:
+    if "deepseek" not in adapter.casefold():
+        return None
+    manifest_path = configuration.get("manifest_path")
+    if isinstance(manifest_path, str) and Path(manifest_path).is_file():
+        try:
+            payload = json.loads(Path(manifest_path).read_text(encoding="utf-8"))
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+            payload = None
+        if isinstance(payload, dict) and payload.get("schema") == "aec-bench/deepseek-evidence/2":
+            return "aec-bench/deepseek-evidence/2"
+    return "aec-bench/deepseek-evidence/3"
+
+
+def _expected_authorities(
+    *,
+    task_kind: str,
+    adapter: str,
+    provider_evidence_protocol: str | None,
+) -> tuple[AuthorityExpectation, ...]:
     expected: list[AuthorityExpectation] = []
     if task_kind == "world":
         expected.extend(
@@ -747,10 +777,12 @@ def _expected_authorities(*, task_kind: str, adapter: str) -> tuple[AuthorityExp
             )
         )
     if "deepseek" in adapter.casefold():
+        if provider_evidence_protocol is None:
+            raise ValueError("DeepSeek imports require a provider evidence protocol")
         expected.append(
             AuthorityExpectation(
                 authority_kind=AuthorityEvidenceKind.PROVIDER,
-                protocol="aec-bench/deepseek-evidence/2",
+                protocol=provider_evidence_protocol,
             )
         )
     return tuple(expected)

@@ -4,13 +4,16 @@
 from __future__ import annotations
 
 import hashlib
+import json
 from datetime import datetime
 from pathlib import Path, PurePosixPath
 from typing import Literal, Self
 
 from pydantic import Field, field_validator, model_validator
 
+from aec_bench.contracts.artifacts import ArtifactRef
 from aec_bench.contracts.harness_kernel import validate_sha256
+from aec_bench.contracts.provider_provenance import ProviderAdapterIdentity, ResolvedRuntimeIdentity
 from aec_bench.contracts.validators import LenientModel, NonEmptyStr, StrictModel
 
 
@@ -265,6 +268,160 @@ class DeepSeekEvidenceManifest(LenientModel):
         return self
 
 
+class DeepSeekEvidenceArtifactV3(LenientModel):
+    role: NonEmptyStr
+    artifact: ArtifactRef
+
+
+class DeepSeekPluginIdentityV3(LenientModel):
+    plugin_id: NonEmptyStr
+    version: NonEmptyStr
+    role: Literal["output_commit", "native_tools"]
+    artifact: ArtifactRef
+
+
+class DeepSeekAttestationLevelV3(LenientModel):
+    status: Literal["complete", "partial", "unavailable"]
+    artifacts: tuple[ArtifactRef, ...] = ()
+    reason: NonEmptyStr | None = None
+
+    @model_validator(mode="after")
+    def validate_status(self) -> Self:
+        if self.status == "complete" and (not self.artifacts or self.reason is not None):
+            raise ValueError("complete attestation requires artifacts and cannot have an unavailable reason")
+        if self.status == "partial" and not self.artifacts and self.reason is None:
+            raise ValueError("partial attestation requires an artifact or a reason")
+        if self.status == "unavailable" and (self.artifacts or self.reason is None):
+            raise ValueError("unavailable attestation requires a reason and cannot reference artifacts")
+        return self
+
+
+class DeepSeekCompositionAttestationV3(LenientModel):
+    declared: DeepSeekAttestationLevelV3
+    resolved_runtime: DeepSeekAttestationLevelV3
+    model_visible: DeepSeekAttestationLevelV3
+
+
+class DeepSeekQualificationIdentityV3(LenientModel):
+    matrix_id: NonEmptyStr
+    matrix: ArtifactRef
+    provider_route: Literal["azure", "deepseek-official"]
+    status: Literal["partial", "qualified", "unqualified"]
+    qualified_features: tuple[NonEmptyStr, ...] = ()
+
+
+class DeepSeekExecutionIdentityV3(LenientModel):
+    status: Literal["completed", "failed"]
+    root_session_id: str | None = None
+    child_session_ids: tuple[str, ...] = ()
+    started_at: datetime
+    finished_at: datetime
+    finish_reason: str | None = None
+    aec_model_turns_used: int = Field(ge=0)
+    deepseek_root_turns: int = Field(ge=0)
+    tool_calls_started: int = Field(ge=0)
+    tool_calls_completed: int = Field(ge=0)
+    timeout_sec: int = Field(ge=1)
+    max_tokens: int | None = Field(default=None, ge=1)
+    process_group_retired: bool
+
+    @model_validator(mode="after")
+    def validate_execution(self) -> Self:
+        if self.finished_at < self.started_at:
+            raise ValueError("finished_at cannot precede started_at")
+        if self.status == "completed" and not self.root_session_id:
+            raise ValueError("completed DeepSeek evidence requires a root session")
+        return self
+
+
+class DeepSeekActorToolEvidenceV3(LenientModel):
+    task_world_id: NonEmptyStr
+    actor_catalogue_sha256: str
+    public_native_tool_surface_sha256: str
+    presentation_mode: Literal["deepseek-native"]
+    actor_authority_scope: Literal["segment-snapshot"]
+    mapping: ArtifactRef
+    actor_authority: ArtifactRef
+    correlation: ArtifactRef
+
+    @field_validator("actor_catalogue_sha256", "public_native_tool_surface_sha256")
+    @classmethod
+    def validate_identity_sha256(cls, value: str) -> str:
+        return validate_sha256(value)
+
+
+class DeepSeekEvidenceManifestV3(LenientModel):
+    schema_id: Literal["aec-bench/deepseek-evidence/3"] = Field(
+        alias="schema",
+        serialization_alias="schema",
+    )
+    trial_id: NonEmptyStr
+    generated_at: datetime
+    adapter: ProviderAdapterIdentity
+    sdk: ResolvedRuntimeIdentity
+    runtime: ResolvedRuntimeIdentity
+    composition: DeepSeekCompositionIdentity
+    attestation: DeepSeekCompositionAttestationV3
+    qualification: DeepSeekQualificationIdentityV3
+    model: DeepSeekModelIdentity
+    execution: DeepSeekExecutionIdentityV3
+    plugins: tuple[DeepSeekPluginIdentityV3, ...] = ()
+    plugin_package_lock: ArtifactRef | None = None
+    actor_native_tools: DeepSeekActorToolEvidenceV3 | None = None
+    redaction_audit: ArtifactRef
+    artifacts: tuple[DeepSeekEvidenceArtifactV3, ...]
+
+    @model_validator(mode="after")
+    def validate_references(self) -> Self:
+        artifacts = {item.artifact.artifact_id: item for item in self.artifacts}
+        if len(artifacts) != len(self.artifacts):
+            raise ValueError("evidence manifest artifact ids must be unique")
+        if _role_for(self.redaction_audit, artifacts) != "redaction_audit":
+            raise ValueError("redaction audit must reference the redaction_audit artifact")
+        if self.adapter.source_snapshot is not None:
+            if _role_for(self.adapter.source_snapshot, artifacts) != "provider_source_snapshot":
+                raise ValueError("adapter source snapshot must reference provider_source_snapshot evidence")
+        for plugin in self.plugins:
+            if _role_for(plugin.artifact, artifacts) != "optional_plugin":
+                raise ValueError("plugin must reference an optional_plugin artifact")
+        if self.plugins:
+            lock_role = None if self.plugin_package_lock is None else _role_for(self.plugin_package_lock, artifacts)
+            if lock_role != "plugin_package_lock":
+                raise ValueError("plugin evidence requires one package-lock artifact")
+        elif self.plugin_package_lock is not None:
+            raise ValueError("plugin-free evidence cannot reference a package lock")
+        output_commit_plugins = [plugin for plugin in self.plugins if plugin.role == "output_commit"]
+        tool_plugins = [plugin for plugin in self.plugins if plugin.role == "native_tools"]
+        if self.composition.output_commit_mode == "required" and len(output_commit_plugins) != 1:
+            raise ValueError("required output commitment must retain one plugin artifact")
+        if self.composition.output_commit_mode == "disabled" and output_commit_plugins:
+            raise ValueError("commit-disabled evidence cannot list an output commit plugin")
+        if len(tool_plugins) != (1 if self.composition.native_tools else 0):
+            raise ValueError("native tool evidence must match its plugin artifact")
+        references = [
+            *self.attestation.declared.artifacts,
+            *self.attestation.resolved_runtime.artifacts,
+            *self.attestation.model_visible.artifacts,
+            self.qualification.matrix,
+        ]
+        if self.actor_native_tools is not None:
+            references.extend(
+                (
+                    self.actor_native_tools.mapping,
+                    self.actor_native_tools.actor_authority,
+                    self.actor_native_tools.correlation,
+                )
+            )
+        for reference in references:
+            _role_for(reference, artifacts)
+        declared_roles = {_role_for(reference, artifacts) for reference in self.attestation.declared.artifacts}
+        if not {"composition_identity", "cordis_input", "system_prompt"}.issubset(declared_roles):
+            raise ValueError("declared attestation must reference composition, Cordis, and system prompt evidence")
+        if self.actor_native_tools is not None and not self.composition.native_tools:
+            raise ValueError("actor native evidence requires a native tool composition")
+        return self
+
+
 class DeepSeekRedactedFile(StrictModel):
     path: NonEmptyStr
     redaction_kinds: tuple[NonEmptyStr, ...]
@@ -283,19 +440,45 @@ class DeepSeekRedactionAudit(StrictModel):
         return self
 
 
-def verify_deepseek_evidence_manifest(path: Path) -> DeepSeekEvidenceManifest:
-    """Validate one receipt and every retained artifact against its recorded bytes."""
+DeepSeekEvidenceManifestDocument = DeepSeekEvidenceManifest | DeepSeekEvidenceManifestV3
+
+
+def verify_deepseek_evidence_manifest(path: Path) -> DeepSeekEvidenceManifestDocument:
+    """Validate current v3 or retained v2 evidence and every referenced artifact."""
     if path.is_symlink() or not path.is_file():
         raise ValueError("DeepSeek evidence manifest must be a regular file")
-    manifest = DeepSeekEvidenceManifest.model_validate_json(path.read_text(encoding="utf-8"))
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise ValueError("DeepSeek evidence manifest must contain JSON") from exc
+    if not isinstance(payload, dict):
+        raise ValueError("DeepSeek evidence manifest must contain an object")
+    schema = payload.get("schema")
+    if schema == "aec-bench/deepseek-evidence/2":
+        manifest: DeepSeekEvidenceManifestDocument = DeepSeekEvidenceManifest.model_validate(payload)
+    elif schema == "aec-bench/deepseek-evidence/3":
+        manifest = DeepSeekEvidenceManifestV3.model_validate(payload)
+    else:
+        raise ValueError(f"unsupported DeepSeek evidence manifest schema: {schema!r}")
     evidence_root = path.parent.resolve()
-    for artifact in manifest.artifacts:
-        artifact_path = evidence_root / artifact.path
+    for artifact_record in manifest.artifacts:
+        artifact = (
+            artifact_record.artifact if isinstance(artifact_record, DeepSeekEvidenceArtifactV3) else artifact_record
+        )
+        artifact_id = artifact.artifact_id if isinstance(artifact, ArtifactRef) else artifact.path
+        artifact_path = evidence_root / artifact_id
         if artifact_path.is_symlink() or not artifact_path.is_file():
-            raise ValueError(f"DeepSeek evidence artifact is not a regular file: {artifact.path}")
+            raise ValueError(f"DeepSeek evidence artifact is not a regular file: {artifact_id}")
         if not artifact_path.resolve().is_relative_to(evidence_root):
-            raise ValueError(f"DeepSeek evidence artifact leaves the trial root: {artifact.path}")
+            raise ValueError(f"DeepSeek evidence artifact leaves the trial root: {artifact_id}")
         content = artifact_path.read_bytes()
         if len(content) != artifact.size_bytes or hashlib.sha256(content).hexdigest() != artifact.sha256:
-            raise ValueError(f"DeepSeek evidence artifact does not match its receipt: {artifact.path}")
+            raise ValueError(f"DeepSeek evidence artifact does not match its receipt: {artifact_id}")
     return manifest
+
+
+def _role_for(reference: ArtifactRef, artifacts: dict[str, DeepSeekEvidenceArtifactV3]) -> str:
+    record = artifacts.get(reference.artifact_id)
+    if record is None or record.artifact != reference:
+        raise ValueError(f"evidence reference does not match a retained artifact: {reference.artifact_id}")
+    return record.role

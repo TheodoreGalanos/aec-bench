@@ -117,7 +117,7 @@ def _build_agent_map_from_lineage(lineage_path: Path) -> dict[str, str]:
     for item in records:
         # Each item may be {"record": {...}, "narrative": {...}} or a flat record
         record = item.get("record", item)
-        version = record.get("entry_version")
+        version = record.get("entry_candidate_id")
         agent_id = record.get("source_agent_id")
         if version and agent_id:
             agent_map[version] = agent_id
@@ -301,8 +301,8 @@ def swarm_state(request: Request, workspace: str) -> SwarmStateResponse:
             narrative = item.get("narrative", {}) if isinstance(item, dict) else {}
             lineage.append(
                 SwarmLineageNodeSchema(
-                    version=record.get("entry_version", ""),
-                    parent_version=record.get("parent_version"),
+                    version=record.get("entry_candidate_id", ""),
+                    parent_version=record.get("parent_candidate_id"),
                     agent_id=record.get("source_agent_id", ""),
                     cross_agent=record.get("cross_agent", False),
                     surprise=record.get("surprise", False),

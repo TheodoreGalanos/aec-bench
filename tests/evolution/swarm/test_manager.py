@@ -38,7 +38,7 @@ class FakeResult:
         _call_counter += 1
         self.score = score
         self.cost_usd = cost
-        self.workspace_version = f"v-{_call_counter}"
+        self.candidate_id = f"v-{_call_counter}"
         self.bd = BehaviourDescriptor(
             token_cost=float(_call_counter * 10_000),
             verification_depth=min(score, 1.0),
@@ -47,7 +47,7 @@ class FakeResult:
             deliberation_ratio=0.2,
             reward=score,
         )
-        self.parent_version = ""
+        self.parent_candidate_id = ""
 
 
 class FakeEvolverFactory:

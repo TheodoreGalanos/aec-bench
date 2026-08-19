@@ -8,6 +8,18 @@ to_prefix = "aec_bench.contracts.trial_extensions."
 from_prefix = "aec_bench.contracts.evaluation_plane."
 to_prefix = "aec_bench.evaluation.legacy_regime."
 
+[[legacy_relocation]]
+from_prefix = "aec_bench.prime_lab.lifecycle_exporter.PrimeLifecycleExportManifest."
+to_prefix = "aec_bench.prime_lab.lifecycle_exporter.LegacyPrimeLifecycleExportManifest."
+
+[[legacy_relocation]]
+from_prefix = "aec_bench.prime_lab.lifecycle_exporter.PrimeLifecyclePackageRecord."
+to_prefix = "aec_bench.prime_lab.lifecycle_exporter.LegacyPrimeLifecyclePackageRecord."
+
+[[legacy_relocation]]
+from_prefix = "aec_bench.prime_lab.lifecycle_exporter.PrimeLifecycleSourceProvenance."
+to_prefix = "aec_bench.prime_lab.lifecycle_exporter.LegacyPrimeLifecycleSourceProvenance."
+
 [[manifest]]
 contract = "aec-bench/actor-invocation-evidence/1"
 sink = "aec_bench.harness.world_actor.authority.ActorInvocationAuthority._append_evidence"
@@ -47,7 +59,8 @@ compatibility_behavior = "reject unsupported protocol versions"
 compatibility_kind = "protocol"
 
 [[field]]
-symbol = "aec_bench.adapters.deepseek_harness.evidence.DeepSeekActorToolEvidence.actor_catalogue_sha256"
+symbol = "aec_bench.adapters.deepseek_harness.evidence.DeepSeekActorToolEvidenceV3.actor_catalogue_sha256"
+aliases = ["aec_bench.adapters.deepseek_harness.evidence.DeepSeekActorToolEvidence.actor_catalogue_sha256"]
 surface = "pydantic_model"
 wire_name = "actor_catalogue_sha256"
 category = "semantic_commitment"
@@ -72,7 +85,8 @@ exception_reason = "DeepSeek evidence v2 keeps a direct actor claim while also r
 removal_milestone = "successor DeepSeek evidence protocol with verified artifact-key claim binding"
 
 [[field]]
-symbol = "aec_bench.adapters.deepseek_harness.evidence.DeepSeekActorToolEvidence.public_native_tool_surface_sha256"
+symbol = "aec_bench.adapters.deepseek_harness.evidence.DeepSeekActorToolEvidenceV3.public_native_tool_surface_sha256"
+aliases = ["aec_bench.adapters.deepseek_harness.evidence.DeepSeekActorToolEvidence.public_native_tool_surface_sha256"]
 surface = "pydantic_model"
 wire_name = "public_native_tool_surface_sha256"
 category = "semantic_commitment"
@@ -260,6 +274,7 @@ read_verification = "verify_deepseek_evidence_manifest re-reads the file and che
 
 [[field]]
 symbol = "aec_bench.adapters.deepseek_harness.evidence.DeepSeekEvidenceManifest.generated_at"
+aliases = ["aec_bench.adapters.deepseek_harness.evidence.DeepSeekEvidenceManifestV3.generated_at"]
 surface = "pydantic_model"
 wire_name = "generated_at"
 category = "event_time"
@@ -268,7 +283,7 @@ authority = "deepseek_evidence_writer"
 authoritative = true
 exposure = "provider_evidence"
 status = "current"
-payload_contract = "aec-bench/deepseek-evidence/2 emission event"
+payload_contract = "aec-bench/deepseek-evidence/3 emission event; retained v2 uses the same event meaning"
 canonicalization = "Pydantic datetime serialized in JSON mode"
 consumer = "DeepSeek evidence consumers"
 validation_behavior = "Pydantic parses the datetime; the writer uses the execution finish event"
@@ -300,6 +315,27 @@ compatibility_behavior = "reject unsupported evidence schemas"
 compatibility_kind = "external_schema"
 
 [[field]]
+symbol = "aec_bench.adapters.deepseek_harness.evidence.DeepSeekEvidenceManifestV3.schema_id"
+surface = "pydantic_model"
+wire_name = "schema"
+category = "compatibility"
+domain_owner = "deepseek_harness"
+authority = "deepseek_evidence_protocol"
+authoritative = true
+exposure = "provider_evidence"
+status = "current"
+payload_contract = "aec-bench/deepseek-evidence/3"
+canonicalization = "fixed schema literal serialized under schema"
+consumer = "verify_deepseek_evidence_manifest"
+validation_behavior = "The reader selects v3 explicitly and Pydantic rejects any other value for this model"
+mismatch_behavior = "reject_evidence_manifest"
+retention = "deepseek_evidence_manifest_lifetime"
+rationale = "Evidence v3 uses exact provider identities and authenticated ArtifactRef table keys."
+duplication = "unique"
+compatibility_behavior = "read v2 and v3 explicitly; reject all other evidence schemas"
+compatibility_kind = "external_schema"
+
+[[field]]
 symbol = "aec_bench.adapters.deepseek_harness.evidence.DeepSeekEvidenceReference.sha256"
 surface = "pydantic_model"
 wire_name = "sha256"
@@ -326,7 +362,8 @@ exception_reason = "The current evidence-v2 claim format repeats the artifact-ta
 removal_milestone = "successor DeepSeek evidence protocol with equivalent authenticated artifact-key references"
 
 [[field]]
-symbol = "aec_bench.adapters.deepseek_harness.evidence.DeepSeekExecutionIdentity.finished_at"
+symbol = "aec_bench.adapters.deepseek_harness.evidence.DeepSeekExecutionIdentityV3.finished_at"
+aliases = ["aec_bench.adapters.deepseek_harness.evidence.DeepSeekExecutionIdentity.finished_at"]
 surface = "pydantic_model"
 wire_name = "finished_at"
 category = "event_time"
@@ -346,7 +383,8 @@ duplication = "unique"
 event = "DeepSeek execution finished"
 
 [[field]]
-symbol = "aec_bench.adapters.deepseek_harness.evidence.DeepSeekExecutionIdentity.started_at"
+symbol = "aec_bench.adapters.deepseek_harness.evidence.DeepSeekExecutionIdentityV3.started_at"
+aliases = ["aec_bench.adapters.deepseek_harness.evidence.DeepSeekExecutionIdentity.started_at"]
 surface = "pydantic_model"
 wire_name = "started_at"
 category = "event_time"
@@ -418,7 +456,8 @@ exception_reason = "Evidence v2 repeats the package-lock digest to keep the plug
 removal_milestone = "successor DeepSeek evidence protocol with equivalent authenticated artifact-key references"
 
 [[field]]
-symbol = "aec_bench.adapters.deepseek_harness.evidence.DeepSeekPluginIdentity.version"
+symbol = "aec_bench.adapters.deepseek_harness.evidence.DeepSeekPluginIdentityV3.version"
+aliases = ["aec_bench.adapters.deepseek_harness.evidence.DeepSeekPluginIdentity.version"]
 surface = "pydantic_model"
 wire_name = "version"
 category = "qualification_attestation"
@@ -472,10 +511,10 @@ authority = "deepseek_release_qualification"
 authoritative = true
 exposure = "provider_evidence"
 status = "current"
-payload_contract = "evidence references for one provider-route qualification feature"
-canonicalization = "ordered non-empty evidence locator strings"
+payload_contract = "content-addressed evidence for one provider-route qualification feature"
+canonicalization = "ordered ArtifactRef values"
 consumer = "DeepSeekQualificationCell and release qualification reviewers"
-validation_behavior = "The model requires evidence for passed cells and forbids it for unpassed cells; the production loader does not currently resolve or content-verify these locator strings"
+validation_behavior = "Qualified cells require evidence and an event time; the matrix loader verifies each ArtifactRef against retained bytes"
 mismatch_behavior = "reject_inconsistent_cell_shape"
 retention = "qualification_matrix_lifetime"
 rationale = "A qualification claim must state the evidence level and must not infer success from missing evidence."
@@ -484,10 +523,11 @@ version_scope = "one AEC-Bench revision, SDK version, runtime version, provider 
 evidence_levels = ["keyless_protocol", "live_provider"]
 missing_evidence_behavior = "the cell cannot be passed; it remains not-run or not-applicable with an explicit reason"
 provider_route_scope = "one explicit qualification-matrix provider route and feature"
-qualification_state_behavior = "passed requires non-empty evidence; missing evidence must remain not-run or not-applicable and cannot imply qualification"
+qualification_state_behavior = "qualified requires content-addressed evidence; missing evidence remains partial or unqualified"
 
 [[field]]
 symbol = "aec_bench.adapters.deepseek_harness.qualification.DeepSeekQualificationMatrix.aec_bench_revision"
+aliases = ["aec_bench.adapters.deepseek_harness.qualification.LegacyDeepSeekQualificationMatrix.aec_bench_revision"]
 surface = "pydantic_model"
 wire_name = "aec_bench_revision"
 category = "source_identity"
@@ -508,6 +548,7 @@ format = "full Git commit"
 
 [[field]]
 symbol = "aec_bench.adapters.deepseek_harness.qualification.DeepSeekQualificationMatrix.aec_bench_version"
+aliases = ["aec_bench.adapters.deepseek_harness.qualification.LegacyDeepSeekQualificationMatrix.aec_bench_version"]
 surface = "pydantic_model"
 wire_name = "aec_bench_version"
 category = "qualification_attestation"
@@ -532,6 +573,7 @@ qualification_state_behavior = "a trial must match the exact AEC-Bench package v
 
 [[field]]
 symbol = "aec_bench.adapters.deepseek_harness.qualification.DeepSeekQualificationMatrix.qualification_date"
+aliases = ["aec_bench.adapters.deepseek_harness.qualification.LegacyDeepSeekQualificationMatrix.qualification_date"]
 surface = "pydantic_model"
 wire_name = "qualification_date"
 category = "event_time"
@@ -560,19 +602,20 @@ authority = "deepseek_qualification_protocol"
 authoritative = true
 exposure = "provider_evidence"
 status = "current"
-payload_contract = "aec-bench/deepseek-qualification/1"
+payload_contract = "aec-bench/deepseek-qualification/2"
 canonicalization = "fixed schema literal serialized under schema"
-consumer = "DeepSeekQualificationMatrix"
-validation_behavior = "Pydantic rejects any schema value other than aec-bench/deepseek-qualification/1"
+consumer = "load_deepseek_qualification_matrix"
+validation_behavior = "The reader selects v2 explicitly and Pydantic rejects any other value for this model"
 mismatch_behavior = "reject_qualification_matrix"
 retention = "qualification_matrix_lifetime"
 rationale = "The package-owned matrix is an independently consumed compatibility envelope."
 duplication = "unique"
-compatibility_behavior = "reject unsupported qualification schemas"
+compatibility_behavior = "read v1 and v2 explicitly; reject unsupported qualification schemas"
 compatibility_kind = "qualification_matrix"
 
 [[field]]
 symbol = "aec_bench.adapters.deepseek_harness.qualification.DeepSeekQualificationRow.runtime_version"
+aliases = ["aec_bench.adapters.deepseek_harness.qualification.LegacyDeepSeekQualificationRow.runtime_version"]
 surface = "pydantic_model"
 wire_name = "runtime_version"
 category = "qualification_attestation"
@@ -597,6 +640,7 @@ qualification_state_behavior = "a trial must match this exact runtime version an
 
 [[field]]
 symbol = "aec_bench.adapters.deepseek_harness.qualification.DeepSeekQualificationRow.sdk_version"
+aliases = ["aec_bench.adapters.deepseek_harness.qualification.LegacyDeepSeekQualificationRow.sdk_version"]
 surface = "pydantic_model"
 wire_name = "sdk_version"
 category = "qualification_attestation"
@@ -618,6 +662,27 @@ evidence_levels = ["keyless_protocol", "live_provider"]
 missing_evidence_behavior = "the qualification row is invalid when the version is missing"
 provider_route_scope = "the single provider route named by this qualification row"
 qualification_state_behavior = "a trial must match this exact SDK version and every feature must pass before the row is qualified"
+
+[[field]]
+symbol = "aec_bench.adapters.deepseek_harness.qualification.LegacyDeepSeekQualificationMatrix.schema_id"
+surface = "pydantic_model"
+wire_name = "schema"
+category = "compatibility"
+domain_owner = "deepseek_harness"
+authority = "deepseek_qualification_protocol"
+authoritative = true
+exposure = "provider_evidence"
+status = "current"
+payload_contract = "aec-bench/deepseek-qualification/1"
+canonicalization = "fixed schema literal serialized under schema"
+consumer = "load_deepseek_qualification_matrix"
+validation_behavior = "The reader selects retained v1 explicitly and Pydantic rejects any other value for this model"
+mismatch_behavior = "reject_qualification_matrix"
+retention = "qualification_matrix_lifetime"
+rationale = "Existing qualification matrices keep their independently interpreted v1 reader."
+duplication = "unique"
+compatibility_behavior = "read retained v1 without interpreting it as v2"
+compatibility_kind = "qualification_matrix"
 
 [[field]]
 symbol = "aec_bench.adapters.deepseek_harness.tool_gateway.EndpointCloseReport.closed_at"
@@ -1012,6 +1077,88 @@ duplication = "unique"
 format = "lowercase 40-character Git commit"
 
 [[field]]
+symbol = "aec_bench.contracts.evolution.WorkspaceCandidateVersion.source_revision"
+surface = "pydantic_model"
+wire_name = "source_revision"
+category = "source_identity"
+domain_owner = "evolution_workspace"
+authority = "git_repository"
+authoritative = true
+exposure = "persisted"
+status = "current"
+payload_contract = "exact Git source for one evolution candidate"
+canonicalization = "lowercase full Git commit returned by git rev-parse"
+consumer = "evolution workspace restore, diff, reporting, and migration"
+validation_behavior = "WorkspaceCandidateVersion requires a lowercase 40-character Git commit"
+mismatch_behavior = "reject_candidate_metadata"
+retention = "evolution_workspace_lifetime"
+rationale = "Git identifies candidate source while candidate IDs identify domain lineage."
+duplication = "unique"
+format = "lowercase 40-character Git commit"
+
+[[field]]
+symbol = "aec_bench.contracts.evolution.WorkspaceManifest.schema_version"
+surface = "pydantic_model"
+wire_name = "schema_version"
+category = "compatibility"
+domain_owner = "evolution_workspace"
+authority = "workspace_manifest_reader"
+authoritative = true
+exposure = "persisted"
+status = "current"
+payload_contract = "evolution workspace manifest schema 1"
+canonicalization = "fixed integer literal 1"
+consumer = "evolution workspace loader and migration"
+validation_behavior = "WorkspaceManifest rejects any schema_version other than 1; Workspace maps legacy version 0.1.0 explicitly"
+mismatch_behavior = "reject_workspace_manifest"
+retention = "evolution_workspace_lifetime"
+rationale = "Persisted workspace manifests need one compatibility selector, not a release-style version."
+duplication = "unique"
+compatibility_behavior = "current readers accept schema 1 and explicitly map legacy manifest version 0.1.0"
+compatibility_kind = "external_schema"
+
+[[field]]
+symbol = "aec_bench.contracts.evolution.WorkspaceMigrationCandidate.expected_source_revision"
+surface = "pydantic_model"
+wire_name = "expected_source_revision"
+category = "source_identity"
+domain_owner = "evolution_workspace"
+authority = "workspace_owner_migration_plan"
+authoritative = false
+exposure = "persisted"
+status = "current"
+payload_contract = "owner-confirmed legacy tag target before candidate registration"
+canonicalization = "lowercase full Git commit supplied in the migration plan"
+consumer = "legacy evolution workspace migration"
+validation_behavior = "WorkspaceMigrationCandidate validates full Git syntax; migration compares it with the resolved label target"
+mismatch_behavior = "report_moved_or_ambiguous_label"
+retention = "workspace_migration_lifetime"
+rationale = "A legacy tag cannot become durable candidate metadata without an independently confirmed source commit."
+duplication = "claim_binding"
+format = "lowercase 40-character Git commit"
+
+[[field]]
+symbol = "aec_bench.contracts.evolution.WorkspaceMigrationPlan.schema_version"
+surface = "pydantic_model"
+wire_name = "schema_version"
+category = "compatibility"
+domain_owner = "evolution_workspace"
+authority = "workspace_migration_reader"
+authoritative = true
+exposure = "persisted"
+status = "current"
+payload_contract = "evolution workspace migration plan schema 1"
+canonicalization = "fixed integer literal 1"
+consumer = "evolve migrate-workspace command"
+validation_behavior = "WorkspaceMigrationPlan rejects any schema_version other than 1"
+mismatch_behavior = "reject_workspace_migration_plan"
+retention = "workspace_migration_lifetime"
+rationale = "External migration plans need one explicit reader contract."
+duplication = "unique"
+compatibility_behavior = "the migration command accepts schema 1 only"
+compatibility_kind = "external_schema"
+
+[[field]]
 symbol = "aec_bench.contracts.harness_instance.HarnessRecipeRef.version"
 surface = "pydantic_model"
 wire_name = "version"
@@ -1188,6 +1335,119 @@ rationale = "Task packages and runtimes independently exchange the structural co
 duplication = "unique"
 compatibility_behavior = "reject unsupported completion-contract schemas"
 compatibility_kind = "external_schema"
+
+[[field]]
+symbol = "aec_bench.contracts.provider_provenance.ProviderAdapterIdentity.package_version"
+surface = "pydantic_model"
+wire_name = "package_version"
+category = "qualification_attestation"
+domain_owner = "provider_adapter"
+authority = "installed_distribution_metadata"
+authoritative = true
+exposure = "provider_evidence"
+status = "current"
+payload_contract = "installed provider-adapter package used by one runtime or qualification cell"
+canonicalization = "distribution version string without rewriting"
+consumer = "provider evidence and qualification exact-version matcher"
+validation_behavior = "ProviderAdapterIdentity requires a non-empty package version"
+mismatch_behavior = "qualification_is_unqualified"
+retention = "provider_evidence_or_qualification_lifetime"
+rationale = "A package version and exact source prove different facts and remain separate."
+duplication = "unique"
+version_scope = "one adapter_id and exact source identity"
+evidence_levels = ["distribution_metadata"]
+missing_evidence_behavior = "provider identity validation fails"
+provider_route_scope = "the provider route named by the enclosing runtime or qualification cell"
+qualification_state_behavior = "an exact package-version mismatch makes the cell unqualified"
+
+[[field]]
+symbol = "aec_bench.contracts.provider_provenance.ProviderAdapterIdentity.source_revision"
+surface = "pydantic_model"
+wire_name = "source_revision"
+category = "source_identity"
+domain_owner = "provider_adapter"
+authority = "git_repository"
+authoritative = true
+exposure = "provider_evidence"
+status = "current"
+payload_contract = "clean provider-adapter source used by one runtime or qualification cell"
+canonicalization = "lowercase full Git commit returned by git rev-parse"
+consumer = "provider evidence verifier and qualification exact-version matcher"
+validation_behavior = "ProviderAdapterIdentity requires exactly one full source revision or source snapshot"
+mismatch_behavior = "reject_identity_or_mark_qualification_unqualified"
+retention = "provider_evidence_or_qualification_lifetime"
+rationale = "One Git revision reconstructs clean source without a root path or source-tree digest."
+duplication = "unique"
+format = "lowercase 40-character Git commit"
+
+[[field]]
+symbol = "aec_bench.contracts.provider_provenance.ProviderQualificationCell.qualified_at"
+aliases = ["aec_bench.adapters.deepseek_harness.qualification.DeepSeekQualificationCell.qualified_at"]
+surface = "pydantic_model"
+wire_name = "qualified_at"
+category = "event_time"
+domain_owner = "provider_qualification"
+authority = "provider_qualification_reviewer"
+authoritative = true
+exposure = "provider_evidence"
+status = "current"
+payload_contract = "qualification event for one exact provider route, feature, and version set"
+canonicalization = "timezone-aware datetime serialized in JSON mode"
+consumer = "qualification matrix readers and release reviewers"
+validation_behavior = "Only qualified cells can have a timezone-aware event time"
+mismatch_behavior = "reject_qualification_cell"
+retention = "qualification_matrix_lifetime"
+rationale = "The time records a completed qualification review, not identity or deterministic metadata."
+duplication = "unique"
+event = "provider feature qualified"
+
+[[field]]
+symbol = "aec_bench.contracts.provider_provenance.ResolvedRuntimeIdentity.distribution_version"
+surface = "pydantic_model"
+wire_name = "distribution_version"
+category = "qualification_attestation"
+domain_owner = "provider_runtime"
+authority = "installed_distribution_metadata"
+authoritative = true
+exposure = "provider_evidence"
+status = "current"
+payload_contract = "installed SDK or runtime distribution used by one provider execution"
+canonicalization = "distribution version string without rewriting"
+consumer = "provider evidence and qualification exact-version matcher"
+validation_behavior = "ResolvedRuntimeIdentity requires a non-empty distribution version"
+mismatch_behavior = "qualification_is_unqualified"
+retention = "provider_evidence_or_qualification_lifetime"
+rationale = "Installed distribution metadata is distinct from a runtime-reported version."
+duplication = "unique"
+version_scope = "one named SDK or runtime distribution"
+evidence_levels = ["distribution_metadata"]
+missing_evidence_behavior = "runtime identity validation fails"
+provider_route_scope = "the provider route named by the enclosing runtime or qualification cell"
+qualification_state_behavior = "an exact distribution-version mismatch makes the cell unqualified"
+
+[[field]]
+symbol = "aec_bench.contracts.provider_provenance.ResolvedRuntimeIdentity.reported_version"
+surface = "pydantic_model"
+wire_name = "reported_version"
+category = "qualification_attestation"
+domain_owner = "provider_runtime"
+authority = "active_provider_runtime"
+authoritative = true
+exposure = "provider_evidence"
+status = "current"
+payload_contract = "version independently reported by the active SDK or runtime"
+canonicalization = "runtime-reported version string without rewriting"
+consumer = "provider evidence and qualification exact-version matcher"
+validation_behavior = "ResolvedRuntimeIdentity retains a non-empty reported value when the runtime provides one"
+mismatch_behavior = "qualification_is_unqualified"
+retention = "provider_evidence_or_qualification_lifetime"
+rationale = "A runtime report and installed distribution metadata are independent observations."
+duplication = "unique"
+version_scope = "one active SDK or runtime process"
+evidence_levels = ["runtime_reported"]
+missing_evidence_behavior = "retain null and do not infer a reported version"
+provider_route_scope = "the provider route named by the enclosing runtime or qualification cell"
+qualification_state_behavior = "an expected reported-version mismatch makes the cell unqualified"
 
 [[field]]
 symbol = "aec_bench.contracts.run_bundle.PublishedRunPackage.schema_version"
@@ -1627,15 +1887,15 @@ authority = "harness_kernel"
 authoritative = true
 exposure = "persisted"
 status = "current"
-payload_contract = "aecbench.runtime-execution-attestation.v1"
-canonicalization = "fixed schema literal"
+payload_contract = "aecbench.runtime-execution-attestation.v1 or v2"
+canonicalization = "explicit supported schema literal"
 consumer = "RuntimeExecutionAttestation readers"
-validation_behavior = "Pydantic rejects any other schema version"
+validation_behavior = "Pydantic rejects unsupported schemas; v1 permits the legacy manifest digest and v2 permits only the provider_evidence role"
 mismatch_behavior = "reject_runtime_attestation"
 retention = "runtime_attestation_lifetime"
 rationale = "The persisted runtime envelope has an independently interpreted contract."
 duplication = "unique"
-compatibility_behavior = "reject unsupported runtime-attestation schemas"
+compatibility_behavior = "read v1 and v2 explicitly; reject unsupported runtime-attestation schemas"
 compatibility_kind = "external_schema"
 
 [[field]]
@@ -1748,6 +2008,156 @@ algorithm = "sha256"
 fail_closed = true
 artifact_boundary = "one immutable regular file below the descriptor-confined byte-store root"
 read_verification = "ImmutableByteStore re-reads and rehashes the confined file and raises ImmutableArtifactIntegrityError on mismatch"
+
+[[field]]
+symbol = "aec_bench.prime_lab.lifecycle_exporter.LegacyPrimeLifecycleExportManifest.schema_version"
+surface = "pydantic_model"
+wire_name = "schema_version"
+category = "compatibility"
+domain_owner = "prime_lifecycle_export"
+authority = "prime_lifecycle_manifest_reader"
+authoritative = true
+exposure = "persisted"
+status = "current"
+payload_contract = "Prime lifecycle export manifest schema 2"
+canonicalization = "fixed string literal 2"
+consumer = "load_prime_lifecycle_manifest"
+validation_behavior = "The reader selects retained schema 2 explicitly and the legacy model accepts only 2"
+mismatch_behavior = "reject_prime_lifecycle_manifest"
+retention = "generated_prime_package_lifetime"
+rationale = "Existing local-reference packages keep their independently interpreted schema-2 reader."
+duplication = "unique"
+compatibility_behavior = "read retained schema 2 without interpreting it as schema 3"
+compatibility_kind = "external_schema"
+
+[[field]]
+symbol = "aec_bench.prime_lab.lifecycle_exporter.PrimeLifecycleExportManifest.package_version"
+surface = "pydantic_model"
+wire_name = "package_version"
+category = "qualification_attestation"
+domain_owner = "prime_lifecycle_export"
+authority = "prime_package_exporter"
+authoritative = true
+exposure = "persisted"
+status = "current"
+payload_contract = "generated Prime lifecycle Python package version"
+canonicalization = "validated PEP 440 version string"
+consumer = "Python package installers and Prime lifecycle package readers"
+validation_behavior = "The exporter rejects a non-PEP-440 configured version before manifest creation"
+mismatch_behavior = "reject_package_export_or_install"
+retention = "generated_prime_package_lifetime"
+rationale = "The independently installed generated package needs its own release version."
+duplication = "unique"
+version_scope = "one generated Prime lifecycle environment package"
+evidence_levels = ["package_metadata"]
+missing_evidence_behavior = "export fails"
+provider_route_scope = "local Prime or Verifiers installation of the generated package"
+qualification_state_behavior = "the package version does not by itself qualify provider behavior"
+
+[[field]]
+symbol = "aec_bench.prime_lab.lifecycle_exporter.PrimeLifecycleExportManifest.protocols"
+surface = "pydantic_model"
+wire_name = "protocols"
+category = "compatibility"
+domain_owner = "prime_lifecycle_export"
+authority = "prime_lifecycle_export_protocol"
+authoritative = true
+exposure = "persisted"
+status = "current"
+payload_contract = "independently consumed Prime environment, evidence-request, and lifecycle-operation protocols"
+canonicalization = "strict PrimeLifecycleProtocolVersions object"
+consumer = "generated Prime lifecycle environment loader"
+validation_behavior = "Pydantic validates each fixed protocol value and rejects extra fields"
+mismatch_behavior = "reject_prime_lifecycle_manifest"
+retention = "generated_prime_package_lifetime"
+rationale = "The generated package exposes independent protocols that do not share its package version."
+duplication = "unique"
+compatibility_behavior = "schema-3 readers require the exact supported protocol set"
+compatibility_kind = "protocol"
+
+[[field]]
+symbol = "aec_bench.prime_lab.lifecycle_exporter.PrimeLifecycleExportManifest.schema_version"
+surface = "pydantic_model"
+wire_name = "schema_version"
+category = "compatibility"
+domain_owner = "prime_lifecycle_export"
+authority = "prime_lifecycle_manifest_reader"
+authoritative = true
+exposure = "persisted"
+status = "current"
+payload_contract = "Prime lifecycle export manifest schema 3"
+canonicalization = "fixed string literal 3"
+consumer = "load_prime_lifecycle_manifest"
+validation_behavior = "The reader selects schema 2 or 3 explicitly and the current model accepts only 3"
+mismatch_behavior = "reject_prime_lifecycle_manifest"
+retention = "generated_prime_package_lifetime"
+rationale = "Schema 3 replaces local path and digest stacks with retained package ArtifactRef values."
+duplication = "unique"
+compatibility_behavior = "read retained schema 2 and current schema 3 explicitly"
+compatibility_kind = "external_schema"
+
+[[field]]
+symbol = "aec_bench.prime_lab.lifecycle_exporter.PrimeLifecycleProtocolVersions.environment"
+surface = "pydantic_model"
+wire_name = "environment"
+category = "compatibility"
+domain_owner = "prime_lifecycle_export"
+authority = "prime_lifecycle_environment_protocol"
+authoritative = true
+exposure = "persisted"
+status = "current"
+payload_contract = "aec-bench/prime-lifecycle-environment/1"
+canonicalization = "fixed protocol literal"
+consumer = "generated Prime lifecycle environment loader"
+validation_behavior = "Pydantic rejects any other environment protocol"
+mismatch_behavior = "reject_prime_lifecycle_manifest"
+retention = "generated_prime_package_lifetime"
+rationale = "The generated environment contract evolves independently from its Python package."
+duplication = "unique"
+compatibility_behavior = "accept protocol 1 only"
+compatibility_kind = "protocol"
+
+[[field]]
+symbol = "aec_bench.prime_lab.lifecycle_exporter.PrimeLifecycleProtocolVersions.evidence_request"
+surface = "pydantic_model"
+wire_name = "evidence_request"
+category = "compatibility"
+domain_owner = "prime_lifecycle_export"
+authority = "evidence_request_protocol"
+authoritative = true
+exposure = "persisted"
+status = "current"
+payload_contract = "evidence request protocol 1"
+canonicalization = "fixed protocol literal"
+consumer = "generated Prime lifecycle environment loader"
+validation_behavior = "Pydantic rejects any other evidence-request protocol"
+mismatch_behavior = "reject_prime_lifecycle_manifest"
+retention = "generated_prime_package_lifetime"
+rationale = "Evidence requests evolve independently from the generated environment package."
+duplication = "unique"
+compatibility_behavior = "accept protocol 1 only"
+compatibility_kind = "protocol"
+
+[[field]]
+symbol = "aec_bench.prime_lab.lifecycle_exporter.PrimeLifecycleProtocolVersions.lifecycle_operation"
+surface = "pydantic_model"
+wire_name = "lifecycle_operation"
+category = "compatibility"
+domain_owner = "prime_lifecycle_export"
+authority = "lifecycle_operation_protocol"
+authoritative = true
+exposure = "persisted"
+status = "current"
+payload_contract = "lifecycle operation protocol 1"
+canonicalization = "fixed protocol literal"
+consumer = "generated Prime lifecycle environment loader"
+validation_behavior = "Pydantic rejects any other lifecycle-operation protocol"
+mismatch_behavior = "reject_prime_lifecycle_manifest"
+retention = "generated_prime_package_lifetime"
+rationale = "Lifecycle operations evolve independently from the generated environment package."
+duplication = "unique"
+compatibility_behavior = "accept protocol 1 only"
+compatibility_kind = "protocol"
 
 [[field]]
 symbol = "manifest:aec-bench/actor-invocation-evidence/1[*].catalogue_sha256"

@@ -3,24 +3,13 @@
 
 from __future__ import annotations
 
-import subprocess
 from pathlib import Path
 
 import yaml
 from fastapi.testclient import TestClient
 
+from aec_bench.evolution.workspace import Workspace
 from aec_bench.web.app import create_app
-
-
-def _git(cwd: Path, *args: str) -> None:
-    """Run a git command in the given directory, raising on failure."""
-    subprocess.run(
-        ["git", *args],
-        cwd=cwd,
-        capture_output=True,
-        text=True,
-        check=True,
-    )
 
 
 def _make_evolution_workspace(tmp_path: Path) -> tuple[Path, Path]:
@@ -33,7 +22,12 @@ def _make_evolution_workspace(tmp_path: Path) -> tuple[Path, Path]:
     ws.mkdir(parents=True)
 
     # Write manifest.yaml
-    manifest = {"name": "my-workspace", "version": "0.1.0"}
+    manifest = {
+        "schema_version": 1,
+        "name": "my-workspace",
+        "agent_adapter": "rlm",
+        "evolvable_layers": ["prompts", "skills"],
+    }
     (ws / "manifest.yaml").write_text(yaml.dump(manifest), encoding="utf-8")
 
     # Write evolution.yaml
@@ -45,20 +39,21 @@ def _make_evolution_workspace(tmp_path: Path) -> tuple[Path, Path]:
     prompts_dir.mkdir()
     (prompts_dir / "system.md").write_text("You are an engineering assistant.", encoding="utf-8")
 
-    # Init git and create evo-0 tag
-    _git(ws, "init")
-    _git(ws, "add", ".")
-    _git(ws, "commit", "-m", "initial commit")
-    _git(ws, "tag", "-a", "evo-0", "-m", "score 0.50")
+    workspace = Workspace(ws)
+    workspace.init_versioning()
 
     # Modify prompt and create evo-1 tag
     (prompts_dir / "system.md").write_text(
         "You are an expert engineering assistant with deep domain knowledge.",
         encoding="utf-8",
     )
-    _git(ws, "add", ".")
-    _git(ws, "commit", "-m", "cycle 1 improvements")
-    _git(ws, "tag", "-a", "evo-1", "-m", "score 0.75")
+    workspace.commit_candidate(
+        candidate_id="test-run:1",
+        parent_candidate_id="baseline",
+        summary="cycle 1 improvements",
+        score=0.75,
+        label="evo-1",
+    )
 
     return workspaces_root, ws
 

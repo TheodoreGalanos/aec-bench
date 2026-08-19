@@ -25,7 +25,7 @@ def produce_consolidation_report(
 
     Extracts patterns from the archive, graveyard, lineage, and notes
     without making LLM calls — pure data analysis. An LLM-powered
-    version can be added later for richer insights.
+    candidate data can be added later for richer insights.
     """
     report_id = f"consolidation-{uuid.uuid4().hex[:8]}"
     coverage = archive.coverage_report()
@@ -112,11 +112,11 @@ def _extract_counterintuitive(lineage: LineageTracker) -> list[str]:
     findings: list[str] = []
     for r in lineage.all_records():
         if r.surprise:
-            narrative = lineage.get_narrative(r.entry_version)
+            narrative = lineage.get_narrative(r.entry_candidate_id)
             explanation = ""
             if narrative and narrative.surprise_explanation:
                 explanation = f" — {narrative.surprise_explanation}"
-            findings.append(f"Entry {r.entry_version} by {r.source_agent_id} was a surprise{explanation}.")
+            findings.append(f"Entry {r.entry_candidate_id} by {r.source_agent_id} was a surprise{explanation}.")
     return findings
 
 

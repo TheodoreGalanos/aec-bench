@@ -61,7 +61,7 @@ def inject_snapshot_into_workspace(snapshot: WorkspaceSnapshot, workspace_dir: P
     """
     content = serialise_snapshot(snapshot)
     (workspace_dir / "system_prompt.md").write_text(content)
-    _log.debug("Injected snapshot (version=%s) into %s", snapshot.workspace_version, workspace_dir)
+    _log.debug("Injected snapshot (candidate_id=%s) into %s", snapshot.candidate_id, workspace_dir)
 
 
 _ADAPTER_CONFIG_FILES: tuple[str, ...] = ("tool_loop.toml",)

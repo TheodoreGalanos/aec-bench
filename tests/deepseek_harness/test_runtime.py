@@ -17,6 +17,7 @@ from aec_bench.adapters.deepseek_harness import runtime as deepseek_runtime
 from aec_bench.adapters.deepseek_harness.config import DeepSeekHarnessSettings
 from aec_bench.adapters.deepseek_harness.evidence import (
     DeepSeekEvidenceManifest,
+    DeepSeekEvidenceManifestV3,
     verify_deepseek_evidence_manifest,
 )
 from aec_bench.adapters.deepseek_harness.native_world_tools import DeepSeekNativeWorldEvidence
@@ -280,16 +281,21 @@ result_path.write_text(json.dumps({
     assert result.manifest_path is not None
     assert result.manifest_path.is_file()
     manifest = json.loads(result.manifest_path.read_text(encoding="utf-8"))
-    assert manifest["schema"] == "aec-bench/deepseek-evidence/2"
+    assert manifest["schema"] == "aec-bench/deepseek-evidence/3"
     assert manifest["trial_id"] == runtime.paths.root.name
-    assert manifest["adapter"]["kind"] == "deepseek_harness"
-    assert manifest["adapter"]["aec_bench_version"] == "0.1.0"
-    assert manifest["adapter"]["python_sdk_version"] == "fake-sdk"
-    assert manifest["adapter"]["runtime_distribution_version"] == "fake-runtime"
-    assert manifest["adapter"]["runtime_reported_version"] is None
-    assert (manifest["adapter"]["aec_bench_revision"] is None) != (
-        manifest["adapter"]["aec_bench_revision_reason"] is None
-    )
+    assert manifest["adapter"]["adapter_id"] == "aec-bench/deepseek-harness"
+    assert manifest["adapter"]["package_version"] == "0.1.0"
+    assert (manifest["adapter"]["source_revision"] is None) != (manifest["adapter"]["source_snapshot"] is None)
+    assert manifest["sdk"] == {
+        "distribution_name": "deepseek-harness-sdk",
+        "distribution_version": "fake-sdk",
+        "reported_version": None,
+    }
+    assert manifest["runtime"] == {
+        "distribution_name": "deepseek-harness-runtime-bin",
+        "distribution_version": "fake-runtime",
+        "reported_version": None,
+    }
     assert manifest["model"] == {
         "provider": "azure",
         "harness_route": "azure",
@@ -301,6 +307,7 @@ result_path.write_text(json.dumps({
     assert manifest["execution"]["timeout_sec"] == 5
     assert manifest["execution"]["max_tokens"] == 17
     assert manifest["execution"]["process_group_retired"] is True
+    assert "workspace" not in manifest["execution"]
     assert manifest["plugins"] == []
     assert manifest["attestation"]["declared"]["status"] == "complete"
     assert manifest["attestation"]["resolved_runtime"] == {
@@ -312,12 +319,13 @@ result_path.write_text(json.dumps({
     assert manifest["qualification"] == {
         "matrix_id": "deepseek-harness-0.1.0rc6-initial",
         "matrix": {
-            "path": "qualification-reference.json",
+            "artifact_id": "qualification-reference.json",
             "sha256": deepseek_runtime._file_sha256(runtime.paths.qualification_reference),
+            "size_bytes": runtime.paths.qualification_reference.stat().st_size,
+            "media_type": "application/json",
         },
         "provider_route": "azure",
         "status": "unqualified",
-        "live_qualified": False,
         "qualified_features": [],
     }
     roles = {artifact["role"] for artifact in manifest["artifacts"]}
@@ -356,19 +364,19 @@ result_path.write_text(json.dumps({
     assert composition["plugins"] == []
     assert runtime_record["timeout_sec"] == 5
     assert runtime_record["max_tokens"] == 17
-    assert result.evidence_manifest_sha256 is not None
+    assert result.evidence_manifest is not None
 
     future_payload = json.loads(result.manifest_path.read_text(encoding="utf-8"))
     future_payload["future_manifest_field"] = {"retained": True}
     future_payload["attestation"]["declared"]["future_level_field"] = "retained"
-    imported = DeepSeekEvidenceManifest.model_validate(future_payload).model_dump(mode="json", by_alias=True)
+    imported = DeepSeekEvidenceManifestV3.model_validate(future_payload).model_dump(mode="json", by_alias=True)
     assert imported["future_manifest_field"] == {"retained": True}
     assert imported["attestation"]["declared"]["future_level_field"] == "retained"
     legacy_payload = json.loads(result.manifest_path.read_text(encoding="utf-8"))
     legacy_payload["schema_version"] = "aecbench.deepseek-evidence-manifest.v1"
     del legacy_payload["schema"]
     with pytest.raises(ValueError, match="schema"):
-        DeepSeekEvidenceManifest.model_validate(legacy_payload)
+        DeepSeekEvidenceManifestV3.model_validate(legacy_payload)
 
     with pytest.raises(DeepSeekHarnessRuntimeError, match="only one trial"):
         runtime.run(AdapterRequest(instruction="Do the work again", configuration={"timeout_sec": 5}))
@@ -377,6 +385,78 @@ result_path.write_text(json.dumps({
     runtime.paths.stderr.write_text("tampered", encoding="utf-8")
     with pytest.raises(ValueError, match="does not match its receipt"):
         verify_deepseek_evidence_manifest(result.manifest_path)
+
+
+def test_deepseek_evidence_v2_remains_readable() -> None:
+    artifacts = [
+        {"role": role, "path": path, "sha256": digest * 64, "size_bytes": 1}
+        for role, path, digest in (
+            ("composition_identity", "composition.json", "a"),
+            ("cordis_input", "cordis.yml", "b"),
+            ("system_prompt", "prompt.txt", "c"),
+            ("qualification_matrix", "qualification.json", "d"),
+            ("redaction_audit", "redaction.json", "e"),
+        )
+    ]
+
+    def reference(path: str, digest: str) -> dict[str, str]:
+        return {"path": path, "sha256": digest * 64}
+
+    manifest = DeepSeekEvidenceManifest.model_validate(
+        {
+            "schema": "aec-bench/deepseek-evidence/2",
+            "trial_id": "retained-v2",
+            "generated_at": "2026-08-17T00:00:00+10:00",
+            "adapter": {
+                "aec_bench_version": "0.1.0",
+                "aec_bench_revision": "f" * 40,
+                "python_sdk_version": "0.1.0rc6",
+                "runtime_distribution_version": "0.1.0rc6",
+            },
+            "composition": {"output_commit_mode": "disabled"},
+            "attestation": {
+                "declared": {
+                    "status": "complete",
+                    "artifacts": [
+                        reference("composition.json", "a"),
+                        reference("cordis.yml", "b"),
+                        reference("prompt.txt", "c"),
+                    ],
+                },
+                "resolved_runtime": {"status": "unavailable", "reason": "not exposed"},
+                "model_visible": {"status": "unavailable", "reason": "not exposed"},
+            },
+            "qualification": {
+                "matrix_id": "retained-v1",
+                "matrix": reference("qualification.json", "d"),
+                "provider_route": "azure",
+                "status": "partial",
+                "live_qualified": False,
+            },
+            "model": {
+                "provider": "azure",
+                "harness_route": "azure",
+                "requested": "azure:model",
+                "resolved": "model",
+            },
+            "execution": {
+                "status": "failed",
+                "workspace": "/retained/v2/path",
+                "started_at": "2026-08-17T00:00:00+10:00",
+                "finished_at": "2026-08-17T00:00:01+10:00",
+                "aec_model_turns_used": 0,
+                "deepseek_root_turns": 0,
+                "tool_calls_started": 0,
+                "tool_calls_completed": 0,
+                "timeout_sec": 30,
+                "process_group_retired": True,
+            },
+            "redaction_audit_path": "redaction.json",
+            "artifacts": artifacts,
+        }
+    )
+
+    assert manifest.schema_id == "aec-bench/deepseek-evidence/2"
 
 
 def test_required_commit_runtime_binds_the_endpoint_and_records_secret_free_evidence(tmp_path: Path) -> None:
@@ -461,27 +541,30 @@ result_path.write_text(json.dumps({
     assert composition["output_commit_mode"] == "required"
     assert composition["plugins"] == [
         {
-            "artifact_path": "plugins/output-commit/index.js",
-            "artifact_sha256": deepseek_runtime._file_sha256(runtime.paths.output_commit_plugin),
-            "package_lock_path": "plugins/package-lock.json",
-            "package_lock_sha256": deepseek_runtime._file_sha256(runtime.paths.plugin_package_lock),
+            "artifact": {
+                "artifact_id": "plugins/output-commit/index.js",
+                "sha256": deepseek_runtime._file_sha256(runtime.paths.output_commit_plugin),
+                "size_bytes": runtime.paths.output_commit_plugin.stat().st_size,
+                "media_type": "text/javascript",
+            },
             "plugin_id": "@aec-bench/dsh-output-commit",
             "role": "output_commit",
             "version": "0.1.0",
         }
     ]
+    assert composition["plugin_package_lock"] == {
+        "artifact_id": "plugins/package-lock.json",
+        "sha256": deepseek_runtime._file_sha256(runtime.paths.plugin_package_lock),
+        "size_bytes": runtime.paths.plugin_package_lock.stat().st_size,
+        "media_type": "application/json",
+    }
     manifest = json.loads(runtime.paths.manifest.read_text(encoding="utf-8"))
     assert {"optional_plugin", "output_commit_evidence"}.issubset(
         {artifact["role"] for artifact in manifest["artifacts"]}
     )
     assert manifest["plugins"] == composition["plugins"]
-    assert manifest["plugins"][0]["artifact_sha256"] == deepseek_runtime._file_sha256(
-        runtime.paths.output_commit_plugin
-    )
-    assert manifest["plugins"][0]["package_lock_path"] == "plugins/package-lock.json"
-    assert manifest["plugins"][0]["package_lock_sha256"] == deepseek_runtime._file_sha256(
-        runtime.paths.plugin_package_lock
-    )
+    assert manifest["plugins"][0]["artifact"] == composition["plugins"][0]["artifact"]
+    assert manifest["plugin_package_lock"] == composition["plugin_package_lock"]
 
 
 def test_runtime_binds_exact_native_tools_and_records_secret_free_evidence(tmp_path: Path) -> None:
@@ -631,13 +714,21 @@ result_path.write_text(json.dumps({
     assert correlation[0]["actor_evidence_sequences"] == [7]
     assert len(manifest["plugins"]) == 1
     assert manifest["plugins"][0] == {
-        "artifact_path": "plugins/tools/index.js",
-        "artifact_sha256": deepseek_runtime._file_sha256(runtime.paths.tool_gateway_plugin),
-        "package_lock_path": "plugins/package-lock.json",
-        "package_lock_sha256": deepseek_runtime._file_sha256(runtime.paths.plugin_package_lock),
+        "artifact": {
+            "artifact_id": "plugins/tools/index.js",
+            "sha256": deepseek_runtime._file_sha256(runtime.paths.tool_gateway_plugin),
+            "size_bytes": runtime.paths.tool_gateway_plugin.stat().st_size,
+            "media_type": "text/javascript",
+        },
         "plugin_id": "@aec-bench/dsh-tools",
         "role": "native_tools",
         "version": "0.2.0",
+    }
+    assert manifest["plugin_package_lock"] == {
+        "artifact_id": "plugins/package-lock.json",
+        "sha256": deepseek_runtime._file_sha256(runtime.paths.plugin_package_lock),
+        "size_bytes": runtime.paths.plugin_package_lock.stat().st_size,
+        "media_type": "application/json",
     }
     assert {
         "actor_authority_evidence",

@@ -21,8 +21,10 @@ from aec_bench.lifecycles.catalogue import lifecycle_operation_resolver, materia
 from aec_bench.lifecycles.runtime.lifecycle import prepare_evidence_checkpoint
 from aec_bench.prime_lab.lifecycle_environment import load_local_lifecycle_environment
 from aec_bench.prime_lab.lifecycle_exporter import (
+    LegacyPrimeLifecycleExportManifest,
     PrimeLifecycleExportConfig,
     export_prime_lifecycle_environment,
+    load_prime_lifecycle_manifest,
 )
 
 TEMPLATE_ID = "drainage-model-evidence-lifecycle-review"
@@ -37,7 +39,7 @@ REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 runner = CliRunner()
 
 
-def test_lifecycle_export_references_registered_public_packages_without_copying(tmp_path: Path) -> None:
+def test_lifecycle_export_retains_content_addressed_public_packages_without_local_paths(tmp_path: Path) -> None:
     packages = tuple(_materialize(tmp_path / "packages" / variant_id, variant_id) for variant_id in PUBLIC_VARIANTS)
 
     result = export_prime_lifecycle_environment(
@@ -57,11 +59,15 @@ def test_lifecycle_export_references_registered_public_packages_without_copying(
     assert manifest["memory_visibility_policy"] == "persistent_context"
     assert manifest["reward_owner"] == "task_lifecycle_verifier"
     assert [record["variant_id"] for record in records] == sorted(PUBLIC_VARIANTS)
-    assert [record["package_dir"] for record in records] == [str(path.resolve()) for path in sorted(packages)]
+    assert manifest["schema_version"] == "3"
+    assert manifest["package_version"] == "0.1.0"
+    assert (manifest["source"]["source_revision"] is None) != (manifest["source"]["source_snapshot"] is None)
+    assert "root" not in manifest["source"]
+    assert "source_inventory_sha256" not in manifest["source"]
     assert all(record["visibility"] == "public" for record in records)
-    assert all(len(record["lifecycle_spec_sha256"]) == 64 for record in records)
-    assert all(len(record["package_sha256"]) == 64 for record in records)
-    assert not (result.package_dir / result.environment_id / "packages").exists()
+    assert all(record["package"]["artifact_id"].endswith(".tar") for record in records)
+    assert all((result.manifest_path.parent / record["package"]["artifact_id"]).is_file() for record in records)
+    assert all("lifecycle_spec_sha256" not in record and "package_sha256" not in record for record in records)
     assert not any(path.name == "aec_bench" for path in result.package_dir.rglob("aec_bench"))
     generated_init = (result.package_dir / result.environment_id / "__init__.py").read_text(encoding="utf-8")
     assert generated_init.startswith(
@@ -72,17 +78,16 @@ def test_lifecycle_export_references_registered_public_packages_without_copying(
     pyproject = tomllib.loads((result.package_dir / "pyproject.toml").read_text(encoding="utf-8"))
     dependencies = cast(list[str], pyproject["project"]["dependencies"])
     assert "verifiers>=0.1.14,<0.2" in dependencies
-    assert "aec-bench[prime]" in dependencies
-    source = pyproject["tool"]["uv"]["sources"]["aec-bench"]
-    assert source == {"path": str(Path(manifest["source"]["root"])), "editable": True}
+    assert "aec-bench[prime]==0.1.0" in dependencies
+    assert "uv" not in pyproject.get("tool", {})
     readme = (result.package_dir / "README.md").read_text(encoding="utf-8")
     assert readme.startswith(f"# {result.environment_id}\n")
     assert "local-only" in readme.lower()
     assert "prime env push" not in readme
     assert "prime train" not in readme
     assert "vf-eval" not in readme
-    assert "uv sync --python 3.13 --project /absolute/path/to/generated-package" in readme
-    assert "/absolute/path/to/generated-package/.venv/bin/python \\\n  -c" in readme
+    assert "uv pip install /absolute/path/to/aec_bench-0.1.0-py3-none-any.whl" in readme
+    assert "uv pip install --no-deps /absolute/path/to/generated-package" in readme
 
 
 def test_lifecycle_export_is_deterministic_and_preserves_existing_output_on_rejection(tmp_path: Path) -> None:
@@ -255,31 +260,11 @@ def test_generated_lifecycle_environment_loads_outside_repo_root(tmp_path: Path)
     )
     outside = tmp_path / "outside"
     outside.mkdir()
-    uv = shutil.which("uv")
-    assert uv is not None
-    sync = subprocess.run(
-        [
-            uv,
-            "sync",
-            "--quiet",
-            "--python",
-            sys.executable,
-            "--project",
-            str(result.package_dir),
-        ],
-        cwd=outside,
-        capture_output=True,
-        text=True,
-        check=False,
-        timeout=180,
-    )
-    assert sync.returncode == 0, sync.stderr
-
     environment = os.environ.copy()
-    environment.pop("PYTHONPATH", None)
+    environment["PYTHONPATH"] = str(result.package_dir)
     process = subprocess.run(
         [
-            str(result.package_dir / ".venv" / "bin" / "python"),
+            sys.executable,
             "-c",
             (
                 "from stormwater_outside_import import load_environment; "
@@ -577,7 +562,7 @@ def test_lifecycle_reward_is_task_owned_and_only_runs_at_terminal_state(tmp_path
     }
 
 
-def test_generated_lifecycle_environment_rejects_path_escape_and_package_hash_drift(tmp_path: Path) -> None:
+def test_generated_lifecycle_environment_rejects_path_escape_and_archive_drift(tmp_path: Path) -> None:
     package = _materialize(tmp_path / "package", PUBLIC_VARIANTS[0])
     result = export_prime_lifecycle_environment(
         PrimeLifecycleExportConfig(
@@ -608,19 +593,23 @@ def test_generated_lifecycle_environment_rejects_path_escape_and_package_hash_dr
     assert responses[0]["payload"]["status"] == "rejected"
     assert responses[1]["payload"]["status"] == "rejected"
 
-    release = next((package / "releases").rglob("*.md"))
-    drift = _run_generated_probe(
-        result.package_dir,
-        result.environment_id,
-        tmp_path / "outside-drift",
-        {
-            "trajectory_id": "drifted-rollout",
-            "mutate_after_load": str(release),
-            "capture_setup_error": True,
-        },
+    manifest = _read_json(result.manifest_path)
+    archive = result.manifest_path.parent / manifest["packages"][0]["package"]["artifact_id"]
+    archive.write_bytes(archive.read_bytes() + b"drift")
+    outside = tmp_path / "outside-drift"
+    outside.mkdir()
+    environment = os.environ.copy()
+    environment["PYTHONPATH"] = str(result.package_dir)
+    drift = subprocess.run(
+        [sys.executable, "-c", f"from {result.environment_id} import load_environment; load_environment()"],
+        cwd=outside,
+        env=environment,
+        capture_output=True,
+        text=True,
+        check=False,
     )
-    assert drift["setup_error"] == "ValueError"
-    assert "package identity" in drift["message"]
+    assert drift.returncode != 0
+    assert "does not match its ArtifactRef" in drift.stderr
 
 
 def test_generated_lifecycle_environment_rechecks_source_provenance_at_setup(tmp_path: Path) -> None:
@@ -657,7 +646,45 @@ def test_generated_lifecycle_environment_rechecks_source_provenance_at_setup(tmp
         extra_python_path=source_root / "src",
     )
     assert drift["setup_error"] == "ValueError"
-    assert "source provenance" in drift["message"]
+    assert "source identity" in drift["message"]
+
+
+def test_prime_lifecycle_manifest_reader_retains_schema_2(tmp_path: Path) -> None:
+    package_dir = tmp_path / "package"
+    package_dir.mkdir()
+    payload = {
+        "schema_version": "2",
+        "environment_id": "retained_schema",
+        "max_turns": 10,
+        "source": {
+            "root": str(tmp_path.resolve()),
+            "commit": "source-tree",
+            "dirty": False,
+            "dirty_digest": "0" * 64,
+            "source_inventory_sha256": "1" * 64,
+            "repository_kind": "source_tree",
+        },
+        "packages": [
+            {
+                "package_dir": str(package_dir.resolve()),
+                "template_id": TEMPLATE_ID,
+                "variant_id": PUBLIC_VARIANTS[0],
+                "visibility": "public",
+                "lifecycle_id": "retained-lifecycle",
+                "checkpoint_ids": ["initial_review"],
+                "initial_instruction": "Review the retained package.",
+                "lifecycle_spec_sha256": "2" * 64,
+                "package_sha256": "3" * 64,
+            }
+        ],
+    }
+    manifest_path = tmp_path / "manifest.json"
+    _write_json(manifest_path, payload)
+
+    manifest = load_prime_lifecycle_manifest(manifest_path)
+
+    assert isinstance(manifest, LegacyPrimeLifecycleExportManifest)
+    assert manifest.schema_version == "2"
 
 
 def test_prime_export_lifecycle_cli_writes_local_only_manifest(tmp_path: Path) -> None:
@@ -715,7 +742,7 @@ def _add_conditional_evidence(package: Path) -> None:
     _write_json(
         package / "hidden" / "evidence-request-resolutions.json",
         {
-            "schema_version": "2",
+            "schema_version": "1",
             "lifecycle_id": lifecycle["lifecycle_id"],
             "resolutions": [
                 {

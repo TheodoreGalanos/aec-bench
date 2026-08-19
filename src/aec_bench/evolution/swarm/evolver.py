@@ -88,8 +88,8 @@ class SwarmStepResult:
     score: float
     bd: BehaviourDescriptor | None
     cost_usd: float
-    workspace_version: str
-    parent_version: str = ""
+    candidate_id: str
+    parent_candidate_id: str = ""
 
 
 def _extract_discipline(task_id: str) -> str:
@@ -153,8 +153,9 @@ class SwarmAgentEvolver:
         self._cycle += 1
 
         # 1. Export current workspace state
-        version_tag = self._workspace.list_versions()[-1].tag if self._workspace.list_versions() else "evo-0"
-        snapshot = self._workspace.export_snapshot(version_tag)
+        candidates = self._workspace.list_candidates()
+        candidate_id = candidates[-1].candidate_id if candidates else "baseline"
+        snapshot = self._workspace.export_snapshot(candidate_id)
 
         # 2. Solve — run tasks against current harness
         trial_records = self._solve_fn(snapshot, self._batch_size)
@@ -164,7 +165,7 @@ class SwarmAgentEvolver:
             EvolutionObservation(
                 trial=tr,
                 enrichment=ObservationEnrichment(),
-                workspace_version=version_tag,
+                candidate_id=candidate_id,
                 discipline=_extract_discipline(tr.task.task_id),
             )
             for tr in trial_records
@@ -210,13 +211,13 @@ class SwarmAgentEvolver:
         if enriched:
             bd = extract_behaviour_descriptor(enriched[0])
 
-        # 8. Compute score, cost, and parent version
+        # 8. Compute score, cost, and parent candidate ID
         score = step_result.cycle_record.batch_score if step_result.cycle_record else 0.0
         evolver_cost = _estimate_evolver_cost(
             step_result.cycle_record.evolver_cost if step_result.cycle_record else None
         )
-        version_after = step_result.cycle_record.workspace_version_after if step_result.cycle_record else version_tag
-        version_before = step_result.cycle_record.workspace_version_before if step_result.cycle_record else ""
+        candidate_id_after = step_result.cycle_record.candidate_id_after if step_result.cycle_record else candidate_id
+        candidate_id_before = step_result.cycle_record.candidate_id_before if step_result.cycle_record else ""
 
         solver_cost = sum(_estimate_trial_cost(tr) for tr in trial_records)
         total_cost = evolver_cost + solver_cost
@@ -225,8 +226,8 @@ class SwarmAgentEvolver:
             score=score,
             bd=bd,
             cost_usd=total_cost,
-            workspace_version=version_after,
-            parent_version=version_before,
+            candidate_id=candidate_id_after,
+            parent_candidate_id=candidate_id_before,
         )
 
 
@@ -310,6 +311,7 @@ class SwarmEvolverFactory:
             stagnation_window=self._stagnation_window,
             structural_weight=self._structural_weight,
         )
+        engine.set_run_id(agent_id)
 
         # 5. Create solver (uses agent's model, not factory default)
         experiment_id = f"swarm-{agent_id}"

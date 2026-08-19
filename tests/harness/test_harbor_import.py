@@ -334,6 +334,54 @@ def test_import_rejects_provider_evidence_digest_mismatch(tmp_path: Path, monkey
         import_harbor_trial(trial_dir=trial_dir, repo_root=repo_root)
 
 
+def test_import_rejects_provider_evidence_artifact_reference_mismatch(tmp_path: Path, monkeypatch) -> None:
+    repo_root, trial_dir = _write_current_entrypoint_trial(tmp_path)
+    provider_manifest = tmp_path / "provider-evidence.json"
+    provider_manifest.write_text('{"schema":"provider-evidence/1"}\n', encoding="utf-8")
+    original = harbor_import_core._agent_configuration_record
+
+    def mismatched_configuration(**kwargs):  # noqa: ANN003, ANN202
+        return {
+            **original(**kwargs),
+            "manifest_path": str(provider_manifest),
+            "provider_evidence_manifest": {
+                "artifact_id": "provider-evidence.json",
+                "sha256": "0" * 64,
+                "size_bytes": provider_manifest.stat().st_size,
+                "media_type": "application/json",
+            },
+        }
+
+    monkeypatch.setattr(harbor_import_core, "_agent_configuration_record", mismatched_configuration)
+
+    with pytest.raises(HarborImportError, match="does not match its ArtifactRef"):
+        import_harbor_trial(trial_dir=trial_dir, repo_root=repo_root)
+
+
+def test_import_preserves_legacy_provider_evidence_protocol(tmp_path: Path, monkeypatch) -> None:
+    repo_root, trial_dir = _write_current_entrypoint_trial(tmp_path)
+    provider_manifest = tmp_path / "provider-evidence.json"
+    content = b'{"schema":"aec-bench/deepseek-evidence/2"}\n'
+    provider_manifest.write_bytes(content)
+    original = harbor_import_core._agent_configuration_record
+
+    def legacy_configuration(**kwargs):  # noqa: ANN003, ANN202
+        return {
+            **original(**kwargs),
+            "manifest_path": str(provider_manifest),
+            "evidence_manifest_sha256": hashlib.sha256(content).hexdigest(),
+        }
+
+    monkeypatch.setattr(harbor_import_core, "_agent_configuration_record", legacy_configuration)
+    monkeypatch.setattr(harbor_import_core, "_resolved_record_adapter", lambda **_kwargs: "deepseek-harness")
+
+    record = import_harbor_trial(trial_dir=trial_dir, repo_root=repo_root)
+
+    assert tuple(expectation.protocol for expectation in record.run_manifest.expected_authorities) == (
+        "aec-bench/deepseek-evidence/2",
+    )
+
+
 def test_import_current_entrypoint_result_preserves_typed_stop_and_turn_evidence(tmp_path: Path) -> None:
     repo_root, trial_dir = _write_current_entrypoint_trial(tmp_path)
     agent_result_path = trial_dir / "artifacts" / "agent" / "agent_result.json"

@@ -1,0 +1,13 @@
+{
+  "schema": "aec-bench/provider-qualification-evidence/1",
+  "provider_route": "deepseek-official",
+  "recorded_at": "2026-08-17T00:00:00+10:00",
+  "evidence_level": "keyless",
+  "result": "passed",
+  "tests": [
+    "tests/deepseek_harness/test_sdk_integration.py::test_real_sdk_composition_uses_the_selected_deepseek_provider",
+    "tests/deepseek_harness/test_runtime.py::test_timeout_terminates_the_worker_process_group",
+    "tests/deepseek_harness/test_runtime.py::test_process_runtime_collects_a_keyless_fake_worker_result"
+  ],
+  "limitation": "This evidence does not use provider credentials and does not qualify the live DeepSeek route."
+}

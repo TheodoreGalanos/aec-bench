@@ -149,7 +149,7 @@ def _make_observation(
     return EvolutionObservation(
         trial=record,
         enrichment=enrichment,
-        workspace_version="evo-0",
+        candidate_id="baseline",
         discipline=discipline,
     )
 
@@ -510,7 +510,7 @@ class TestStructuralScoreInGate:
                     bond_sequence="E-D-E-V",
                 ),
             ),
-            workspace_version="evo-0",
+            candidate_id="baseline",
             discipline="electrical",
         )
 
@@ -576,7 +576,7 @@ class TestPhaseClassifyTraceExtraction:
         return EvolutionObservation(
             trial=record,
             enrichment=ObservationEnrichment(),
-            workspace_version="evo-0",
+            candidate_id="baseline",
             discipline="electrical",
         )
 

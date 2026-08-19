@@ -69,7 +69,7 @@ def _make_observation(
             field_scores=field_scores,
             trace_digest=trace_digest,
         ),
-        workspace_version="evo-1",
+        candidate_id="run:1",
         discipline="electrical",
     )
 
@@ -127,7 +127,7 @@ class TestExtractTrialOutcome:
         obs = EvolutionObservation(
             trial=trial,
             enrichment=ObservationEnrichment(trace_digest=None),
-            workspace_version="evo-1",
+            candidate_id="run:1",
             discipline="electrical",
         )
 
@@ -154,7 +154,7 @@ class TestExtractTrialOutcome:
         obs = EvolutionObservation(
             trial=trial,
             enrichment=ObservationEnrichment(trace_digest=None),
-            workspace_version="evo-1",
+            candidate_id="run:1",
             discipline="electrical",
         )
 
@@ -170,7 +170,7 @@ class TestExtractTrialOutcome:
         obs = EvolutionObservation(
             trial=trial,
             enrichment=ObservationEnrichment(trace_digest=None),
-            workspace_version="evo-1",
+            candidate_id="run:1",
             discipline="electrical",
         )
 

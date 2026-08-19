@@ -184,7 +184,7 @@ class QDArchive:
                 "x": x,
                 "y": y,
                 "reward": e.bd.reward,
-                "version": e.snapshot.workspace_version,
+                "version": e.snapshot.candidate_id,
                 "token_cost": e.bd.token_cost,
                 "verification_depth": e.bd.verification_depth,
                 "tool_density": e.bd.tool_density,
@@ -221,7 +221,7 @@ class QDArchive:
         Parameters
         ----------
         agent_map:
-            Optional mapping of workspace_version -> agent_id, used to tag
+            Optional mapping of candidate_id -> agent_id, used to tag
             occupied centroids with the agent that produced them.
         """
         if agent_map is None:
@@ -251,15 +251,15 @@ class QDArchive:
         for i in range(n):
             entry = self._entries.get(i)
             if entry is not None:
-                version = entry.snapshot.workspace_version
+                candidate_id = entry.snapshot.candidate_id
                 result.append(
                     {
                         "x": float(proj[i, 0]),
                         "y": float(proj[i, 1]),
                         "occupied": True,
                         "reward": entry.bd.reward,
-                        "version": version,
-                        "agent_id": agent_map.get(version),
+                        "version": candidate_id,
+                        "agent_id": agent_map.get(candidate_id),
                         "token_cost": entry.bd.token_cost,
                         "verification_depth": entry.bd.verification_depth,
                         "tool_density": entry.bd.tool_density,
@@ -354,10 +354,10 @@ class QDArchive:
             "total_centroids": self._n_centroids,
         }
 
-    def get_entry_by_version(self, version: str) -> ArchiveEntry | None:
-        """Return the entry whose snapshot.workspace_version matches version, or None."""
+    def get_entry_by_candidate_id(self, candidate_id: str) -> ArchiveEntry | None:
+        """Return the archive entry for one candidate ID."""
         for entry in self._entries.values():
-            if entry.snapshot.workspace_version == version:
+            if entry.snapshot.candidate_id == candidate_id:
                 return entry
         return None
 

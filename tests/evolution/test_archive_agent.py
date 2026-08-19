@@ -39,7 +39,7 @@ def _make_snapshot(
     return WorkspaceSnapshot(
         system_prompt=prompt,
         skills=skills or [],
-        workspace_version=version,
+        candidate_id=version,
     )
 
 
@@ -82,7 +82,7 @@ def _populated_graveyard() -> MutationGraveyard:
             mutation_description="Added a cable-sizing skill",
             score_before=0.5,
             score_after=0.3,
-            workspace_version="v1",
+            candidate_id="v1",
             failure_reason="Score regressed by 0.2",
         )
     )
@@ -93,7 +93,7 @@ def _populated_graveyard() -> MutationGraveyard:
             mutation_description="Rewrote system prompt",
             score_before=0.6,
             score_after=0.4,
-            workspace_version="v2",
+            candidate_id="v2",
             failure_reason="Agent started hallucinating units",
         )
     )
@@ -115,7 +115,7 @@ def test_browse_archive_returns_entries() -> None:
     assert "v_high" in result
     assert "v_mid" in result
     assert "0.900" in result  # reward for v_high
-    assert "| Version | Reward |" in result
+    assert "| Candidate | Reward |" in result
 
 
 def test_browse_archive_frontier_sort() -> None:
@@ -126,7 +126,7 @@ def test_browse_archive_frontier_sort() -> None:
     result = tools["browse_archive"](sort_by="frontier", limit=3)
 
     # Should return a table with at least one version
-    assert "| Version | Reward |" in result
+    assert "| Candidate | Reward |" in result
     assert "v_high" in result
 
 
@@ -314,8 +314,8 @@ def test_parse_selection_valid_format() -> None:
     shortlist = ["v_high", "v_mid", "v_low"]
     result = _parse_selection(text, shortlist)
 
-    assert result.parent_version == "v_high"
-    assert result.inspiration_versions == ["v_mid", "v_low"]
+    assert result.parent_candidate_id == "v_high"
+    assert result.inspiration_candidate_ids == ["v_mid", "v_low"]
     assert result.strategy == "crossover"
     assert "best reward" in result.reasoning
 
@@ -325,7 +325,7 @@ def test_parse_selection_fallback() -> None:
     shortlist = ["v_a", "v_b"]
     result = _parse_selection(text, shortlist)
 
-    assert result.parent_version == "v_a"
+    assert result.parent_candidate_id == "v_a"
     assert result.strategy == "conservative"
     assert "Fallback" in result.reasoning
 
@@ -336,7 +336,7 @@ def test_parse_selection_invalid_version_falls_back() -> None:
     result = _parse_selection(text, shortlist)
 
     # v_unknown is not in shortlist, so must fall back to first entry
-    assert result.parent_version == "v_a"
+    assert result.parent_candidate_id == "v_a"
     assert result.strategy == "conservative"
 
 
@@ -345,5 +345,5 @@ def test_parse_selection_empty_shortlist_returns_empty() -> None:
     shortlist: list[str] = []
     result = _parse_selection(text, shortlist)
 
-    assert result.parent_version == ""
+    assert result.parent_candidate_id == ""
     assert result.strategy == "conservative"

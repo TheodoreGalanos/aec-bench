@@ -34,6 +34,7 @@ readable.
 | Generated-task replay | Task generation | Template sources and sampling inputs become optional reproducibility data | Schema 1 sidecar; not a runtime task contract | [`GenerationManifest`](../src/aec_bench/generation/replay.py) and the `generate replay` command | Optional persisted sidecar |
 | Finite lifecycle execution | Lifecycle task and host | Stage-specific task evidence and actor results become one bounded host-controlled progression | Internal package and runtime contract; persisted accepted evidence is current-format only | [`EvidenceLifecycleSpec`](../src/aec_bench/contracts/evidence_lifecycle.py) and the [staged evidence protocol](protocols/staged-evidence-and-publication.md) | Packaged task, runtime state, and persisted accepted evidence |
 | Experiment manifest | Experiment orchestration | User configuration becomes an executable plan | Internal, except documented CLI/config behavior | [`ExperimentManifest`](../src/aec_bench/contracts/experiment_manifest.py) | Persisted configuration |
+| Evolution workspace candidate lineage | Experimentation and feedback | Mutable workspace files become exact Git source and explicit candidate lineage | Workspace manifest schema 1; legacy labels require an explicit migration plan | [`WorkspaceCandidateVersion`, `WorkspaceManifest`, and `WorkspaceMigrationPlan`](../src/aec_bench/contracts/evolution.py) plus [`Workspace`](../src/aec_bench/evolution/workspace.py) | Persisted workspace Git metadata and manifest |
 | Run plan and published run package | Harness and ledger | One internal execution plan and its trial records become one portable retained package | Internal `RunPlan`; published package schema 1 | [`RunPlan` and `PublishedRunPackage`](../src/aec_bench/contracts/run_bundle.py), [`TaskSnapshotRef`](../src/aec_bench/contracts/task_snapshot.py), and [`run_package.py`](../src/aec_bench/ledger/run_package.py) | Internal plan; persisted and exportable package |
 | Trial and episode record | Harness and ledger | Execution, verifier, and authority evidence becomes reportable benchmark evidence | Protected schema 2; no historical reader | [`RunManifest` and `TrialRecord`](../src/aec_bench/contracts/trial_record.py) plus the owning episode or world protocol | Persisted and exportable |
 | Evaluation regime | Evaluation | Observable evaluation policy becomes one independently published compatibility identity | Envelope schema 1; legacy component plans migrate only when all inputs resolve | [`EvaluationRegimeEnvelope`](../src/aec_bench/contracts/evaluation_plane.py), `EvaluationRegimeRef`, and [`regime.py`](../src/aec_bench/evaluation/regime.py) | Persisted and independently publishable |
@@ -354,6 +355,35 @@ size and SHA-256 before extraction. Archive extraction rejects traversal,
 links, duplicate paths, and unsupported member types. Replay does not overwrite
 an existing output directory unless the user supplies `--overwrite`.
 
+## Evolution workspace candidate lineage
+
+An evolution workspace separates source, candidate identity, lineage, and
+display labels:
+
+- `WorkspaceCandidateVersion.candidate_id` identifies one domain candidate.
+- `source_revision` is the full Git commit that identifies its exact source.
+- `parent_candidate_id` records explicit evolutionary lineage. It does not come
+  from the Git parent, label order, a timestamp, or a naming convention.
+- `label` is an optional immutable Git tag for people. Creating the same label
+  at the same commit is idempotent. A label at another commit is an error.
+
+Candidate metadata is stored in the `aec-bench-evolution` Git notes reference.
+The metadata does not store a generated historical time. Reports call Git for
+the commit time when they need to display it.
+
+`WorkspaceManifest.schema_version` is the only workspace compatibility
+version. Current writers emit integer schema `1`. The reader explicitly maps
+the old release-style manifest value `0.1.0` to schema `1` and rejects other
+legacy values.
+
+A legacy tag is not enough to prove a candidate. `WorkspaceMigrationPlan`
+must give each candidate ID, label, confirmed full source revision, and parent
+candidate ID. `aec-bench evolve migrate-workspace` reports a missing label, a
+moved label, an unknown parent, duplicate source assignment, or a missing
+confirmed revision. It also replaces legacy label fields in `archive.json` and
+`graveyard.json`. It registers no candidate and writes no sidecar when the plan
+is ambiguous.
+
 ## Provider request and result envelopes
 
 The harness-facing adapter contract is `AdapterRequest` to `AdapterResult`.
@@ -383,6 +413,14 @@ termination. The provider sample, conversation, and submitted output are
 retained as SHA-256-bound `ArtifactReference` values, while score and validity
 remain `EvaluationResult` authority.
 
+Prime lifecycle export schema 3 retains each public lifecycle as one tar
+`ArtifactRef`. It records the generated package version, independent Prime
+protocol versions, and one `ProviderAdapterIdentity`. Clean source uses one
+full Git revision. Dirty or non-Git source uses one retained source snapshot.
+The package does not persist an absolute repository root, source inventory,
+lifecycle-spec digest, or a second raw package digest. The reader keeps schema
+2 support for existing local packages.
+
 Adapter-only extraction metadata must not become task-semantic output. The
 lambda-RLM `__confidence__` key is reserved for extraction confidence and is
 removed before semantic payloads reach generation, persistence, or review.
@@ -399,14 +437,21 @@ The current public Harness hooks cannot both stop these operations at the exact
 boundary and retain a typed budget terminal reason. These limits remain
 unsupported until that full contract can be enforced and recorded.
 
-Each DeepSeek trial writes one `aec-bench/deepseek-evidence/2` manifest. The
-manifest keeps the adapter, model, exact installed SDK and runtime versions,
-AEC source revision status, limits, execution status, composition modes,
-optional plugins, qualification reference, and redaction actions readable.
-Each retained artifact has one SHA-256 entry. An attestation or qualification
-reference repeats the path and hash so that its claim is content-bound.
-`RuntimeExecutionAttestation` binds the manifest SHA-256 when the adapter
-provides one. Attestations from other adapters keep their existing shape.
+Each new DeepSeek trial writes one `aec-bench/deepseek-evidence/3` manifest.
+The manifest keeps the adapter package and reconstructive source identity,
+model, separate SDK and runtime distribution identities, reported runtime
+version, limits, execution status, composition modes, optional plugins,
+qualification reference, and redaction actions readable. Each retained file
+has one `ArtifactRef` in the authenticated artifact table. Claim references
+must equal one complete table reference. One package-lock reference covers the
+installed plugin set.
+
+`RuntimeExecutionAttestation` schema v2 names the `provider_evidence` trial
+role. `TrialRecord` stores the exact manifest `ArtifactRef` once under that
+role. The trial builder and Harbor importer verify the adapter-supplied
+reference against the manifest bytes before attachment. The independent
+DeepSeek evidence-v2 reader remains available; evidence v1 is not interpreted
+as v2 or v3.
 
 The manifest has three composition attestation levels:
 
@@ -443,12 +488,14 @@ replacement counts. It does not change the candidate output.
 
 The package owns one versioned provider and feature matrix at
 `src/aec_bench/adapters/deepseek_harness/profiles/qualification-matrix.json`.
-Each row records the AEC revision, SDK version, runtime version, provider route,
-qualification date, and the evidence or reason for each feature cell. Keyless
-protocol proof and credentialed live-provider proof are different cells. A
-provider route is `qualified` only when every required cell passed for the
-exact version set. A trial with a different or unavailable source revision is
-`unqualified`, even when its protocol tests passed.
+Matrix schema 2 records one cell for each provider route and feature. Each cell
+contains the exact adapter package and source, SDK distribution and report,
+runtime distribution and report, evidence level, status, content-addressed
+evidence, event time, or reason. Keyless protocol proof and credentialed
+live-provider proof are different cells. A provider route is `qualified` only
+when every required cell is qualified for the exact version set. A trial with
+a different source or version is `unqualified`, even when its protocol tests
+passed. The reader keeps qualification schema 1 support.
 
 The initial matrix records both the Azure and official DeepSeek routes as
 `partial`. It does not claim retained live-provider evidence. Release owners

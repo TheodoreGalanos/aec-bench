@@ -812,6 +812,30 @@ cd -
 uv run aec-bench web --dev
 ```
 
+### Evolution Workspaces
+
+Evolution workspaces use candidate IDs for lineage and full Git commits for
+source. Git tags are optional immutable labels. History displays the Git commit
+time; it does not create a new time when it reads old candidates.
+
+```bash
+# Create and run a workspace
+uv run aec-bench evolve init ./my-workspace --name "My Agent"
+uv run aec-bench evolve run --config ./my-workspace/evolution.yaml
+
+# Inspect candidates or restore one by candidate ID or label
+uv run aec-bench evolve history ./my-workspace
+uv run aec-bench evolve rollback ./my-workspace <candidate-id-or-label>
+
+# Convert old evo-* labels with an owner-supplied source and lineage plan
+uv run aec-bench evolve migrate-workspace ./my-workspace --plan migration.json
+```
+
+Migration plans use schema `1`. Each item supplies `candidate_id`, `label`,
+`expected_source_revision` as a full Git SHA, and an optional
+`parent_candidate_id`. The command rejects moved labels and reports missing or
+ambiguous source and lineage.
+
 ### Configuration
 
 ```bash

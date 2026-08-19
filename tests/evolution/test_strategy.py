@@ -25,7 +25,7 @@ def _make_snapshot(version: str = "evo-1") -> WorkspaceSnapshot:
     return WorkspaceSnapshot(
         system_prompt="You are an agent.",
         skills=[],
-        workspace_version=version,
+        candidate_id=version,
     )
 
 
@@ -38,8 +38,8 @@ def _make_cycle_record(
 ) -> EvolutionCycleRecord:
     return EvolutionCycleRecord(
         cycle=cycle,
-        workspace_version_before=version_before,
-        workspace_version_after=version_after,
+        candidate_id_before=version_before,
+        candidate_id_after=version_after,
         batch_score=batch_score,
         structural_score=None,
         mutation=MutationSummary(prompt_modified=True),
@@ -88,7 +88,7 @@ class TestHillClimbStrategy:
         result = strategy.select_parent(current_score=0.5)
         assert result is not None
         assert isinstance(result, SelectionResult)
-        assert result.parent_version == "evo-1"
+        assert result.parent_candidate_id == "evo-1"
         assert result.strategy == "conservative"
 
     def test_best_updates_on_higher_score(self) -> None:
@@ -119,7 +119,7 @@ class TestHillClimbStrategy:
 
         result = strategy.select_parent(current_score=0.7)
         assert result is not None
-        assert result.parent_version == "evo-2"
+        assert result.parent_candidate_id == "evo-2"
 
     def test_best_does_not_update_on_lower_score(self) -> None:
         strategy = HillClimbStrategy()
@@ -149,7 +149,7 @@ class TestHillClimbStrategy:
 
         result = strategy.select_parent(current_score=0.3)
         assert result is not None
-        assert result.parent_version == "evo-1"
+        assert result.parent_candidate_id == "evo-1"
 
     def test_get_snapshot_returns_stored(self) -> None:
         strategy = HillClimbStrategy()
@@ -167,7 +167,7 @@ class TestHillClimbStrategy:
 
         retrieved = strategy.get_snapshot("evo-1")
         assert retrieved is not None
-        assert retrieved.workspace_version == "evo-1"
+        assert retrieved.candidate_id == "evo-1"
         assert retrieved.system_prompt == "You are an agent."
 
     def test_get_snapshot_returns_none_for_unknown(self) -> None:
@@ -202,7 +202,7 @@ class TestHillClimbStrategy:
         )
 
         summary = strategy.summary()
-        assert summary["best_version"] == "evo-3"
+        assert summary["best_candidate_id"] == "evo-3"
         assert summary["best_score"] == 0.75
 
     def test_on_cycle_end_accepts_extra_kwargs(self) -> None:
@@ -224,7 +224,7 @@ class TestHillClimbStrategy:
 
         result = strategy.select_parent(current_score=0.0)
         assert result is not None
-        assert result.parent_version == "evo-1"
+        assert result.parent_candidate_id == "evo-1"
 
 
 # ---------------------------------------------------------------------------
@@ -272,7 +272,7 @@ class TestQDStrategy:
                 },
             ),
             enrichment=ObservationEnrichment(),
-            workspace_version="evo-1",
+            candidate_id="evo-1",
             discipline="electrical",
         )
 
@@ -313,7 +313,7 @@ class TestQDStrategy:
                 },
             ),
             enrichment=ObservationEnrichment(),
-            workspace_version="evo-1",
+            candidate_id="evo-1",
             discipline="electrical",
         )
 

@@ -11,6 +11,9 @@ from typing import Literal, NotRequired, TypedDict
 
 import yaml
 
+from aec_bench.contracts.evolution import WorkspaceCandidateVersion
+from aec_bench.evolution.workspace import Workspace
+
 
 @dataclass(frozen=True)
 class CycleReport:
@@ -90,23 +93,17 @@ class WorkspaceRunSummary(TypedDict):
     model: str
 
 
-_SCORE_PATTERN = re.compile(r"score\s+([\d.]+)")
-
-
 def build_evolution_report_data(
     workspace_path: Path,
     run_id: str | None = None,
 ) -> EvolutionReportData:
-    """Build report data by reading git tags and diffs from a workspace.
-
-    Walks ``evo-0``, ``evo-1``, ... tags and extracts diffs between
-    consecutive pairs.  Scores are parsed from tag messages.
-    """
+    """Build report data from registered candidates and exact source revisions."""
     workspace_name = _read_workspace_name(workspace_path)
     model = _read_model(workspace_path)
-    tags = _list_evo_tags(workspace_path, run_id=run_id)
+    all_candidates = Workspace(workspace_path).list_candidates()
+    candidates = _report_candidates(all_candidates, run_id)
 
-    if len(tags) < 2:
+    if len(candidates) < 2:
         return EvolutionReportData(
             workspace_name=workspace_name,
             model=model,
@@ -117,24 +114,31 @@ def build_evolution_report_data(
         )
 
     cycles: list[CycleReport] = []
-    for i in range(1, len(tags)):
-        prev_tag = tags[i - 1]
-        curr_tag = tags[i]
+    candidates_by_id = {candidate.candidate_id: candidate for candidate in all_candidates}
+    for i, candidate in enumerate(candidates[1:], 1):
+        parent = candidates_by_id.get(candidate.parent_candidate_id or "")
+        if parent is None:
+            continue
         cycle_num = i
 
-        score = _parse_score_from_tag(workspace_path, curr_tag)
-        prompt_diff = _get_file_diff(workspace_path, prev_tag, curr_tag, "prompts/system.md")
+        score = candidate.score or 0.0
+        prompt_diff = _get_file_diff(
+            workspace_path,
+            parent.source_revision,
+            candidate.source_revision,
+            "prompts/system.md",
+        )
 
         added, modified, removed, skill_diffs = _classify_skill_changes(
             workspace_path,
-            prev_tag,
-            curr_tag,
+            parent.source_revision,
+            candidate.source_revision,
         )
 
         cycles.append(
             CycleReport(
                 cycle=cycle_num,
-                version_tag=curr_tag,
+                version_tag=candidate.label or candidate.candidate_id,
                 score=score,
                 prompt_diff=prompt_diff,
                 skills_added=added,
@@ -171,89 +175,37 @@ def _git(cwd: Path, *args: str) -> str:
     return result.stdout.strip()
 
 
-def _list_evo_tags(cwd: Path, run_id: str | None = None) -> list[str]:
-    """List evo tags sorted by cycle number, optionally filtered to a specific run.
-
-    Supports both legacy ``evo-N`` tags and run-scoped ``evo-{run_id}-N`` tags.
-    When *run_id* is None, auto-detects the latest run by finding the most
-    recent run prefix. ``evo-0`` (the workspace baseline) is always included.
-    """
-    raw = _git(cwd, "tag", "-l", "evo-*")
-    if not raw:
-        return []
-    all_tags = [t.strip() for t in raw.splitlines() if t.strip()]
-
-    if run_id == "legacy":
-        # Legacy runs use evo-N format (no run prefix)
-        legacy_re = re.compile(r"^evo-\d+$")
-        tags = [t for t in all_tags if legacy_re.match(t)]
-    elif run_id:
-        # Filter to specific run + evo-0
-        prefix = f"evo-{run_id}-"
-        tags = [t for t in all_tags if t.startswith(prefix) or t == "evo-0"]
-    else:
-        # Auto-detect: find the latest run prefix
-        tags = _filter_latest_run(all_tags)
-
-    # Sort by numeric suffix (cycle number)
-    def _sort_key(tag: str) -> int:
-        try:
-            return int(tag.split("-")[-1])
-        except ValueError:
-            return 0
-
-    return sorted(tags, key=_sort_key)
+def _candidate_run_id(candidate_id: str) -> str | None:
+    run_id, separator, cycle = candidate_id.rpartition(":")
+    if not separator or not cycle.isdigit():
+        return None
+    return run_id
 
 
-def _filter_latest_run(tags: list[str]) -> list[str]:
-    """Given all evo-* tags, return only evo-0 + the most recent run's tags.
-
-    Run-scoped tags have format ``evo-{YYYYMMDD}-{HHMM}-{cycle}``.
-    Legacy tags have format ``evo-{cycle}``. If only legacy tags exist,
-    returns all of them for backwards compatibility.
-    """
-    import re
-
-    run_prefix_pattern = re.compile(r"^evo-(\d{8}-\d{4})-\d+$")
-    run_prefixes: set[str] = set()
-    legacy_tags: list[str] = []
-
-    for tag in tags:
-        m = run_prefix_pattern.match(tag)
-        if m:
-            run_prefixes.add(m.group(1))
-        elif tag == "evo-0":
-            pass  # always include
-        else:
-            legacy_tags.append(tag)
-
-    if not run_prefixes:
-        # Only legacy tags — return all for backwards compatibility
-        return tags
-
-    # Pick the latest run prefix (lexicographic sort on YYYYMMDD-HHMM works)
-    latest = sorted(run_prefixes)[-1]
-    prefix = f"evo-{latest}-"
-    return ["evo-0"] + [t for t in tags if t.startswith(prefix)]
-
-
-def _parse_score_from_tag(cwd: Path, tag: str) -> float:
-    """Extract score from a tag's annotation message."""
-    msg = _git(cwd, "tag", "-l", tag, "-n1")
-    match = _SCORE_PATTERN.search(msg)
-    if match:
-        return float(match.group(1))
-    return 0.0
+def _report_candidates(
+    candidates: list[WorkspaceCandidateVersion],
+    run_id: str | None,
+) -> list[WorkspaceCandidateVersion]:
+    baseline = next((candidate for candidate in candidates if candidate.candidate_id == "baseline"), None)
+    grouped: dict[str, list[WorkspaceCandidateVersion]] = {}
+    for candidate in candidates:
+        candidate_run_id = _candidate_run_id(candidate.candidate_id)
+        if candidate_run_id is not None:
+            grouped.setdefault(candidate_run_id, []).append(candidate)
+    selected_run_id = run_id or (sorted(grouped)[-1] if grouped else None)
+    if selected_run_id is None:
+        return [baseline] if baseline is not None else []
+    selected = grouped.get(selected_run_id, [])
+    return ([baseline] if baseline is not None else []) + selected
 
 
 # Pattern for strategy in tag messages: [hill_climb] or [qd]
 _STRATEGY_PATTERN = re.compile(r"\[(hill_climb|qd)\]")
 
 
-def _parse_strategy_from_tag(cwd: Path, tag: str) -> str | None:
-    """Extract strategy name from a tag's annotation message, if present."""
-    msg = _git(cwd, "tag", "-l", tag, "-n1")
-    match = _STRATEGY_PATTERN.search(msg)
+def _parse_strategy(summary: str | None) -> str | None:
+    """Extract a strategy name from a candidate summary."""
+    match = _STRATEGY_PATTERN.search(summary or "")
     if match:
         return match.group(1)
     return None
@@ -265,56 +217,34 @@ def list_runs(workspace_path: Path) -> list[EvolutionRunSummary]:
     Returns a list of dicts sorted most-recent-first, each containing:
     run_id, cycles, best_score, final_score, strategy.
     """
-    raw = _git(workspace_path, "tag", "-l", "evo-*")
-    if not raw:
-        return []
-    all_tags = [t.strip() for t in raw.splitlines() if t.strip()]
-
-    run_prefix_pattern = re.compile(r"^evo-(\d{8}-\d{4})-(\d+)$")
-    legacy_pattern = re.compile(r"^evo-(\d+)$")
-
-    # Group tags by run_id
-    runs: dict[str, list[tuple[str, int]]] = {}  # run_id -> [(tag, cycle)]
-    for tag in all_tags:
-        if tag == "evo-0":
-            continue
-        m = run_prefix_pattern.match(tag)
-        if m:
-            run_id = m.group(1)
-            cycle = int(m.group(2))
-            runs.setdefault(run_id, []).append((tag, cycle))
-            continue
-        m = legacy_pattern.match(tag)
-        if m:
-            cycle = int(m.group(1))
-            runs.setdefault("legacy", []).append((tag, cycle))
+    candidates = Workspace(workspace_path).list_candidates()
+    runs: dict[str, list[WorkspaceCandidateVersion]] = {}
+    for candidate in candidates:
+        run_id = _candidate_run_id(candidate.candidate_id)
+        if run_id is not None:
+            runs.setdefault(run_id, []).append(candidate)
 
     # Parse scores and strategy per run
     config_strategy = _read_strategy(workspace_path)
     result: list[EvolutionRunSummary] = []
-    for run_id, tag_cycles in runs.items():
-        tag_cycles.sort(key=lambda tc: tc[1])
-        scores: list[float] = []
-        for tag, _cycle in tag_cycles:
-            score = _parse_score_from_tag(workspace_path, tag)
-            scores.append(score)
+    for run_id, run_candidates in runs.items():
+        scores = [candidate.score or 0.0 for candidate in run_candidates]
 
-        # Try to read strategy from the first tag's message; fall back to config
-        strategy = _parse_strategy_from_tag(workspace_path, tag_cycles[0][0])
+        strategy = _parse_strategy(run_candidates[0].summary)
         if strategy is None:
             strategy = config_strategy
 
         result.append(
             {
                 "run_id": run_id,
-                "cycles": len(tag_cycles),
+                "cycles": len(run_candidates),
                 "best_score": max(scores) if scores else 0.0,
                 "final_score": scores[-1] if scores else 0.0,
                 "strategy": strategy,
             }
         )
 
-    # Sort most-recent-first (lexicographic on YYYYMMDD-HHMM; "legacy" sorts first)
+    # Engine run IDs are sortable UTC event times.
     result.sort(key=lambda r: r["run_id"], reverse=True)
     return result
 
@@ -416,37 +346,22 @@ def _read_model(workspace_path: Path) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Version helpers
+# Candidate helpers
 # ---------------------------------------------------------------------------
 
 
-def _previous_version(version: str) -> str | None:
-    """Return the previous evo tag for both legacy and run-scoped formats.
-
-    Legacy: evo-N → evo-(N-1), evo-0 → None.
-    Run-scoped: evo-{run_id}-N → evo-{run_id}-(N-1), evo-{run_id}-1 → evo-0,
-    evo-{run_id}-0 → None.
-    """
-    # Run-scoped: evo-YYYYMMDD-HHMM-N
-    run_match = re.match(r"^evo-(\d{8}-\d{4})-(\d+)$", version)
-    if run_match:
-        run_id = run_match.group(1)
-        cycle = int(run_match.group(2))
-        if cycle == 0:
-            return None
-        if cycle == 1:
-            return "evo-0"
-        return f"evo-{run_id}-{cycle - 1}"
-
-    # Legacy: evo-N
-    legacy_match = re.match(r"^evo-(\d+)$", version)
-    if legacy_match:
-        n = int(legacy_match.group(1))
-        if n == 0:
-            return None
-        return f"evo-{n - 1}"
-
-    return None
+def _candidate_and_parent(
+    workspace_path: Path,
+    candidate_or_label: str,
+) -> tuple[WorkspaceCandidateVersion, WorkspaceCandidateVersion | None]:
+    workspace = Workspace(workspace_path)
+    candidate = workspace.resolve_candidate(candidate_or_label)
+    parent = (
+        workspace.require_candidate(candidate.parent_candidate_id)
+        if candidate.parent_candidate_id is not None
+        else None
+    )
+    return candidate, parent
 
 
 def _status_char_to_label(char: str) -> str:
@@ -577,8 +492,8 @@ def get_file_tree_at_version(workspace_path: Path, version: str) -> FileTreeNode
     Uses git ls-tree to list files and git diff to determine change status.
     For evo-0 all files are marked as "added".
     """
-    # List all files at this version
-    raw_files = _git(workspace_path, "ls-tree", "-r", "--name-only", version)
+    candidate, parent = _candidate_and_parent(workspace_path, version)
+    raw_files = _git(workspace_path, "ls-tree", "-r", "--name-only", candidate.source_revision)
     if not raw_files:
         return {
             "name": ".",
@@ -589,11 +504,10 @@ def get_file_tree_at_version(workspace_path: Path, version: str) -> FileTreeNode
     files = raw_files.splitlines()
 
     # Determine changed files
-    prev = _previous_version(version)
-    if prev is None:
-        changed_files = _get_changed_files_initial(workspace_path, version)
+    if parent is None:
+        changed_files = _get_changed_files_initial(workspace_path, candidate.source_revision)
     else:
-        changed_files = _get_changed_files(workspace_path, prev, version)
+        changed_files = _get_changed_files(workspace_path, parent.source_revision, candidate.source_revision)
 
     return _build_tree_nodes(files, changed_files)
 
@@ -608,7 +522,8 @@ def get_file_at_version(
     Returns dict with path, version, content, and language (detected from
     file extension).
     """
-    content = _git(workspace_path, "show", f"{version}:{filepath}")
+    candidate, _ = _candidate_and_parent(workspace_path, version)
+    content = _git(workspace_path, "show", f"{candidate.source_revision}:{filepath}")
     ext = Path(filepath).suffix.lower()
     language = _EXTENSION_LANGUAGE.get(ext, "text")
     return {
@@ -629,19 +544,24 @@ def get_file_diff_at_version(
     For evo-0, the entire file content is shown as additions (diff against
     empty tree).
     """
-    prev = _previous_version(version)
-    if prev is None:
+    candidate, parent = _candidate_and_parent(workspace_path, version)
+    if parent is None:
         # evo-0: show everything as additions
-        content = _git(workspace_path, "show", f"{version}:{filepath}")
+        content = _git(workspace_path, "show", f"{candidate.source_revision}:{filepath}")
         lines = content.splitlines()
         diff_lines = [f"+{line}" for line in lines]
         diff_text = "\n".join(diff_lines)
     else:
-        diff_text = _get_file_diff(workspace_path, prev, version, filepath)
+        diff_text = _get_file_diff(
+            workspace_path,
+            parent.source_revision,
+            candidate.source_revision,
+            filepath,
+        )
 
     return {
         "path": filepath,
-        "from_version": prev,
+        "from_version": (parent.label or parent.candidate_id) if parent is not None else None,
         "to_version": version,
         "diff": diff_text,
     }

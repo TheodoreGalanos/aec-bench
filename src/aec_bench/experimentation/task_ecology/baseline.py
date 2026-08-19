@@ -92,7 +92,7 @@ def run_baseline_dataset(
     snapshot = WorkspaceSnapshot(
         system_prompt=prompt,
         skills=[],
-        workspace_version="baseline",
+        candidate_id="baseline",
     )
 
     completed_ids = _completed_task_ids(rows_path)

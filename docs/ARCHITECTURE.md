@@ -242,8 +242,9 @@ trial evidence.
 
 The DeepSeek adapter owns its trial manifest, runtime-file redaction, and
 optional plugin copy. The execution entrypoint does not interpret that
-provider evidence. It binds the single manifest digest into the existing AEC
-runtime execution attestation.
+provider evidence. It validates one provider-manifest `ArtifactRef` and binds
+the `provider_evidence` role into the runtime execution attestation. The trial
+record retains that exact manifest reference once.
 
 The optional `@aec-bench/dsh-tools` Cordis plugin is a transport gateway, not a
 tool authority. The AEC host supplies one exact per-run manifest from explicit

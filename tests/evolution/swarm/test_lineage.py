@@ -18,8 +18,8 @@ def _make_record(
     mutation: str = "mutate",
 ) -> LineageRecord:
     return LineageRecord(
-        entry_version=version,
-        parent_version=parent,
+        entry_candidate_id=version,
+        parent_candidate_id=parent,
         source_agent_id=agent,
         cross_agent=cross_agent,
         cross_agent_source=cross_source,
@@ -57,23 +57,23 @@ def test_record_and_retrieve() -> None:
     tracker.record(rec)
     records = tracker.all_records()
     assert len(records) == 1
-    assert records[0].entry_version == "v1"
+    assert records[0].entry_candidate_id == "v1"
 
 
-def test_get_by_version() -> None:
+def test_get_by_candidate_id() -> None:
     tracker = LineageTracker()
     tracker.record(_make_record("v1"))
     tracker.record(_make_record("v2", parent="v1"))
-    result = tracker.get_by_version("v2")
+    result = tracker.get_by_candidate_id("v2")
     assert result is not None
-    assert result.entry_version == "v2"
-    assert result.parent_version == "v1"
+    assert result.entry_candidate_id == "v2"
+    assert result.parent_candidate_id == "v1"
 
 
-def test_get_by_version_missing() -> None:
+def test_get_by_candidate_id_missing() -> None:
     tracker = LineageTracker()
     tracker.record(_make_record("v1"))
-    assert tracker.get_by_version("v999") is None
+    assert tracker.get_by_candidate_id("v999") is None
 
 
 def test_lineage_chain_three_entries() -> None:
@@ -82,7 +82,7 @@ def test_lineage_chain_three_entries() -> None:
     tracker.record(_make_record("v2", parent="v1"))
     tracker.record(_make_record("v3", parent="v2"))
     chain = tracker.get_lineage_chain("v3")
-    assert [r.entry_version for r in chain] == ["v3", "v2", "v1"]
+    assert [r.entry_candidate_id for r in chain] == ["v3", "v2", "v1"]
 
 
 def test_lineage_chain_single() -> None:
@@ -90,7 +90,7 @@ def test_lineage_chain_single() -> None:
     tracker.record(_make_record("v1"))
     chain = tracker.get_lineage_chain("v1")
     assert len(chain) == 1
-    assert chain[0].entry_version == "v1"
+    assert chain[0].entry_candidate_id == "v1"
 
 
 def test_cross_agent_records() -> None:
@@ -100,7 +100,7 @@ def test_cross_agent_records() -> None:
     tracker.record(_make_record("v3"))
     cross = tracker.cross_agent_records()
     assert len(cross) == 1
-    assert cross[0].entry_version == "v2"
+    assert cross[0].entry_candidate_id == "v2"
     assert cross[0].cross_agent_source == "agent-2"
 
 
@@ -130,7 +130,7 @@ def test_save_load_roundtrip(tmp_path: Path) -> None:
     loaded = LineageTracker.load(filepath)
     assert len(loaded.all_records()) == 2
     chain = loaded.get_lineage_chain("v2")
-    assert [r.entry_version for r in chain] == ["v2", "v1"]
+    assert [r.entry_candidate_id for r in chain] == ["v2", "v1"]
 
 
 def test_load_missing_file(tmp_path: Path) -> None:
@@ -151,7 +151,7 @@ def test_attach_and_retrieve_narrative() -> None:
     tracker.record(_make_record("v1"))
 
     narrative = LineageNarrative(
-        entry_version="v1",
+        entry_candidate_id="v1",
         agent_reasoning="Tried adding verification skill to improve accuracy.",
         investigation_context="Archive coverage was 5%. Targeted low-token region.",
     )
@@ -177,20 +177,20 @@ def test_all_narratives() -> None:
 
     tracker.attach_narrative(
         LineageNarrative(
-            entry_version="v1",
+            entry_candidate_id="v1",
             agent_reasoning="First attempt.",
         )
     )
     tracker.attach_narrative(
         LineageNarrative(
-            entry_version="v2",
+            entry_candidate_id="v2",
             agent_reasoning="Improved on v1.",
         )
     )
 
     narratives = tracker.all_narratives()
     assert len(narratives) == 2
-    assert narratives[0].entry_version == "v1"
+    assert narratives[0].entry_candidate_id == "v1"
 
 
 def test_narrative_roundtrip(tmp_path: Path) -> None:
@@ -200,7 +200,7 @@ def test_narrative_roundtrip(tmp_path: Path) -> None:
     tracker.record(_make_record("v1"))
     tracker.attach_narrative(
         LineageNarrative(
-            entry_version="v1",
+            entry_candidate_id="v1",
             agent_reasoning="Added cable-sizing skill.",
             investigation_context="Score was 0.5, needed improvement.",
             surprise_explanation="Unexpectedly improved token efficiency.",

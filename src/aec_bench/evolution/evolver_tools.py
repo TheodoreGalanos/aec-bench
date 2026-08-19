@@ -142,8 +142,8 @@ def build_evolver_toolset(
         if record.structural_score is not None:
             lines.append(f"Structural score: {record.structural_score:.3f}")
         lines.append(f"Gate decision: {record.gate_decision}")
-        lines.append(f"Workspace version before: {record.workspace_version_before}")
-        lines.append(f"Workspace version after: {record.workspace_version_after}")
+        lines.append(f"Candidate before: {record.candidate_id_before}")
+        lines.append(f"Candidate after: {record.candidate_id_after}")
         lines.append(f"Timestamp: {record.timestamp.isoformat()}")
         lines.append(f"Trials ({len(record.trial_ids)}): {', '.join(record.trial_ids)}")
 

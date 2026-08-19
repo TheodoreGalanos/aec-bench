@@ -3,13 +3,11 @@
 
 from __future__ import annotations
 
-import subprocess
 from pathlib import Path
 
 from aec_bench.evolution.report_data import (
     EvolutionReportData,
     _aggregate_status,
-    _previous_version,
     _status_char_to_label,
     build_evolution_report_data,
     discover_workspaces,
@@ -18,30 +16,20 @@ from aec_bench.evolution.report_data import (
     get_file_tree_at_version,
     list_runs,
 )
-
-
-def _git(cwd: Path, *args: str) -> str:
-    result = subprocess.run(
-        ["git", *args],
-        cwd=cwd,
-        capture_output=True,
-        text=True,
-    )
-    return result.stdout.strip()
+from aec_bench.evolution.workspace import Workspace
 
 
 def _init_workspace(root: Path) -> None:
     """Set up a minimal evolution workspace with git history."""
     root.mkdir(exist_ok=True)
-    (root / "manifest.yaml").write_text("name: test-evo\nadapter: rlm\n")
+    (root / "manifest.yaml").write_text(
+        "schema_version: 1\nname: test-evo\nagent_adapter: rlm\nevolvable_layers: [prompts, skills]\n"
+    )
     (root / "prompts").mkdir()
     (root / "prompts" / "system.md").write_text("You are a helpful agent.")
     (root / "skills").mkdir()
 
-    _git(root, "init")
-    _git(root, "add", ".")
-    _git(root, "commit", "-m", "initial")
-    _git(root, "tag", "-a", "evo-0", "-m", "evo-0: initial workspace")
+    Workspace(root).init_versioning()
 
 
 def _add_cycle(root: Path, cycle: int, score: float) -> None:
@@ -56,9 +44,13 @@ def _add_cycle(root: Path, cycle: int, score: float) -> None:
     skill_dir.mkdir(exist_ok=True)
     (skill_dir / "SKILL.md").write_text(f"---\nname: skill-{cycle}\ndescription: Added in cycle {cycle}\n---\nContent.")
 
-    _git(root, "add", ".")
-    _git(root, "commit", "-m", f"evo-{cycle}: cycle {cycle}: score {score:.3f}")
-    _git(root, "tag", "-a", f"evo-{cycle}", "-m", f"evo-{cycle}: cycle {cycle}: score {score:.3f}")
+    Workspace(root).commit_candidate(
+        candidate_id=f"test-run:{cycle}",
+        parent_candidate_id="baseline" if cycle == 1 else f"test-run:{cycle - 1}",
+        summary=f"cycle {cycle}: score {score:.3f}",
+        score=score,
+        label=f"evo-{cycle}",
+    )
 
 
 class TestBuildEvolutionReportData:
@@ -119,9 +111,13 @@ class TestBuildEvolutionReportData:
         # Modify the skill in cycle 2
         skill_path = ws / "skills" / "skill-1" / "SKILL.md"
         skill_path.write_text("---\nname: skill-1\n---\nUpdated content.")
-        _git(ws, "add", ".")
-        _git(ws, "commit", "-m", "evo-2: cycle 2: score 0.7")
-        _git(ws, "tag", "-a", "evo-2", "-m", "evo-2: cycle 2: score 0.700")
+        Workspace(ws).commit_candidate(
+            candidate_id="test-run:2",
+            parent_candidate_id="test-run:1",
+            summary="cycle 2: score 0.700",
+            score=0.7,
+            label="evo-2",
+        )
 
         data = build_evolution_report_data(ws)
         assert "skill-1" in data.cycles[1].skills_modified
@@ -143,45 +139,6 @@ class TestBuildEvolutionReportData:
         data = build_evolution_report_data(ws)
         assert data.total_cycles == 0
         assert data.cycles == []
-
-
-# ---------------------------------------------------------------------------
-# Helper function tests
-# ---------------------------------------------------------------------------
-
-
-class TestPreviousVersion:
-    """Tests for _previous_version helper."""
-
-    def test_evo_0_returns_none(self) -> None:
-        assert _previous_version("evo-0") is None
-
-    def test_evo_1_returns_evo_0(self) -> None:
-        assert _previous_version("evo-1") == "evo-0"
-
-    def test_evo_5_returns_evo_4(self) -> None:
-        assert _previous_version("evo-5") == "evo-4"
-
-
-class TestPreviousVersionRunScoped:
-    """Tests for _previous_version with run-scoped evo-{YYYYMMDD}-{HHMM}-N tags."""
-
-    def test_run_scoped_cycle_2(self) -> None:
-        assert _previous_version("evo-20260404-1220-2") == "evo-20260404-1220-1"
-
-    def test_run_scoped_cycle_1_falls_back_to_evo_0(self) -> None:
-        assert _previous_version("evo-20260404-1220-1") == "evo-0"
-
-    def test_run_scoped_cycle_0_returns_none(self) -> None:
-        assert _previous_version("evo-20260404-1220-0") is None
-
-    def test_legacy_still_works(self) -> None:
-        assert _previous_version("evo-3") == "evo-2"
-        assert _previous_version("evo-1") == "evo-0"
-        assert _previous_version("evo-0") is None
-
-    def test_invalid_tag_returns_none(self) -> None:
-        assert _previous_version("something-else") is None
 
 
 class TestStatusCharToLabel:
@@ -233,19 +190,23 @@ class TestAggregateStatus:
 # ---------------------------------------------------------------------------
 
 
-def _init_workspace_with_evolution(root: Path) -> None:
+def _init_workspace_with_evolution(
+    root: Path,
+    *,
+    name: str = "test-evo",
+    model: str = "claude-sonnet-4-20250514",
+) -> None:
     """Set up a workspace with both manifest.yaml and evolution.yaml."""
     root.mkdir(parents=True, exist_ok=True)
-    (root / "manifest.yaml").write_text("name: test-evo\nadapter: rlm\n")
-    (root / "evolution.yaml").write_text("models:\n  evolver: claude-sonnet-4-20250514\n")
+    (root / "manifest.yaml").write_text(
+        f"schema_version: 1\nname: {name}\nagent_adapter: rlm\nevolvable_layers: [prompts, skills]\n"
+    )
+    (root / "evolution.yaml").write_text(f"models:\n  evolver: {model}\n")
     (root / "prompts").mkdir()
     (root / "prompts" / "system.md").write_text("You are a helpful agent.")
     (root / "skills").mkdir()
 
-    _git(root, "init")
-    _git(root, "add", ".")
-    _git(root, "commit", "-m", "initial")
-    _git(root, "tag", "-a", "evo-0", "-m", "evo-0: initial workspace")
+    Workspace(root).init_versioning()
 
 
 class TestDiscoverWorkspaces:
@@ -292,16 +253,7 @@ class TestDiscoverWorkspaces:
         _add_cycle(ws1, 1, 0.3)
 
         ws2 = search / "beta"
-        ws2.mkdir(parents=True, exist_ok=True)
-        (ws2 / "manifest.yaml").write_text("name: beta-evo\nadapter: rlm\n")
-        (ws2 / "evolution.yaml").write_text("models:\n  evolver: gpt-4.1-mini\n")
-        (ws2 / "prompts").mkdir()
-        (ws2 / "prompts" / "system.md").write_text("system prompt")
-        (ws2 / "skills").mkdir()
-        _git(ws2, "init")
-        _git(ws2, "add", ".")
-        _git(ws2, "commit", "-m", "initial")
-        _git(ws2, "tag", "-a", "evo-0", "-m", "evo-0: initial")
+        _init_workspace_with_evolution(ws2, name="beta-evo", model="gpt-4.1-mini")
         _add_cycle(ws2, 1, 0.7)
 
         results = discover_workspaces(search)
@@ -407,17 +359,18 @@ class TestGetFileAtVersion:
     def test_language_detection(self, tmp_path: Path) -> None:
         ws = tmp_path / "workspace"
         ws.mkdir(parents=True)
-        (ws / "manifest.yaml").write_text("name: lang-test\n")
+        (ws / "manifest.yaml").write_text(
+            "schema_version: 1\nname: lang-test\nagent_adapter: rlm\nevolvable_layers: [prompts]\n"
+        )
+        (ws / "prompts").mkdir()
+        (ws / "prompts" / "system.md").write_text("system prompt\n")
         (ws / "config.toml").write_text("[section]\nkey = 1\n")
         (ws / "data.json").write_text('{"a": 1}\n')
         (ws / "script.py").write_text("print('hello')\n")
         (ws / "readme.md").write_text("# Hello\n")
         (ws / "notes.txt").write_text("plain text\n")
 
-        _git(ws, "init")
-        _git(ws, "add", ".")
-        _git(ws, "commit", "-m", "initial")
-        _git(ws, "tag", "-a", "evo-0", "-m", "evo-0: initial")
+        Workspace(ws).init_versioning()
 
         assert get_file_at_version(ws, "evo-0", "manifest.yaml")["language"] == "yaml"
         assert get_file_at_version(ws, "evo-0", "config.toml")["language"] == "toml"
@@ -479,28 +432,54 @@ def _collect_files(node: dict) -> list[dict]:
 
 
 class TestListRuns:
-    def test_groups_run_scoped_tags(self, tmp_path: Path) -> None:
-        """Run-scoped tags are grouped by run_id prefix."""
+    def test_groups_run_scoped_candidates(self, tmp_path: Path) -> None:
+        """Run-scoped candidate IDs are grouped by run ID."""
         root = tmp_path / "ws"
         _init_workspace(root)
-        _git(root, "tag", "-a", "evo-20260404-0328-1", "-m", "cycle 1: score 0.250")
-        _git(root, "tag", "-a", "evo-20260404-0328-2", "-m", "cycle 2: score 0.500")
-        _git(root, "tag", "-a", "evo-20260404-1220-1", "-m", "cycle 1: score 0.125")
+        workspace = Workspace(root)
+        workspace.commit_candidate(
+            candidate_id="20260404T032800:1",
+            parent_candidate_id="baseline",
+            summary="cycle 1: score 0.250",
+            score=0.25,
+        )
+        workspace.commit_candidate(
+            candidate_id="20260404T032800:2",
+            parent_candidate_id="20260404T032800:1",
+            summary="cycle 2: score 0.500",
+            score=0.5,
+        )
+        workspace.commit_candidate(
+            candidate_id="20260404T122000:1",
+            parent_candidate_id="baseline",
+            summary="cycle 1: score 0.125",
+            score=0.125,
+        )
 
         runs = list_runs(root)
         assert len(runs) == 2
         # Most recent first
-        assert runs[0]["run_id"] == "20260404-1220"
+        assert runs[0]["run_id"] == "20260404T122000"
         assert runs[0]["cycles"] == 1
-        assert runs[1]["run_id"] == "20260404-0328"
+        assert runs[1]["run_id"] == "20260404T032800"
         assert runs[1]["cycles"] == 2
 
-    def test_legacy_tags_form_single_run(self, tmp_path: Path) -> None:
-        """Legacy evo-N tags are grouped as a single 'legacy' run."""
+    def test_migrated_candidate_ids_form_a_run(self, tmp_path: Path) -> None:
         root = tmp_path / "ws"
         _init_workspace(root)
-        _git(root, "tag", "-a", "evo-1", "-m", "cycle 1: score 0.500")
-        _git(root, "tag", "-a", "evo-2", "-m", "cycle 2: score 0.750")
+        workspace = Workspace(root)
+        workspace.commit_candidate(
+            candidate_id="legacy:1",
+            parent_candidate_id="baseline",
+            summary="cycle 1: score 0.500",
+            score=0.5,
+        )
+        workspace.commit_candidate(
+            candidate_id="legacy:2",
+            parent_candidate_id="legacy:1",
+            summary="cycle 2: score 0.750",
+            score=0.75,
+        )
 
         runs = list_runs(root)
         assert len(runs) == 1
@@ -513,11 +492,22 @@ class TestListRuns:
         runs = list_runs(root)
         assert runs == []
 
-    def test_scores_parsed_from_tag_messages(self, tmp_path: Path) -> None:
+    def test_scores_come_from_candidate_metadata(self, tmp_path: Path) -> None:
         root = tmp_path / "ws"
         _init_workspace(root)
-        _git(root, "tag", "-a", "evo-20260404-1220-1", "-m", "cycle 1: score 0.250")
-        _git(root, "tag", "-a", "evo-20260404-1220-2", "-m", "cycle 2: score 0.750")
+        workspace = Workspace(root)
+        workspace.commit_candidate(
+            candidate_id="20260404T122000:1",
+            parent_candidate_id="baseline",
+            summary="first",
+            score=0.25,
+        )
+        workspace.commit_candidate(
+            candidate_id="20260404T122000:2",
+            parent_candidate_id="20260404T122000:1",
+            summary="second",
+            score=0.75,
+        )
 
         runs = list_runs(root)
         assert runs[0]["best_score"] == 0.75
