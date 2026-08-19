@@ -40,7 +40,7 @@ def test_post_annotation(tmp_path: Path) -> None:
     body = resp.json()
     assert body["verdict"] == "pass"
     assert body["notes"] == "looks good"
-    assert "timestamp" in body
+    assert "reviewed_at" in body
 
 
 def test_post_annotation_replaces_existing(tmp_path: Path) -> None:

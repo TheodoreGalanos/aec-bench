@@ -664,6 +664,41 @@ they all contain hashes.
 Detailed lifecycle rules live in
 [Staged evidence and publication](protocols/staged-evidence-and-publication.md).
 
+## Public presentation and inspection vocabulary
+
+Current Web API responses use one vocabulary for identity, integrity,
+compatibility, qualification, labels, and event time:
+
+- stable domain IDs, such as `dataset_id`, `trial_id`, and `candidate_id`,
+  identify domain objects and URL targets;
+- `label` and `release_label` are human display and discovery values, not
+  authoritative identity;
+- `source_revision` is the full Git commit for repository source;
+- `ArtifactRef.sha256` identifies exact retained bytes and appears through an
+  explicit integrity inspection, not routine navigation;
+- `schema_version`, `protocol_version`, and `package_version` select an
+  independently evolving reader, protocol, or installed package;
+- `qualification_status`, `evidence_level`, and `qualified_at` describe one
+  exact provider and runtime qualification claim; and
+- named event times, such as `reviewed_at`, `occurred_at`, `authored_at`, and
+  `verified_at`, state which event the time records.
+
+Routine dataset and trial views do not return full artifact digests. A trial
+evidence view returns authority kind, protocol, artifact ID, media type, byte
+size, and separate integrity and content links. The integrity route reads the
+stored bytes, verifies the `ArtifactRef`, and then returns the full SHA-256,
+size, and verification time. Provider qualification uses the same split:
+routine cells show the exact adapter, SDK, and runtime version set, evidence
+level, qualification status, event time or reason, and evidence references;
+full evidence digests stay behind explicit integrity inspection.
+
+The technical evidence, content, integrity, and provider-qualification routes
+require internal access. Current API schemas use the v2 vocabulary. Evolution
+request paths can accept an old human candidate label during transition, but
+responses and generated links always return and use `candidate_id`. There is
+no current response field named generic `version`, `timestamp`,
+`content_hash`, or `content_sha256` in these Web contracts.
+
 ## Visibility classification
 
 `Visibility.PUBLIC` and `Visibility.HOLDOUT` are independent of lifecycle,

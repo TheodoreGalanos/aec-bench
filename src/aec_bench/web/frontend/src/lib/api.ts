@@ -119,7 +119,7 @@ export async function submitAnnotation(body: {
   experiment_id: string;
   verdict: string;
   notes?: string;
-}): Promise<{ verdict: string; notes: string; timestamp: string }> {
+}): Promise<{ verdict: string; notes: string; reviewed_at: string }> {
   const resp = await fetch("/api/triage/annotate", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -264,16 +264,16 @@ export function fetchEvolutionArchive(workspace: string): Promise<ArchiveData> {
   return fetchJson<ArchiveData>(`/api/evolution/${workspace}/archive`);
 }
 
-export function fetchEvolutionTree(workspace: string, version: string): Promise<EvolutionTreeData> {
-  return fetchJson<EvolutionTreeData>(`/api/evolution/${workspace}/tree/${version}`);
+export function fetchEvolutionTree(workspace: string, candidateId: string): Promise<EvolutionTreeData> {
+  return fetchJson<EvolutionTreeData>(`/api/evolution/${workspace}/tree/${encodeURIComponent(candidateId)}`);
 }
 
-export function fetchEvolutionFile(workspace: string, version: string, path: string): Promise<FileContent> {
-  return fetchJson<FileContent>(`/api/evolution/${workspace}/file/${version}/${path}`);
+export function fetchEvolutionFile(workspace: string, candidateId: string, path: string): Promise<FileContent> {
+  return fetchJson<FileContent>(`/api/evolution/${workspace}/file/${encodeURIComponent(candidateId)}/${path}`);
 }
 
-export function fetchEvolutionDiff(workspace: string, version: string, path: string): Promise<FileDiff> {
-  return fetchJson<FileDiff>(`/api/evolution/${workspace}/diff/${version}/${path}`);
+export function fetchEvolutionDiff(workspace: string, candidateId: string, path: string): Promise<FileDiff> {
+  return fetchJson<FileDiff>(`/api/evolution/${workspace}/diff/${encodeURIComponent(candidateId)}/${path}`);
 }
 
 // ---------------------------------------------------------------------------

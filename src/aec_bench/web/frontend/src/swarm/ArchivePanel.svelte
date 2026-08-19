@@ -183,7 +183,7 @@
   <!-- Tooltip overlay (fixed position, from child mouse coordinates) -->
   {#if hoveredCentroid}
     <div class="centroid-tooltip" style="left: {tooltipX + 12}px; top: {tooltipY - 10}px;">
-      <div class="tt-version">{hoveredCentroid.version}</div>
+      <div class="tt-candidate">{hoveredCentroid.candidate_id}</div>
       <div class="tt-row">Reward: {(hoveredCentroid.reward ?? 0).toFixed(3)}</div>
       {#if hoveredCentroid.agent_id}
         <div class="tt-row">Agent: {hoveredCentroid.agent_id}</div>
@@ -296,7 +296,7 @@
     box-shadow: var(--shadow-md);
   }
 
-  .tt-version {
+  .tt-candidate {
     font-weight: 700;
     margin-bottom: 2px;
   }

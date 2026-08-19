@@ -50,7 +50,7 @@ def test_project_2d_with_centroids_with_entries():
 
     assert len(occupied) == 1
     assert occupied[0]["reward"] == pytest.approx(0.9)
-    assert occupied[0]["version"] == "evo-1"
+    assert occupied[0]["candidate_id"] == "evo-1"
     assert len(empty) == 49
 
 

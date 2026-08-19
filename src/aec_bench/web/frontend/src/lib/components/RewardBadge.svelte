@@ -1,17 +1,24 @@
 <!-- ABOUTME: Colour-coded badge for displaying reward scores with threshold-based styling. -->
 <!-- ABOUTME: Maps reward values to reward CSS variables for consistent visual encoding. -->
 <script lang="ts">
-  type RewardClass = "reward-perfect" | "reward-good" | "reward-mid" | "reward-poor" | "reward-zero";
+  type RewardClass =
+    | "reward-perfect"
+    | "reward-good"
+    | "reward-mid"
+    | "reward-poor"
+    | "reward-zero"
+    | "reward-unavailable";
   type Size = "sm" | "md";
 
   interface Props {
-    reward: number;
+    reward: number | null;
     size?: Size;
   }
 
   let { reward, size = "md" }: Props = $props();
 
-  function getRewardClass(r: number): RewardClass {
+  function getRewardClass(r: number | null): RewardClass {
+    if (r === null) return "reward-unavailable";
     if (r >= 1.0) return "reward-perfect";
     if (r >= 0.8) return "reward-good";
     if (r >= 0.5) return "reward-mid";
@@ -23,7 +30,7 @@
 </script>
 
 <span class="reward-badge {rewardClass} size-{size}">
-  {reward.toFixed(3)}
+  {reward === null ? "—" : reward.toFixed(3)}
 </span>
 
 <style>
@@ -68,5 +75,10 @@
   .reward-zero {
     color: var(--reward-zero);
     background: var(--reward-zero-bg);
+  }
+
+  .reward-unavailable {
+    color: var(--text-3);
+    background: var(--bg-alt);
   }
 </style>

@@ -12,7 +12,10 @@ function buildTrial(overrides: Partial<ViewerMeta> = {}): ViewerMeta {
   return {
     trial_id: "trial-001",
     experiment_id: "exp-a",
-    dataset_id: "voltage-drop-core@1",
+    dataset_id: "voltage-drop-core",
+    dataset_label: "stable-1",
+    dataset_reference_kind: "repository",
+    dataset_source_display: "abcdef012345",
     task_id: "electrical/voltage-drop/easy",
     model: "claude-sonnet-4-6",
     adapter: "rlm",
@@ -60,8 +63,8 @@ describe("InfoPanel — Related section", () => {
     render(InfoPanel, {
       props: { trial: buildTrial(), artefacts: [], openModal: () => {} },
     });
-    const link = screen.getByRole("link", { name: /Dataset: voltage-drop-core v1/i });
-    expect(link).toHaveAttribute("href", "/datasets/voltage-drop-core/1");
+    const link = screen.getByRole("link", { name: /Dataset: stable-1/i });
+    expect(link).toHaveAttribute("href", "/datasets/voltage-drop-core/stable-1");
   });
 
   it("hides the Dataset link when dataset_id is null", () => {
@@ -75,15 +78,16 @@ describe("InfoPanel — Related section", () => {
     expect(screen.queryByRole("link", { name: /Dataset:/i })).toBeNull();
   });
 
-  it("hides the Dataset link when dataset_id has no '@' separator", () => {
+  it("shows the stable dataset ID without a link when no label is available", () => {
     render(InfoPanel, {
       props: {
-        trial: buildTrial({ dataset_id: "no-at-separator" }),
+        trial: buildTrial({ dataset_label: null }),
         artefacts: [],
         openModal: () => {},
       },
     });
     expect(screen.queryByRole("link", { name: /Dataset:/i })).toBeNull();
+    expect(screen.getByText(/Dataset: voltage-drop-core/i)).toBeInTheDocument();
   });
 
   it("renders the Experiment link pointing to /?experiment=<id>", () => {

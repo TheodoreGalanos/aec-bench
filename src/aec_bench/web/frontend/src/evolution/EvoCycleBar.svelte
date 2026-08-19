@@ -1,5 +1,5 @@
 <!-- ABOUTME: Horizontal bar with cycle selector pills, inline SVG score sparkline, and stat pills. -->
-<!-- ABOUTME: Sits below the NavBar in the evolution workspace explorer, drives version selection. -->
+<!-- ABOUTME: Sits below the NavBar in the evolution workspace explorer and drives candidate selection. -->
 <script lang="ts">
   import type { EvolutionCycle } from "../lib/types";
   import StatPill from "../lib/components/StatPill.svelte";
@@ -9,10 +9,11 @@
     activeCycle: number;
     workspaceName: string;
     model: string;
+    baselineLabel: string;
     onselect: (cycle: number) => void;
   }
 
-  let { cycles, activeCycle, workspaceName, model, onselect }: Props = $props();
+  let { cycles, activeCycle, workspaceName, model, baselineLabel, onselect }: Props = $props();
 
   // Derive the active cycle data (null for baseline evo-0)
   let activeCycleData = $derived(
@@ -93,7 +94,7 @@
         aria-selected={activeCycle === 0}
         onclick={() => onselect(0)}
       >
-        evo-0
+        {baselineLabel}
       </button>
       {#each cycles as cycle (cycle.cycle)}
         <button
@@ -103,7 +104,7 @@
           aria-selected={activeCycle === cycle.cycle}
           onclick={() => onselect(cycle.cycle)}
         >
-          evo-{cycle.cycle}
+          {cycle.label ?? cycle.candidate_id}
         </button>
       {/each}
     </div>

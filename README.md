@@ -812,6 +812,14 @@ cd -
 uv run aec-bench web --dev
 ```
 
+The current Web API uses stable domain IDs in routine responses. Full artifact
+SHA-256 values are available only through authenticated technical integrity
+inspection, which verifies the retained bytes before it returns the digest.
+Trial evidence inspection keeps actor, provider, World, lifecycle, and
+evaluation authority references separate. Provider qualification inspection
+shows the exact adapter, SDK, and runtime version set and keeps keyless proof
+separate from live-provider evidence.
+
 ### Evolution Workspaces
 
 Evolution workspaces use candidate IDs for lineage and full Git commits for

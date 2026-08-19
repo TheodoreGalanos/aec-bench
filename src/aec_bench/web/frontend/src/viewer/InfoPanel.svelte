@@ -38,15 +38,11 @@
     };
   });
 
-  // dataset_id is an immutable transitional reference key or null for inline runs.
-  const datasetParts = $derived.by(() => {
-    if (!trial.dataset_id) return { name: "", version: "", href: null };
-    const at = trial.dataset_id.indexOf("@");
-    if (at <= 0) return { name: "", version: "", href: null };
-    const name = trial.dataset_id.slice(0, at);
-    const version = trial.dataset_id.slice(at + 1);
-    return { name, version, href: `/datasets/${name}/${version}` };
-  });
+  const datasetHref = $derived(
+    trial.dataset_id && trial.dataset_label
+      ? `/datasets/${encodeURIComponent(trial.dataset_id)}/${encodeURIComponent(trial.dataset_label)}`
+      : null,
+  );
 
   const experimentHref = $derived(`/?experiment=${encodeURIComponent(trial.experiment_id)}`);
   const reviewHref = $derived(`/review/trials/${encodeURIComponent(trial.trial_id)}`);
@@ -153,12 +149,19 @@
           </a>
         </li>
       {/if}
-      {#if datasetParts.href}
+      {#if datasetHref}
         <li>
-          <a href={datasetParts.href} class="related-link">
+          <a href={datasetHref} class="related-link">
             <Database size={14} aria-hidden="true" />
-            <span>Dataset: {datasetParts.name} v{datasetParts.version}</span>
+            <span>Dataset: {trial.dataset_label ?? trial.dataset_id}</span>
           </a>
+        </li>
+      {:else if trial.dataset_id}
+        <li class="related-reference">
+          <Database size={14} aria-hidden="true" />
+          <span>Dataset: {trial.dataset_id}</span>
+          {#if trial.dataset_reference_kind}<span>({trial.dataset_reference_kind})</span>{/if}
+          {#if trial.dataset_source_display}<code>{trial.dataset_source_display}</code>{/if}
         </li>
       {/if}
       <li>

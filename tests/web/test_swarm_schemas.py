@@ -52,13 +52,20 @@ def test_swarm_state_response():
             phase="winding_down",
         ),
         centroids=[
-            SwarmCentroidSchema(x=0.1, y=0.2, occupied=True, reward=0.87, version="evo-5", agent_id="agent-0"),
+            SwarmCentroidSchema(
+                x=0.1,
+                y=0.2,
+                occupied=True,
+                reward=0.87,
+                candidate_id="run:5",
+                agent_id="agent-0",
+            ),
             SwarmCentroidSchema(x=0.5, y=0.6, occupied=False),
         ],
         lineage=[
             SwarmLineageNodeSchema(
-                version="evo-5",
-                parent_version="evo-3",
+                candidate_id="run:5",
+                parent_candidate_id="run:3",
                 agent_id="agent-0",
                 cross_agent=False,
                 surprise=False,
@@ -84,7 +91,7 @@ def test_swarm_events_response():
         events=[
             SwarmEventSchema(
                 event_type="eval_completed",
-                timestamp="2026-04-08T02:20:00Z",
+                occurred_at="2026-04-08T02:20:00Z",
                 agent_id="agent-0",
                 payload={"score": 0.87},
                 sequence_number=10,

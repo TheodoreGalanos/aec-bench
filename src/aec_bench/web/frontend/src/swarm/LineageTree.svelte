@@ -9,7 +9,7 @@
   }
 
   let { nodes, agentColors }: Props = $props();
-  let hoveredVersion: string | null = $state(null);
+  let hoveredCandidateId: string | null = $state(null);
 
   const NODE_RADIUS_MIN = 8;
   const NODE_RADIUS_MAX = 20;
@@ -18,7 +18,7 @@
   const PADDING = 40;
 
   interface LayoutNode {
-    version: string;
+    candidateId: string;
     node: SwarmLineageNode;
     layer: number;
     x: number;
@@ -29,17 +29,17 @@
   let layout = $derived.by((): { nodes: LayoutNode[]; edges: { from: LayoutNode; to: LayoutNode; crossAgent: boolean }[]; width: number; height: number } => {
     if (nodes.length === 0) return { nodes: [], edges: [], width: 200, height: 100 };
 
-    const byVersion = new Map(nodes.map((n) => [n.version, n]));
+    const byCandidateId = new Map(nodes.map((n) => [n.candidate_id, n]));
 
     const children = new Map<string, string[]>();
     const roots: string[] = [];
     for (const n of nodes) {
-      if (!n.parent_version || !byVersion.has(n.parent_version)) {
-        roots.push(n.version);
+      if (!n.parent_candidate_id || !byCandidateId.has(n.parent_candidate_id)) {
+        roots.push(n.candidate_id);
       } else {
-        const list = children.get(n.parent_version) ?? [];
-        list.push(n.version);
-        children.set(n.parent_version, list);
+        const list = children.get(n.parent_candidate_id) ?? [];
+        list.push(n.candidate_id);
+        children.set(n.parent_candidate_id, list);
       }
     }
 
@@ -74,14 +74,14 @@
     const layoutNodes: LayoutNode[] = [];
     const posMap = new Map<string, LayoutNode>();
 
-    for (const [layer, versions] of layers) {
-      const layerHeight = (versions.length - 1) * VERTICAL_GAP;
+    for (const [layer, candidateIds] of layers) {
+      const layerHeight = (candidateIds.length - 1) * VERTICAL_GAP;
       const startY = (height - layerHeight) / 2;
-      versions.forEach((v, idx) => {
-        const node = byVersion.get(v)!;
+      candidateIds.forEach((candidateId, idx) => {
+        const node = byCandidateId.get(candidateId)!;
         const radius = NODE_RADIUS_MIN + node.reward * (NODE_RADIUS_MAX - NODE_RADIUS_MIN);
         const ln: LayoutNode = {
-          version: v,
+          candidateId,
           node,
           layer,
           x: PADDING + layer * LAYER_GAP,
@@ -89,16 +89,16 @@
           radius,
         };
         layoutNodes.push(ln);
-        posMap.set(v, ln);
+        posMap.set(candidateId, ln);
       });
     }
 
     const edges: { from: LayoutNode; to: LayoutNode; crossAgent: boolean }[] = [];
     for (const n of nodes) {
-      if (n.parent_version && posMap.has(n.parent_version)) {
+      if (n.parent_candidate_id && posMap.has(n.parent_candidate_id)) {
         edges.push({
-          from: posMap.get(n.parent_version)!,
-          to: posMap.get(n.version)!,
+          from: posMap.get(n.parent_candidate_id)!,
+          to: posMap.get(n.candidate_id)!,
           crossAgent: n.cross_agent,
         });
       }
@@ -127,12 +127,12 @@
           />
         {/each}
 
-        {#each layout.nodes as ln (ln.version)}
+        {#each layout.nodes as ln (ln.candidateId)}
           <!-- svelte-ignore a11y_no_static_element_interactions -->
           <g
             class="lineage-node"
-            onmouseenter={() => (hoveredVersion = ln.version)}
-            onmouseleave={() => (hoveredVersion = null)}
+            onmouseenter={() => (hoveredCandidateId = ln.candidateId)}
+            onmouseleave={() => (hoveredCandidateId = null)}
           >
             {#if ln.node.surprise}
               <circle
@@ -157,17 +157,17 @@
               y={ln.y + ln.radius + 14}
               text-anchor="middle"
               class="node-label"
-            >{ln.version}</text>
+            >{ln.candidateId}</text>
           </g>
         {/each}
       </svg>
     </div>
 
-    {#if hoveredVersion}
-      {@const ln = layout.nodes.find((n) => n.version === hoveredVersion)}
+    {#if hoveredCandidateId}
+      {@const ln = layout.nodes.find((n) => n.candidateId === hoveredCandidateId)}
       {#if ln}
         <div class="lineage-tooltip">
-          <strong>{ln.version}</strong> — {ln.node.agent_id}
+          <strong>{ln.candidateId}</strong> — {ln.node.agent_id}
           <br />Mutation: {ln.node.mutation_type}
           <br />Reward: {ln.node.reward.toFixed(3)}
           {#if ln.node.cross_agent}

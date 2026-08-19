@@ -6,7 +6,7 @@
   import type { Annotation, StepSummary } from "../lib/types";
 
   interface Props {
-    reward: number;
+    reward: number | null;
     rewardClass: string;
     totalSteps: number;
     totalErrors: number;

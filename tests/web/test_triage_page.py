@@ -89,6 +89,29 @@ def test_triage_api_filters_by_experiment(tmp_path: Path) -> None:
         assert "trial_id" in trial
         assert "reward" in trial
         assert "reward_class" in trial
+        assert trial["execution_status"] == "completed"
+        assert trial["evaluation_status"] == "completed"
+        assert trial["evidence_status"] == "not_required"
+
+
+def test_triage_api_does_not_report_missing_evaluation_as_zero(tmp_path: Path) -> None:
+    ledger = tmp_path / "ledger"
+    ledger.mkdir()
+    tasks = tmp_path / "tasks"
+    tasks.mkdir()
+    write_trial_record(
+        ledger_root=ledger,
+        record=make_trial_record(experiment_id="exp-pending", trial_id="trial-pending", evaluation=None),
+    )
+    client = TestClient(create_app(ledger_root=ledger, tasks_root=tasks))
+
+    response = client.get("/api/triage?experiment=exp-pending")
+
+    assert response.status_code == 200
+    trial = response.json()["trials"][0]
+    assert trial["evaluation_status"] == "not_requested"
+    assert trial["reward"] is None
+    assert trial["reward_class"] == "reward-unavailable"
 
 
 def test_triage_api_with_experiment_filter(tmp_path: Path) -> None:

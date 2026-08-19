@@ -33,7 +33,7 @@
     steps: StepSummary[];
     stepMessages: Map<number, TrajectoryMessage[]>;
     isRlmTrial: boolean;
-    reward: number;
+    reward: number | null;
     taskId: string;
     model: string;
     tokensIn: number | null;

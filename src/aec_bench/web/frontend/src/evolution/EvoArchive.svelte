@@ -1,5 +1,5 @@
 <!-- ABOUTME: Collapsible QD archive scatter plot showing MAP-Elites coverage in 2D PCA space. -->
-<!-- ABOUTME: Points coloured by reward, with hover tooltips showing version and discipline. -->
+<!-- ABOUTME: Points coloured by reward, with hover tooltips showing candidate identity and discipline. -->
 <script lang="ts">
   import type { ArchiveData, ArchivePoint } from "../lib/types";
 
@@ -86,7 +86,7 @@
             <text x={12} y={HEIGHT / 2} text-anchor="middle" transform="rotate(-90, 12, {HEIGHT / 2})" class="axis-label">PCA 2</text>
 
             <!-- Points -->
-            {#each data.points_2d as point (point.version)}
+            {#each data.points_2d as point (point.candidate_id)}
               <!-- svelte-ignore a11y_no_static_element_interactions -->
               <circle
                 cx={scaleX(point.x)}
@@ -106,7 +106,7 @@
           <!-- Tooltip -->
           {#if hoveredPoint}
             <div class="scatter-tooltip" style="left: {tooltipX}px; top: {tooltipY}px;">
-              <div class="tooltip-version">{hoveredPoint.version}</div>
+              <div class="tooltip-candidate">{hoveredPoint.candidate_id}</div>
               <div class="tooltip-reward">Reward: {hoveredPoint.reward.toFixed(3)}</div>
               <div class="tooltip-discipline">{hoveredPoint.discipline}</div>
             </div>
@@ -225,7 +225,7 @@
     transform: translateX(-50%);
   }
 
-  .tooltip-version {
+  .tooltip-candidate {
     font-weight: 700;
   }
 

@@ -121,6 +121,13 @@ describe("RewardBadge", () => {
     render(RewardBadge, { props: { reward: 0.756789 } });
     expect(screen.getByText("0.757")).toBeInTheDocument();
   });
+
+  it("shows an unavailable score without treating it as zero", () => {
+    const { container } = render(RewardBadge, { props: { reward: null } });
+    expect(screen.getByText("—")).toBeInTheDocument();
+    expect(container.querySelector(".reward-unavailable")).toBeInTheDocument();
+    expect(container.querySelector(".reward-zero")).not.toBeInTheDocument();
+  });
 });
 
 // ---------------------------------------------------------------------------

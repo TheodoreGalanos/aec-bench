@@ -14,7 +14,7 @@
   // --- Types ---
 
   interface TrajectoryEntry {
-    version: string;
+    candidate_id: string;
     agent_id: string;
     reward: number;
     token_cost: number;
@@ -43,14 +43,14 @@
   // --- Derived data ---
 
   let trajectoryEntries = $derived.by((): TrajectoryEntry[] => {
-    const occupied = centroids.filter((c) => c.occupied && c.version);
+    const occupied = centroids.filter((c) => c.occupied && c.candidate_id);
     const sorted = [...occupied].sort((a, b) => {
-      const numA = parseInt(a.version!.replace(/\D/g, "") || "0");
-      const numB = parseInt(b.version!.replace(/\D/g, "") || "0");
+      const numA = parseInt(a.candidate_id!.split(":").at(-1) ?? "0");
+      const numB = parseInt(b.candidate_id!.split(":").at(-1) ?? "0");
       return numA - numB;
     });
     return sorted.map((c, i) => ({
-      version: c.version!,
+      candidate_id: c.candidate_id!,
       agent_id: c.agent_id ?? "unknown",
       reward: c.reward ?? 0,
       token_cost: c.token_cost ?? 0,
@@ -395,7 +395,7 @@
 
   {#if hoveredEntry}
     <div class="traj-tooltip">
-      <strong>{hoveredEntry.version}</strong> — {hoveredEntry.agent_id}<br />
+      <strong>{hoveredEntry.candidate_id}</strong> — {hoveredEntry.agent_id}<br />
       Reward: {hoveredEntry.reward.toFixed(3)} |
       Tokens: {hoveredEntry.token_cost.toFixed(2)} |
       Verify: {hoveredEntry.verification_depth.toFixed(2)} |

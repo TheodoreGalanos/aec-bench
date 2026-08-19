@@ -92,10 +92,10 @@
     }
   }
 
-  async function loadTree(versionTag: string): Promise<void> {
+  async function loadTree(candidateId: string): Promise<void> {
     loadingTree = true;
     try {
-      treeData = await fetchEvolutionTree(workspace, versionTag);
+      treeData = await fetchEvolutionTree(workspace, candidateId);
     } catch {
       treeData = null;
     } finally {
@@ -103,14 +103,14 @@
     }
   }
 
-  async function loadFileOrDiff(versionTag: string, path: string): Promise<void> {
+  async function loadFileOrDiff(candidateId: string, path: string): Promise<void> {
     loadingFile = true;
     try {
       if (viewMode === "diff") {
-        fileDiff = await fetchEvolutionDiff(workspace, versionTag, path);
+        fileDiff = await fetchEvolutionDiff(workspace, candidateId, path);
         fileContent = null;
       } else {
-        fileContent = await fetchEvolutionFile(workspace, versionTag, path);
+        fileContent = await fetchEvolutionFile(workspace, candidateId, path);
         fileDiff = null;
       }
     } catch {
@@ -138,8 +138,12 @@
     if (data === null) return;
     if (tab !== "cycles") return;
     const cycle = data.cycles.find((c) => c.cycle === activeCycle);
-    const version = cycle?.version_tag ?? "evo-0";
-    void loadTree(version);
+    const candidateId = cycle?.candidate_id ?? data.baseline_candidate_id;
+    if (candidateId === null) {
+      treeData = null;
+      return;
+    }
+    void loadTree(candidateId);
   });
 
   function handleWorkspaceChange(newWs: string): void {
@@ -166,16 +170,18 @@
   function handleFileSelect(path: string): void {
     activeFile = path;
     const cycle = data?.cycles.find((c) => c.cycle === activeCycle);
-    const version = cycle?.version_tag ?? "evo-0";
-    void loadFileOrDiff(version, path);
+    const candidateId = cycle?.candidate_id ?? data?.baseline_candidate_id;
+    if (!candidateId) return;
+    void loadFileOrDiff(candidateId, path);
   }
 
   function handleViewModeChange(mode: "content" | "diff"): void {
     viewMode = mode;
     if (activeFile) {
       const cycle = data?.cycles.find((c) => c.cycle === activeCycle);
-      const version = cycle?.version_tag ?? "evo-0";
-      void loadFileOrDiff(version, activeFile);
+      const candidateId = cycle?.candidate_id ?? data?.baseline_candidate_id;
+      if (!candidateId) return;
+      void loadFileOrDiff(candidateId, activeFile);
     }
   }
 </script>

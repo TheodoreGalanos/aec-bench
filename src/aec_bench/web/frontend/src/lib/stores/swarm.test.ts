@@ -64,9 +64,9 @@ describe("SwarmStore", () => {
 
     const event: SwarmEvent = {
       event_type: "eval_completed",
-      timestamp: "2026-04-08T02:21:00Z",
+      occurred_at: "2026-04-08T02:21:00Z",
       agent_id: "agent-0",
-      payload: { score: 0.9, version: "evo-2" },
+      payload: { score: 0.9, candidate_id: "run:2" },
       sequence_number: 5,
     };
 
@@ -85,7 +85,7 @@ describe("SwarmStore", () => {
 
     store.applyEvent({
       event_type: "agent_pivoting",
-      timestamp: "2026-04-08T02:22:00Z",
+      occurred_at: "2026-04-08T02:22:00Z",
       agent_id: "agent-0",
       payload: {},
       sequence_number: 6,
@@ -101,7 +101,7 @@ describe("SwarmStore", () => {
 
     store.applyEvent({
       event_type: "agent_retired",
-      timestamp: "2026-04-08T02:23:00Z",
+      occurred_at: "2026-04-08T02:23:00Z",
       agent_id: "agent-0",
       payload: {},
       sequence_number: 7,
@@ -116,7 +116,7 @@ describe("SwarmStore", () => {
 
     store.applyEvent({
       event_type: "budget_spent",
-      timestamp: "2026-04-08T02:24:00Z",
+      occurred_at: "2026-04-08T02:24:00Z",
       agent_id: "agent-0",
       payload: { cost_usd: 1.5 },
       sequence_number: 8,
@@ -133,7 +133,7 @@ describe("SwarmStore", () => {
 
     store.applyEvent({
       event_type: "swarm_completed",
-      timestamp: "2026-04-08T02:25:00Z",
+      occurred_at: "2026-04-08T02:25:00Z",
       agent_id: null,
       payload: {},
       sequence_number: 10,

@@ -15,6 +15,7 @@ from aec_bench.web.routes.dashboard import router as dashboard_router
 from aec_bench.web.routes.datasets import router as datasets_router
 from aec_bench.web.routes.evolution import router as evolution_router
 from aec_bench.web.routes.export import router as export_router
+from aec_bench.web.routes.inspection import router as inspection_router
 from aec_bench.web.routes.leaderboard import router as leaderboard_router
 from aec_bench.web.routes.library import router as library_router
 from aec_bench.web.routes.review import router as review_router
@@ -35,7 +36,11 @@ def create_app(
     frontend_dist: Path | None = None,
     workspaces_root: Path | None = None,
 ) -> FastAPI:
-    app = FastAPI(title="aec-bench communication and feedback")
+    app = FastAPI(
+        title="aec-bench communication and feedback",
+        version="2.0",
+        description="Current API responses use stable domain IDs and context-specific provenance names.",
+    )
     resolved_benchmark = benchmark_templates_root or (Path(__file__).resolve().parents[1] / "templates" / "builtin")
     app.state.settings = WebSettings(
         ledger_root=ledger_root,
@@ -55,6 +60,7 @@ def create_app(
     app.include_router(leaderboard_router)
     app.include_router(library_router)
     app.include_router(export_router)
+    app.include_router(inspection_router)
     app.include_router(review_router)
     app.include_router(search_router)
     app.include_router(triage_router)

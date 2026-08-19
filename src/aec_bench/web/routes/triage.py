@@ -64,7 +64,7 @@ def post_triage_annotation(
     return {
         "verdict": annotation.verdict,
         "notes": annotation.notes,
-        "timestamp": annotation.timestamp,
+        "reviewed_at": annotation.timestamp,
     }
 
 
@@ -81,7 +81,7 @@ def get_triage_annotations(
         trial_id: {
             "verdict": ann.verdict,
             "notes": ann.notes,
-            "timestamp": ann.timestamp,
+            "reviewed_at": ann.timestamp,
         }
         for trial_id, ann in annotations.items()
     }
@@ -123,11 +123,11 @@ def _filter_by_reward(
 ) -> list[TrialRecord]:
     """Apply reward-band filtering to a list of trial records."""
     if reward_filter == "zero":
-        return [r for r in records if r.evaluation.reward == 0.0]
+        return [r for r in records if r.evaluation is not None and r.evaluation.reward == 0.0]
     if reward_filter == "partial":
-        return [r for r in records if 0.0 < r.evaluation.reward < 1.0]
+        return [r for r in records if r.evaluation is not None and 0.0 < r.evaluation.reward < 1.0]
     if reward_filter == "perfect":
-        return [r for r in records if r.evaluation.reward >= 1.0]
+        return [r for r in records if r.evaluation is not None and r.evaluation.reward >= 1.0]
     return records
 
 
@@ -174,9 +174,21 @@ def _filter_by_errors(
 def _sort_trials(records: list[TrialRecord], sort_key: str) -> list[TrialRecord]:
     """Sort trial records by the given key."""
     if sort_key == "reward_asc":
-        return sorted(records, key=lambda r: r.evaluation.reward)
+        return sorted(
+            records,
+            key=lambda record: (
+                record.evaluation is None,
+                record.evaluation.reward if record.evaluation is not None else 0.0,
+            ),
+        )
     if sort_key == "reward_desc":
-        return sorted(records, key=lambda r: r.evaluation.reward, reverse=True)
+        return sorted(
+            records,
+            key=lambda record: (
+                record.evaluation is None,
+                -(record.evaluation.reward if record.evaluation is not None else 0.0),
+            ),
+        )
     if sort_key == "model":
         return sorted(records, key=lambda r: r.agent.model)
     if sort_key == "task":
@@ -284,6 +296,7 @@ def get_triage_api(
     trial_rows: list[TrialRowSchema] = []
     for record in records:
         ann = annotations.get(record.trial_id)
+        reward_value = record.evaluation.reward if record.evaluation is not None else None
         trial_rows.append(
             TrialRowSchema(
                 trial_id=record.trial_id,
@@ -291,10 +304,13 @@ def get_triage_api(
                 task_id=record.task.task_id,
                 model=record.agent.model,
                 adapter=record.agent.adapter,
+                execution_status=record.execution_status.value,
+                evaluation_status=record.evaluation_status.value,
+                evidence_status=record.evidence_status.value,
                 compute_backend=record.environment.compute_backend,
                 discipline=extract_discipline(record.task.task_id),
-                reward=record.evaluation.reward,
-                reward_class=reward_css_class(record.evaluation.reward),
+                reward=reward_value,
+                reward_class=reward_css_class(reward_value) if reward_value is not None else "reward-unavailable",
                 annotation_icon=_annotation_icon(ann),
                 annotation_verdict=ann.verdict if ann else "",
             )

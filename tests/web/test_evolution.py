@@ -126,7 +126,9 @@ def test_workspace_detail(tmp_path: Path) -> None:
 
     cycle = data["cycles"][0]
     assert cycle["cycle"] == 1
-    assert cycle["version_tag"] == "evo-1"
+    assert cycle["candidate_id"] == "test-run:1"
+    assert cycle["label"] == "evo-1"
+    assert len(cycle["source_revision"]) == 40
     assert cycle["score"] == 0.75
     # prompt_diff should contain something since we changed the prompt
     assert len(cycle["prompt_diff"]) > 0
@@ -140,10 +142,12 @@ def test_workspace_tree(tmp_path: Path) -> None:
     workspaces_root, _ws = _make_evolution_workspace(tmp_path)
     client = _make_client(tmp_path, workspaces_root=workspaces_root)
 
-    resp = client.get("/api/evolution/my-workspace/tree/evo-1")
+    resp = client.get("/api/evolution/my-workspace/tree/test-run%3A1")
     assert resp.status_code == 200
     data = resp.json()
-    assert data["version"] == "evo-1"
+    assert data["candidate_id"] == "test-run:1"
+    assert data["label"] == "evo-1"
+    assert len(data["source_revision"]) == 40
     assert "tree" in data
     # The tree should contain our files
     tree = data["tree"]
@@ -161,11 +165,13 @@ def test_workspace_file(tmp_path: Path) -> None:
     workspaces_root, _ws = _make_evolution_workspace(tmp_path)
     client = _make_client(tmp_path, workspaces_root=workspaces_root)
 
-    resp = client.get("/api/evolution/my-workspace/file/evo-1/prompts/system.md")
+    resp = client.get("/api/evolution/my-workspace/file/test-run%3A1/prompts/system.md")
     assert resp.status_code == 200
     data = resp.json()
     assert data["path"] == "prompts/system.md"
-    assert data["version"] == "evo-1"
+    assert data["candidate_id"] == "test-run:1"
+    assert data["label"] == "evo-1"
+    assert len(data["source_revision"]) == 40
     assert "expert engineering assistant" in data["content"]
     assert data["language"] == "markdown"
 
@@ -178,12 +184,12 @@ def test_workspace_diff(tmp_path: Path) -> None:
     workspaces_root, _ws = _make_evolution_workspace(tmp_path)
     client = _make_client(tmp_path, workspaces_root=workspaces_root)
 
-    resp = client.get("/api/evolution/my-workspace/diff/evo-1/prompts/system.md")
+    resp = client.get("/api/evolution/my-workspace/diff/test-run%3A1/prompts/system.md")
     assert resp.status_code == 200
     data = resp.json()
     assert data["path"] == "prompts/system.md"
-    assert data["to_version"] == "evo-1"
-    assert data["from_version"] == "evo-0"
+    assert data["to_candidate_id"] == "test-run:1"
+    assert data["from_candidate_id"] == "baseline"
     # The diff should show old and new lines
     assert len(data["diff"]) > 0
 

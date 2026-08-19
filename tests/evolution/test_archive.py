@@ -154,7 +154,7 @@ def test_project_2d_single_entry_returns_origin_point() -> None:
     assert points[0]["x"] == 0.0
     assert points[0]["y"] == 0.0
     assert points[0]["reward"] == pytest.approx(0.7)
-    assert "version" in points[0]
+    assert points[0]["candidate_id"] == "v_single"
 
 
 def test_project_2d_multiple_entries_have_required_keys() -> None:
@@ -169,7 +169,7 @@ def test_project_2d_multiple_entries_have_required_keys() -> None:
         assert "x" in point
         assert "y" in point
         assert "reward" in point
-        assert "version" in point
+        assert "candidate_id" in point
 
 
 # ---------------------------------------------------------------------------

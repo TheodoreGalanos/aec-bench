@@ -290,7 +290,7 @@ describe("fetchReviewTrial", () => {
 
 describe("submitAnnotation", () => {
   it("POSTs to /api/triage/annotate with JSON body", async () => {
-    const responsePayload = { verdict: "good", notes: "looks fine", timestamp: "2024-01-01T00:00:00Z" };
+    const responsePayload = { verdict: "good", notes: "looks fine", reviewed_at: "2024-01-01T00:00:00Z" };
     mockJsonResponse(responsePayload);
     const result = await submitAnnotation({
       trial_id: "t-1",

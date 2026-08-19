@@ -10,8 +10,10 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request, status
 
+from aec_bench.contracts.dataset import BundleDatasetRef, RepositoryDatasetRef
 from aec_bench.contracts.trajectory import TrajectoryEntry, read_trajectory
 from aec_bench.contracts.trial_record import TrialRecord
+from aec_bench.dataset.storage import list_publications
 from aec_bench.evaluation.trajectory_reader import (
     compute_step_status,
     detect_adapter_type,
@@ -245,7 +247,7 @@ def viewer_api_meta(
         annotation = AnnotationSchema(
             verdict=raw_annotation.verdict,
             notes=raw_annotation.notes,
-            timestamp=raw_annotation.timestamp,
+            reviewed_at=raw_annotation.timestamp,
         )
 
     # Token stats
@@ -257,6 +259,27 @@ def viewer_api_meta(
         total_tokens = tokens_in + tokens_out
     cost_usd = record.cost.estimated_cost_usd if record.cost else None
 
+    dataset_ref = record.run_manifest.dataset
+    dataset_id = dataset_ref.dataset_id if dataset_ref is not None else None
+    dataset_label = None
+    dataset_reference_kind = dataset_ref.kind if dataset_ref is not None else None
+    dataset_source_display = None
+    if dataset_ref is not None:
+        dataset_label = next(
+            (
+                publication.label
+                for publication in list_publications(settings.datasets_root)
+                if publication.dataset_ref == dataset_ref
+            ),
+            None,
+        )
+        if isinstance(dataset_ref, RepositoryDatasetRef):
+            dataset_source_display = dataset_ref.source_revision[:12]
+        elif isinstance(dataset_ref, BundleDatasetRef):
+            dataset_source_display = dataset_ref.artifact.sha256[:12]
+
+    reward_value = record.evaluation.reward if record.evaluation is not None else None
+
     # Back URL (API callers may omit query params — use empty defaults)
     query_params: dict[str, str] = {k: v for k, v in request.query_params.items()}
     back_url = _build_back_url(query_params.get("from"), query_params)
@@ -264,7 +287,10 @@ def viewer_api_meta(
     return ViewerMetaResponse(
         trial_id=record.trial_id,
         experiment_id=record.experiment_id,
-        dataset_id=record.dataset_id,
+        dataset_id=dataset_id,
+        dataset_label=dataset_label,
+        dataset_reference_kind=dataset_reference_kind,
+        dataset_source_display=dataset_source_display,
         task_id=record.task.task_id,
         model=record.agent.model,
         adapter=record.agent.adapter,
@@ -272,8 +298,8 @@ def viewer_api_meta(
         evaluation_status=record.evaluation_status.value,
         evidence_status=record.evidence_status.value,
         compute_backend=record.environment.compute_backend,
-        reward=record.evaluation.reward,
-        reward_class=reward_css_class(record.evaluation.reward),
+        reward=reward_value,
+        reward_class=reward_css_class(reward_value) if reward_value is not None else "reward-unavailable",
         steps=steps,
         is_rlm_trial=is_rlm_trial,
         adapter_type=adapter_type,

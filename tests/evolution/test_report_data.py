@@ -11,9 +11,9 @@ from aec_bench.evolution.report_data import (
     _status_char_to_label,
     build_evolution_report_data,
     discover_workspaces,
-    get_file_at_version,
-    get_file_diff_at_version,
-    get_file_tree_at_version,
+    get_file_at_candidate,
+    get_file_diff_at_candidate,
+    get_file_tree_at_candidate,
     list_runs,
 )
 from aec_bench.evolution.workspace import Workspace
@@ -122,15 +122,17 @@ class TestBuildEvolutionReportData:
         data = build_evolution_report_data(ws)
         assert "skill-1" in data.cycles[1].skills_modified
 
-    def test_version_tags(self, tmp_path: Path) -> None:
+    def test_candidate_identity_and_labels(self, tmp_path: Path) -> None:
         ws = tmp_path / "workspace"
         _init_workspace(ws)
         _add_cycle(ws, 1, 0.3)
         _add_cycle(ws, 2, 0.6)
 
         data = build_evolution_report_data(ws)
-        assert data.cycles[0].version_tag == "evo-1"
-        assert data.cycles[1].version_tag == "evo-2"
+        assert data.cycles[0].candidate_id == "test-run:1"
+        assert data.cycles[0].label == "evo-1"
+        assert data.cycles[1].candidate_id == "test-run:2"
+        assert data.cycles[1].label == "evo-2"
 
     def test_empty_workspace_no_cycles(self, tmp_path: Path) -> None:
         ws = tmp_path / "workspace"
@@ -139,6 +141,18 @@ class TestBuildEvolutionReportData:
         data = build_evolution_report_data(ws)
         assert data.total_cycles == 0
         assert data.cycles == []
+
+    def test_unversioned_workspace_has_no_fabricated_baseline_identity(self, tmp_path: Path) -> None:
+        (tmp_path / "manifest.yaml").write_text(
+            "schema_version: 1\nname: unversioned\nagent_adapter: rlm\nevolvable_layers: [prompts, skills]\n"
+        )
+        (tmp_path / "prompts").mkdir()
+        (tmp_path / "prompts" / "system.md").write_text("Prompt\n")
+
+        data = build_evolution_report_data(tmp_path)
+
+        assert data.baseline_candidate_id is None
+        assert data.baseline_source_revision is None
 
 
 class TestStatusCharToLabel:
@@ -263,18 +277,18 @@ class TestDiscoverWorkspaces:
 
 
 # ---------------------------------------------------------------------------
-# get_file_tree_at_version tests
+# get_file_tree_at_candidate tests
 # ---------------------------------------------------------------------------
 
 
-class TestGetFileTreeAtVersion:
-    """Tests for get_file_tree_at_version."""
+class TestGetFileTreeAtCandidate:
+    """Tests for get_file_tree_at_candidate."""
 
     def test_file_tree_at_evo0(self, tmp_path: Path) -> None:
         ws = tmp_path / "workspace"
         _init_workspace(ws)
 
-        tree = get_file_tree_at_version(ws, "evo-0")
+        tree = get_file_tree_at_candidate(ws, "baseline")
         assert isinstance(tree, dict)
         assert tree["name"] == "."
         assert tree["type"] == "directory"
@@ -296,7 +310,7 @@ class TestGetFileTreeAtVersion:
         _init_workspace(ws)
         _add_cycle(ws, 1, 0.5)
 
-        tree = get_file_tree_at_version(ws, "evo-1")
+        tree = get_file_tree_at_candidate(ws, "test-run:1")
         all_files = _collect_files(tree)
         file_names = {f["name"] for f in all_files}
 
@@ -317,7 +331,7 @@ class TestGetFileTreeAtVersion:
         ws = tmp_path / "workspace"
         _init_workspace(ws)
 
-        tree = get_file_tree_at_version(ws, "evo-0")
+        tree = get_file_tree_at_candidate(ws, "baseline")
         # The root should have children
         assert "children" in tree
         assert len(tree["children"]) > 0
@@ -330,20 +344,21 @@ class TestGetFileTreeAtVersion:
 
 
 # ---------------------------------------------------------------------------
-# get_file_at_version tests
+# get_file_at_candidate tests
 # ---------------------------------------------------------------------------
 
 
-class TestGetFileAtVersion:
-    """Tests for get_file_at_version."""
+class TestGetFileAtCandidate:
+    """Tests for get_file_at_candidate."""
 
     def test_get_file_at_evo0(self, tmp_path: Path) -> None:
         ws = tmp_path / "workspace"
         _init_workspace(ws)
 
-        result = get_file_at_version(ws, "evo-0", "manifest.yaml")
+        result = get_file_at_candidate(ws, "baseline", "manifest.yaml")
         assert result["path"] == "manifest.yaml"
-        assert result["version"] == "evo-0"
+        assert result["candidate_id"] == "baseline"
+        assert result["label"] == "evo-0"
         assert "name: test-evo" in result["content"]
         assert result["language"] == "yaml"
 
@@ -352,7 +367,7 @@ class TestGetFileAtVersion:
         _init_workspace(ws)
         _add_cycle(ws, 1, 0.5)
 
-        result = get_file_at_version(ws, "evo-1", "prompts/system.md")
+        result = get_file_at_candidate(ws, "test-run:1", "prompts/system.md")
         assert "Cycle 1 addition" in result["content"]
         assert result["language"] == "markdown"
 
@@ -372,41 +387,41 @@ class TestGetFileAtVersion:
 
         Workspace(ws).init_versioning()
 
-        assert get_file_at_version(ws, "evo-0", "manifest.yaml")["language"] == "yaml"
-        assert get_file_at_version(ws, "evo-0", "config.toml")["language"] == "toml"
-        assert get_file_at_version(ws, "evo-0", "data.json")["language"] == "json"
-        assert get_file_at_version(ws, "evo-0", "script.py")["language"] == "python"
-        assert get_file_at_version(ws, "evo-0", "readme.md")["language"] == "markdown"
-        assert get_file_at_version(ws, "evo-0", "notes.txt")["language"] == "text"
+        assert get_file_at_candidate(ws, "baseline", "manifest.yaml")["language"] == "yaml"
+        assert get_file_at_candidate(ws, "baseline", "config.toml")["language"] == "toml"
+        assert get_file_at_candidate(ws, "baseline", "data.json")["language"] == "json"
+        assert get_file_at_candidate(ws, "baseline", "script.py")["language"] == "python"
+        assert get_file_at_candidate(ws, "baseline", "readme.md")["language"] == "markdown"
+        assert get_file_at_candidate(ws, "baseline", "notes.txt")["language"] == "text"
 
 
 # ---------------------------------------------------------------------------
-# get_file_diff_at_version tests
+# get_file_diff_at_candidate tests
 # ---------------------------------------------------------------------------
 
 
-class TestGetFileDiffAtVersion:
-    """Tests for get_file_diff_at_version."""
+class TestGetFileDiffAtCandidate:
+    """Tests for get_file_diff_at_candidate."""
 
     def test_diff_at_evo0_shows_additions(self, tmp_path: Path) -> None:
         ws = tmp_path / "workspace"
         _init_workspace(ws)
 
-        result = get_file_diff_at_version(ws, "evo-0", "prompts/system.md")
+        result = get_file_diff_at_candidate(ws, "baseline", "prompts/system.md")
         assert result["path"] == "prompts/system.md"
-        assert result["from_version"] is None
-        assert result["to_version"] == "evo-0"
+        assert result["from_candidate_id"] is None
+        assert result["to_candidate_id"] == "baseline"
         # At evo-0, entire content should appear as additions
         assert "+You are a helpful agent." in result["diff"]
 
-    def test_diff_between_versions(self, tmp_path: Path) -> None:
+    def test_diff_between_candidates(self, tmp_path: Path) -> None:
         ws = tmp_path / "workspace"
         _init_workspace(ws)
         _add_cycle(ws, 1, 0.5)
 
-        result = get_file_diff_at_version(ws, "evo-1", "prompts/system.md")
-        assert result["from_version"] == "evo-0"
-        assert result["to_version"] == "evo-1"
+        result = get_file_diff_at_candidate(ws, "test-run:1", "prompts/system.md")
+        assert result["from_candidate_id"] == "baseline"
+        assert result["to_candidate_id"] == "test-run:1"
         assert "+## Cycle 1 addition" in result["diff"]
         assert "+New instructions here." in result["diff"]
 

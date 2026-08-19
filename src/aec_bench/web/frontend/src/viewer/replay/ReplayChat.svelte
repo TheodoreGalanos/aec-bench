@@ -9,7 +9,7 @@
     visibleMessages: ReplayMessage[];
     currentStep: number;
     finished: boolean;
-    reward: number;
+    reward: number | null;
     totalMs: number;
     tokensTotal: number;
     costTotal: number;
@@ -110,7 +110,8 @@
   }
 
   // Determine reward colour class for summary card
-  function rewardClass(r: number): string {
+  function rewardClass(r: number | null): string {
+    if (r === null) return "reward-unavailable";
     if (r >= 0.9) return "reward-perfect";
     if (r <= 0.1) return "reward-zero";
     return "reward-mid";
@@ -198,7 +199,9 @@
       <div class="summary-stats">
         <div class="summary-stat">
           <span class="stat-key">Reward</span>
-          <span class="stat-value {rewardClass(reward)}">{(reward * 100).toFixed(0)}%</span>
+          <span class="stat-value {rewardClass(reward)}">
+            {reward === null ? "—" : `${(reward * 100).toFixed(0)}%`}
+          </span>
         </div>
         <div class="summary-stat">
           <span class="stat-key">Time</span>
@@ -504,6 +507,7 @@
   .reward-perfect { color: #61AAF2; }
   .reward-zero { color: #BF4D43; }
   .reward-mid { color: #D4A27F; }
+  .reward-unavailable { color: var(--text-3); }
 
   /* Tool call spinner shown while waiting for result */
   .tool-spinner {
