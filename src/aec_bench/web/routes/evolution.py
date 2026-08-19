@@ -7,6 +7,7 @@ from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Request, status
 
+from aec_bench.contracts.evolution import WorkspaceCandidateVersion
 from aec_bench.evolution.report_data import (
     FileTreeNode,
     build_evolution_report_data,
@@ -15,7 +16,7 @@ from aec_bench.evolution.report_data import (
     get_file_diff_at_candidate,
     get_file_tree_at_candidate,
 )
-from aec_bench.evolution.workspace import Workspace
+from aec_bench.evolution.workspace import Workspace, WorkspaceError
 from aec_bench.web.dependencies import get_web_settings
 from aec_bench.web.schemas import (
     EvolutionCycleSchema,
@@ -71,6 +72,14 @@ def _resolve_workspace(request: Request, workspace: str) -> Path:
         )
 
     return ws_path
+
+
+def _require_candidate(workspace_path: Path, candidate_id: str) -> WorkspaceCandidateVersion:
+    """Return one exact candidate ID or report a missing Web resource."""
+    try:
+        return Workspace(workspace_path).require_candidate(candidate_id)
+    except WorkspaceError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
 
 
 def _dict_to_tree_node(raw: FileTreeNode) -> FileTreeNodeSchema:
@@ -222,13 +231,9 @@ def evolution_tree(
     workspace: str,
     candidate_id: str,
 ) -> EvolutionTreeResponse:
-    """Return the file tree for a stable candidate ID.
-
-    A human label is accepted as a transitional request value, but responses
-    always return the stable candidate ID.
-    """
+    """Return the file tree for a stable candidate ID."""
     ws_path = _resolve_workspace(request, workspace)
-    candidate = Workspace(ws_path).resolve_candidate(candidate_id)
+    candidate = _require_candidate(ws_path, candidate_id)
     raw_tree = get_file_tree_at_candidate(ws_path, candidate_id)
 
     # raw_tree is the root node dict — return its children as the top-level list
@@ -252,6 +257,7 @@ def evolution_file(
 ) -> EvolutionFileResponse:
     """Return file content for a stable candidate ID."""
     ws_path = _resolve_workspace(request, workspace)
+    _require_candidate(ws_path, candidate_id)
     data = get_file_at_candidate(ws_path, candidate_id, path)
     return EvolutionFileResponse(
         path=data["path"],
@@ -308,6 +314,7 @@ def evolution_diff(
 ) -> EvolutionDiffResponse:
     """Return the unified diff between one candidate and its parent."""
     ws_path = _resolve_workspace(request, workspace)
+    _require_candidate(ws_path, candidate_id)
     data = get_file_diff_at_candidate(ws_path, candidate_id, path)
     return EvolutionDiffResponse(
         path=data["path"],

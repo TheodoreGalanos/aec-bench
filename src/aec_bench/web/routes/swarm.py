@@ -11,6 +11,7 @@ from typing import Any, cast
 from fastapi import APIRouter, HTTPException, Request, status
 from fastapi.responses import StreamingResponse
 
+from aec_bench.contracts.evolution import ConsolidationReport, SwarmEvent, SwarmNote
 from aec_bench.web.dependencies import get_web_settings
 from aec_bench.web.schemas import (
     SwarmAgentSchema,
@@ -56,35 +57,20 @@ def _read_summary(swarm_dir: Path) -> dict[str, Any] | None:
     return cast(dict[str, Any], json.loads(summary_path.read_text(encoding="utf-8")))
 
 
-def _read_events(swarm_dir: Path, after: int = -1) -> list[dict[str, Any]]:
+def _read_events(swarm_dir: Path, after: int = -1) -> list[SwarmEvent]:
     """Read events from events.jsonl, filtering by sequence_number > after."""
     events_path = swarm_dir / "events.jsonl"
     if not events_path.exists():
         return []
-    events: list[dict[str, Any]] = []
+    events: list[SwarmEvent] = []
     for line in events_path.read_text(encoding="utf-8").splitlines():
         line = line.strip()
         if not line:
             continue
-        event = json.loads(line)
-        if event.get("sequence_number", 0) > after:
+        event = SwarmEvent.model_validate_json(line)
+        if event.sequence_number > after:
             events.append(event)
     return events
-
-
-def _public_event(event: dict[str, Any]) -> dict[str, Any]:
-    """Map a retained event to the public v2 vocabulary."""
-    payload = dict(event.get("payload", {}))
-    legacy_candidate = payload.pop("version", None)
-    if legacy_candidate is not None and "candidate_id" not in payload:
-        payload["candidate_id"] = legacy_candidate
-    return {
-        "event_type": event.get("event_type", ""),
-        "occurred_at": event.get("timestamp", ""),
-        "agent_id": event.get("agent_id"),
-        "payload": payload,
-        "sequence_number": event.get("sequence_number", 0),
-    }
 
 
 def _resolve_swarm_dir(request: Request, workspace: str) -> tuple[Path, Path]:
@@ -174,8 +160,8 @@ def swarm_runs(request: Request) -> SwarmRunsResponse:
         if not run_id:
             events = _read_events(swarm_dir)
             for event in events:
-                if event.get("event_type") == "swarm_started":
-                    run_id = event.get("payload", {}).get("run_id", "")
+                if event.event_type == "swarm_started":
+                    run_id = event.payload.get("run_id", "")
                     break
 
         # Strategy from workspace evolution.yaml
@@ -224,8 +210,8 @@ def swarm_state(request: Request, workspace: str) -> SwarmStateResponse:
     total_evals_summary = summary.get("total_evals", 0) if summary else 0
 
     for event in events_raw:
-        if event.get("event_type") == "swarm_started":
-            payload = event.get("payload", {})
+        if event.event_type == "swarm_started":
+            payload = event.payload
             if not run_id:
                 run_id = payload.get("run_id", "")
             max_cost_usd = payload.get("max_cost_usd", max_cost_usd)
@@ -237,9 +223,9 @@ def swarm_state(request: Request, workspace: str) -> SwarmStateResponse:
     eval_count_total = 0
 
     for event in events_raw:
-        event_type = event.get("event_type", "")
-        agent_id = event.get("agent_id")
-        payload = event.get("payload", {})
+        event_type = event.event_type
+        agent_id = event.agent_id
+        payload = event.payload
 
         if event_type == "agent_spawned" and agent_id:
             agents[agent_id] = {
@@ -331,17 +317,9 @@ def swarm_state(request: Request, workspace: str) -> SwarmStateResponse:
     notes_path = swarm_dir / "notes.json"
     if notes_path.exists():
         raw_notes = json.loads(notes_path.read_text(encoding="utf-8"))
-        for n in raw_notes if isinstance(raw_notes, list) else []:
-            notes.append(
-                SwarmNoteSchema(
-                    note_id=n.get("note_id", ""),
-                    agent_id=n.get("agent_id", ""),
-                    authored_at=n.get("timestamp", ""),
-                    title=n.get("title", ""),
-                    content=n.get("content", ""),
-                    tags=n.get("tags", []),
-                )
-            )
+        for raw_note in raw_notes if isinstance(raw_notes, list) else []:
+            note = SwarmNote.model_validate(raw_note)
+            notes.append(SwarmNoteSchema.model_validate(note.model_dump(mode="json")))
 
     # Load consolidation reports
     consolidation_reports: list[SwarmConsolidationSchema] = []
@@ -351,21 +329,11 @@ def swarm_state(request: Request, workspace: str) -> SwarmStateResponse:
         # May be a single dict or a list
         if isinstance(raw_cons, dict):
             raw_cons = [raw_cons]
-        for c in raw_cons:
-            consolidation_reports.append(
-                SwarmConsolidationSchema(
-                    report_id=c.get("report_id", ""),
-                    created_at=c.get("timestamp", ""),
-                    archive_coverage_pct=c.get("archive_coverage_pct", 0.0),
-                    total_evals=c.get("total_evals", 0),
-                    cross_agent_patterns=c.get("cross_agent_patterns", []),
-                    strategy_recommendations=c.get("strategy_recommendations", []),
-                    counterintuitive_findings=c.get("counterintuitive_findings", []),
-                    lineage_insights=c.get("lineage_insights", ""),
-                )
-            )
+        for raw_report in raw_cons:
+            report = ConsolidationReport.model_validate(raw_report)
+            consolidation_reports.append(SwarmConsolidationSchema.model_validate(report.model_dump(mode="json")))
 
-    event_schemas = [SwarmEventSchema.model_validate(_public_event(event)) for event in events_raw]
+    event_schemas = [SwarmEventSchema.model_validate(event.model_dump(mode="json")) for event in events_raw]
 
     effective_evals = total_evals_summary or eval_count_total
 
@@ -396,7 +364,7 @@ def swarm_events(
     _ws_path, swarm_dir = _resolve_swarm_dir(request, workspace)
 
     raw_events = _read_events(swarm_dir, after=after)
-    events = [SwarmEventSchema.model_validate(_public_event(event)) for event in raw_events]
+    events = [SwarmEventSchema.model_validate(event.model_dump(mode="json")) for event in raw_events]
     return SwarmEventsResponse(events=events)
 
 
@@ -422,9 +390,9 @@ async def swarm_events_stream(request: Request, workspace: str) -> StreamingResp
         while True:
             raw_events = _read_events(swarm_dir, after=last_seq)
             for event in raw_events:
-                seq = event.get("sequence_number", 0)
+                seq = event.sequence_number
                 last_seq = max(last_seq, seq)
-                yield f"data: {json.dumps(_public_event(event))}\n\n"
+                yield f"data: {event.model_dump_json()}\n\n"
             # Check if still active
             current_summary = _read_summary(swarm_dir)
             if current_summary and current_summary.get("elapsed_seconds") is not None:

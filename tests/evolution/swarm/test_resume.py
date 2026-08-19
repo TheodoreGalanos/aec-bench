@@ -16,7 +16,7 @@ def _emit_events(path: Path, events: list[tuple[SwarmEventType, str | None, dict
         writer.emit(
             SwarmEvent(
                 event_type=event_type,
-                timestamp="2026-04-07T10:00:00Z",
+                occurred_at="2026-04-07T10:00:00Z",
                 agent_id=agent_id,
                 payload=payload,
             )

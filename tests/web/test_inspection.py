@@ -132,7 +132,9 @@ def test_openapi_documents_v2_vocabulary_and_label_authority(tmp_path: Path) -> 
     assert document["info"]["version"] == "2.0"
     assert "version" not in schemas["EvolutionTreeResponse"]["properties"]
     assert "candidate_id" in schemas["EvolutionTreeResponse"]["properties"]
-    assert "legacy version" in schemas["EvolutionTreeResponse"]["properties"]["candidate_id"]["description"]
+    candidate_description = schemas["EvolutionTreeResponse"]["properties"]["candidate_id"]["description"]
+    assert candidate_description == "Stable candidate identity."
+    assert "legacy" not in candidate_description
     assert "display" in schemas["EvolutionTreeResponse"]["properties"]["label"]["description"]
     assert "sha256" not in schemas["TrialEvidenceItemSchema"]["properties"]
 

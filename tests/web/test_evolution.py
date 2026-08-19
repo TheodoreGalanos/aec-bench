@@ -5,6 +5,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
 import yaml
 from fastapi.testclient import TestClient
 
@@ -138,7 +139,7 @@ def test_workspace_detail(tmp_path: Path) -> None:
 
 
 def test_workspace_tree(tmp_path: Path) -> None:
-    """GET /api/evolution/{workspace}/tree/{version} returns file tree."""
+    """GET /api/evolution/{workspace}/tree/{candidate_id} returns a file tree."""
     workspaces_root, _ws = _make_evolution_workspace(tmp_path)
     client = _make_client(tmp_path, workspaces_root=workspaces_root)
 
@@ -161,7 +162,7 @@ def test_workspace_tree(tmp_path: Path) -> None:
 
 
 def test_workspace_file(tmp_path: Path) -> None:
-    """GET /api/evolution/{workspace}/file/{version}/{path} returns file content."""
+    """GET /api/evolution/{workspace}/file/{candidate_id}/{path} returns file content."""
     workspaces_root, _ws = _make_evolution_workspace(tmp_path)
     client = _make_client(tmp_path, workspaces_root=workspaces_root)
 
@@ -180,7 +181,7 @@ def test_workspace_file(tmp_path: Path) -> None:
 
 
 def test_workspace_diff(tmp_path: Path) -> None:
-    """GET /api/evolution/{workspace}/diff/{version}/{path} returns unified diff."""
+    """GET /api/evolution/{workspace}/diff/{candidate_id}/{path} returns a unified diff."""
     workspaces_root, _ws = _make_evolution_workspace(tmp_path)
     client = _make_client(tmp_path, workspaces_root=workspaces_root)
 
@@ -192,6 +193,25 @@ def test_workspace_diff(tmp_path: Path) -> None:
     assert data["from_candidate_id"] == "baseline"
     # The diff should show old and new lines
     assert len(data["diff"]) > 0
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/api/evolution/my-workspace/tree/evo-1",
+        "/api/evolution/my-workspace/file/evo-1/prompts/system.md",
+        "/api/evolution/my-workspace/diff/evo-1/prompts/system.md",
+    ],
+)
+def test_candidate_inspection_rejects_human_labels(tmp_path: Path, path: str) -> None:
+    """Evolution inspection paths require an exact candidate ID."""
+    workspaces_root, _ws = _make_evolution_workspace(tmp_path)
+    client = _make_client(tmp_path, workspaces_root=workspaces_root)
+
+    response = client.get(path)
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "candidate 'evo-1' does not exist"
 
 
 # ── 404 handling ─────────────────────────────────────────────────────────

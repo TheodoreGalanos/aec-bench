@@ -37,7 +37,7 @@ def _make_note(
     return SwarmNote(
         note_id=note_id or f"note-{id(title)}",
         agent_id=agent_id,
-        timestamp="2026-04-08T10:00:00Z",
+        authored_at="2026-04-08T10:00:00Z",
         bd_region=bd_region,
         title=title,
         content=content,

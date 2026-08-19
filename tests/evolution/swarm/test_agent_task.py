@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from typing import Any
 
 import pytest
@@ -55,6 +56,33 @@ async def test_agent_loop_tracks_best_score() -> None:
     ctx = AgentContext(agent_id="agent-1", evolver=evolver, on_eval_complete=on_eval)
     state = await run_agent_loop(ctx)
     assert state.best_score == pytest.approx(0.8)
+
+
+@pytest.mark.asyncio
+async def test_agent_loop_records_last_evaluation_time() -> None:
+    completed_at = datetime(2026, 4, 7, 10, 0, tzinfo=UTC)
+
+    @dataclass
+    class CycleRecord:
+        timestamp: datetime
+
+    @dataclass
+    class TimedResult:
+        score: float
+        cycle_record: CycleRecord
+
+    class TimedEvolver:
+        async def step(self) -> TimedResult:
+            return TimedResult(score=0.5, cycle_record=CycleRecord(timestamp=completed_at))
+
+    async def stop_after_evaluation(result: Any) -> bool:
+        return False
+
+    state = await run_agent_loop(
+        AgentContext(agent_id="agent-1", evolver=TimedEvolver(), on_eval_complete=stop_after_evaluation)
+    )
+
+    assert state.last_evaluated_at == completed_at.isoformat()
 
 
 @pytest.mark.asyncio

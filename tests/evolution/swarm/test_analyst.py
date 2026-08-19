@@ -50,7 +50,7 @@ def _make_record(version: str, agent: str = "agent-0", **overrides) -> LineageRe
         cross_agent=False,
         mutation_type="evolution_cycle",
         surprise=False,
-        timestamp="2026-04-08T10:00:00Z",
+        recorded_at="2026-04-08T10:00:00Z",
     )
     defaults.update(overrides)
     return LineageRecord(**defaults)

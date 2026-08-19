@@ -24,7 +24,7 @@ def _make_record(
         cross_agent=cross_agent,
         cross_agent_source=cross_source,
         mutation_type=mutation,
-        timestamp="2026-04-07T00:00:00Z",
+        recorded_at="2026-04-07T00:00:00Z",
     )
 
 
