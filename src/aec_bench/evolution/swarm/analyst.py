@@ -38,7 +38,7 @@ def produce_consolidation_report(
 
     return ConsolidationReport(
         report_id=report_id,
-        timestamp=datetime.now(tz=UTC).isoformat(),
+        created_at=datetime.now(tz=UTC).isoformat(),
         archive_coverage_pct=coverage_pct,
         total_evals=total_evals,
         cross_agent_patterns=cross_agent_patterns,

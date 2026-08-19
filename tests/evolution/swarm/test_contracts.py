@@ -72,7 +72,7 @@ def _make_agent_state(**overrides) -> SwarmAgentState:
         best_score=0.0,
         budget_consumed_usd=0.0,
         restart_count=0,
-        last_eval_timestamp="2026-04-07T10:00:00Z",
+        last_evaluated_at="2026-04-07T10:00:00Z",
         consecutive_non_improving=0,
         worktree_branch="coral/agent-1",
     )
@@ -114,7 +114,7 @@ def test_agent_state_rejects_extra_fields() -> None:
 def test_swarm_event_creation() -> None:
     event = SwarmEvent(
         event_type=SwarmEventType.EVAL_COMPLETED,
-        timestamp="2026-04-07T10:01:30Z",
+        occurred_at="2026-04-07T10:01:30Z",
         agent_id="agent-1",
         payload={"score": 0.72, "cycle": 1},
         sequence_number=2,
@@ -126,12 +126,23 @@ def test_swarm_event_creation() -> None:
 def test_swarm_event_null_agent_for_global_events() -> None:
     event = SwarmEvent(
         event_type=SwarmEventType.SWARM_STARTED,
-        timestamp="2026-04-07T10:00:00Z",
+        occurred_at="2026-04-07T10:00:00Z",
         agent_id=None,
         payload={"run_id": "sw-abc"},
         sequence_number=0,
     )
     assert event.agent_id is None
+
+
+def test_swarm_event_rejects_generic_timestamp() -> None:
+    with pytest.raises(ValidationError):
+        SwarmEvent.model_validate(
+            {
+                "event_type": "swarm_started",
+                "timestamp": "2026-04-07T10:00:00Z",
+                "payload": {"run_id": "sw-abc"},
+            }
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -149,7 +160,7 @@ def test_lineage_record_creation() -> None:
         mutation_type="skill_add",
         bd_region_targeted=None,
         surprise=False,
-        timestamp="2026-04-07T10:05:00Z",
+        recorded_at="2026-04-07T10:05:00Z",
     )
     assert record.entry_candidate_id == "evo-sw-1"
     assert record.cross_agent is False
@@ -165,7 +176,7 @@ def test_lineage_record_cross_agent() -> None:
         mutation_type="crossover",
         bd_region_targeted=None,
         surprise=True,
-        timestamp="2026-04-07T10:15:00Z",
+        recorded_at="2026-04-07T10:15:00Z",
     )
     assert record.cross_agent is True
     assert record.cross_agent_source == "agent-1"

@@ -41,7 +41,7 @@ async def run_agent_loop(ctx: AgentContext) -> SwarmAgentState:
     eval_count = 0
     best_score = 0.0
     status = AgentStatus.ACTIVE
-    last_timestamp = ""
+    last_evaluated_at = ""
 
     while True:
         try:
@@ -59,7 +59,9 @@ async def run_agent_loop(ctx: AgentContext) -> SwarmAgentState:
         score = getattr(result, "score", 0.0)
         if score > best_score:
             best_score = score
-        last_timestamp = getattr(result, "timestamp", "")
+        cycle_record = getattr(result, "cycle_record", None)
+        evaluated_at = getattr(cycle_record, "timestamp", None)
+        last_evaluated_at = evaluated_at.isoformat() if evaluated_at is not None else ""
 
         should_continue = await ctx.on_eval_complete(result)
         if not should_continue:
@@ -72,6 +74,6 @@ async def run_agent_loop(ctx: AgentContext) -> SwarmAgentState:
         status=status,
         eval_count=eval_count,
         best_score=best_score,
-        last_eval_timestamp=last_timestamp,
+        last_evaluated_at=last_evaluated_at,
         worktree_branch=ctx.worktree_branch or f"coral/{ctx.agent_id}",
     )

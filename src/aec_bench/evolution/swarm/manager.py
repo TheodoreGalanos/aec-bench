@@ -163,7 +163,7 @@ class SwarmManager:
         """Emit a SwarmEvent to the JSONL log."""
         event = SwarmEvent(
             event_type=event_type,
-            timestamp=_now_iso(),
+            occurred_at=_now_iso(),
             agent_id=agent_id,
             payload=payload or {},
         )
@@ -288,7 +288,7 @@ class SwarmManager:
                     mutation_type="evolution_cycle",
                     bd_region_targeted=bd,
                     surprise=is_surprise,
-                    timestamp=_now_iso(),
+                    recorded_at=_now_iso(),
                 )
                 self._lineage.record(lineage_record)
 
@@ -327,7 +327,7 @@ class SwarmManager:
                 note = SwarmNote(
                     note_id=f"{agent_id}-reflect-{agent_evals}",
                     agent_id=agent_id,
-                    timestamp=_now_iso(),
+                    authored_at=_now_iso(),
                     bd_region=bd,
                     title=f"Eval {agent_evals} reflection",
                     content=note_content,

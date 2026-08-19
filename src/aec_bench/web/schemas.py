@@ -463,7 +463,7 @@ class EvolutionCycleSchema(BaseModel):
     """Data for one evolution cycle."""
 
     cycle: int
-    candidate_id: str = Field(description="Stable candidate identity; replaces the legacy version field.")
+    candidate_id: str = Field(description="Stable candidate identity.")
     label: str | None = Field(
         default=None,
         description="Human display and discovery label; it is not an authoritative identity.",
@@ -512,7 +512,7 @@ class FileTreeNodeSchema(BaseModel):
 class EvolutionTreeResponse(BaseModel):
     """Response for the file tree at a specific candidate."""
 
-    candidate_id: str = Field(description="Stable candidate identity; replaces the legacy version field.")
+    candidate_id: str = Field(description="Stable candidate identity.")
     label: str | None = Field(
         default=None,
         description="Human display and discovery label; it is not an authoritative identity.",
@@ -525,7 +525,7 @@ class EvolutionFileResponse(BaseModel):
     """Response for file content at a specific candidate."""
 
     path: str
-    candidate_id: str = Field(description="Stable candidate identity; replaces the legacy version field.")
+    candidate_id: str = Field(description="Stable candidate identity.")
     label: str | None = Field(
         default=None,
         description="Human display and discovery label; it is not an authoritative identity.",

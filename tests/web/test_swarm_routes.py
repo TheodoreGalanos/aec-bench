@@ -23,23 +23,23 @@ def swarm_workspace(tmp_path: Path):
     events = [
         {
             "event_type": "swarm_started",
-            "timestamp": "2026-04-08T02:19:14Z",
+            "occurred_at": "2026-04-08T02:19:14Z",
             "agent_id": None,
             "payload": {"run_id": "abc123", "agent_count": 2, "max_cost_usd": 5.0},
             "sequence_number": 0,
         },
         {
             "event_type": "agent_spawned",
-            "timestamp": "2026-04-08T02:19:15Z",
+            "occurred_at": "2026-04-08T02:19:15Z",
             "agent_id": "agent-0",
             "payload": {"model": "sonnet-4.6"},
             "sequence_number": 1,
         },
         {
             "event_type": "eval_completed",
-            "timestamp": "2026-04-08T02:20:00Z",
+            "occurred_at": "2026-04-08T02:20:00Z",
             "agent_id": "agent-0",
-            "payload": {"score": 0.87, "version": "candidate:1"},
+            "payload": {"score": 0.87, "candidate_id": "candidate:1"},
             "sequence_number": 2,
         },
     ]
@@ -57,6 +57,30 @@ def swarm_workspace(tmp_path: Path):
         "agent_count": 2,
     }
     (swarm_dir / "summary.json").write_text(json.dumps(summary))
+    (swarm_dir / "notes.json").write_text(
+        json.dumps(
+            [
+                {
+                    "note_id": "note-1",
+                    "agent_id": "agent-0",
+                    "authored_at": "2026-04-08T02:21:00Z",
+                    "title": "Useful pattern",
+                    "content": "The verifier feedback improved the candidate.",
+                    "tags": ["reflect"],
+                }
+            ]
+        )
+    )
+    (swarm_dir / "consolidation.json").write_text(
+        json.dumps(
+            {
+                "report_id": "consolidation-1",
+                "created_at": "2026-04-08T02:22:00Z",
+                "archive_coverage_pct": 25.0,
+                "total_evals": 1,
+            }
+        )
+    )
 
     return tmp_path
 
@@ -89,6 +113,8 @@ def test_swarm_state_snapshot(client):
     assert "budget" in data
     assert "centroids" in data
     assert "events" in data
+    assert data["notes"][0]["authored_at"] == "2026-04-08T02:21:00Z"
+    assert data["consolidation_reports"][0]["created_at"] == "2026-04-08T02:22:00Z"
 
 
 def test_swarm_events_with_after(client):

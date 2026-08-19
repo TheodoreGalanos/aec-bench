@@ -694,10 +694,9 @@ full evidence digests stay behind explicit integrity inspection.
 
 The technical evidence, content, integrity, and provider-qualification routes
 require internal access. Current API schemas use the v2 vocabulary. Evolution
-request paths can accept an old human candidate label during transition, but
-responses and generated links always return and use `candidate_id`. There is
-no current response field named generic `version`, `timestamp`,
-`content_hash`, or `content_sha256` in these Web contracts.
+inspection paths require an exact `candidate_id`; human labels are for display
+and discovery only. There is no current response field named generic `version`,
+`timestamp`, `content_hash`, or `content_sha256` in these Web contracts.
 
 ## Visibility classification
 

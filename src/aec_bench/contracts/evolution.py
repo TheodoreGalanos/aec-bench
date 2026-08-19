@@ -447,7 +447,7 @@ class SwarmAgentState(StrictModel):
     best_score: float = 0.0
     budget_consumed_usd: float = 0.0
     restart_count: int = 0
-    last_eval_timestamp: str = ""
+    last_evaluated_at: str = ""
     consecutive_non_improving: int = 0
     worktree_branch: NonEmptyStr = ""
 
@@ -456,7 +456,7 @@ class SwarmEvent(StrictModel):
     """A single event in the swarm event log (JSONL serialisation)."""
 
     event_type: SwarmEventType
-    timestamp: NonEmptyStr
+    occurred_at: NonEmptyStr
     agent_id: str | None = None
     payload: dict[str, Any] = Field(default_factory=dict)
     sequence_number: int = 0
@@ -475,7 +475,7 @@ class LineageRecord(StrictModel):
     mutation_type: NonEmptyStr
     bd_region_targeted: BehaviourDescriptor | None = None
     surprise: bool = False
-    timestamp: NonEmptyStr
+    recorded_at: NonEmptyStr
 
 
 class LineageNarrative(StrictModel):
@@ -495,7 +495,7 @@ class ConsolidationReport(StrictModel):
     model_config = ConfigDict(frozen=True)
 
     report_id: NonEmptyStr
-    timestamp: NonEmptyStr
+    created_at: NonEmptyStr
     archive_coverage_pct: float = 0.0
     total_evals: int = 0
     cross_agent_patterns: list[str] = Field(default_factory=list)
@@ -511,7 +511,7 @@ class SwarmNote(StrictModel):
 
     note_id: NonEmptyStr
     agent_id: NonEmptyStr
-    timestamp: NonEmptyStr
+    authored_at: NonEmptyStr
     bd_region: BehaviourDescriptor | None = None
     title: NonEmptyStr
     content: NonEmptyStr

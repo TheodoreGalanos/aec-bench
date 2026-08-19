@@ -371,10 +371,10 @@ def _read_model(workspace_path: Path) -> str:
 
 def _candidate_and_parent(
     workspace_path: Path,
-    candidate_or_label: str,
+    candidate_id: str,
 ) -> tuple[WorkspaceCandidateVersion, WorkspaceCandidateVersion | None]:
     workspace = Workspace(workspace_path)
-    candidate = workspace.resolve_candidate(candidate_or_label)
+    candidate = workspace.require_candidate(candidate_id)
     parent = (
         workspace.require_candidate(candidate.parent_candidate_id)
         if candidate.parent_candidate_id is not None
@@ -506,7 +506,7 @@ def _propagate_status(node: FileTreeNode) -> None:
 
 
 def get_file_tree_at_candidate(workspace_path: Path, candidate_id: str) -> FileTreeNode:
-    """Return the file tree for a candidate ID or accepted legacy label.
+    """Return the file tree for an exact candidate ID.
 
     Uses git ls-tree to list files and git diff to determine change status.
     For evo-0 all files are marked as "added".
@@ -536,10 +536,7 @@ def get_file_at_candidate(
     candidate_id: str,
     filepath: str,
 ) -> CandidateFile:
-    """Return file content for a candidate ID or accepted legacy label.
-
-    Returns canonical candidate identity even when the request used a label.
-    """
+    """Return file content for an exact candidate ID."""
     candidate, _ = _candidate_and_parent(workspace_path, candidate_id)
     content = _git(workspace_path, "show", f"{candidate.source_revision}:{filepath}")
     ext = Path(filepath).suffix.lower()

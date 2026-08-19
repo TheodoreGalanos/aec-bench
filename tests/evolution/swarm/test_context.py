@@ -335,7 +335,7 @@ def test_notes_included_when_present() -> None:
         SwarmNote(
             note_id="n1",
             agent_id="agent-2",
-            timestamp="2026-04-08T10:00:00Z",
+            authored_at="2026-04-08T10:00:00Z",
             title="Insight from agent-2",
             content="Verification skills help in this region.",
             tags=("reflect",),
@@ -367,7 +367,7 @@ def test_notes_excluded_from_own_agent() -> None:
         SwarmNote(
             note_id="n1",
             agent_id="agent-1",
-            timestamp="2026-04-08T10:00:00Z",
+            authored_at="2026-04-08T10:00:00Z",
             title="My own note",
             content="This is mine.",
         )
