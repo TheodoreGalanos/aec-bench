@@ -51,6 +51,7 @@ def test_dependency_groups_have_one_named_feature_owner() -> None:
         "pyyaml",
         "rich",
         "typer",
+        "zstandard",
     }
     extras = {name: _requirement_names(requirements) for name, requirements in project["optional-dependencies"].items()}
     assert extras == {
