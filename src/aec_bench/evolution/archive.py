@@ -167,7 +167,7 @@ class QDArchive:
 
         Returns an empty list for an empty archive. Returns a single point at the
         origin when only one entry exists (PCA is undefined for a single sample).
-        Each dict contains: x, y, reward, version, token_cost, verification_depth,
+        Each dict contains: x, y, reward, candidate_id, token_cost, verification_depth,
         tool_density, exploration_ratio, deliberation_ratio.
         """
         if self.size == 0:
@@ -184,7 +184,7 @@ class QDArchive:
                 "x": x,
                 "y": y,
                 "reward": e.bd.reward,
-                "version": e.snapshot.candidate_id,
+                "candidate_id": e.snapshot.candidate_id,
                 "token_cost": e.bd.token_cost,
                 "verification_depth": e.bd.verification_depth,
                 "tool_density": e.bd.tool_density,
@@ -258,7 +258,7 @@ class QDArchive:
                         "y": float(proj[i, 1]),
                         "occupied": True,
                         "reward": entry.bd.reward,
-                        "version": candidate_id,
+                        "candidate_id": candidate_id,
                         "agent_id": agent_map.get(candidate_id),
                         "token_cost": entry.bd.token_cost,
                         "verification_depth": entry.bd.verification_depth,

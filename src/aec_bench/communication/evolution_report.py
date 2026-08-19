@@ -99,7 +99,9 @@ def _render_svg_chart(data: EvolutionReportData) -> str:
         return ""
 
     scores = [0.0] + [c.score for c in data.cycles]
-    labels = ["evo-0"] + [c.version_tag for c in data.cycles]
+    labels = [data.baseline_label or data.baseline_candidate_id or "Baseline"] + [
+        c.label or c.candidate_id for c in data.cycles
+    ]
     n = len(scores)
     if n < 2:
         return ""
@@ -173,7 +175,8 @@ def _render_cycle_card(cycle: CycleReport) -> str:
 <article class="cycle-card" id="cycle-{cycle.cycle}">
   <div class="cycle-header">
     <h3>Cycle {cycle.cycle}</h3>
-    <span class="version-tag">{_esc(cycle.version_tag)}</span>
+    <span class="candidate-tag">{_esc(cycle.label or cycle.candidate_id)}</span>
+    <span class="source-revision">{_esc(cycle.source_revision[:12])}</span>
     <span class="score-badge">{cycle.score:.1%}</span>
   </div>
   {prompt_html}
@@ -336,7 +339,8 @@ _CSS = """\
     display: flex; align-items: center; gap: 12px; margin-bottom: 16px;
   }
   .cycle-header h3 { font-size: 1.15em; }
-  .version-tag {
+  .candidate-tag,
+  .source-revision {
     font-family: 'JetBrains Mono', monospace; font-size: 0.8em;
     background: var(--bg); padding: 2px 8px; border-radius: 4px;
     color: var(--text-muted);

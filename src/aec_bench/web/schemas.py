@@ -1,9 +1,9 @@
 # ABOUTME: Pydantic response models for all JSON API endpoints in the web layer.
 # ABOUTME: These schemas define the serializable contract between the backend API and frontend.
 
-from typing import Any
+from typing import Any, Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 # ---------------------------------------------------------------------------
 # Dashboard
@@ -49,7 +49,7 @@ class TrialRowSchema(BaseModel):
     evidence_status: str
     compute_backend: str = ""
     discipline: str
-    reward: float
+    reward: float | None
     reward_class: str
     annotation_icon: str
     annotation_verdict: str
@@ -90,7 +90,7 @@ class AnnotationSchema(BaseModel):
 
     verdict: str
     notes: str
-    timestamp: str
+    reviewed_at: str
 
 
 class ViewerMetaResponse(BaseModel):
@@ -99,11 +99,23 @@ class ViewerMetaResponse(BaseModel):
     trial_id: str
     experiment_id: str
     dataset_id: str | None = None
+    dataset_label: str | None = Field(
+        default=None,
+        description="Human display and discovery label; it is not an authoritative identity.",
+    )
+    dataset_reference_kind: str | None = None
+    dataset_source_display: str | None = Field(
+        default=None,
+        description="Short display value only; it must not be used for lookup or equality.",
+    )
     task_id: str
     model: str
     adapter: str
+    execution_status: str
+    evaluation_status: str
+    evidence_status: str
     compute_backend: str = ""
-    reward: float
+    reward: float | None
     reward_class: str
     steps: list[StepSummarySchema]
     is_rlm_trial: bool
@@ -451,7 +463,12 @@ class EvolutionCycleSchema(BaseModel):
     """Data for one evolution cycle."""
 
     cycle: int
-    version_tag: str
+    candidate_id: str = Field(description="Stable candidate identity; replaces the legacy version field.")
+    label: str | None = Field(
+        default=None,
+        description="Human display and discovery label; it is not an authoritative identity.",
+    )
+    source_revision: str = Field(description="Exact Git source revision for this candidate.")
     score: float
     prompt_diff: str
     skills_added: list[str]
@@ -471,6 +488,14 @@ class EvolutionDataResponse(BaseModel):
     converged: bool
     best_score: float
     final_score: float
+    baseline_candidate_id: str | None = Field(description="Stable identity for the registered baseline candidate.")
+    baseline_label: str | None = Field(
+        default=None,
+        description="Human display and discovery label; it is not an authoritative identity.",
+    )
+    baseline_source_revision: str | None = Field(
+        description="Exact Git source revision for the registered baseline candidate."
+    )
     cycles: list[EvolutionCycleSchema]
 
 
@@ -485,27 +510,37 @@ class FileTreeNodeSchema(BaseModel):
 
 
 class EvolutionTreeResponse(BaseModel):
-    """Response for the file tree at a specific version."""
+    """Response for the file tree at a specific candidate."""
 
-    version: str
+    candidate_id: str = Field(description="Stable candidate identity; replaces the legacy version field.")
+    label: str | None = Field(
+        default=None,
+        description="Human display and discovery label; it is not an authoritative identity.",
+    )
+    source_revision: str = Field(description="Exact Git source revision for this candidate.")
     tree: list[FileTreeNodeSchema]
 
 
 class EvolutionFileResponse(BaseModel):
-    """Response for file content at a specific version."""
+    """Response for file content at a specific candidate."""
 
     path: str
-    version: str
+    candidate_id: str = Field(description="Stable candidate identity; replaces the legacy version field.")
+    label: str | None = Field(
+        default=None,
+        description="Human display and discovery label; it is not an authoritative identity.",
+    )
+    source_revision: str = Field(description="Exact Git source revision for this candidate.")
     content: str
     language: str
 
 
 class EvolutionDiffResponse(BaseModel):
-    """Response for the unified diff of a file between versions."""
+    """Response for the unified diff of a file between candidates."""
 
     path: str
-    from_version: str
-    to_version: str
+    from_candidate_id: str | None
+    to_candidate_id: str
     diff: str
 
 
@@ -612,7 +647,7 @@ class SwarmCentroidSchema(BaseModel):
     y: float
     occupied: bool
     reward: float | None = None
-    version: str | None = None
+    candidate_id: str | None = None
     agent_id: str | None = None
     token_cost: float | None = None
     verification_depth: float | None = None
@@ -625,7 +660,7 @@ class SwarmEventSchema(BaseModel):
     """A single swarm event from the event log."""
 
     event_type: str
-    timestamp: str
+    occurred_at: str
     agent_id: str | None = None
     payload: dict[str, Any] = {}
     sequence_number: int = 0
@@ -634,8 +669,8 @@ class SwarmEventSchema(BaseModel):
 class SwarmLineageNodeSchema(BaseModel):
     """One node in the swarm lineage graph."""
 
-    version: str
-    parent_version: str | None = None
+    candidate_id: str
+    parent_candidate_id: str | None = None
     agent_id: str
     cross_agent: bool = False
     surprise: bool = False
@@ -649,7 +684,7 @@ class SwarmNoteSchema(BaseModel):
 
     note_id: str = ""
     agent_id: str
-    timestamp: str
+    authored_at: str
     title: str
     content: str
     tags: list[str] = []
@@ -659,7 +694,7 @@ class SwarmConsolidationSchema(BaseModel):
     """Analyst consolidation report across swarm agents."""
 
     report_id: str
-    timestamp: str
+    created_at: str
     archive_coverage_pct: float = 0.0
     total_evals: int = 0
     cross_agent_patterns: list[str] = []
@@ -710,3 +745,89 @@ class SwarmEventsResponse(BaseModel):
     """Response for the swarm events stream endpoint."""
 
     events: list[SwarmEventSchema]
+
+
+# ---------------------------------------------------------------------------
+# Technical inspection
+# ---------------------------------------------------------------------------
+
+
+class ArtifactIntegrityResponse(BaseModel):
+    """Result of an explicit read-time artifact integrity check."""
+
+    artifact_id: str
+    algorithm: Literal["sha256"] = "sha256"
+    sha256: str = Field(description="Full SHA-256 digest of the verified exact bytes.")
+    size_bytes: int
+    verified: bool
+    verified_at: str
+
+
+class TrialEvidenceItemSchema(BaseModel):
+    """One authority-owned evidence reference without its full digest."""
+
+    authority_kind: str
+    protocol: str
+    artifact_id: str
+    media_type: str
+    size_bytes: int
+    integrity_url: str
+    content_url: str
+
+
+class TrialEvidenceResponse(BaseModel):
+    """Technical evidence references for one trial."""
+
+    experiment_id: str
+    trial_id: str
+    evidence_status: str
+    evidence: list[TrialEvidenceItemSchema]
+
+
+class QualificationEvidenceSchema(BaseModel):
+    """One retained qualification evidence reference without its full digest."""
+
+    artifact_id: str
+    media_type: str
+    size_bytes: int
+    integrity_url: str
+    content_url: str
+
+
+class ProviderAdapterIdentitySchema(BaseModel):
+    """Exact provider adapter package and source identity."""
+
+    adapter_id: str
+    package_version: str
+    source_revision: str | None = None
+    source_snapshot: QualificationEvidenceSchema | None = None
+
+
+class RuntimeIdentitySchema(BaseModel):
+    """Exact installed distribution and runtime-reported identity."""
+
+    distribution_name: str
+    distribution_version: str
+    reported_version: str | None = None
+
+
+class ProviderQualificationCellSchema(BaseModel):
+    """One provider feature claim for one exact package and runtime set."""
+
+    provider_route: str
+    feature: str
+    adapter_identity: ProviderAdapterIdentitySchema
+    sdk: RuntimeIdentitySchema
+    runtime: RuntimeIdentitySchema
+    evidence_level: str
+    qualification_status: str
+    qualified_at: str | None
+    reason: str | None
+    evidence: list[QualificationEvidenceSchema]
+
+
+class ProviderQualificationResponse(BaseModel):
+    """Current provider qualification cells in the public v2 vocabulary."""
+
+    matrix_id: str
+    cells: list[ProviderQualificationCellSchema]

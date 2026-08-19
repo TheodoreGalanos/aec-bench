@@ -72,6 +72,21 @@ def _read_events(swarm_dir: Path, after: int = -1) -> list[dict[str, Any]]:
     return events
 
 
+def _public_event(event: dict[str, Any]) -> dict[str, Any]:
+    """Map a retained event to the public v2 vocabulary."""
+    payload = dict(event.get("payload", {}))
+    legacy_candidate = payload.pop("version", None)
+    if legacy_candidate is not None and "candidate_id" not in payload:
+        payload["candidate_id"] = legacy_candidate
+    return {
+        "event_type": event.get("event_type", ""),
+        "occurred_at": event.get("timestamp", ""),
+        "agent_id": event.get("agent_id"),
+        "payload": payload,
+        "sequence_number": event.get("sequence_number", 0),
+    }
+
+
 def _resolve_swarm_dir(request: Request, workspace: str) -> tuple[Path, Path]:
     """Validate workspace name and return (workspace_path, swarm_dir).
 
@@ -100,7 +115,7 @@ def _resolve_swarm_dir(request: Request, workspace: str) -> tuple[Path, Path]:
 
 
 def _build_agent_map_from_lineage(lineage_path: Path) -> dict[str, str]:
-    """Build a version → agent_id mapping from lineage.json.
+    """Build a candidate ID to agent ID mapping from lineage.json.
 
     Handles both list-of-records and {"records": [...]} formats.
     """
@@ -117,10 +132,10 @@ def _build_agent_map_from_lineage(lineage_path: Path) -> dict[str, str]:
     for item in records:
         # Each item may be {"record": {...}, "narrative": {...}} or a flat record
         record = item.get("record", item)
-        version = record.get("entry_candidate_id")
+        candidate_id = record.get("entry_candidate_id")
         agent_id = record.get("source_agent_id")
-        if version and agent_id:
-            agent_map[version] = agent_id
+        if candidate_id and agent_id:
+            agent_map[candidate_id] = agent_id
     return agent_map
 
 
@@ -301,8 +316,8 @@ def swarm_state(request: Request, workspace: str) -> SwarmStateResponse:
             narrative = item.get("narrative", {}) if isinstance(item, dict) else {}
             lineage.append(
                 SwarmLineageNodeSchema(
-                    version=record.get("entry_candidate_id", ""),
-                    parent_version=record.get("parent_candidate_id"),
+                    candidate_id=record.get("entry_candidate_id", ""),
+                    parent_candidate_id=record.get("parent_candidate_id"),
                     agent_id=record.get("source_agent_id", ""),
                     cross_agent=record.get("cross_agent", False),
                     surprise=record.get("surprise", False),
@@ -321,7 +336,7 @@ def swarm_state(request: Request, workspace: str) -> SwarmStateResponse:
                 SwarmNoteSchema(
                     note_id=n.get("note_id", ""),
                     agent_id=n.get("agent_id", ""),
-                    timestamp=n.get("timestamp", ""),
+                    authored_at=n.get("timestamp", ""),
                     title=n.get("title", ""),
                     content=n.get("content", ""),
                     tags=n.get("tags", []),
@@ -340,7 +355,7 @@ def swarm_state(request: Request, workspace: str) -> SwarmStateResponse:
             consolidation_reports.append(
                 SwarmConsolidationSchema(
                     report_id=c.get("report_id", ""),
-                    timestamp=c.get("timestamp", ""),
+                    created_at=c.get("timestamp", ""),
                     archive_coverage_pct=c.get("archive_coverage_pct", 0.0),
                     total_evals=c.get("total_evals", 0),
                     cross_agent_patterns=c.get("cross_agent_patterns", []),
@@ -350,16 +365,7 @@ def swarm_state(request: Request, workspace: str) -> SwarmStateResponse:
                 )
             )
 
-    event_schemas = [
-        SwarmEventSchema(
-            event_type=e.get("event_type", ""),
-            timestamp=e.get("timestamp", ""),
-            agent_id=e.get("agent_id"),
-            payload=e.get("payload", {}),
-            sequence_number=e.get("sequence_number", 0),
-        )
-        for e in events_raw
-    ]
+    event_schemas = [SwarmEventSchema.model_validate(_public_event(event)) for event in events_raw]
 
     effective_evals = total_evals_summary or eval_count_total
 
@@ -390,16 +396,7 @@ def swarm_events(
     _ws_path, swarm_dir = _resolve_swarm_dir(request, workspace)
 
     raw_events = _read_events(swarm_dir, after=after)
-    events = [
-        SwarmEventSchema(
-            event_type=e.get("event_type", ""),
-            timestamp=e.get("timestamp", ""),
-            agent_id=e.get("agent_id"),
-            payload=e.get("payload", {}),
-            sequence_number=e.get("sequence_number", 0),
-        )
-        for e in raw_events
-    ]
+    events = [SwarmEventSchema.model_validate(_public_event(event)) for event in raw_events]
     return SwarmEventsResponse(events=events)
 
 
@@ -427,7 +424,7 @@ async def swarm_events_stream(request: Request, workspace: str) -> StreamingResp
             for event in raw_events:
                 seq = event.get("sequence_number", 0)
                 last_seq = max(last_seq, seq)
-                yield f"data: {json.dumps(event)}\n\n"
+                yield f"data: {json.dumps(_public_event(event))}\n\n"
             # Check if still active
             current_summary = _read_summary(swarm_dir)
             if current_summary and current_summary.get("elapsed_seconds") is not None:

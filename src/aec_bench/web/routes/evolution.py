@@ -11,10 +11,11 @@ from aec_bench.evolution.report_data import (
     FileTreeNode,
     build_evolution_report_data,
     discover_workspaces,
-    get_file_at_version,
-    get_file_diff_at_version,
-    get_file_tree_at_version,
+    get_file_at_candidate,
+    get_file_diff_at_candidate,
+    get_file_tree_at_candidate,
 )
+from aec_bench.evolution.workspace import Workspace
 from aec_bench.web.dependencies import get_web_settings
 from aec_bench.web.schemas import (
     EvolutionCycleSchema,
@@ -124,7 +125,9 @@ def evolution_detail(
     cycles = [
         EvolutionCycleSchema(
             cycle=c.cycle,
-            version_tag=c.version_tag,
+            candidate_id=c.candidate_id,
+            label=c.label,
+            source_revision=c.source_revision,
             score=c.score,
             prompt_diff=c.prompt_diff,
             skills_added=c.skills_added,
@@ -144,6 +147,9 @@ def evolution_detail(
         converged=report.converged,
         best_score=report.best_score,
         final_score=report.final_score,
+        baseline_candidate_id=report.baseline_candidate_id,
+        baseline_label=report.baseline_label,
+        baseline_source_revision=report.baseline_source_revision,
         cycles=cycles,
     )
 
@@ -210,36 +216,48 @@ def evolution_graveyard(request: Request, workspace: str) -> GraveyardResponse:
     return GraveyardResponse(entries=entries, total=graveyard.size)
 
 
-@router.get("/api/evolution/{workspace}/tree/{version}")
+@router.get("/api/evolution/{workspace}/tree/{candidate_id}")
 def evolution_tree(
     request: Request,
     workspace: str,
-    version: str,
+    candidate_id: str,
 ) -> EvolutionTreeResponse:
-    """Return the file tree at a specific evo-N version."""
+    """Return the file tree for a stable candidate ID.
+
+    A human label is accepted as a transitional request value, but responses
+    always return the stable candidate ID.
+    """
     ws_path = _resolve_workspace(request, workspace)
-    raw_tree = get_file_tree_at_version(ws_path, version)
+    candidate = Workspace(ws_path).resolve_candidate(candidate_id)
+    raw_tree = get_file_tree_at_candidate(ws_path, candidate_id)
 
     # raw_tree is the root node dict — return its children as the top-level list
     children = raw_tree.get("children", [])
     tree_nodes = [_dict_to_tree_node(c) for c in children]
 
-    return EvolutionTreeResponse(version=version, tree=tree_nodes)
+    return EvolutionTreeResponse(
+        candidate_id=candidate.candidate_id,
+        label=candidate.label,
+        source_revision=candidate.source_revision,
+        tree=tree_nodes,
+    )
 
 
-@router.get("/api/evolution/{workspace}/file/{version}/{path:path}")
+@router.get("/api/evolution/{workspace}/file/{candidate_id}/{path:path}")
 def evolution_file(
     request: Request,
     workspace: str,
-    version: str,
+    candidate_id: str,
     path: str,
 ) -> EvolutionFileResponse:
-    """Return file content at a specific version."""
+    """Return file content for a stable candidate ID."""
     ws_path = _resolve_workspace(request, workspace)
-    data = get_file_at_version(ws_path, version, path)
+    data = get_file_at_candidate(ws_path, candidate_id, path)
     return EvolutionFileResponse(
         path=data["path"],
-        version=data["version"],
+        candidate_id=data["candidate_id"],
+        label=data["label"],
+        source_revision=data["source_revision"],
         content=data["content"],
         language=data["language"],
     )
@@ -281,19 +299,19 @@ async def get_archive(
     }
 
 
-@router.get("/api/evolution/{workspace}/diff/{version}/{path:path}")
+@router.get("/api/evolution/{workspace}/diff/{candidate_id}/{path:path}")
 def evolution_diff(
     request: Request,
     workspace: str,
-    version: str,
+    candidate_id: str,
     path: str,
 ) -> EvolutionDiffResponse:
-    """Return the unified diff of a file between the previous version and this one."""
+    """Return the unified diff between one candidate and its parent."""
     ws_path = _resolve_workspace(request, workspace)
-    data = get_file_diff_at_version(ws_path, version, path)
+    data = get_file_diff_at_candidate(ws_path, candidate_id, path)
     return EvolutionDiffResponse(
         path=data["path"],
-        from_version=data["from_version"] or "",
-        to_version=data["to_version"],
+        from_candidate_id=data["from_candidate_id"],
+        to_candidate_id=data["to_candidate_id"],
         diff=data["diff"],
     )

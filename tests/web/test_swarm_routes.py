@@ -39,7 +39,7 @@ def swarm_workspace(tmp_path: Path):
             "event_type": "eval_completed",
             "timestamp": "2026-04-08T02:20:00Z",
             "agent_id": "agent-0",
-            "payload": {"score": 0.87, "version": "evo-1"},
+            "payload": {"score": 0.87, "version": "candidate:1"},
             "sequence_number": 2,
         },
     ]
@@ -96,6 +96,10 @@ def test_swarm_events_with_after(client):
     assert resp.status_code == 200
     data = resp.json()
     assert all(e["sequence_number"] > 0 for e in data["events"])
+    completed = next(event for event in data["events"] if event["event_type"] == "eval_completed")
+    assert completed["occurred_at"] == "2026-04-08T02:20:00Z"
+    assert completed["payload"]["candidate_id"] == "candidate:1"
+    assert "version" not in completed["payload"]
 
 
 def test_swarm_state_404_unknown_workspace(client):

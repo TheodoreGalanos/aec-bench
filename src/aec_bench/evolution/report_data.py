@@ -20,7 +20,9 @@ class CycleReport:
     """Data for one evolution cycle's changes."""
 
     cycle: int
-    version_tag: str
+    candidate_id: str
+    label: str | None
+    source_revision: str
     score: float
     prompt_diff: str
     skills_added: list[str] = field(default_factory=list)
@@ -40,6 +42,9 @@ class EvolutionReportData:
     converged: bool
     best_score: float
     final_score: float
+    baseline_candidate_id: str | None
+    baseline_label: str | None
+    baseline_source_revision: str | None
     cycles: list[CycleReport] = field(default_factory=list)
 
 
@@ -62,21 +67,23 @@ class FileTreeNode(TypedDict):
     children: NotRequired[list[FileTreeNode]]
 
 
-class VersionedFile(TypedDict):
-    """File content read from a tagged workspace version."""
+class CandidateFile(TypedDict):
+    """File content read from one registered workspace candidate."""
 
     path: str
-    version: str
+    candidate_id: str
+    label: str | None
+    source_revision: str
     content: str
     language: str
 
 
-class VersionedFileDiff(TypedDict):
-    """File diff between adjacent tagged workspace versions."""
+class CandidateFileDiff(TypedDict):
+    """File diff between adjacent registered workspace candidates."""
 
     path: str
-    from_version: str | None
-    to_version: str
+    from_candidate_id: str | None
+    to_candidate_id: str
     diff: str
 
 
@@ -102,6 +109,10 @@ def build_evolution_report_data(
     model = _read_model(workspace_path)
     all_candidates = Workspace(workspace_path).list_candidates()
     candidates = _report_candidates(all_candidates, run_id)
+    baseline = next((candidate for candidate in all_candidates if candidate.candidate_id == "baseline"), None)
+    baseline_candidate_id = baseline.candidate_id if baseline is not None else None
+    baseline_label = baseline.label if baseline is not None else None
+    baseline_source_revision = baseline.source_revision if baseline is not None else None
 
     if len(candidates) < 2:
         return EvolutionReportData(
@@ -111,6 +122,9 @@ def build_evolution_report_data(
             converged=False,
             best_score=0.0,
             final_score=0.0,
+            baseline_candidate_id=baseline_candidate_id,
+            baseline_label=baseline_label,
+            baseline_source_revision=baseline_source_revision,
         )
 
     cycles: list[CycleReport] = []
@@ -138,7 +152,9 @@ def build_evolution_report_data(
         cycles.append(
             CycleReport(
                 cycle=cycle_num,
-                version_tag=candidate.label or candidate.candidate_id,
+                candidate_id=candidate.candidate_id,
+                label=candidate.label,
+                source_revision=candidate.source_revision,
                 score=score,
                 prompt_diff=prompt_diff,
                 skills_added=added,
@@ -156,6 +172,9 @@ def build_evolution_report_data(
         converged=False,
         best_score=max(scores) if scores else 0.0,
         final_score=scores[-1] if scores else 0.0,
+        baseline_candidate_id=baseline_candidate_id,
+        baseline_label=baseline_label,
+        baseline_source_revision=baseline_source_revision,
         cycles=cycles,
     )
 
@@ -402,9 +421,9 @@ _EXTENSION_LANGUAGE = {
 }
 
 
-def _get_changed_files(cwd: Path, from_version: str, to_version: str) -> dict[str, str]:
-    """Return {filepath: status_char} for changes between two versions."""
-    raw = _git(cwd, "diff", "--name-status", f"{from_version}..{to_version}")
+def _get_changed_files(cwd: Path, from_revision: str, to_revision: str) -> dict[str, str]:
+    """Return {filepath: status_char} for changes between two source revisions."""
+    raw = _git(cwd, "diff", "--name-status", f"{from_revision}..{to_revision}")
     result: dict[str, str] = {}
     for line in raw.splitlines():
         parts = line.split("\t", 1)
@@ -413,13 +432,13 @@ def _get_changed_files(cwd: Path, from_version: str, to_version: str) -> dict[st
     return result
 
 
-def _get_changed_files_initial(cwd: Path, version: str) -> dict[str, str]:
+def _get_changed_files_initial(cwd: Path, source_revision: str) -> dict[str, str]:
     """Return {filepath: 'A'} for all files at an initial commit (evo-0).
 
     Uses --root to diff against the empty tree so the root commit's files
     appear as additions.
     """
-    raw = _git(cwd, "diff-tree", "-r", "--root", "--no-commit-id", "--name-status", version)
+    raw = _git(cwd, "diff-tree", "-r", "--root", "--no-commit-id", "--name-status", source_revision)
     result: dict[str, str] = {}
     for line in raw.splitlines():
         parts = line.split("\t", 1)
@@ -486,13 +505,13 @@ def _propagate_status(node: FileTreeNode) -> None:
     node["status"] = _aggregate_status(node.get("children", []))
 
 
-def get_file_tree_at_version(workspace_path: Path, version: str) -> FileTreeNode:
-    """Return the file tree at a specific evo-N version.
+def get_file_tree_at_candidate(workspace_path: Path, candidate_id: str) -> FileTreeNode:
+    """Return the file tree for a candidate ID or accepted legacy label.
 
     Uses git ls-tree to list files and git diff to determine change status.
     For evo-0 all files are marked as "added".
     """
-    candidate, parent = _candidate_and_parent(workspace_path, version)
+    candidate, parent = _candidate_and_parent(workspace_path, candidate_id)
     raw_files = _git(workspace_path, "ls-tree", "-r", "--name-only", candidate.source_revision)
     if not raw_files:
         return {
@@ -512,39 +531,40 @@ def get_file_tree_at_version(workspace_path: Path, version: str) -> FileTreeNode
     return _build_tree_nodes(files, changed_files)
 
 
-def get_file_at_version(
+def get_file_at_candidate(
     workspace_path: Path,
-    version: str,
+    candidate_id: str,
     filepath: str,
-) -> VersionedFile:
-    """Return file content at a specific version.
+) -> CandidateFile:
+    """Return file content for a candidate ID or accepted legacy label.
 
-    Returns dict with path, version, content, and language (detected from
-    file extension).
+    Returns canonical candidate identity even when the request used a label.
     """
-    candidate, _ = _candidate_and_parent(workspace_path, version)
+    candidate, _ = _candidate_and_parent(workspace_path, candidate_id)
     content = _git(workspace_path, "show", f"{candidate.source_revision}:{filepath}")
     ext = Path(filepath).suffix.lower()
     language = _EXTENSION_LANGUAGE.get(ext, "text")
     return {
         "path": filepath,
-        "version": version,
+        "candidate_id": candidate.candidate_id,
+        "label": candidate.label,
+        "source_revision": candidate.source_revision,
         "content": content,
         "language": language,
     }
 
 
-def get_file_diff_at_version(
+def get_file_diff_at_candidate(
     workspace_path: Path,
-    version: str,
+    candidate_id: str,
     filepath: str,
-) -> VersionedFileDiff:
-    """Return unified diff for a file between the previous version and this one.
+) -> CandidateFileDiff:
+    """Return a unified diff between one candidate and its parent.
 
     For evo-0, the entire file content is shown as additions (diff against
     empty tree).
     """
-    candidate, parent = _candidate_and_parent(workspace_path, version)
+    candidate, parent = _candidate_and_parent(workspace_path, candidate_id)
     if parent is None:
         # evo-0: show everything as additions
         content = _git(workspace_path, "show", f"{candidate.source_revision}:{filepath}")
@@ -561,8 +581,8 @@ def get_file_diff_at_version(
 
     return {
         "path": filepath,
-        "from_version": (parent.label or parent.candidate_id) if parent is not None else None,
-        "to_version": version,
+        "from_candidate_id": parent.candidate_id if parent is not None else None,
+        "to_candidate_id": candidate.candidate_id,
         "diff": diff_text,
     }
 

@@ -14,8 +14,11 @@ const evolutionMock = vi.hoisted(() =>
     converged: false,
     best_score: 0.9,
     final_score: 0.9,
+    baseline_candidate_id: "baseline",
+    baseline_label: "evo-0",
+    baseline_source_revision: "a".repeat(40),
     cycles: [
-      { cycle: 1, version_tag: "evo-1", score: 0.5, prompt_diff: "", skills_added: [], skills_modified: [], skills_removed: [], skill_diffs: {}, evolver_reasoning: "" },
+      { cycle: 1, candidate_id: "run:1", label: "evo-1", source_revision: "b".repeat(40), score: 0.5, prompt_diff: "", skills_added: [], skills_modified: [], skills_removed: [], skill_diffs: {}, evolver_reasoning: "" },
     ],
   })),
 );
@@ -31,7 +34,7 @@ const workspacesMock = vi.hoisted(() =>
 );
 const graveyardMock = vi.hoisted(() => vi.fn(async () => ({ entries: [], total: 0 })));
 const archiveMock = vi.hoisted(() => vi.fn(async () => ({ summary: { size: 0, coverage: 0, n_centroids: 0, best_reward: 0, mean_reward: 0, disciplines: [], task_ids: [], bd_dimensions: [] }, points_2d: [] })));
-const treeMock = vi.hoisted(() => vi.fn(async () => ({ version: "evo-1", tree: [] })));
+const treeMock = vi.hoisted(() => vi.fn(async () => ({ candidate_id: "run:1", label: "evo-1", source_revision: "b".repeat(40), tree: [] })));
 
 vi.mock("../lib/api", () => ({
   fetchEvolutionData: evolutionMock,

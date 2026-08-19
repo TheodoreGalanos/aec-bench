@@ -6,7 +6,7 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
-from aec_bench.contracts.dataset import RepositoryDatasetRef, dataset_reference_key
+from aec_bench.contracts.dataset import RepositoryDatasetRef
 from aec_bench.contracts.trajectory import TrajectoryEntry
 from aec_bench.evaluation.trajectory_reader import (
     detect_adapter_type,
@@ -343,6 +343,26 @@ def test_viewer_api_meta_returns_json(tmp_path: Path) -> None:
     assert data["compute_backend"] == "morph"
 
 
+def test_viewer_api_meta_does_not_report_missing_evaluation_as_zero(tmp_path: Path) -> None:
+    ledger = tmp_path / "ledger"
+    ledger.mkdir()
+    tasks = tmp_path / "tasks"
+    tasks.mkdir()
+    write_trial_record(
+        ledger_root=ledger,
+        record=make_trial_record(experiment_id="exp-pending", trial_id="trial-pending", evaluation=None),
+    )
+    client = TestClient(create_app(ledger_root=ledger, tasks_root=tasks))
+
+    response = client.get("/api/viewer/exp-pending/trial-pending")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["evaluation_status"] == "not_requested"
+    assert data["reward"] is None
+    assert data["reward_class"] == "reward-unavailable"
+
+
 def test_viewer_api_meta_404_for_missing_trial(tmp_path: Path) -> None:
     """API meta endpoint returns 404 when trial does not exist."""
     ledger = tmp_path / "ledger"
@@ -526,7 +546,11 @@ def test_viewer_meta_includes_dataset_id_when_present(tmp_path: Path) -> None:
     resp = client.get("/api/viewer/exp-a/trial-001")
     assert resp.status_code == 200
     data = resp.json()
-    assert data["dataset_id"] == dataset_reference_key(dataset)
+    assert data["dataset_id"] == "voltage-drop-core"
+    assert data["dataset_label"] is None
+    assert data["dataset_reference_kind"] == "repository"
+    assert data["dataset_source_display"] == "a" * 12
+    assert "a" * 40 not in resp.text
 
 
 def test_viewer_meta_dataset_id_is_null_for_inline_trial(tmp_path: Path) -> None:

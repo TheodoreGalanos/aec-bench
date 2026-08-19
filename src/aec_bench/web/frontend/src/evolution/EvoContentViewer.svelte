@@ -55,15 +55,21 @@
       <p>Select a file from the tree to view its contents.</p>
     </div>
   {:else}
-    <!-- Header with file path, version badge, and mode toggle -->
+    <!-- Header with file path, candidate identity, and mode toggle -->
     <div class="viewer-header">
       <div class="header-left">
         {#if fileContent}
           <span class="file-path">{fileContent.path}</span>
-          <span class="version-badge">{fileContent.version}</span>
+          <span class="candidate-badge">{fileContent.label ?? fileContent.candidate_id}</span>
+          <button
+            class="revision-button"
+            title={fileContent.source_revision}
+            aria-label="Copy full source revision"
+            onclick={() => navigator.clipboard.writeText(fileContent.source_revision)}
+          >{fileContent.source_revision.slice(0, 12)}</button>
         {:else if fileDiff}
           <span class="file-path">{fileDiff.path}</span>
-          <span class="version-badge">{fileDiff.from_version} → {fileDiff.to_version}</span>
+          <span class="candidate-badge">{fileDiff.from_candidate_id ?? "start"} → {fileDiff.to_candidate_id}</span>
         {/if}
       </div>
 
@@ -171,7 +177,8 @@
     text-overflow: ellipsis;
   }
 
-  .version-badge {
+  .candidate-badge,
+  .revision-button {
     font-family: var(--font-mono);
     font-size: 0.7rem;
     font-weight: 600;
@@ -181,6 +188,11 @@
     color: var(--forest);
     white-space: nowrap;
     flex-shrink: 0;
+  }
+
+  .revision-button {
+    border: 0;
+    cursor: copy;
   }
 
   .mode-toggle {

@@ -1,5 +1,5 @@
 <!-- ABOUTME: Scrollable feed of recent swarm events with agent colour coding. -->
-<!-- ABOUTME: Shows timestamp, event type, and agent attribution for the last 30 events. Auto-scrolls to bottom on new events. -->
+<!-- ABOUTME: Shows event time, type, and agent attribution for the last 30 events. Auto-scrolls to bottom. -->
 <script lang="ts">
   import type { SwarmEvent } from "../lib/types";
 
@@ -28,12 +28,12 @@
     }
   });
 
-  function formatTime(timestamp: string): string {
+  function formatTime(occurredAt: string): string {
     try {
-      const d = new Date(timestamp);
+      const d = new Date(occurredAt);
       return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
     } catch {
-      return timestamp;
+      return occurredAt;
     }
   }
 
@@ -46,10 +46,10 @@
     switch (event.event_type) {
       case "eval_completed": {
         const score = (p.score ?? 0).toFixed(2);
-        const version = p.version ?? "";
+        const candidateId = p.candidate_id ?? "";
         const cost = p.cost_usd != null ? ` ${formatCost(p.cost_usd)}` : "";
         const inserted = p.inserted ? " ★" : "";
-        return `${score} → ${version}${cost}${inserted}`;
+        return `${score} → ${candidateId}${cost}${inserted}`;
       }
       case "agent_spawned":
         return `Spawned${p.model ? ": " + p.model.split(".").pop() : ""}`;
@@ -82,7 +82,7 @@
 <div class="event-feed" bind:this={feedEl}>
   {#each reversed as event, i (event.sequence_number + "-" + i)}
     <div class="event-row">
-      <span class="event-time">{formatTime(event.timestamp)}</span>
+      <span class="event-time">{formatTime(event.occurred_at)}</span>
       {#if event.agent_id}
         <span
           class="agent-dot"

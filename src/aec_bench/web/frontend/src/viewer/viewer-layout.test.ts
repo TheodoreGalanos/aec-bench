@@ -200,7 +200,7 @@ describe("StatsBar", () => {
     render(StatsBar, {
       props: {
         ...baseProps,
-        annotation: { verdict: "pass", notes: "", timestamp: "2025-01-01" },
+        annotation: { verdict: "pass", notes: "", reviewed_at: "2025-01-01" },
       },
     });
     expect(screen.getByTestId("annotation-verdict")).toHaveTextContent("pass");

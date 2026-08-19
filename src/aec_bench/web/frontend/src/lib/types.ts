@@ -37,7 +37,7 @@ export interface TrialRow {
   evidence_status: string;
   compute_backend?: string;
   discipline: string;
-  reward: number;
+  reward: number | null;
   reward_class: string;
   annotation_icon: string;
   annotation_verdict: string;
@@ -71,18 +71,24 @@ export interface StepSummary {
 export interface Annotation {
   verdict: string;
   notes: string;
-  timestamp: string;
+  reviewed_at: string;
 }
 
 export interface ViewerMeta {
   trial_id: string;
   experiment_id: string;
-  dataset_id?: string | null;          // Exact transitional dataset-reference key; null for inline runs.
+  dataset_id?: string | null;
+  dataset_label?: string | null;
+  dataset_reference_kind?: string | null;
+  dataset_source_display?: string | null;
   task_id: string;
   model: string;
   adapter: string;
+  execution_status: string;
+  evaluation_status: string;
+  evidence_status: string;
   compute_backend?: string;
-  reward: number;
+  reward: number | null;
   reward_class: string;
   steps: StepSummary[];
   is_rlm_trial: boolean;
@@ -353,7 +359,9 @@ export interface EvolutionWorkspacesData {
 
 export interface EvolutionCycle {
   cycle: number;
-  version_tag: string;
+  candidate_id: string;
+  label: string | null;
+  source_revision: string;
   score: number;
   prompt_diff: string;
   skills_added: string[];
@@ -371,6 +379,9 @@ export interface EvolutionData {
   best_score: number;
   final_score: number;
   strategy: string;
+  baseline_candidate_id: string | null;
+  baseline_label: string | null;
+  baseline_source_revision: string | null;
   cycles: EvolutionCycle[];
 }
 
@@ -408,7 +419,7 @@ export interface ArchivePoint {
   x: number;
   y: number;
   reward: number;
-  version: string;
+  candidate_id: string;
   token_cost: number;
   verification_depth: number;
   tool_density: number;
@@ -446,21 +457,25 @@ export interface FileTreeNode {
 }
 
 export interface EvolutionTreeData {
-  version: string;
+  candidate_id: string;
+  label: string | null;
+  source_revision: string;
   tree: FileTreeNode[];
 }
 
 export interface FileContent {
   path: string;
-  version: string;
+  candidate_id: string;
+  label: string | null;
+  source_revision: string;
   content: string;
   language: string;
 }
 
 export interface FileDiff {
   path: string;
-  from_version: string;
-  to_version: string;
+  from_candidate_id: string | null;
+  to_candidate_id: string;
   diff: string;
 }
 
@@ -491,7 +506,7 @@ export interface SwarmCentroid {
   y: number;
   occupied: boolean;
   reward?: number;
-  version?: string;
+  candidate_id?: string;
   agent_id?: string;
   token_cost?: number;
   verification_depth?: number;
@@ -502,15 +517,15 @@ export interface SwarmCentroid {
 
 export interface SwarmEvent {
   event_type: string;
-  timestamp: string;
+  occurred_at: string;
   agent_id: string | null;
   payload: Record<string, any>;
   sequence_number: number;
 }
 
 export interface SwarmLineageNode {
-  version: string;
-  parent_version: string | null;
+  candidate_id: string;
+  parent_candidate_id: string | null;
   agent_id: string;
   cross_agent: boolean;
   surprise: boolean;
@@ -522,7 +537,7 @@ export interface SwarmLineageNode {
 export interface SwarmNote {
   note_id: string;
   agent_id: string;
-  timestamp: string;
+  authored_at: string;
   title: string;
   content: string;
   tags: string[];
@@ -530,7 +545,7 @@ export interface SwarmNote {
 
 export interface SwarmConsolidation {
   report_id: string;
-  timestamp: string;
+  created_at: string;
   archive_coverage_pct: number;
   total_evals: number;
   cross_agent_patterns: string[];

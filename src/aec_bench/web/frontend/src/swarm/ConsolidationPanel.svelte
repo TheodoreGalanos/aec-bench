@@ -33,7 +33,7 @@
       <div class="report-card">
         <button class="report-header" onclick={() => toggle(report.report_id)}>
           <div class="report-meta">
-            <span class="report-time">{formatTime(report.timestamp)}</span>
+            <span class="report-time">{formatTime(report.created_at)}</span>
             <span class="report-coverage">{report.archive_coverage_pct.toFixed(0)}% coverage</span>
             <span class="report-evals">{report.total_evals} evals</span>
           </div>

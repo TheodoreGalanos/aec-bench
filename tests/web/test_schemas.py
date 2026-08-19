@@ -94,6 +94,9 @@ def test_trial_row_schema_round_trips() -> None:
         task_id="electrical/voltage-drop/instance-01",
         model="gpt-4",
         adapter="openai",
+        execution_status="completed",
+        evaluation_status="completed",
+        evidence_status="verified",
         discipline="electrical",
         reward=1.0,
         reward_class="reward-perfect",
@@ -112,6 +115,9 @@ def test_triage_response_with_one_trial() -> None:
         task_id="electrical/voltage-drop/instance-01",
         model="gpt-4",
         adapter="openai",
+        execution_status="completed",
+        evaluation_status="completed",
+        evidence_status="not_required",
         discipline="electrical",
         reward=0.5,
         reward_class="reward-mid",
@@ -183,6 +189,9 @@ def test_viewer_meta_response_minimal() -> None:
         task_id="electrical/voltage-drop/instance-01",
         model="claude",
         adapter="anthropic",
+        execution_status="completed",
+        evaluation_status="completed",
+        evidence_status="not_required",
         reward=0.8,
         reward_class="reward-good",
         steps=[step],
@@ -207,13 +216,16 @@ def test_viewer_meta_response_minimal() -> None:
 
 
 def test_viewer_meta_response_with_annotation() -> None:
-    ann = AnnotationSchema(verdict="pass", notes="Looks good", timestamp="2024-01-01T00:00:00")
+    ann = AnnotationSchema(verdict="pass", notes="Looks good", reviewed_at="2024-01-01T00:00:00")
     response = ViewerMetaResponse(
         trial_id="trial-002",
         experiment_id="exp-01",
         task_id="civil/pavement/instance-01",
         model="gpt-4",
         adapter="openai",
+        execution_status="completed",
+        evaluation_status="completed",
+        evidence_status="verified",
         reward=1.0,
         reward_class="reward-perfect",
         steps=[],

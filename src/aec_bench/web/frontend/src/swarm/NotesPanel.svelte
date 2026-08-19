@@ -63,7 +63,7 @@
           {#each note.tags as tag}
             <span class="tag-pill">{tag}</span>
           {/each}
-          <span class="note-time">{formatTime(note.timestamp)}</span>
+          <span class="note-time">{formatTime(note.authored_at)}</span>
         </div>
       {/each}
     </div>

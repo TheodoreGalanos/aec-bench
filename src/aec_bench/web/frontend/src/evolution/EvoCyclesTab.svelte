@@ -51,6 +51,7 @@
     {activeCycle}
     workspaceName={data.workspace_name}
     model={data.model}
+    baselineLabel={data.baseline_label ?? data.baseline_candidate_id ?? "Not initialised"}
     onselect={onCycleChange}
   />
 
@@ -72,7 +73,7 @@
         />
       {:else}
         <div class="tree-empty">
-          <p>No files found for this version.</p>
+          <p>No files found for this candidate.</p>
         </div>
       {/if}
     </div>

@@ -16,8 +16,11 @@ const data: EvolutionData = {
   converged: false,
   best_score: 0.9,
   final_score: 0.9,
+  baseline_candidate_id: "baseline",
+  baseline_label: "evo-0",
+  baseline_source_revision: "a".repeat(40),
   cycles: [
-    { cycle: 1, version_tag: "evo-1", score: 0.5, prompt_diff: "", skills_added: [], skills_modified: [], skills_removed: [], skill_diffs: {}, evolver_reasoning: "" },
+    { cycle: 1, candidate_id: "run:1", label: "evo-1", source_revision: "b".repeat(40), score: 0.5, prompt_diff: "", skills_added: [], skills_modified: [], skills_removed: [], skill_diffs: {}, evolver_reasoning: "" },
   ],
 };
 
