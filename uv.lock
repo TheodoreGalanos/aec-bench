@@ -22,6 +22,7 @@ dependencies = [
     { name = "pyyaml" },
     { name = "rich" },
     { name = "typer" },
+    { name = "zstandard" },
 ]
 
 [package.optional-dependencies]
@@ -106,6 +107,7 @@ requires-dist = [
     { name = "typer", specifier = ">=0.25.1,<0.26" },
     { name = "uvicorn", marker = "extra == 'webui'", specifier = ">=0.38,<1" },
     { name = "verifiers", marker = "extra == 'prime'", specifier = ">=0.1.14,<0.2" },
+    { name = "zstandard", specifier = ">=0.25,<0.26" },
 ]
 provides-extras = ["execution", "deepseek-harness", "morph", "local-agents", "prime", "webui", "tui", "evolution", "prime-agent"]
 

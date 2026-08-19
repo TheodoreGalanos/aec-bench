@@ -9,8 +9,8 @@ from typing import Any
 
 import yaml
 
-from aec_bench.contracts.run_bundle import TaskSnapshotRef
 from aec_bench.contracts.task_genome import TaskGenomeManifest, TaskGenomeReview
+from aec_bench.contracts.task_snapshot import TaskSnapshotRef
 from aec_bench.tasks.genome import resolve_task_genome_evidence
 
 Reviewer = Callable[[str], TaskGenomeManifest | dict[str, Any]]

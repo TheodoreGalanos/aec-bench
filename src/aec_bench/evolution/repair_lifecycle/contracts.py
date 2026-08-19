@@ -22,7 +22,7 @@ from aec_bench.contracts.harness_instance import (
     HarnessInstanceRef,
 )
 from aec_bench.contracts.harness_kernel import FrozenStrictModel, validate_sha256
-from aec_bench.contracts.run_bundle import RunBundle
+from aec_bench.contracts.run_bundle import RunPlan
 from aec_bench.contracts.validators import NonEmptyStr
 from aec_bench.evolution.paired_repair import (
     PairedRepairAttempt,
@@ -144,20 +144,20 @@ class RepairCandidate(FrozenStrictModel):
 
 
 class CompiledRepairCandidate(FrozenStrictModel):
-    """Candidate resolved into exact Hx, px, and executable RunBundle contracts."""
+    """Candidate resolved into exact Hx, px, and executable RunPlan contracts."""
 
     candidate_id: NonEmptyStr
     parent_candidate_id: NonEmptyStr | None
     iteration: NonNegativeInt
     harness: CompiledHarnessInstance
     program: CompiledExecutionProgram
-    bundle: RunBundle
+    bundle: RunPlan
 
     @model_validator(mode="after")
     def validate_compiled_identity(self) -> Self:
         if self.bundle.harness != self.harness:
             raise ValueError("compiled repair bundle must contain the candidate harness")
-        if self.bundle.program != self.program:
+        if self.bundle.execution_program != self.program:
             raise ValueError("compiled repair bundle must contain the candidate program")
         return self
 

@@ -8,8 +8,10 @@ import hashlib
 import pytest
 from pydantic import ValidationError
 
-from aec_bench.contracts.run_bundle import TaskReviewSnapshotRef, TaskSnapshotRef
+from aec_bench.contracts.artifacts import ArtifactRef
 from aec_bench.contracts.task_definition import Visibility
+from aec_bench.contracts.task_review_snapshot import TaskReviewSnapshot as TaskReviewSnapshotRef
+from aec_bench.contracts.task_snapshot import ArtifactTaskSnapshotRef as TaskSnapshotRef
 from aec_bench.experimentation.proposals.structural_corpus import (
     StructuralCorpusItem,
     StructuralSplit,
@@ -19,7 +21,6 @@ from aec_bench.experimentation.proposals.structural_corpus import (
     build_structural_split_manifest,
     topology_shape_ref,
 )
-from aec_bench.harness.compilation.task_snapshot import graph_hidden_task_snapshot_sha256
 
 
 def test_renamed_and_reordered_isomorphic_dags_have_identical_signatures() -> None:
@@ -296,7 +297,7 @@ def test_task_manifest_projection_binds_exact_public_and_sealed_packages_not_man
                         manifest.train.items[0].model_copy(
                             update={
                                 "public_snapshot": manifest.train.items[0].public_snapshot.model_copy(
-                                    update={"package_sha256": _digest("changed-public-package")}
+                                    update={"artifact": _artifact_ref("changed-public-package")}
                                 )
                             }
                         ),
@@ -368,7 +369,7 @@ def test_item_rejects_snapshot_lineage_and_visibility_mismatches() -> None:
         StructuralCorpusItem.model_validate(
             {
                 **valid.model_dump(mode="python"),
-                "review_lineage_id": _digest("different-review"),
+                "review_lineage_id": "different-review",
             }
         )
 
@@ -380,21 +381,11 @@ def test_item_rejects_snapshot_lineage_and_visibility_mismatches() -> None:
             }
         )
 
-    with pytest.raises(ValidationError, match="public snapshot cannot contain"):
+    with pytest.raises(ValidationError, match="review task id"):
         StructuralCorpusItem.model_validate(
             {
                 **valid.model_dump(mode="python"),
-                "public_snapshot": valid.public_snapshot.model_copy(update={"task_review": valid.snapshot.task_review}),
-            }
-        )
-
-    with pytest.raises(ValidationError, match="definition identities must match"):
-        StructuralCorpusItem.model_validate(
-            {
-                **valid.model_dump(mode="python"),
-                "public_snapshot": valid.public_snapshot.model_copy(
-                    update={"definition_sha256": _digest("different-definition")}
-                ),
+                "review": valid.review.model_copy(update={"task_id": "other-task"}),
             }
         )
 
@@ -402,18 +393,9 @@ def test_item_rejects_snapshot_lineage_and_visibility_mismatches() -> None:
         StructuralCorpusItem.model_validate(
             {
                 **valid.model_dump(mode="python"),
-                "public_snapshot": valid.public_snapshot.model_copy(
-                    update={"package_sha256": valid.snapshot.package_sha256}
-                ),
+                "public_snapshot": valid.snapshot,
             }
         )
-
-
-def test_item_derives_the_exact_graph_hidden_public_snapshot_identity() -> None:
-    """The safe proposer view can be joined exactly to its host-owned corpus item."""
-    item = _chain_item("train-1", "drainage", "review-train", 3)
-
-    assert item.public_task_snapshot_sha256 == graph_hidden_task_snapshot_sha256(item.public_snapshot)
 
 
 def test_manifest_enforces_split_visibility() -> None:
@@ -444,7 +426,7 @@ def test_manifest_rejects_duplicate_task_packages() -> None:
     )
 
     duplicate_package_dev = dev_item.model_copy(
-        update={"snapshot": dev_item.snapshot.model_copy(update={"package_sha256": train_item.snapshot.package_sha256})}
+        update={"snapshot": train_item.snapshot.model_copy(update={"task_id": dev_item.task_id})}
     )
     with pytest.raises(ValidationError, match="package snapshots must be unique"):
         StructuralSplitManifest(
@@ -456,11 +438,7 @@ def test_manifest_rejects_duplicate_task_packages() -> None:
         )
 
     duplicate_public_package_dev = dev_item.model_copy(
-        update={
-            "public_snapshot": dev_item.public_snapshot.model_copy(
-                update={"package_sha256": train_item.public_snapshot.package_sha256}
-            )
-        }
+        update={"public_snapshot": train_item.public_snapshot.model_copy(update={"task_id": dev_item.task_id})}
     )
     with pytest.raises(ValidationError, match="public task package snapshots must be unique"):
         StructuralSplitManifest(
@@ -484,31 +462,34 @@ def _item(
     *,
     visibility: Visibility = Visibility.PUBLIC,
 ) -> StructuralCorpusItem:
-    lineage_sha256 = _digest(lineage)
     return StructuralCorpusItem(
         task_id=task_id,
         semantic_family=family,
-        review_lineage_id=lineage_sha256,
+        review_lineage_id=lineage,
         visibility=visibility,
-        public_snapshot=TaskSnapshotRef(
+        public_snapshot=_task_snapshot(task_id, f"public-package:{task_id}"),
+        snapshot=_task_snapshot(task_id, f"sealed-package:{task_id}"),
+        review=TaskReviewSnapshotRef(
             task_id=task_id,
-            definition_sha256=_digest(f"definition:{task_id}"),
-            package_sha256=_digest(f"public-package:{task_id}"),
-        ),
-        snapshot=TaskSnapshotRef(
-            task_id=task_id,
-            definition_sha256=_digest(f"definition:{task_id}"),
-            package_sha256=_digest(f"sealed-package:{task_id}"),
-            task_review=TaskReviewSnapshotRef(
-                profile_id=f"review:{task_id}",
-                review_profile_sha256=_digest(f"review-profile:{task_id}"),
-                review_sidecar_sha256=lineage_sha256,
-                declared_surface_sha256=_digest(f"declared-surface:{task_id}"),
-                visibility=visibility,
-            ),
+            profile_id=lineage,
+            visibility=visibility,
         ),
         topology=shape,
     )
+
+
+def _artifact_ref(label: str) -> ArtifactRef:
+    digest = _digest(label)
+    return ArtifactRef(
+        artifact_id=f"artifacts/sha256/{digest}",
+        sha256=digest,
+        size_bytes=len(label.encode("utf-8")),
+        media_type="application/vnd.aec-bench.task-snapshot+tar+zstd",
+    )
+
+
+def _task_snapshot(task_id: str, label: str) -> TaskSnapshotRef:
+    return TaskSnapshotRef(task_id=task_id, artifact=_artifact_ref(label))
 
 
 def _chain_item(

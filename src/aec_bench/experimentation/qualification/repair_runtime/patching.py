@@ -25,7 +25,8 @@ from aec_bench.contracts.harness_instance import (
     HarnessCompileRequest,
     HarnessRecipe,
 )
-from aec_bench.contracts.run_bundle import RunBundle
+from aec_bench.contracts.run_bundle import RunPlan
+from aec_bench.contracts.task_review_snapshot import ReviewSnapshot
 from aec_bench.evolution.repair_lifecycle import (
     CompiledRepairCandidate,
     RepairCandidate,
@@ -616,19 +617,22 @@ def _is_exact_single_task_batch_action(
 
 
 def _declared_stage_graph_evidence(
-    bundle: RunBundle,
+    bundle: RunPlan,
 ) -> tuple[RepairDeclaredStageGraphEvidence, ...]:
+    if not isinstance(bundle.review, ReviewSnapshot):
+        return ()
+    reviews = {review.task_id: review for review in bundle.review.tasks}
     evidence: list[RepairDeclaredStageGraphEvidence] = []
     for snapshot in bundle.task_snapshots:
-        task_review = snapshot.task_review
+        task_review = reviews.get(snapshot.task_id)
         graph = task_review.stage_graph if task_review is not None else None
         if task_review is None or graph is None:
             return ()
         evidence.append(
             RepairDeclaredStageGraphEvidence(
                 task_id=snapshot.task_id,
-                task_package_sha256=snapshot.package_sha256,
-                stage_graph=graph,
+                task_snapshot=snapshot,
+                review=task_review,
             )
         )
     return tuple(evidence)

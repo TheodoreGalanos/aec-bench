@@ -224,9 +224,8 @@ def _validate_task_identity(
         record.task_id != record.bundle.task_snapshot.task_id
         or record.task_id != manifest.task_id
         or record.task_id != derived_task.task_id
-        or record.task_revision != record.bundle.task_snapshot.definition_sha256
+        or record.task_revision != record.bundle.task_snapshot.commitment_sha256
         or record.task_revision != manifest.task_revision
-        or record.source_task_package_sha256 != record.bundle.task_snapshot.package_sha256
         or record.source_task_package_sha256 != manifest.source_task_package_sha256
         or record.source_task_package_sha256 != record.host_config.source_task_package_sha256
     ):

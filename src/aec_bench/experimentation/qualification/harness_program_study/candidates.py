@@ -1,4 +1,4 @@
-# ABOUTME: Materializes matched four-cell RunBundle sets from fixed-K harness and program treatments.
+# ABOUTME: Materializes matched four-cell RunPlan sets from fixed-K harness and program treatments.
 # ABOUTME: Enforces exact shared tasks, model, resources, seeds, repetitions, and content identities.
 
 from __future__ import annotations
@@ -28,7 +28,8 @@ from aec_bench.contracts.harness_kernel import (
     kernel_abi_commitment,
 )
 from aec_bench.contracts.legacy_content_address import LegacyContentAddressedModel
-from aec_bench.contracts.run_bundle import RunBundle, TaskSnapshotRef
+from aec_bench.contracts.run_bundle import RunPlan
+from aec_bench.contracts.task_snapshot import TaskSnapshotRef
 from aec_bench.contracts.validators import NonEmptyStr
 from aec_bench.experimentation.qualification.harness_program_study.plan import (
     HarnessProgramCandidateReference,
@@ -38,7 +39,7 @@ from aec_bench.experimentation.qualification.harness_program_study.plan import (
 from aec_bench.harness.compilation import (
     compile_execution_program,
     compile_harness_instance,
-    compile_run_bundle,
+    compile_run_plan,
 )
 from aec_bench.harness.kernel_catalogue import KernelRuntimeRegistry
 
@@ -108,20 +109,20 @@ class HarnessProgramCandidateRequest(LegacyContentAddressedModel):
 
 
 class MaterializedHarnessProgramCandidate(FrozenStrictModel):
-    """One real candidate reference paired with its executable RunBundle."""
+    """One real candidate reference paired with its executable RunPlan."""
 
     cell: HarnessProgramCell
     reference: HarnessProgramCandidateReference
-    bundle: RunBundle
+    bundle: RunPlan
 
     @model_validator(mode="after")
     def validate_local_identity(self) -> Self:
         if self.reference.cell is not self.cell:
             raise ValueError("materialized candidate cell does not match its reference")
-        if self.reference.kernel_ref != self.bundle.kernel_ref:
-            raise ValueError("materialized candidate kernel does not match its RunBundle")
+        if self.reference.kernel_ref != self.bundle.harness.kernel_ref:
+            raise ValueError("materialized candidate kernel does not match its RunPlan")
         if self.reference.harness_ref != self.bundle.harness.ref:
-            raise ValueError("materialized candidate harness does not match its RunBundle")
+            raise ValueError("materialized candidate harness does not match its RunPlan")
         return self
 
 
@@ -245,25 +246,26 @@ def _validate_candidate_bundle_identity(
     *,
     request: HarnessProgramCandidateRequest,
     cell: HarnessProgramCell,
-    bundle: RunBundle,
+    bundle: RunPlan,
     snapshots: tuple[TaskSnapshotRef, ...],
 ) -> None:
-    if bundle.bundle_id != f"{request.candidate_set_id}.{cell.value}":
+    if bundle.run_manifest.run_id != f"{request.candidate_set_id}.{cell.value}":
         raise ValueError("candidate bundle id does not match its harness-program cell")
-    if bundle.kernel_ref != request.kernel_ref:
+    if bundle.harness.kernel_ref != request.kernel_ref:
         raise ValueError("candidate bundle does not use the requested fixed kernel")
-    if bundle.task_snapshots != snapshots or bundle.harbor.task_refs != request.task_refs:
+    if (
+        bundle.task_snapshots != snapshots
+        or tuple(snapshot.task_id for snapshot in bundle.task_snapshots) != request.task_refs
+    ):
         raise ValueError("candidate bundles must use identical exact task snapshots")
-    if bundle.harbor.experiment_id != request.experiment_id:
+    if bundle.run_manifest.experiment_id != request.experiment_id:
         raise ValueError("candidate bundles must use one shared experiment identity")
-    if bundle.harbor.repetitions != 1:
-        raise ValueError("candidate bundles must contain exactly one Harbor attempt")
 
 
 def _validate_candidate_bundle_factors(
     *,
     request: HarnessProgramCandidateRequest,
-    bundle: RunBundle,
+    bundle: RunPlan,
     recipe: HarnessRecipe,
     program_factor: ProgramFactorTemplate,
 ) -> None:
@@ -275,9 +277,9 @@ def _validate_candidate_bundle_factors(
     if agent.model != request.model:
         raise ValueError("candidate bundles must use one shared model")
     expected_program = program_factor.bind(bundle.harness.ref)
-    if bundle.program.source_program_ref != expected_program.ref:
+    if bundle.execution_program.source_program_ref != expected_program.ref:
         raise ValueError("candidate compiled program does not match its program factor")
-    if bundle.program.limits != request.program_limits:
+    if bundle.execution_program.limits != request.program_limits:
         raise ValueError("candidate bundles must use one shared program limits budget")
 
 
@@ -298,7 +300,7 @@ def _validate_candidate_reference(
         raise ValueError("candidate reference does not bind the shared model, seeds, and repetitions")
     if reference.resource_sha256 != resource_sha256:
         raise ValueError("candidate reference does not bind the shared resource budget")
-    if reference.program_ref != candidate.bundle.program.source_program_ref:
+    if reference.program_ref != candidate.bundle.execution_program.source_program_ref:
         raise ValueError("candidate reference does not bind its harness-independent program factor")
     abi_identities = (
         reference.kernel_abi_sha256,
@@ -318,7 +320,10 @@ def _validate_materialized_harness_program_cross(
     hx_px = by_cell[HarnessProgramCell.HX_PX]
     if h0_p0.bundle.harness != h0_px.bundle.harness or hx_p0.bundle.harness != hx_px.bundle.harness:
         raise ValueError("harness-program cells do not preserve their exact compiled harness factor")
-    if h0_p0.bundle.program == hx_p0.bundle.program or h0_px.bundle.program == hx_px.bundle.program:
+    if (
+        h0_p0.bundle.execution_program == hx_p0.bundle.execution_program
+        or h0_px.bundle.execution_program == hx_px.bundle.execution_program
+    ):
         raise ValueError("program factors must compile separately against each harness")
 
 
@@ -351,7 +356,7 @@ def materialize_harness_program_candidates(
             registry=registry,
         ),
     }
-    bundles: dict[HarnessProgramCell, RunBundle] = {}
+    bundles: dict[HarnessProgramCell, RunPlan] = {}
     for cell in HarnessProgramCell:
         harness = harnesses[_learned_harness(cell)]
         program_factor = _program_factor(source, cell)
@@ -360,14 +365,13 @@ def materialize_harness_program_candidates(
             harness=harness,
             registry=registry,
         )
-        bundles[cell] = compile_run_bundle(
-            bundle_id=f"{source.candidate_set_id}.{cell.value}",
+        bundles[cell] = compile_run_plan(
+            run_id=f"{source.candidate_set_id}.{cell.value}",
             harness=harness,
-            program=compiled_program,
+            execution_program=compiled_program,
             registry=registry,
             tasks_root=Path(tasks_root),
             experiment_id=source.experiment_id,
-            repetitions=1,
         )
 
     snapshots = bundles[HarnessProgramCell.H0_P0].task_snapshots
@@ -400,21 +404,21 @@ def build_harness_program_candidate_reference(
     *,
     request: HarnessProgramCandidateRequest,
     cell: HarnessProgramCell,
-    bundle: RunBundle,
+    bundle: RunPlan,
 ) -> HarnessProgramCandidateReference:
     """Derive one candidate identity from its exact source factors and compiled bundle."""
     source = HarnessProgramCandidateRequest.model_validate(request.model_dump(mode="python"))
-    compiled = RunBundle.model_validate(bundle.model_dump(mode="python"))
+    compiled = RunPlan.model_validate(bundle.model_dump(mode="python"))
     factor = _program_factor(source, cell)
     expected_recipe = source.learned_harness_recipe if _learned_harness(cell) else source.fixed_harness_recipe
-    if compiled.kernel_ref != source.kernel_ref:
+    if compiled.harness.kernel_ref != source.kernel_ref:
         raise ValueError("harness-program candidate bundle does not use the requested fixed kernel")
     if compiled.harness.source_recipe_ref != expected_recipe.ref:
         raise ValueError("harness-program candidate bundle does not use the requested harness factor")
-    if compiled.program.source_program_ref != factor.bind(compiled.harness.ref).ref:
+    if compiled.execution_program.source_program_ref != factor.bind(compiled.harness.ref).ref:
         raise ValueError("harness-program candidate bundle does not use the requested program factor")
-    if compiled.harbor.task_refs != source.task_refs or compiled.harbor.repetitions != 1:
-        raise ValueError("harness-program candidate bundle does not use the requested task/repetition surface")
+    if tuple(snapshot.task_id for snapshot in compiled.task_snapshots) != source.task_refs:
+        raise ValueError("harness-program candidate bundle does not use the requested task surface")
     abi_sha256 = kernel_abi_commitment(source.kernel_ref)
     return HarnessProgramCandidateReference.create(
         cell=cell,
@@ -425,7 +429,7 @@ def build_harness_program_candidate_reference(
         task_set_sha256=_task_set_sha256(compiled.task_snapshots),
         harness_ref=compiled.harness.ref,
         harness_abi_sha256=abi_sha256,
-        program_ref=compiled.program.source_program_ref,
+        program_ref=compiled.execution_program.source_program_ref,
         program_abi_sha256=abi_sha256,
         resource_sha256=_resource_sha256(source),
     )
@@ -511,7 +515,7 @@ def _single_recipe_configuration(
 
 
 def _single_compiled_configuration(
-    bundle: RunBundle,
+    bundle: RunPlan,
     configuration_type: type[ConfigurationT],
     *,
     role: str,

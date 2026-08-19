@@ -12,12 +12,8 @@ from aec_bench.contracts.legacy_content_address import LegacyContentAddressedMod
 from aec_bench.contracts.proposal_execution.compilation import ProposalCompilationSuccess
 from aec_bench.contracts.proposal_execution.session import ProposalSessionPlan
 from aec_bench.contracts.proposal_execution_types import ProposalExecutionSemantics
-from aec_bench.contracts.run_bundle import TaskSnapshotRef
+from aec_bench.contracts.task_snapshot import TaskSnapshotRef, task_snapshot_commitment
 from aec_bench.contracts.validators import NonEmptyStr
-from aec_bench.harness.compilation.task_snapshot import (
-    TaskSnapshotError,
-    graph_hidden_task_snapshot_sha256,
-)
 
 from .constants import _SESSION_OPERATION_ID
 
@@ -43,18 +39,15 @@ class ProposalRunSessionBundle(LegacyContentAddressedModel):
             raise ValueError("proposal session plan does not bind the exact compilation")
         if self.fixed_harness.ref != self.compilation.fixed_harness_ref:
             raise ValueError("proposal session bundle does not carry the exact frozen harness")
-        try:
-            task_snapshot_sha256 = graph_hidden_task_snapshot_sha256(self.task_snapshot)
-        except TaskSnapshotError as error:
-            raise ValueError(f"proposal session bundle carries an invalid task snapshot: {error}") from error
+        task_snapshot_sha256 = task_snapshot_commitment(self.task_snapshot)
         if task_snapshot_sha256 != self.compilation.task_snapshot_sha256:
             raise ValueError("proposal session bundle task snapshot differs from the compilation")
         problem_view = self.compilation.proposal_freeze.problem_view
         source_manifest = self.compilation.source_scope_manifest
         if (
             self.task_snapshot.task_id != problem_view.task_id
-            or self.task_snapshot.definition_sha256 != problem_view.task_revision
-            or self.task_snapshot.package_sha256 != source_manifest.task_package_sha256
+            or task_snapshot_sha256 != problem_view.task_revision
+            or task_snapshot_sha256 != source_manifest.task_package_sha256
         ):
             raise ValueError("proposal session bundle task snapshot differs from the frozen task identity")
         session_constraint = execution_profile.operation(_SESSION_OPERATION_ID)

@@ -14,6 +14,7 @@ from aec_bench.contracts.harness_kernel import (
     FrozenStrictModel,
     validate_sha256,
 )
+from aec_bench.contracts.task_snapshot import TaskSnapshotRef
 from aec_bench.contracts.trial_record import ArtifactReference
 from aec_bench.contracts.validators import NonEmptyStr
 
@@ -72,18 +73,13 @@ class DeclaredStageRoute(FrozenStrictModel):
 
 
 class DeclaredStageGraph(FrozenStrictModel):
-    """Content-pinned executable projection of a task-review profile's declared stage graph."""
+    """Executable projection owned by one stable task-review profile."""
 
-    schema_version: Literal["aecbench.declared-stage-graph.v2"] = "aecbench.declared-stage-graph.v2"
+    schema_version: Literal["aecbench.declared-stage-graph.v3"] = "aecbench.declared-stage-graph.v3"
     task_id: NonEmptyStr
-    review_sidecar_sha256: str
+    review_profile_id: NonEmptyStr
     stages: tuple[DeclaredStage, ...] = Field(min_length=1)
     handoffs: tuple[DeclaredHandoff, ...] = ()
-
-    @field_validator("review_sidecar_sha256")
-    @classmethod
-    def validate_review_sidecar_sha256(cls, value: str) -> str:
-        return validate_sha256(value)
 
     @model_validator(mode="after")
     def validate_graph(self) -> Self:
@@ -141,11 +137,11 @@ class DeclaredStageGraph(FrozenStrictModel):
 
     @property
     def ref(self) -> DeclaredStageGraphRef:
-        """Return the stable task and review-sidecar identity for this graph."""
+        """Return the stable task and review-profile identity for this graph."""
 
         return DeclaredStageGraphRef(
             task_id=self.task_id,
-            review_sidecar_sha256=self.review_sidecar_sha256,
+            review_profile_id=self.review_profile_id,
         )
 
     def predecessor_stage_ids(self, stage_id: str) -> tuple[str, ...]:
@@ -214,12 +210,7 @@ class DeclaredStageGraphRef(FrozenStrictModel):
     """Stable reference to the stage graph declared by one reviewed task."""
 
     task_id: NonEmptyStr
-    review_sidecar_sha256: str
-
-    @field_validator("review_sidecar_sha256")
-    @classmethod
-    def validate_review_sidecar_sha256(cls, value: str) -> str:
-        return validate_sha256(value)
+    review_profile_id: NonEmptyStr
 
 
 class KernelInstructionOverride(FrozenStrictModel):
@@ -342,15 +333,15 @@ class StageResourceEvidence(FrozenStrictModel):
 class StageExecutionReceipt(FrozenStrictModel):
     """Tamper-evident intermediate execution result kept outside the TrialRecord ledger."""
 
-    schema_version: Literal["aecbench.stage-execution-receipt.v2"] = "aecbench.stage-execution-receipt.v2"
-    bundle_id: NonEmptyStr
+    schema_version: Literal["aecbench.stage-execution-receipt.v3"] = "aecbench.stage-execution-receipt.v3"
+    plan_run_id: NonEmptyStr
     run_id: NonEmptyStr
     program_ref: ExecutionProgramRef
     program_node_id: NonEmptyStr
     operation_ref: ProgramOperationRef
     attempt: int = Field(ge=1)
     task_id: NonEmptyStr
-    task_package_sha256: str
+    task_snapshot: TaskSnapshotRef
     stage_graph_ref: DeclaredStageGraphRef
     stage_id: NonEmptyStr
     context_manifest: ArtifactReference
@@ -361,13 +352,6 @@ class StageExecutionReceipt(FrozenStrictModel):
     job_dir: NonEmptyStr
     job_files: tuple[StageJobFileDigest, ...]
     resources: StageResourceEvidence
-
-    @field_validator(
-        "task_package_sha256",
-    )
-    @classmethod
-    def validate_sha256_fields(cls, value: str) -> str:
-        return validate_sha256(value)
 
     @model_validator(mode="after")
     def validate_artifacts_and_files(self) -> Self:
@@ -396,7 +380,7 @@ class StageExecutionReceipt(FrozenStrictModel):
 def declared_stage_graph_from_payload(
     *,
     task_id: str,
-    review_sidecar_sha256: str,
+    review_profile_id: str,
     payload: dict[str, Any],
 ) -> DeclaredStageGraph | None:
     """Build the closed stage graph projection from an already parsed task-review sidecar."""
@@ -406,7 +390,7 @@ def declared_stage_graph_from_payload(
 
     return DeclaredStageGraph(
         task_id=task_id,
-        review_sidecar_sha256=review_sidecar_sha256,
+        review_profile_id=review_profile_id,
         stages=_declared_stages_from_payload(raw_stages),
         handoffs=_declared_handoffs_from_payload(payload.get("handoffs", ())),
     )

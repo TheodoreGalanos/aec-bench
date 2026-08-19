@@ -131,7 +131,7 @@ def prepare_proposal_node_invocation(
         kernel_ref=bundle.fixed_harness.kernel_ref,
         harness_ref=bundle.fixed_harness.ref,
         program_ref=bundle.compilation.lowered_program.ref,
-        bundle_id=bundle.bundle_id,
+        plan_run_id=bundle.bundle_id,
         program_node_id=node_id,
         binding_ids=binding_ids,
         attempt=1,

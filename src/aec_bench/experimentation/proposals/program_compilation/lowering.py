@@ -34,7 +34,7 @@ from aec_bench.contracts.proposal_execution_types import (
     ProposalCompileRejectionCode,
     ProposalExecutionSemantics,
 )
-from aec_bench.contracts.run_bundle import TaskSnapshotRef
+from aec_bench.contracts.task_snapshot import TaskSnapshotRef
 
 from .constants import (
     _CHECK_OPERATION_ID,
@@ -78,7 +78,7 @@ def _build_source_scope_manifest(
         return ProposalSourceScopeManifest(
             proposal_graph_sha256=graph.content_sha256,
             problem_view_sha256=proposal_freeze.problem_view.content_sha256,
-            task_package_sha256=task_snapshot.package_sha256,
+            task_package_sha256=task_snapshot.commitment_sha256,
             sources=source_materializations,
             node_scopes=tuple(node_scopes),
         )

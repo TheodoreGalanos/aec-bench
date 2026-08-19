@@ -10,7 +10,11 @@ from typer.testing import CliRunner
 
 from aec_bench.cli.main import app
 from aec_bench.contracts.dataset import DatasetManifest, DatasetTaskEntry
+from aec_bench.contracts.run_bundle import PublishedRunPackage
 from aec_bench.dataset.publication import publish_dataset
+from aec_bench.ledger.artifact_repository import ArtifactRepository
+from aec_bench.ledger.run_package import publish_run_package
+from tests.support.adaptive_harness import build_adaptive_bundle, write_adaptive_task
 
 runner = CliRunner()
 
@@ -171,3 +175,52 @@ compute:
     assert result.exit_code == 0, result.output
     envelope = json.loads(result.output)
     assert envelope["data"]["selected_tasks"] == 1
+
+
+def test_run_export_and_import_transfer_one_published_package(tmp_path: Path) -> None:
+    tasks_root = tmp_path / "tasks"
+    write_adaptive_task(tasks_root)
+    source_ledger = tmp_path / "source-ledger"
+    plan = build_adaptive_bundle(
+        tasks_root=tasks_root,
+        artifact_repository=ArtifactRepository(source_ledger / "_artifacts"),
+    )
+    published = publish_run_package(
+        ledger_root=source_ledger,
+        package=PublishedRunPackage(run_plan=plan),
+    )
+    archive = tmp_path / "run-package.tar.zst"
+
+    exported = runner.invoke(
+        app,
+        [
+            "--json",
+            "run",
+            "export",
+            plan.run_manifest.run_id,
+            "--output",
+            str(archive),
+            "--ledger-root",
+            str(source_ledger),
+        ],
+    )
+
+    assert exported.exit_code == 0, exported.output
+    assert archive.read_bytes() == ArtifactRepository(source_ledger / "_artifacts").read_bytes(published)
+    destination_ledger = tmp_path / "destination-ledger"
+    imported = runner.invoke(
+        app,
+        [
+            "--json",
+            "run",
+            "import",
+            str(archive),
+            "--ledger-root",
+            str(destination_ledger),
+        ],
+    )
+
+    assert imported.exit_code == 0, imported.output
+    envelope = json.loads(imported.output)
+    assert envelope["data"]["run_id"] == plan.run_manifest.run_id
+    assert ArtifactRepository(destination_ledger / "_artifacts").read_bytes(published) == archive.read_bytes()

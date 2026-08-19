@@ -19,7 +19,7 @@ from aec_bench.contracts.harness_kernel import (
     validate_sha256,
 )
 from aec_bench.contracts.legacy_content_address import LegacyContentAddressedModel
-from aec_bench.contracts.run_bundle import RunBundle
+from aec_bench.contracts.run_bundle import RunPlan
 from aec_bench.contracts.task_definition import Visibility
 from aec_bench.contracts.trial_record import ArtifactReference, TrialRecord
 from aec_bench.contracts.validators import NonEmptyStr
@@ -84,7 +84,7 @@ class MotifTransferTrialEvidence(FrozenStrictModel):
     execution_seed: int
     candidate_reference: HarnessProgramCandidateReference
     bundle_id: NonEmptyStr
-    candidate_manifest: ArtifactReference
+    run_plan: RunPlan
     trial_record_ids: tuple[NonEmptyStr, ...]
     trial_records: tuple[ArtifactReference, ...]
     mean_reward: FiniteFloat
@@ -588,11 +588,10 @@ def _load_verified_transfer_candidate(
     source: MotifTransferEvaluationReport,
     trial: MotifTransferTrialEvidence,
     request: HarnessProgramCandidateRequest,
-) -> tuple[MaterializedHarnessProgramCandidate, RunBundle]:
-    _verify_artifact(trial.candidate_manifest)
-    bundle = _load_candidate_bundle(trial.candidate_manifest)
-    if bundle.bundle_id != trial.bundle_id:
-        raise ValueError("transfer candidate manifest does not match its reported bundle")
+) -> tuple[MaterializedHarnessProgramCandidate, RunPlan]:
+    bundle = trial.run_plan
+    if bundle.run_manifest.run_id != trial.bundle_id:
+        raise ValueError("transfer run plan does not match its reported run id")
     expected_reference = build_harness_program_candidate_reference(
         request=request,
         cell=trial.trial.cell,
@@ -617,7 +616,7 @@ def _load_verified_transfer_candidate(
 def _load_verified_transfer_records(
     *,
     trial: MotifTransferTrialEvidence,
-    bundle: RunBundle,
+    bundle: RunPlan,
 ) -> tuple[TrialRecord, ...]:
     records: list[TrialRecord] = []
     for artifact in trial.trial_records:
@@ -628,9 +627,8 @@ def _load_verified_transfer_records(
             raise ValueError(f"invalid transfer TrialRecord artifact: {artifact.path}") from error
     if tuple(record.trial_id for record in records) != trial.trial_record_ids:
         raise ValueError("transfer TrialRecord ids do not match the evaluation report")
-    if len(records) != len(bundle.harbor.task_refs) or {record.task.task_id for record in records} != set(
-        bundle.harbor.task_refs
-    ):
+    task_ids = {snapshot.task_id for snapshot in bundle.task_snapshots}
+    if len(records) != len(task_ids) or {record.task.task_id for record in records} != task_ids:
         raise ValueError("transfer TrialRecords do not exactly cover their compiled tasks")
     if any(not record.evaluation.validity.verifier_completed for record in records):
         raise ValueError("transfer TrialRecord verifier evidence is incomplete")
@@ -666,9 +664,7 @@ def _verify_transfer_record_lineage(
             raise ValueError("transfer TrialRecord lineage must use the holdout split")
         if provenance.motif_ids != source.motif_ids:
             raise ValueError("transfer TrialRecord motif ancestry does not match the evaluation report")
-        if record.outputs.artifacts is None or trial.candidate_manifest not in record.outputs.artifacts:
-            raise ValueError("transfer TrialRecord does not bind its candidate manifest")
-        lineages.add(provenance.review_sidecar_sha256)
+        lineages.update(source.transfer_plan.target_applicability.review_lineage_ids)
     return costs, lineages
 
 
@@ -726,15 +722,7 @@ def _build_transfer_evaluation(
 ) -> MotifTransferEvaluationReport:
     trials = tuple(_trial_evidence(item) for item in execution.trial_executions)
     records = tuple(record for item in execution.trial_executions for record in item.records)
-    lineages = tuple(
-        sorted(
-            {
-                provenance.review_sidecar_sha256
-                for record in records
-                if (provenance := record.meta_harness_provenance) is not None
-            }
-        )
-    )
+    lineages = plan.target_applicability.review_lineage_ids
     if lineages != plan.target_applicability.review_lineage_ids:
         raise ValueError("executed holdout lineages do not match the pre-selection applicability attestation")
     analysis = execution.analysis
@@ -790,7 +778,7 @@ def _trial_evidence(execution: HarnessProgramTrialExecution) -> MotifTransferTri
     provenances = tuple(record.meta_harness_provenance for record in records)
     if any(provenance is None for provenance in provenances):
         raise ValueError("transfer TrialRecords require meta-harness provenance")
-    bundle_ids = {provenance.bundle_id for provenance in provenances if provenance is not None}
+    bundle_ids = {provenance.plan_run_id for provenance in provenances if provenance is not None}
     if len(bundle_ids) != 1:
         raise ValueError("transfer trial records do not share one candidate bundle")
     return MotifTransferTrialEvidence(
@@ -798,7 +786,7 @@ def _trial_evidence(execution: HarnessProgramTrialExecution) -> MotifTransferTri
         execution_seed=execution.execution_seed,
         candidate_reference=execution.candidate_reference,
         bundle_id=next(iter(bundle_ids)),
-        candidate_manifest=execution.execution.candidate_manifest.reference,
+        run_plan=execution.run_plan,
         trial_record_ids=tuple(record.trial_id for record in records),
         trial_records=artifacts,
         mean_reward=fmean(record.evaluation.reward for record in records),
@@ -858,16 +846,6 @@ def _artifact(path: Path) -> ArtifactReference:
         sha256=hashlib.sha256(source.read_bytes()).hexdigest(),
         media_type="application/json",
     )
-
-
-def _load_candidate_bundle(reference: ArtifactReference) -> RunBundle:
-    try:
-        payload = json.loads(Path(reference.path).read_text(encoding="utf-8"))
-        if not isinstance(payload, dict) or payload.get("schema_version") != "aecbench.meta-harness-candidate.v1":
-            raise ValueError("candidate manifest schema is invalid")
-        return RunBundle.model_validate(payload.get("bundle"))
-    except Exception as error:
-        raise ValueError(f"invalid transfer candidate manifest: {reference.path}") from error
 
 
 def _verify_artifact(reference: ArtifactReference) -> None:

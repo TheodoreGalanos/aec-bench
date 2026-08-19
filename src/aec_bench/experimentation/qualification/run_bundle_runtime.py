@@ -1,5 +1,5 @@
-# ABOUTME: Executes compiled RunBundles through the generic px runtime and real Harbor workflow boundary.
-# ABOUTME: Persists candidate manifests and injects causal meta-harness lineage before ledger import.
+# ABOUTME: Executes compiled run plans through the generic px runtime and real Harbor workflow boundary.
+# ABOUTME: Injects causal meta-harness lineage before ledger import without duplicating the run plan.
 
 from __future__ import annotations
 
@@ -14,23 +14,21 @@ from aec_bench.contracts.harness_instance import (
     VerificationBindingConfig,
     prohibited_retry_safe_error_codes,
 )
-from aec_bench.contracts.harness_kernel import (
-    canonical_json_sha256,
-)
-from aec_bench.contracts.run_bundle import RunBundle, TaskSnapshotRef
+from aec_bench.contracts.run_bundle import RunPlan
 from aec_bench.contracts.stage_execution import KernelInstructionOverride
+from aec_bench.contracts.task_snapshot import TaskSnapshotRef
 from aec_bench.contracts.trajectory import MetaHarnessTrajectoryContext
 from aec_bench.contracts.trial_record import (
     ArtifactReference,
     MetaHarnessTrialProvenance,
     RunManifest,
+    TrialArtifactRef,
     TrialRecord,
 )
 from aec_bench.experimentation.governance.authority_ledger import (
     AuthorityLedger,
 )
 from aec_bench.experimentation.qualification.run_bundle_evidence import (
-    CandidateManifestArtifact,
     HarborInvocationEvidence,
     HarborInvocationGovernance,
     StageExecutionEvidence,
@@ -49,9 +47,6 @@ from aec_bench.experimentation.qualification.run_bundle_evidence import (
 )
 from aec_bench.experimentation.qualification.run_bundle_evidence import (
     load_harbor_invocation_receipt as load_harbor_invocation_receipt,
-)
-from aec_bench.experimentation.qualification.run_bundle_evidence import (
-    write_candidate_manifest as _write_candidate_manifest,
 )
 from aec_bench.experimentation.qualification.run_bundle_scored_attempt import (
     RunBundleScoredAttemptError,
@@ -110,20 +105,17 @@ from aec_bench.ledger.reader import read_trial_record
 
 def execute_run_bundle(
     *,
-    bundle: RunBundle,
+    bundle: RunPlan,
     registry: KernelRuntimeRegistry,
     workflow: SynchronousHarborWorkflow,
     artifacts_root: Path,
     study: MetaHarnessStudyContext,
     executor: HarborCommandExecutor | None = None,
     authority_ledger: AuthorityLedger | None = None,
+    repetitions: int = 1,
 ) -> RunBundleExecution:
     """Execute the complete immutable px graph using only fixed-K trusted operation handlers."""
     verify_kernel_implementation_identity(registry)
-    candidate = _write_candidate_manifest(
-        bundle=bundle,
-        artifacts_root=artifacts_root,
-    )
     budget = HarnessBudgetLedger(bundle.harness.budget)
     handler = _HarborBatchHandler(
         bundle=bundle,
@@ -131,10 +123,10 @@ def execute_run_bundle(
         workflow=workflow,
         artifacts_root=artifacts_root,
         study=study,
-        candidate=candidate,
         budget=budget,
         executor=executor,
         authority_ledger=authority_ledger,
+        repetitions=repetitions,
     )
     stage_handler = _HarborStageHandler(
         bundle=bundle,
@@ -158,10 +150,9 @@ def execute_run_bundle(
         stage_handler=stage_handler,
         finalize_handler=finalize_handler,
     )
-    program_result = execute_program(bundle.program, OperationRegistry(registrations))
+    program_result = execute_program(bundle.execution_program, OperationRegistry(registrations))
     return RunBundleExecution(
         program=program_result,
-        candidate_manifest=candidate,
         stage_executions=stage_handler.executions,
         harbor_invocations=handler.invocations,
         budget=budget.snapshot(),
@@ -172,25 +163,25 @@ class _HarborBatchHandler:
     def __init__(
         self,
         *,
-        bundle: RunBundle,
+        bundle: RunPlan,
         registry: KernelRuntimeRegistry,
         workflow: SynchronousHarborWorkflow,
         artifacts_root: Path,
         study: MetaHarnessStudyContext,
-        candidate: CandidateManifestArtifact,
         budget: HarnessBudgetLedger,
         executor: HarborCommandExecutor | None,
         authority_ledger: AuthorityLedger | None,
+        repetitions: int,
     ) -> None:
         self._bundle = bundle
         self._registry = registry
         self._workflow = workflow
         self._artifacts_root = Path(artifacts_root)
         self._study = study
-        self._candidate = candidate
         self._budget = budget
         self._executor = executor
         self._authority_ledger = authority_ledger
+        self._repetitions = repetitions
         self._invocations: list[HarborInvocationEvidence] = []
         self._lock = threading.Lock()
 
@@ -233,7 +224,6 @@ class _HarborBatchHandler:
                 workflow=self._workflow,
                 artifacts_root=self._artifacts_root,
                 study=self._study,
-                candidate=self._candidate.reference,
                 budget=self._budget,
                 context=context,
                 task_refs=selected_task_refs,
@@ -241,6 +231,7 @@ class _HarborBatchHandler:
                 authority_ledger=self._authority_ledger,
                 instruction_override=instruction_override,
                 additional_artifacts=additional_artifacts,
+                repetitions=self._repetitions,
             )
         except RunBundleScoredAttemptError as error:
             if error.materialization is not None:
@@ -302,7 +293,7 @@ class _HarborStageHandler:
     def __init__(
         self,
         *,
-        bundle: RunBundle,
+        bundle: RunPlan,
         registry: KernelRuntimeRegistry,
         workflow: SynchronousHarborWorkflow,
         artifacts_root: Path,
@@ -457,7 +448,7 @@ class _HarborFinalizeHandler:
     def __init__(
         self,
         *,
-        bundle: RunBundle,
+        bundle: RunPlan,
         tasks_root: Path,
         study: MetaHarnessStudyContext,
         scored_handler: _HarborBatchHandler,
@@ -498,25 +489,25 @@ class _TrialLineageTransform:
     def __init__(
         self,
         *,
-        bundle: RunBundle,
+        bundle: RunPlan,
         study: MetaHarnessStudyContext,
-        candidate: ArtifactReference,
         required_artifact_kinds: tuple[str, ...],
         expected_adapter_kind: str,
         expected_model: str,
         expected_context: MetaHarnessTrajectoryContext,
         expected_execution_request_sha256_by_task_id: Mapping[str, str],
         additional_artifacts: tuple[ArtifactReference, ...] = (),
+        repetitions: int = 1,
     ) -> None:
         self._bundle = bundle
         self._study = study
-        self._candidate = candidate
         self._required_artifact_kinds = required_artifact_kinds
         self._expected_adapter_kind = expected_adapter_kind
         self._expected_model = expected_model
         self._expected_context = expected_context
         self._expected_execution_request_sha256_by_task_id = dict(expected_execution_request_sha256_by_task_id)
         self._additional_artifacts = additional_artifacts
+        self._required_repetitions = repetitions
         self._repetitions: dict[str, int] = {}
         self._snapshots = {snapshot.task_id: snapshot for snapshot in bundle.task_snapshots}
 
@@ -525,40 +516,36 @@ class _TrialLineageTransform:
         self._validate_required_verifier(record)
         snapshot = self._snapshots.get(record.task.task_id)
         if snapshot is None:
-            raise ValueError(f"trial task is absent from RunBundle snapshots: {record.task.task_id}")
+            raise ValueError(f"trial task is absent from RunPlan snapshots: {record.task.task_id}")
         repetition = self._repetitions.get(record.task.task_id, 0) + 1
-        if repetition > self._bundle.harbor.repetitions:
+        if repetition > self._required_repetitions:
             raise ValueError(f"too many repetitions imported for task: {record.task.task_id}")
         self._repetitions[record.task.task_id] = repetition
-        review_sidecar_sha256, declared_surface_sha256 = _review_lineage(snapshot)
         artifacts = _merge_artifacts(
-            record.outputs.artifacts or [],
-            self._candidate,
+            [],
             self._study.harness_program_plan,
             self._study.repair_decision,
             *self._additional_artifacts,
         )
+        available_artifacts: tuple[TrialArtifactRef | ArtifactReference, ...] = (
+            *record.outputs.artifacts,
+            *artifacts,
+        )
         missing = tuple(
             required
             for required in self._required_artifact_kinds
-            if not any(_artifact_matches(artifact, required) for artifact in artifacts)
+            if not any(_artifact_matches(artifact, required) for artifact in available_artifacts)
         )
         if missing:
             raise ValueError("required result artifacts are missing: " + ", ".join(missing))
         provenance = MetaHarnessTrialProvenance(
             run_id=self._study.run_id,
             policy_id=self._study.policy_id,
-            kernel_id=self._bundle.kernel_ref.kernel_id,
-            kernel_sha256=canonical_json_sha256(self._bundle.kernel_ref.model_dump(mode="json")),
+            plan_run_id=self._bundle.run_manifest.run_id,
+            kernel_id=self._bundle.harness.kernel_ref.kernel_id,
             harness_id=self._bundle.harness.instance_id,
-            harness_sha256=canonical_json_sha256(self._bundle.harness.model_dump(mode="json")),
-            program_id=self._bundle.program.program_id,
-            program_sha256=canonical_json_sha256(self._bundle.program.model_dump(mode="json")),
-            bundle_id=self._bundle.bundle_id,
-            bundle_sha256=canonical_json_sha256(self._bundle.model_dump(mode="json")),
-            parent_bundle_id=self._study.parent_bundle_id,
-            review_sidecar_sha256=review_sidecar_sha256,
-            declared_surface_sha256=declared_surface_sha256,
+            program_id=self._bundle.execution_program.program_id,
+            parent_plan_run_id=self._study.parent_bundle_id,
             harness_generator_sha256=self._study.harness_generator_sha256,
             program_generator_sha256=self._study.program_generator_sha256,
             split=self._study.split,
@@ -568,7 +555,6 @@ class _TrialLineageTransform:
             paired_block_id=self._study.paired_block_id,
             repair_attempt_id=self._study.repair_attempt_id,
             repair_iteration=self._study.repair_iteration,
-            candidate_manifest=self._candidate,
             harness_program_plan=self._study.harness_program_plan,
             repair_decision=self._study.repair_decision,
             motif_ids=self._study.motif_ids,
@@ -599,7 +585,6 @@ class _TrialLineageTransform:
         enforce_runtime_harness_contracts(
             contracts=self._bundle.harness.contracts,
             record=validated,
-            candidate_manifest=self._candidate,
         )
         return validated
 
@@ -646,7 +631,7 @@ class _TrialLineageTransform:
             and binding.configuration.required
             for binding in self._bundle.harness.bindings
         )
-        if required and not record.evaluation.validity.verifier_completed:
+        if required and (record.evaluation is None or not record.evaluation.validity.verifier_completed):
             raise HarnessContractError(
                 "required_verifier_not_completed",
                 f"trial {record.trial_id!r} did not complete the required Hx verifier",
@@ -655,7 +640,7 @@ class _TrialLineageTransform:
 
     def validate_complete(self, *, task_ids: tuple[str, ...]) -> None:
         """Require exact coverage of every task/repetition in this Harbor invocation."""
-        expected = self._bundle.harbor.repetitions
+        expected = self._required_repetitions
         missing = tuple(
             sorted(
                 f"{task_id}:{self._repetitions.get(task_id, 0)}/{expected}"
@@ -692,7 +677,7 @@ class _EnumerateTaskRefsHandler:
 
 def _operation_registrations(
     *,
-    bundle: RunBundle,
+    bundle: RunPlan,
     registry: KernelRuntimeRegistry,
     batch_handler: _HarborBatchHandler,
     stage_handler: _HarborStageHandler,
@@ -722,7 +707,7 @@ def _operation_registrations(
         operation_runtimes[surface_operation.operation_id] = primitive.runtime
 
     registrations: list[OperationRegistration] = []
-    for reference in bundle.program.operation_refs:
+    for reference in bundle.execution_program.operation_refs:
         operation = bundle.harness.program_surface.resolve_operation(reference)
         if operation is None:
             raise ValueError(f"compiled operation no longer resolves against Hx: {reference.operation_id}")
@@ -820,13 +805,13 @@ def _definition_operation_handler(
 def _invocation_root(
     *,
     artifacts_root: Path,
-    bundle: RunBundle,
+    bundle: RunPlan,
     run_id: str,
     context: OperationExecutionContext,
 ) -> Path:
     return (
         Path(artifacts_root)
-        / _safe_segment(bundle.bundle_id)
+        / _safe_segment(bundle.run_manifest.run_id)
         / "runs"
         / _safe_segment(run_id)
         / "invocations"
@@ -893,23 +878,8 @@ def _runtime_finalization_selection(
     return task_ref, arguments["stage_receipts"]
 
 
-def _review_lineage(snapshot: TaskSnapshotRef) -> tuple[str, str]:
-    if snapshot.task_review is not None:
-        return snapshot.task_review.review_sidecar_sha256, snapshot.task_review.declared_surface_sha256
-    return (
-        snapshot.package_sha256,
-        canonical_json_sha256(
-            {
-                "kind": "atomic-task",
-                "task_id": snapshot.task_id,
-                "task_package_sha256": snapshot.package_sha256,
-            }
-        ),
-    )
-
-
 def _bound_runtime_versions(
-    bundle: RunBundle,
+    bundle: RunPlan,
     snapshot: TaskSnapshotRef,
     record: TrialRecord,
 ) -> dict[str, str]:
@@ -944,7 +914,7 @@ def _merge_artifacts(
     return result
 
 
-def _artifact_matches(artifact: ArtifactReference, requirement: str) -> bool:
+def _artifact_matches(artifact: ArtifactReference | TrialArtifactRef, requirement: str) -> bool:
     return artifact.kind == requirement or artifact.path.endswith(requirement)
 
 
@@ -964,6 +934,7 @@ def _trial_rewards(paths: tuple[Path, ...]) -> list[float]:
     rewards: list[float] = []
     for path in paths:
         record = read_trial_record(path, ledger_root=path.parents[1])
-        if record.evaluation.reward is not None:
-            rewards.append(float(record.evaluation.reward))
+        evaluation = record.evaluation
+        if evaluation is not None and evaluation.reward is not None:
+            rewards.append(float(evaluation.reward))
     return rewards

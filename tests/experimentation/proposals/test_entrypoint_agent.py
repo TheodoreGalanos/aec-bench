@@ -28,6 +28,7 @@ from aec_bench.experimentation.proposals.session_config import (
 from aec_bench.experimentation.proposals.task_package import (
     ProposalTaskPackageIdentity,
     build_proposal_task_package,
+    source_task_package_sha256,
 )
 from agents.entrypoint_agent import (
     _LIBRARY_ARCHIVE_REMOTE_PATH,
@@ -442,13 +443,14 @@ def _rlm_host_fixture(
     output_contract = OutputCompletionContract.model_validate_json(
         (source_task_dir / "environment" / "output_contract.json").read_bytes(),
     )
+    source_package_sha256 = source_task_package_sha256(source_task_dir)
     derived = build_proposal_task_package(
         source_task_dir=source_task_dir,
         destination_task_dir=tmp_path / "derived-task",
         identity=ProposalTaskPackageIdentity(
             task_id=bundle.task_snapshot.task_id,
-            task_revision=bundle.task_snapshot.definition_sha256,
-            source_task_package_sha256=bundle.task_snapshot.package_sha256,
+            task_revision=bundle.task_snapshot.commitment_sha256,
+            source_task_package_sha256=source_package_sha256,
             problem_view_sha256=(bundle.compilation.proposal_freeze.problem_view.content_sha256),
             output_contract_sha256=(bundle.compilation.proposal_graph.finalizer.output_completion_contract_sha256),
             visibility=Visibility.PUBLIC,
@@ -463,7 +465,7 @@ def _rlm_host_fixture(
             bundle_file_sha256=hashlib.sha256(bundle_bytes).hexdigest(),
             bundle_content_sha256=bundle.content_sha256,
             source_task_dir=str(source_task_dir.resolve()),
-            source_task_package_sha256=bundle.task_snapshot.package_sha256,
+            source_task_package_sha256=source_package_sha256,
             runtime_archive_path=str(runtime_archive.path.resolve()),
             runtime_archive_sha256=runtime_archive.archive_sha256,
             runtime_archive_content_sha256=runtime_archive.content_sha256,

@@ -14,13 +14,12 @@ from aec_bench.contracts.harness_instance import (
     HarnessContractKind,
     HarnessContractSpec,
 )
-from aec_bench.contracts.trial_record import ArtifactReference, TrialRecord
+from aec_bench.contracts.trial_record import TrialRecord
 
 ContractValidator = Literal[
     "task_ref_set",
     "trial_record",
     "verified_trial_record",
-    "candidate_manifest",
 ]
 
 
@@ -66,12 +65,6 @@ TRUSTED_HARNESS_CONTRACTS: dict[str, HarnessContractRule] = {
             }
         ),
         validator="verified_trial_record",
-    ),
-    "aecbench://candidate-manifest/v1": HarnessContractRule(
-        kind=HarnessContractKind.INVARIANT,
-        enforcement=HarnessContractEnforcement.RUNTIME,
-        binding_kinds=frozenset({HarnessBindingKind.RESULT_IMPORT}),
-        validator="candidate_manifest",
     ),
 }
 
@@ -125,7 +118,6 @@ def enforce_runtime_harness_contracts(
     *,
     contracts: tuple[HarnessContractSpec, ...],
     record: TrialRecord,
-    candidate_manifest: ArtifactReference,
 ) -> None:
     """Apply every declared runtime validator to one imported TrialRecord."""
     for contract in contracts:
@@ -140,15 +132,6 @@ def enforce_runtime_harness_contracts(
                 raise HarnessContractError(
                     "verified_trial_contract_failed",
                     f"trial {record.trial_id!r} does not satisfy verified output validity",
-                    subject_ids=(contract.contract_id, record.trial_id),
-                )
-            continue
-        if rule.validator == "candidate_manifest":
-            artifacts = record.outputs.artifacts or []
-            if candidate_manifest not in artifacts:
-                raise HarnessContractError(
-                    "candidate_manifest_contract_failed",
-                    f"trial {record.trial_id!r} is not bound to its candidate manifest",
                     subject_ids=(contract.contract_id, record.trial_id),
                 )
             continue

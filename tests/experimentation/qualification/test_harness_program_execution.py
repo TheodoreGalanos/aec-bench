@@ -1,4 +1,4 @@
-# ABOUTME: Exercises ordered harness-program execution through real RunBundle and Harbor workflow contracts.
+# ABOUTME: Exercises ordered harness-program execution through real RunPlan and Harbor workflow contracts.
 # ABOUTME: Proves outer seed matching, one-attempt cells, content-addressed plans, and fail-closed outcomes.
 
 from __future__ import annotations
@@ -13,7 +13,6 @@ from typing import Any
 import pytest
 import yaml  # type: ignore[import-untyped]
 
-from aec_bench.contracts.harness_kernel import canonical_json_sha256
 from aec_bench.contracts.trial_record import ExecutionStatus
 from aec_bench.experimentation.qualification.harness_program_study.candidates import (
     HarnessProgramCandidateRequest,
@@ -64,7 +63,7 @@ class HarnessProgramHarborExecutor:
         kwargs: dict[str, Any] = agent["kwargs"]
         lineage: dict[str, Any] = kwargs["meta_harness_context"]
         execution_seed = int(kwargs["execution_seed"])
-        bundle_id = str(lineage["bundle_id"])
+        bundle_id = str(lineage["plan_run_id"])
         assert lineage["execution_seed"] == execution_seed
         call = CapturedHarborCall(
             execution_seed=execution_seed,
@@ -138,7 +137,7 @@ def test_execute_harness_program_study_runs_williams_plan_once_per_seeded_trial(
         HarnessProgramCell.HX_PX: 0.9,
     }
     rewards_by_bundle_id = {
-        candidate.bundle.bundle_id: rewards_by_cell[candidate.cell] for candidate in candidates.candidates
+        candidate.bundle.run_manifest.run_id: rewards_by_cell[candidate.cell] for candidate in candidates.candidates
     }
     executor = HarnessProgramHarborExecutor(rewards_by_bundle_id=rewards_by_bundle_id)
 
@@ -182,8 +181,8 @@ def test_execute_harness_program_study_runs_williams_plan_once_per_seeded_trial(
         assert provenance.harness_program_cell == item.trial.cell.value
         assert provenance.paired_block_id == item.trial.block_id
         assert provenance.harness_program_plan == result.plan_artifact.reference
-        assert provenance.bundle_sha256 == canonical_json_sha256(expected.bundle.model_dump(mode="json"))
-        assert provenance.program_sha256 == canonical_json_sha256(expected.bundle.program.model_dump(mode="json"))
+        assert provenance.plan_run_id == expected.bundle.run_manifest.run_id
+        assert provenance.program_id == expected.bundle.execution_program.program_id
         assert provenance.motif_ids == ("motif.alpha", "motif.beta")
         assert record.execution_status is ExecutionStatus.COMPLETED
         assert record.outputs.artifacts is not None
@@ -228,7 +227,7 @@ def test_execute_harness_program_study_rejects_unverified_trial_records(tmp_path
     registry, tasks_root, request = _factory_inputs(tmp_path)
     candidates = materialize_harness_program_candidates(request, registry=registry, tasks_root=tasks_root)
     executor = HarnessProgramHarborExecutor(
-        rewards_by_bundle_id={candidate.bundle.bundle_id: 1.0 for candidate in candidates.candidates},
+        rewards_by_bundle_id={candidate.bundle.run_manifest.run_id: 1.0 for candidate in candidates.candidates},
         verified=False,
     )
 
@@ -256,7 +255,7 @@ def test_execute_harness_program_study_preserves_verifier_completed_invalid_zero
     registry, tasks_root, request = _factory_inputs(tmp_path)
     candidates = materialize_harness_program_candidates(request, registry=registry, tasks_root=tasks_root)
     executor = HarnessProgramHarborExecutor(
-        rewards_by_bundle_id={candidate.bundle.bundle_id: 1.0 for candidate in candidates.candidates},
+        rewards_by_bundle_id={candidate.bundle.run_manifest.run_id: 1.0 for candidate in candidates.candidates},
         valid_output=False,
     )
 
@@ -292,7 +291,7 @@ def test_execute_harness_program_study_aggregates_multi_invocation_programs_once
     registry, tasks_root, request = _factory_inputs(tmp_path, task_refs=task_refs)
     candidates = materialize_harness_program_candidates(request, registry=registry, tasks_root=tasks_root)
     executor = HarnessProgramHarborExecutor(
-        rewards_by_bundle_id={candidate.bundle.bundle_id: 0.5 for candidate in candidates.candidates}
+        rewards_by_bundle_id={candidate.bundle.run_manifest.run_id: 0.5 for candidate in candidates.candidates}
     )
 
     result = execute_harness_program_study(
@@ -334,7 +333,9 @@ def test_execute_harness_program_study_blocks_multiple_task_sets_under_one_sched
     beta = materialize_harness_program_candidates(request_beta, registry=registry, tasks_root=tasks_root)
     executor = HarnessProgramHarborExecutor(
         rewards_by_bundle_id={
-            candidate.bundle.bundle_id: 0.5 for candidate_set in (alpha, beta) for candidate in candidate_set.candidates
+            candidate.bundle.run_manifest.run_id: 0.5
+            for candidate_set in (alpha, beta)
+            for candidate in candidate_set.candidates
         }
     )
 
@@ -498,7 +499,7 @@ def test_execute_harness_program_study_revalidates_reference_to_bundle_mapping(t
     swapped = candidates.candidates[0].model_copy(update={"bundle": candidates.candidates[1].bundle})
     tampered = candidates.model_copy(update={"candidates": (swapped, *candidates.candidates[1:])})
 
-    with pytest.raises(ValueError, match="materialized candidate harness does not match its RunBundle"):
+    with pytest.raises(ValueError, match="materialized candidate harness does not match its RunPlan"):
         execute_harness_program_study(
             candidates=tampered,
             manifest=_manifest(candidates, randomization_seed=73),

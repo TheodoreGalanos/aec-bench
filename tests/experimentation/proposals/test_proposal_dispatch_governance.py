@@ -55,6 +55,7 @@ from aec_bench.experimentation.proposals.task_package import (
     ProposalTaskPackageIdentity,
     ProposalTaskPackageManifest,
     build_proposal_task_package,
+    source_task_package_sha256,
 )
 from aec_bench.tasks.loader import load_task_definition
 
@@ -483,6 +484,7 @@ def _materialize_dispatch_fixture(
         archive_path=tmp_path / "proposal-runtime.tar.gz",
     )
     source_task_dir = fixture.ledger.root.parent / "tasks" / compiled.task_snapshot.task_id
+    source_package_sha256 = source_task_package_sha256(source_task_dir)
     output_contract = OutputCompletionContract.model_validate(
         compiled.compilation.proposal_freeze.problem_view.output_contract,
     )
@@ -495,8 +497,8 @@ def _materialize_dispatch_fixture(
         ),
         identity=ProposalTaskPackageIdentity(
             task_id=compiled.task_snapshot.task_id,
-            task_revision=compiled.task_snapshot.definition_sha256,
-            source_task_package_sha256=compiled.task_snapshot.package_sha256,
+            task_revision=compiled.task_snapshot.commitment_sha256,
+            source_task_package_sha256=source_package_sha256,
             problem_view_sha256=(compiled.compilation.proposal_freeze.problem_view.content_sha256),
             output_contract_sha256=(compiled.compilation.proposal_graph.finalizer.output_completion_contract_sha256),
             visibility=Visibility.PUBLIC,
@@ -538,7 +540,7 @@ def _materialize_dispatch_fixture(
         bundle_file_sha256=hashlib.sha256(bundle_path.read_bytes()).hexdigest(),
         bundle_content_sha256=compiled.content_sha256,
         source_task_dir=str(source_task_dir.resolve()),
-        source_task_package_sha256=compiled.task_snapshot.package_sha256,
+        source_task_package_sha256=source_package_sha256,
         runtime_archive_path=str(runtime_archive.path.resolve()),
         runtime_archive_sha256=runtime_archive.archive_sha256,
         runtime_archive_content_sha256=runtime_archive.content_sha256,

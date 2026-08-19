@@ -28,7 +28,7 @@ from aec_bench.contracts.proposal_execution_types import (
     ProposalDiagnosticVisibility,
     ProposalExecutionSemantics,
 )
-from aec_bench.contracts.run_bundle import TaskSnapshotRef
+from aec_bench.contracts.task_snapshot import TaskSnapshotRef
 from aec_bench.experimentation.governance.authority_ledger import AuthorityLedger, AuthorityLedgerError
 from aec_bench.experimentation.proposals.freezing import (
     GovernedProposalFreezeError,

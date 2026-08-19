@@ -13,14 +13,18 @@ from pydantic import JsonValue
 
 from aec_bench.adapters.base import AdapterCompletionReason, AdapterStopReason
 from aec_bench.contracts.agent_output import AgentOutputStatus
+from aec_bench.contracts.artifacts import ArtifactRef
 from aec_bench.contracts.execution_program import ActionNode, StopNode
+from aec_bench.contracts.harness_instance import AgentBindingConfig
 from aec_bench.contracts.harness_kernel import canonical_json_sha256
 from aec_bench.contracts.output_completion import (
     OutputCommitAttestation,
     OutputCompletionContract,
     evaluate_output_completion,
 )
-from aec_bench.contracts.run_bundle import RunBundle, TaskSnapshotRef
+from aec_bench.contracts.run_bundle import RunPlan
+from aec_bench.contracts.task_review_snapshot import ReviewSnapshot
+from aec_bench.contracts.task_snapshot import TaskSnapshotRef
 from aec_bench.contracts.trial_record import EvaluationStatus, EvidenceStatus, ExecutionStatus, TrialRecord
 from aec_bench.evolution.paired_repair import RepairTrialOutcome
 from aec_bench.evolution.repair_lifecycle import (
@@ -56,7 +60,7 @@ from aec_bench.harness.program_execution import NodeExecutionStatus
 @dataclass(frozen=True)
 class _SeedCapture:
     manifest: RepairSeedExecution
-    bundle: RunBundle
+    bundle: RunPlan
     execution: RunBundleExecution
 
 
@@ -110,12 +114,18 @@ def _repair_agent_evidence(
 def _requires_output_contract_completion_evidence(candidate: CompiledRepairCandidate) -> bool:
     if candidate.parent_candidate_id is None:
         return False
-    binding = candidate.harness.binding(candidate.bundle.harbor.agent_binding_id)
+    binding = next(
+        (binding for binding in candidate.harness.bindings if isinstance(binding.configuration, AgentBindingConfig)),
+        None,
+    )
     return binding is not None and binding.capability_ref.capability_id == "aecbench.adapter.rlm-output-contract"
 
 
 def _requires_output_commit_completion_evidence(candidate: CompiledRepairCandidate) -> bool:
-    binding = candidate.harness.binding(candidate.bundle.harbor.agent_binding_id)
+    binding = next(
+        (binding for binding in candidate.harness.bindings if isinstance(binding.configuration, AgentBindingConfig)),
+        None,
+    )
     return binding is not None and binding.capability_ref.capability_id == "aecbench.adapter.rlm-output-commit"
 
 
@@ -181,20 +191,20 @@ def _repair_output_artifact_evidence(
 ) -> RepairOutputArtifactEvidence | None:
     raw_output_path = record.outputs.raw_output_path
     declared_output = record.outputs.agent_output
-    if raw_output_path is None or declared_output is None:
+    raw_output_ref = record.outputs.raw_output
+    if raw_output_path is None or raw_output_ref is None or declared_output is None:
         return None
     root = repo_root.resolve()
     output = _resolve_output_artifact(
         raw_output_path=raw_output_path,
-        declared_output_path=declared_output.output_path,
+        artifact=raw_output_ref,
         root=root,
     )
     if output is None:
         return None
-    relative, resolved, encoded = output
+    resolved, encoded = output
     contract_evidence = _load_bound_completion_contract(
         record,
-        root=root,
         tasks_root=tasks_root,
         output_encoded=encoded,
     )
@@ -209,7 +219,7 @@ def _repair_output_artifact_evidence(
         ".jsonl": "application/x-ndjson",
     }.get(resolved.suffix.lower(), "application/octet-stream")
     return RepairOutputArtifactEvidence(
-        path=relative.as_posix(),
+        path=declared_output.output_path,
         sha256=hashlib.sha256(encoded).hexdigest(),
         media_type=media_type,
         size_bytes=len(encoded),
@@ -222,27 +232,30 @@ def _repair_output_artifact_evidence(
 def _resolve_output_artifact(
     *,
     raw_output_path: str,
-    declared_output_path: str,
+    artifact: ArtifactRef,
     root: Path,
-) -> tuple[Path, Path, bytes] | None:
+) -> tuple[Path, bytes] | None:
     path = Path(raw_output_path)
     resolved = path.resolve() if path.is_absolute() else (root / path).resolve()
     try:
-        relative = resolved.relative_to(root)
+        resolved.relative_to(root)
     except ValueError:
         return None
-    if resolved.name != Path(declared_output_path).name or not resolved.is_file():
+    if not resolved.is_file():
         return None
     encoded = resolved.read_bytes()
-    if not encoded.strip():
+    if (
+        not encoded.strip()
+        or len(encoded) != artifact.size_bytes
+        or hashlib.sha256(encoded).hexdigest() != artifact.sha256
+    ):
         return None
-    return relative, resolved, encoded
+    return resolved, encoded
 
 
 def _load_bound_completion_contract(
     record: TrialRecord,
     *,
-    root: Path,
     tasks_root: Path,
     output_encoded: bytes,
 ) -> tuple[bytes, OutputCompletionContract, str] | None:
@@ -255,16 +268,15 @@ def _load_bound_completion_contract(
     if not contract_path.is_file():
         return None
     contract_encoded = contract_path.read_bytes()
-    try:
-        contract_relative_path = contract_path.relative_to(root).as_posix()
-    except ValueError:
-        return None
     contract_references = tuple(
-        reference
-        for reference in record.inputs.input_files or ()
-        if reference.path == contract_relative_path and reference.source == "output_completion_contract"
+        reference for reference in record.inputs.input_files or () if reference.source == "output_completion_contract"
     )
-    if len(contract_references) != 1 or contract_references[0].hash != hashlib.sha256(contract_encoded).hexdigest():
+    if len(contract_references) != 1:
+        return None
+    contract_reference = contract_references[0].artifact
+    if contract_reference.sha256 != hashlib.sha256(
+        contract_encoded
+    ).hexdigest() or contract_reference.size_bytes != len(contract_encoded):
         return None
     try:
         contract = OutputCompletionContract.model_validate_json(contract_encoded)
@@ -466,9 +478,8 @@ def _interpret_trial_record(
     if estimated_cost is None:
         diagnostics = (*diagnostics, "cost_evidence_incomplete")
     snapshot = _snapshot(candidate.bundle, task_id)
-    review_lineage_sha256 = (
-        snapshot.task_review.review_sidecar_sha256 if snapshot.task_review is not None else snapshot.package_sha256
-    )
+    review_lineage_sha256 = _review_commitment(candidate.bundle, task_id)
+    resource_sha256 = snapshot.commitment_sha256
     trial_evidence = RepairTrialEvidence(
         trial_id=record.trial_id,
         task_id=task_id,
@@ -479,7 +490,7 @@ def _interpret_trial_record(
         valid=valid,
         agent=agent_evidence,
         verifier=verifier_evidence,
-        resource_sha256=snapshot.package_sha256,
+        resource_sha256=resource_sha256,
         review_lineage_sha256=review_lineage_sha256,
         estimated_cost_usd=estimated_cost,
         error_codes=diagnostics,
@@ -498,7 +509,7 @@ def _interpret_trial_record(
             split=pairing.split,
             candidate_id=candidate.candidate_id,
             kernel_ref=candidate.harness.kernel_ref,
-            resource_sha256=snapshot.package_sha256,
+            resource_sha256=resource_sha256,
             review_lineage_sha256=review_lineage_sha256,
             reward=record.evaluation.reward,
             complete=complete,
@@ -618,11 +629,19 @@ def _monolithic_run_batch_evidence(
     )
 
 
-def _snapshot(bundle: RunBundle, task_id: str) -> TaskSnapshotRef:
+def _snapshot(bundle: RunPlan, task_id: str) -> TaskSnapshotRef:
     matches = [snapshot for snapshot in bundle.task_snapshots if snapshot.task_id == task_id]
     if len(matches) != 1:
         raise ValueError(f"repair evidence task is absent from exact snapshots: {task_id}")
     return matches[0]
+
+
+def _review_commitment(bundle: RunPlan, task_id: str) -> str:
+    if isinstance(bundle.review, ReviewSnapshot):
+        review = next((review for review in bundle.review.tasks if review.task_id == task_id), None)
+        if review is not None:
+            return canonical_json_sha256(review.model_dump(mode="json"))
+    return _snapshot(bundle, task_id).commitment_sha256
 
 
 def _block_id(

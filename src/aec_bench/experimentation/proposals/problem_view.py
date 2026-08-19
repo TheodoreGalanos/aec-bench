@@ -25,14 +25,10 @@ from aec_bench.contracts.program_proposal.problem import (
     PublicDataGapBoundary,
     PublicSourceRef,
 )
-from aec_bench.contracts.run_bundle import TaskSnapshotRef
 from aec_bench.contracts.task_definition import TaskDefinition
+from aec_bench.contracts.task_snapshot import TaskSnapshotRef
 from aec_bench.evaluation.task_review import TASK_REVIEW_SIDECARS
-from aec_bench.harness.compilation.task_snapshot import (
-    TaskSnapshotError,
-    build_task_snapshot,
-    graph_hidden_task_snapshot_sha256,
-)
+from aec_bench.harness.compilation.task_snapshot import TaskSnapshotError, build_task_snapshot
 
 _ProposalT = TypeVar("_ProposalT")
 _AUDIT_POLICY = {
@@ -313,8 +309,7 @@ def build_decomposition_problem_view(
     problem_view = DecompositionProblemView(
         problem_id=f"decomposition-problem.{task.task_id}.{audited_input_sha256[:12]}",
         task_id=task.task_id,
-        task_revision=exact_snapshot.definition_sha256,
-        public_task_snapshot_sha256=graph_hidden_task_snapshot_sha256(exact_snapshot),
+        task_revision=exact_snapshot.commitment_sha256,
         public_instruction=task.instruction,
         public_sources=source_refs,
         output_contract=output_contract,
@@ -457,7 +452,7 @@ def _validate_exact_snapshot(
     except (OSError, TaskSnapshotError, ValueError):
         findings.add("task_snapshot_mismatch")
         return None
-    if actual != expected or actual.task_review is not None:
+    if actual != expected:
         findings.add("task_snapshot_mismatch")
         return None
     return actual

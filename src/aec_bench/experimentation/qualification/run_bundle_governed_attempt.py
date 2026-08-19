@@ -1,10 +1,8 @@
-# ABOUTME: Assesses ordinary RunBundle executions at the governed-attempt lifecycle boundary.
+# ABOUTME: Assesses ordinary RunPlan executions at the governed-attempt lifecycle boundary.
 # ABOUTME: Replays scored terminal evidence while preserving the historical assessment API.
 
 from __future__ import annotations
 
-import hashlib
-import json
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
@@ -17,7 +15,7 @@ from aec_bench.contracts.harness_kernel import (
     validate_sha256,
 )
 from aec_bench.contracts.legacy_content_address import LegacyContentAddressedModel
-from aec_bench.contracts.run_bundle import RunBundle
+from aec_bench.contracts.run_bundle import RunPlan
 from aec_bench.contracts.validators import NonEmptyStr
 from aec_bench.experimentation.governance.authority_ledger import AuthorityLedger
 from aec_bench.experimentation.qualification.run_bundle_runtime import (
@@ -46,18 +44,18 @@ class RunBundleGovernedAttemptBlockedError(RuntimeError):
     def __init__(self, assessment: RunBundleGovernedAttemptAssessment) -> None:
         self.assessment = assessment
         blockers = ", ".join(item.value for item in assessment.blockers)
-        super().__init__(f"RunBundle governed-attempt migration is blocked: {blockers}")
+        super().__init__(f"RunPlan governed-attempt migration is blocked: {blockers}")
 
 
 class RunBundleGovernedAttemptAssessment(LegacyContentAddressedModel):
     """Content-bound proof that scored invocations reached governed terminals."""
 
-    schema_version: Literal["aecbench.run-bundle-governed-attempt-assessment.v2"] = (
-        "aecbench.run-bundle-governed-attempt-assessment.v2"
+    schema_version: Literal["aecbench.run-plan-governed-attempt-assessment.v3"] = (
+        "aecbench.run-plan-governed-attempt-assessment.v3"
     )
     bundle_id: NonEmptyStr
     run_id: NonEmptyStr
-    candidate_manifest_sha256: str
+    plan_commitment_sha256: str
     program_execution_sha256: str
     stage_receipt_sha256s: tuple[str, ...] = ()
     invocation_receipt_sha256s: tuple[str, ...] = ()
@@ -66,7 +64,7 @@ class RunBundleGovernedAttemptAssessment(LegacyContentAddressedModel):
     blockers: tuple[RunBundleGovernedAttemptBlocker, ...] = ()
 
     @field_validator(
-        "candidate_manifest_sha256",
+        "plan_commitment_sha256",
         "program_execution_sha256",
     )
     @classmethod
@@ -83,15 +81,15 @@ class RunBundleGovernedAttemptAssessment(LegacyContentAddressedModel):
         for digest in value:
             validate_sha256(digest)
         if value != tuple(sorted(set(value))):
-            raise ValueError("RunBundle governed-attempt evidence hashes must be sorted and unique")
+            raise ValueError("RunPlan governed-attempt evidence hashes must be sorted and unique")
         return value
 
     @model_validator(mode="after")
     def validate_blockers(self) -> Self:
         if self.blockers:
-            raise ValueError("ready RunBundle governed-attempt evidence cannot retain migration blockers")
+            raise ValueError("ready RunPlan governed-attempt evidence cannot retain migration blockers")
         if len(self.governed_terminal_sha256s) != len(self.invocation_receipt_sha256s):
-            raise ValueError("every scored RunBundle invocation requires one governed terminal")
+            raise ValueError("every scored RunPlan invocation requires one governed terminal")
         return self
 
 
@@ -105,7 +103,7 @@ class RunBundleGovernedAttemptBoundary:
 
 def execute_run_bundle_with_governed_attempt_assessment(
     *,
-    bundle: RunBundle,
+    bundle: RunPlan,
     registry: KernelRuntimeRegistry,
     workflow: SynchronousHarborWorkflow,
     artifacts_root: Path,
@@ -136,19 +134,14 @@ def execute_run_bundle_with_governed_attempt_assessment(
 
 def assess_run_bundle_governed_attempt(
     *,
-    bundle: RunBundle,
+    bundle: RunPlan,
     study: MetaHarnessStudyContext,
     execution: RunBundleExecution,
 ) -> RunBundleGovernedAttemptAssessment:
     """Verify exact legacy and governed evidence before declaring parity ready."""
 
-    if execution.program.program_ref != bundle.program.ref:
-        raise ValueError("RunBundle execution program differs from the assessed bundle")
-
-    candidate_manifest_sha256 = _verified_candidate_manifest_sha256(
-        bundle=bundle,
-        execution=execution,
-    )
+    if execution.program.program_ref != bundle.execution_program.ref:
+        raise ValueError("RunPlan execution program differs from the assessed bundle")
 
     invocation_hashes: list[str] = []
     terminal_hashes: list[str] = []
@@ -156,10 +149,10 @@ def assess_run_bundle_governed_attempt(
         loaded = load_harbor_invocation_receipt(invocation.receipt.path)
         if (
             loaded != invocation.receipt.receipt
-            or loaded.bundle_id != bundle.bundle_id
+            or loaded.bundle_id != bundle.run_manifest.run_id
             or loaded.run_id != study.run_id
         ):
-            raise ValueError("RunBundle invocation receipt differs from the assessed execution")
+            raise ValueError("RunPlan invocation receipt differs from the assessed execution")
         invocation_hashes.append(invocation.receipt.reference.sha256)
         terminal = _load_governed_terminal(invocation.job_dir)
         expected_imported = {
@@ -167,19 +160,19 @@ def assess_run_bundle_governed_attempt(
             *(item.sha256 for item in invocation.receipt.receipt.imported_trial_records),
         }
         if not expected_imported.issubset(terminal.imported_evidence_sha256s):
-            raise ValueError("RunBundle governed terminal omits exact imported invocation evidence")
+            raise ValueError("RunPlan governed terminal omits exact imported invocation evidence")
         terminal_hashes.append(canonical_json_sha256(terminal.model_dump(mode="json")))
     if len(invocation_hashes) != len(set(invocation_hashes)):
-        raise ValueError("RunBundle execution contains duplicate invocation receipt evidence")
+        raise ValueError("RunPlan execution contains duplicate invocation receipt evidence")
 
     stage_hashes = [item.receipt.reference.sha256 for item in execution.stage_executions]
     if len(stage_hashes) != len(set(stage_hashes)):
-        raise ValueError("RunBundle execution contains duplicate stage receipt evidence")
+        raise ValueError("RunPlan execution contains duplicate stage receipt evidence")
 
     return RunBundleGovernedAttemptAssessment(
-        bundle_id=bundle.bundle_id,
+        bundle_id=bundle.run_manifest.run_id,
         run_id=study.run_id,
-        candidate_manifest_sha256=candidate_manifest_sha256,
+        plan_commitment_sha256=canonical_json_sha256(bundle.model_dump(mode="json")),
         program_execution_sha256=canonical_json_sha256(
             execution.program.model_dump(mode="json"),
         ),
@@ -198,37 +191,15 @@ def require_run_bundle_governed_attempt_ready(
         raise RunBundleGovernedAttemptBlockedError(assessment)
 
 
-def _verified_candidate_manifest_sha256(
-    *,
-    bundle: RunBundle,
-    execution: RunBundleExecution,
-) -> str:
-    candidate_path = execution.candidate_manifest.path.resolve()
-    candidate_reference = execution.candidate_manifest.reference
-    if not candidate_path.is_file():
-        raise ValueError("RunBundle candidate manifest is missing")
-    candidate_bytes = candidate_path.read_bytes()
-    if hashlib.sha256(candidate_bytes).hexdigest() != candidate_reference.sha256:
-        raise ValueError("RunBundle candidate manifest differs from its evidence reference")
-    try:
-        candidate_payload = json.loads(candidate_bytes)
-    except json.JSONDecodeError as error:
-        raise ValueError("RunBundle candidate manifest is not valid JSON") from error
-    embedded_bundle = candidate_payload.get("bundle")
-    if not isinstance(embedded_bundle, dict) or embedded_bundle.get("bundle_id") != bundle.bundle_id:
-        raise ValueError("RunBundle candidate manifest differs from the assessed bundle")
-    return candidate_reference.sha256
-
-
 def _load_governed_terminal(job_dir: Path) -> GovernedAttemptTerminal:
     invocation_root = Path(job_dir).resolve().parent.parent
     state_root = invocation_root / "governed-attempt-state"
     records = tuple((state_root / "governed-attempt" / "records" / "terminal").glob("*/record.json"))
     if len(records) != 1:
-        raise ValueError("RunBundle scored invocation has no unique governed terminal record")
+        raise ValueError("RunPlan scored invocation has no unique governed terminal record")
     candidate = GovernedAttemptTerminal.model_validate_json(records[0].read_bytes())
     repository = GovernedAttemptRepository(root=state_root, disjoint_roots=())
     terminal = repository.load_state(candidate.attempt_id).terminal
     if terminal is None:
-        raise ValueError("RunBundle governed terminal cannot be replayed")
+        raise ValueError("RunPlan governed terminal cannot be replayed")
     return terminal

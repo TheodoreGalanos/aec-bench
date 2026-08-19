@@ -1,5 +1,5 @@
 # ABOUTME: Tests deterministic compilation of a matched four-cell harness-program candidate set.
-# ABOUTME: Proves factor integrity and executes every real RunBundle through the Harbor workflow seam.
+# ABOUTME: Proves factor integrity and executes every real RunPlan through the Harbor workflow seam.
 
 from __future__ import annotations
 
@@ -33,7 +33,7 @@ from aec_bench.contracts.harness_instance import (
     TaskSourceBindingConfig,
     VerificationBindingConfig,
 )
-from aec_bench.contracts.harness_kernel import KernelRef, canonical_json_sha256
+from aec_bench.contracts.harness_kernel import KernelRef
 from aec_bench.experimentation.qualification.harness_program_study.candidates import (
     HarnessProgramCandidateRequest,
     MaterializedHarnessProgramCandidateSet,
@@ -144,12 +144,14 @@ def test_factory_compiles_a_deterministic_genuine_matched_two_by_two(tmp_path: P
     assert h0_p0.bundle.harness != hx_p0.bundle.harness
     assert h0_p0.reference.program_ref == hx_p0.reference.program_ref == request.fixed_program.ref
     assert h0_px.reference.program_ref == hx_px.reference.program_ref == request.learned_program.ref
-    assert h0_p0.bundle.program != hx_p0.bundle.program
-    assert h0_px.bundle.program != hx_px.bundle.program
-    assert len({candidate.bundle.kernel_ref for candidate in first.candidates}) == 1
-    assert all(candidate.bundle.harbor.task_refs == request.task_refs for candidate in first.candidates)
+    assert h0_p0.bundle.execution_program != hx_p0.bundle.execution_program
+    assert h0_px.bundle.execution_program != hx_px.bundle.execution_program
+    assert len({candidate.bundle.harness.kernel_ref for candidate in first.candidates}) == 1
+    assert all(
+        tuple(snapshot.task_id for snapshot in candidate.bundle.task_snapshots) == request.task_refs
+        for candidate in first.candidates
+    )
     assert request.repetitions == 2
-    assert all(candidate.bundle.harbor.repetitions == 1 for candidate in first.candidates)
 
 
 def test_materialized_set_rejects_a_valid_bundle_swapped_into_the_wrong_cell(tmp_path: Path) -> None:
@@ -159,7 +161,7 @@ def test_materialized_set_rejects_a_valid_bundle_swapped_into_the_wrong_cell(tmp
     payload.pop("content_sha256")
     payload["candidates"][0]["bundle"] = payload["candidates"][1]["bundle"]
 
-    with pytest.raises(ValidationError, match="materialized candidate harness does not match its RunBundle"):
+    with pytest.raises(ValidationError, match="materialized candidate harness does not match its RunPlan"):
         MaterializedHarnessProgramCandidateSet.model_validate(payload)
 
 
@@ -316,10 +318,10 @@ def test_all_four_bundles_execute_through_the_real_run_bundle_runtime_seam(tmp_p
             for path in invocation.imported_trial_paths
         ]
         assert len(records) == 1
-        observed_bundle_ids = {
-            record.meta_harness_provenance.bundle_sha256 for record in records if record.meta_harness_provenance
+        observed_plan_ids = {
+            record.meta_harness_provenance.plan_run_id for record in records if record.meta_harness_provenance
         }
-        assert observed_bundle_ids == {canonical_json_sha256(candidate.bundle.model_dump(mode="json"))}
+        assert observed_plan_ids == {candidate.bundle.run_manifest.run_id}
 
     assert executor.calls == 4
 
@@ -450,7 +452,6 @@ def _recipe(
                 topology_role=HarnessTopologyRole.SINK,
                 configuration=ResultImportBindingConfig(
                     ledger_namespace="harness-program-candidates",
-                    required_artifacts=("candidate-manifest",),
                 ),
             ),
         ),

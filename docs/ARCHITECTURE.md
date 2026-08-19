@@ -171,16 +171,23 @@ An evaluation regime is one independently published canonical envelope. Its
 artifact digest replaces compatibility checks over policy and critic hash
 matrices.
 Kernel, Harness, execution-program, evaluation, stage, task-snapshot, and
-run-bundle contracts remain plain domain models. Their joins use stable IDs,
+run-plan contracts remain plain domain models. Their joins use stable IDs,
 typed references, direct values, and named commitments. They do not calculate
 or carry a universal self-digest. A legacy compatibility reader validates old
 self-addressed JSON before it creates a plain current model.
+`RunPlan` owns the internal execution join. The ledger publishes one
+`PublishedRunPackage` archive that contains the plan, exact trial references,
+and all referenced artifact bytes. The archive receives one `ArtifactRef` and
+is the portable run-package identity. Import verifies the complete archive
+before it publishes any contained bytes.
 `RunManifest` owns identity shared by all trials in one run. It records the
 dataset, source, agent, runtime, provider route, evaluation regime, and
 expected authorities once. `TrialRecord` references that identity by
 `run_id`, and records execution, evaluation, and evidence status separately.
-A full clean Git revision or source-snapshot `ArtifactRef` identifies the
-source used for publishable execution.
+A full clean Git revision plus repository-relative task path, or one detached
+task-package `ArtifactRef`, identifies each exact runnable task. Review data is
+separate and a declared stage graph belongs to a stable review profile. The
+provider route stays in `RunManifest`; it does not participate in task identity.
 
 `TrialRecord` references evidence authorities; it does not copy task-owned
 episode state or replay facts into a second shared model. `TrialOutput` owns

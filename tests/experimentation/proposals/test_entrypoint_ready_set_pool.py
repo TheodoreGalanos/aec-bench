@@ -20,6 +20,7 @@ from aec_bench.experimentation.proposals.session_config import (
     LoadedProposalSessionHostInputs,
     load_proposal_session_host_inputs,
 )
+from aec_bench.experimentation.proposals.task_package import source_task_package_sha256
 from agents.entrypoint_agent import EntrypointAgent
 from tests.experimentation.proposals.test_entrypoint_agent import (
     _proposal_model,
@@ -126,7 +127,7 @@ def _ready_set_inputs(tmp_path: Path) -> LoadedProposalSessionHostInputs:
     ready_config = sequential_inputs.config.model_copy(
         update={
             "source_task_dir": str(ready_source_task.resolve()),
-            "source_task_package_sha256": (ready_bundle.task_snapshot.package_sha256),
+            "source_task_package_sha256": source_task_package_sha256(ready_source_task),
             "evaluation_coordinate": _evaluation_coordinate(ready_bundle),
         },
     )

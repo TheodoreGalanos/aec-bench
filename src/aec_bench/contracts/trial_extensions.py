@@ -243,17 +243,11 @@ class ProposalSessionTrialProvenance(StrictModel):
 class MetaHarnessTrialProvenance(StrictModel):
     run_id: NonEmptyStr
     policy_id: NonEmptyStr
+    plan_run_id: NonEmptyStr
     kernel_id: NonEmptyStr
-    kernel_sha256: NonEmptyStr
     harness_id: NonEmptyStr
-    harness_sha256: NonEmptyStr
     program_id: NonEmptyStr
-    program_sha256: NonEmptyStr
-    bundle_id: NonEmptyStr
-    bundle_sha256: NonEmptyStr
-    parent_bundle_id: NonEmptyStr | None = None
-    review_sidecar_sha256: NonEmptyStr
-    declared_surface_sha256: NonEmptyStr
+    parent_plan_run_id: NonEmptyStr | None = None
     harness_generator_sha256: NonEmptyStr
     program_generator_sha256: NonEmptyStr
     split: Literal["discovery", "repair_gate", "calibration", "holdout"]
@@ -264,7 +258,6 @@ class MetaHarnessTrialProvenance(StrictModel):
     paired_block_id: NonEmptyStr | None = None
     repair_attempt_id: NonEmptyStr | None = None
     repair_iteration: NonNegativeInt | None = None
-    candidate_manifest: ArtifactReference
     harness_program_plan: ArtifactReference | None = None
     repair_decision: ArtifactReference | None = None
     motif_ids: tuple[NonEmptyStr, ...] = ()
@@ -272,12 +265,6 @@ class MetaHarnessTrialProvenance(StrictModel):
     proposal_session: ProposalSessionTrialProvenance | None = None
 
     @field_validator(
-        "kernel_sha256",
-        "harness_sha256",
-        "program_sha256",
-        "bundle_sha256",
-        "review_sidecar_sha256",
-        "declared_surface_sha256",
         "harness_generator_sha256",
         "program_generator_sha256",
     )

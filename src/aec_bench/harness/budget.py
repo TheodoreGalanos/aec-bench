@@ -1,4 +1,4 @@
-# ABOUTME: Accounts observable Hx runtime, token, and cost usage across every RunBundle invocation.
+# ABOUTME: Accounts observable Hx runtime, token, and cost usage across every RunPlan invocation.
 # ABOUTME: Fails closed when declared evidence is missing or a content-pinned harness budget is breached.
 
 from __future__ import annotations

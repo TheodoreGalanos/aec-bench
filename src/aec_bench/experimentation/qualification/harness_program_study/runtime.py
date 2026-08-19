@@ -159,15 +159,7 @@ def _build_report(
         _candidate_set_evidence(candidate_set, execution=execution) for candidate_set in materialized
     )
     records = tuple(record for trial in execution.trial_executions for record in trial.records)
-    review_lineages = tuple(
-        sorted(
-            {
-                provenance.review_sidecar_sha256
-                for record in records
-                if (provenance := record.meta_harness_provenance) is not None
-            }
-        )
-    )
+    review_lineages = spec.applicability.review_lineage_ids
     valid_records = sum(_is_valid(record) for record in records)
     return HarnessProgramStudyReport(
         spec_sha256=spec.content_sha256,
@@ -211,20 +203,12 @@ def _candidate_cell_evidence(
     *,
     execution: HarnessProgramStudyExecution,
 ) -> HarnessProgramStudyCellEvidence:
-    matching = {
-        trial.execution.candidate_manifest.reference.sha256: trial.execution.candidate_manifest.reference
-        for trial in execution.trial_executions
-        if trial.candidate_reference == candidate.reference
-    }
-    if len(matching) != 1:
-        raise ValueError("harness-program-study candidate does not have exactly one stable candidate manifest")
     return HarnessProgramStudyCellEvidence(
         cell=candidate.cell,
         candidate_reference=candidate.reference,
-        bundle_id=candidate.bundle.bundle_id,
+        bundle_id=candidate.bundle.run_manifest.run_id,
         compiled_harness_ref=candidate.bundle.harness.ref,
-        compiled_program_ref=candidate.bundle.program.ref,
-        candidate_manifest=next(iter(matching.values())),
+        compiled_program_ref=candidate.bundle.execution_program.ref,
     )
 
 

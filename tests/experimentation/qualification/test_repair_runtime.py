@@ -1,4 +1,4 @@
-# ABOUTME: Exercises verifier-guided repair through real compilation, RunBundle execution, and TrialRecords.
+# ABOUTME: Exercises verifier-guided repair through real compilation, RunPlan execution, and TrialRecords.
 # ABOUTME: Proves seeded paired reruns, typed Hx patches, artifact integrity, and world-drift rejection.
 
 from __future__ import annotations
@@ -50,6 +50,7 @@ from aec_bench.contracts.output_completion import (
     OutputCompletionEvaluation,
     OutputCompletionReason,
 )
+from aec_bench.contracts.task_review_snapshot import ReviewSnapshot
 from aec_bench.contracts.trial_record import ArtifactReference
 from aec_bench.evolution.paired_repair import RepairAcceptancePolicy
 from aec_bench.evolution.repair_lifecycle import (
@@ -469,11 +470,12 @@ def test_repair_runtime_executes_seeded_parent_child_pair_and_preserves_lineage(
         ProgramExecutionStatus.SUCCEEDED,
         ProgramExecutionStatus.SUCCEEDED,
     ]
-    assert execution.attempt_plan.reference in [
-        artifact
+    assert execution.attempt_plan.reference.sha256 in [
+        artifact.artifact.sha256
         for run_artifact in execution.run_artifacts
         for record in runtime.verified_records(run_artifact.run_id)
         for artifact in (record.outputs.artifacts or [])
+        if artifact.role == execution.attempt_plan.reference.kind
     ]
 
     parent = result.parent_verification
@@ -637,7 +639,7 @@ def test_repair_runtime_executes_capability_repair_with_cost_non_inferiority_gat
             assert provenance.repair_decision == execution.attempt_plan.reference
             assert provenance.execution_seed in runtime.request.pairing.seeds
             if run_artifact.candidate_id == runtime.request.child_candidate_id:
-                assert provenance.parent_bundle_id is not None
+                assert provenance.parent_plan_run_id is not None
 
 
 def test_capability_repair_rejects_child_that_completed_without_exercising_output_contract(
@@ -1556,7 +1558,7 @@ def test_program_batch_coalescing_patch_preserves_fixed_hx_and_all_program_limit
     assert child_source.harness_request == runtime.parent.harness_request
     assert child_source.program_template.limits == runtime.parent.program_template.limits
     assert child.harness == parent.harness
-    assert child.bundle.kernel_ref == parent.bundle.kernel_ref
+    assert child.bundle.harness.kernel_ref == parent.bundle.harness.kernel_ref
     assert child.program.limits == parent.program.limits
     assert child.program.limits.max_total_attempts == 1
     assert child_source.program_template.nodes == (
@@ -1608,11 +1610,13 @@ def test_declared_stage_graph_patch_compiles_the_exact_graph_without_changing_hx
     _write_declared_stage_review(runtime.tasks_root / task_id)
     parent = runtime.dependencies.compiler(runtime.parent, runtime.request.pairing)
     snapshot = parent.bundle.task_snapshots[0]
-    assert snapshot.task_review is not None and snapshot.task_review.stage_graph is not None
+    assert isinstance(parent.bundle.review, ReviewSnapshot)
+    review = next(item for item in parent.bundle.review.tasks if item.task_id == task_id)
+    assert review.stage_graph is not None
     task_graph = RepairDeclaredStageGraphEvidence(
         task_id=task_id,
-        task_package_sha256=snapshot.package_sha256,
-        stage_graph=snapshot.task_review.stage_graph,
+        task_snapshot=snapshot,
+        review=review,
     )
     patch = ProgramMaterializeDeclaredStageGraphPatch(
         expected_program_ref=parent.program.ref,
@@ -1638,7 +1642,7 @@ def test_declared_stage_graph_patch_compiles_the_exact_graph_without_changing_hx
     assert child_source.harness_request == runtime.parent.harness_request
     assert child_source.program_template.limits == runtime.parent.program_template.limits
     assert child.harness == parent.harness
-    assert child.bundle.kernel_ref == parent.bundle.kernel_ref
+    assert child.bundle.harness.kernel_ref == parent.bundle.harness.kernel_ref
     assert child.bundle.task_snapshots == parent.bundle.task_snapshots
     stage_actions = tuple(
         node for node in child.program.nodes if isinstance(node, ActionNode) and node.operation_id == "run_stage.v1"
@@ -1680,11 +1684,13 @@ def test_declared_stage_graph_patch_rejects_stale_program_or_task_graph_identity
     _write_declared_stage_review(runtime.tasks_root / task_id)
     parent = runtime.dependencies.compiler(runtime.parent, runtime.request.pairing)
     snapshot = parent.bundle.task_snapshots[0]
-    assert snapshot.task_review is not None and snapshot.task_review.stage_graph is not None
+    assert isinstance(parent.bundle.review, ReviewSnapshot)
+    review = next(item for item in parent.bundle.review.tasks if item.task_id == task_id)
+    assert review.stage_graph is not None
     task_graph = RepairDeclaredStageGraphEvidence(
         task_id=task_id,
-        task_package_sha256=snapshot.package_sha256,
-        stage_graph=snapshot.task_review.stage_graph,
+        task_snapshot=snapshot,
+        review=review,
     )
 
     with pytest.raises(ValueError, match="expected program"):
@@ -1708,7 +1714,11 @@ def test_declared_stage_graph_patch_rejects_stale_program_or_task_graph_identity
                 message="Reject stale task identity.",
                 patch=ProgramMaterializeDeclaredStageGraphPatch(
                     expected_program_ref=parent.program.ref,
-                    task_graphs=(task_graph.model_copy(update={"task_package_sha256": "0" * 64}),),
+                    task_graphs=(
+                        task_graph.model_copy(
+                            update={"review": review.model_copy(update={"profile_id": "stale-review"})}
+                        ),
+                    ),
                 ),
             )
         )
@@ -2666,7 +2676,6 @@ def _parent_candidate(
                 topology_role=HarnessTopologyRole.SINK,
                 configuration=ResultImportBindingConfig(
                     ledger_namespace="repair-runtime",
-                    required_artifacts=("candidate-manifest",),
                 ),
             ),
         ),

@@ -325,18 +325,11 @@ def _compile_candidate(
             message="compiled candidate budget must match the exact paired budget",
             candidate_id=candidate.candidate_id,
         )
-    if compiled.bundle.harbor.task_refs != pairing.task_ids:
+    if tuple(snapshot.task_id for snapshot in compiled.bundle.task_snapshots) != pairing.task_ids:
         _fail(
             stage=RepairLoopStage.COMPILE,
             code="compiled_tasks_mismatch",
             message="compiled candidate tasks must match the exact paired tasks",
-            candidate_id=candidate.candidate_id,
-        )
-    if compiled.bundle.harbor.repetitions != pairing.repetitions:
-        _fail(
-            stage=RepairLoopStage.COMPILE,
-            code="compiled_repetitions_mismatch",
-            message="compiled candidate repetitions must match the exact paired repetitions",
             candidate_id=candidate.candidate_id,
         )
     return compiled

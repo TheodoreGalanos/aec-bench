@@ -142,8 +142,8 @@ class TaskCandidatePlan(LegacyContentAddressedModel):
         coordinate = self.matched_coordinate
         expected_task_identity = (
             task.task_id,
-            task.public_snapshot.definition_sha256,
-            task.review_lineage_id,
+            task.public_snapshot.commitment_sha256,
+            task.review.profile_id,
         )
         if (
             coordinate.task_id,
@@ -221,7 +221,7 @@ class EvaluationBatchPlan(LegacyContentAddressedModel):
             ),
             (
                 "world identities",
-                tuple(item.cohort_task.task.review_lineage_id for item in value),
+                tuple(item.cohort_task.task.review.profile_id for item in value),
             ),
             (
                 "schedule identities",

@@ -28,6 +28,7 @@ from aec_bench.contracts.harness_instance import (
     TaskSourceBindingConfig,
     VerificationBindingConfig,
 )
+from aec_bench.contracts.harness_kernel import kernel_abi_commitment
 from aec_bench.experimentation.governance.motifs import (
     HarnessProgramMotif,
     MotifApplicabilityDescriptor,
@@ -130,7 +131,10 @@ def test_selected_motif_materializes_target_specific_factors_and_real_candidates
     assert learned_agent.model == "claude-sonnet-4-6"
     assert "source/family/world" not in str(instantiated.model_dump(mode="json"))
     assert tuple(candidate.cell for candidate in materialized.candidates) == tuple(HarnessProgramCell)
-    assert all(candidate.bundle.harbor.task_refs == (target_task,) for candidate in materialized.candidates)
+    assert all(
+        tuple(snapshot.task_id for snapshot in candidate.bundle.task_snapshots) == (target_task,)
+        for candidate in materialized.candidates
+    )
 
 
 def test_motif_materialization_rejects_no_selection_and_untyped_template_payload() -> None:
@@ -173,7 +177,7 @@ def test_motif_materialization_rejects_no_selection_and_untyped_template_payload
 
     malformed = HarnessProgramMotif.create(
         status=MotifStatus.REUSABLE,
-        kernel_abi_sha256=registry.manifest.content_sha256,
+        kernel_abi_sha256=kernel_abi_commitment(registry.manifest.ref),
         hx_template=MotifTemplate.create(kind="hx", payload={"entrypoint": "arbitrary.import"}),
         px_template=encode_program_motif_template(_fanout_program("selected-px", limits)),
         applicability=_applicability(),
@@ -263,7 +267,7 @@ def _motif(recipe: HarnessRecipe, program: ProgramFactorTemplate) -> HarnessProg
     registry = default_kernel_registry()
     return HarnessProgramMotif.create(
         status=MotifStatus.REUSABLE,
-        kernel_abi_sha256=registry.manifest.content_sha256,
+        kernel_abi_sha256=kernel_abi_commitment(registry.manifest.ref),
         hx_template=encode_harness_motif_template(recipe),
         px_template=encode_program_motif_template(program),
         applicability=_applicability(),
@@ -275,7 +279,7 @@ def _selection_request(library: MotifLibrary) -> MotifSelectionRequest:
     return MotifSelectionRequest.create(
         archive_sha256=library.archive_sha256,
         archive_frozen=True,
-        kernel_abi_sha256=default_kernel_registry().manifest.content_sha256,
+        kernel_abi_sha256=kernel_abi_commitment(default_kernel_registry().manifest.ref),
         applicability=_applicability(),
         selection_split="discovery",
     )

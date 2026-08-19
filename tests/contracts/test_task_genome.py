@@ -4,7 +4,7 @@
 import pytest
 from pydantic import ValidationError
 
-from aec_bench.contracts.run_bundle import TaskSnapshotRef
+from aec_bench.contracts.artifacts import ArtifactRef
 from aec_bench.contracts.task_genome import (
     DomainFrame,
     ExtractionSummary,
@@ -17,6 +17,7 @@ from aec_bench.contracts.task_genome import (
     TaskGenomeReview,
     VerifierContract,
 )
+from aec_bench.contracts.task_snapshot import ArtifactTaskSnapshotRef as TaskSnapshotRef
 
 
 def build_manifest(**overrides: object) -> TaskGenomeManifest:
@@ -108,7 +109,7 @@ def test_task_genome_review_staleness_depends_only_on_task_snapshot() -> None:
     changed_review = review.model_copy(update={"reviewer": "theo", "status": "needs_review"})
 
     assert not changed_review.is_stale(snapshot)
-    assert changed_review.is_stale(snapshot.model_copy(update={"package_sha256": "3" * 64}))
+    assert changed_review.is_stale(snapshot.model_copy(update={"task_id": "electrical/changed-voltage-drop"}))
     assert changed_review.task == review.task
 
 
@@ -126,6 +127,10 @@ def test_reviewed_task_genome_requires_a_reviewer() -> None:
 def _snapshot() -> TaskSnapshotRef:
     return TaskSnapshotRef(
         task_id="electrical/voltage-drop",
-        definition_sha256="1" * 64,
-        package_sha256="2" * 64,
+        artifact=ArtifactRef(
+            artifact_id=f"artifacts/sha256/{'2' * 64}",
+            sha256="2" * 64,
+            size_bytes=1,
+            media_type="application/vnd.aec-bench.task-snapshot+tar+zstd",
+        ),
     )

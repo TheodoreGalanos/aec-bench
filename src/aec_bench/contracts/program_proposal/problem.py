@@ -88,11 +88,10 @@ class FixedHarnessCapabilityProjection(LegacyContentAddressedModel):
 class DecompositionProblemView(LegacyContentAddressedModel):
     """Reward-blind public task surface from which a proposer may create a program."""
 
-    schema_version: Literal["aecbench.decomposition-problem-view.v1"] = "aecbench.decomposition-problem-view.v1"
+    schema_version: Literal["aecbench.decomposition-problem-view.v2"] = "aecbench.decomposition-problem-view.v2"
     problem_id: NonEmptyStr
     task_id: NonEmptyStr
     task_revision: NonEmptyStr
-    public_task_snapshot_sha256: str
     public_instruction: NonEmptyStr
     public_sources: tuple[PublicSourceRef, ...] = Field(min_length=1)
     output_contract: OutputCompletionContract
@@ -110,7 +109,7 @@ class DecompositionProblemView(LegacyContentAddressedModel):
             raise ValueError(f"decomposition problem view rejects privileged leakage key {leaking_key!r}")
         return value
 
-    @field_validator("task_revision", "public_task_snapshot_sha256")
+    @field_validator("task_revision")
     @classmethod
     def validate_task_snapshot_hashes(cls, value: str) -> str:
         return validate_sha256(value)

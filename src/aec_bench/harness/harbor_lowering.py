@@ -1,4 +1,4 @@
-# ABOUTME: Lowers an immutable RunBundle into exact, trusted Harbor runtime inputs.
+# ABOUTME: Lowers an immutable RunPlan into exact, trusted Harbor runtime inputs.
 # ABOUTME: Revalidates task bytes and resolves every execution-bearing Hx binding through fixed K.
 
 from __future__ import annotations
@@ -23,12 +23,13 @@ from aec_bench.contracts.harness_instance import (
 )
 from aec_bench.contracts.harness_kernel import KernelCapabilityRef
 from aec_bench.contracts.output_completion import OutputCompletionContract
-from aec_bench.contracts.run_bundle import RunBundle
+from aec_bench.contracts.run_bundle import RunPlan
 from aec_bench.contracts.stage_execution import KernelInstructionOverride
 from aec_bench.contracts.task_definition import TaskDefinition, ToolSpec
+from aec_bench.contracts.task_snapshot import ArtifactTaskSnapshotRef, TaskSnapshotRef, task_snapshot_id
 from aec_bench.contracts.trajectory import MetaHarnessTrajectoryContext
 from aec_bench.harness.compilation import CompilationDiagnostic, CompilationOwner
-from aec_bench.harness.compilation.task_snapshot import TaskSnapshotError, resolve_task_snapshots
+from aec_bench.harness.compilation.task_snapshot import TaskSnapshotError, build_task_snapshot
 from aec_bench.harness.harbor_dispatch import build_harbor_job_config
 from aec_bench.harness.kernel_catalogue import (
     AgentAdapterRuntime,
@@ -42,7 +43,9 @@ from aec_bench.harness.kernel_catalogue import (
     ToolProviderRuntime,
     VerifierRuntime,
 )
+from aec_bench.tasks.loader import load_task_definition
 from aec_bench.tasks.registry import TaskRegistry
+from aec_bench.tasks.snapshot import build_task_snapshot_archive
 
 ConfigurationT = TypeVar("ConfigurationT", bound=HarnessBindingConfiguration)
 HarborOperation = Literal[
@@ -54,7 +57,7 @@ _HARBOR_OUTPUT_COMPLETION_PATH = "/workspace/output.md"
 
 
 class HarborLoweringError(ValueError):
-    """Raised when a RunBundle cannot be faithfully lowered to the installed runtime."""
+    """Raised when a RunPlan cannot be faithfully lowered to the installed runtime."""
 
     def __init__(self, diagnostic: CompilationDiagnostic) -> None:
         self.diagnostic = diagnostic
@@ -89,7 +92,7 @@ class LoweredHarborRun:
 
 
 def lower_run_bundle(
-    bundle: RunBundle,
+    bundle: RunPlan,
     *,
     registry: KernelRuntimeRegistry,
     tasks_root: Path,
@@ -103,6 +106,7 @@ def lower_run_bundle(
     motif_ids: tuple[str, ...] = (),
     remaining_runtime_seconds: int | None = None,
     instruction_override: KernelInstructionOverride | None = None,
+    repetitions: int = 1,
 ) -> LoweredHarborRun:
     """Resolve one px operation invocation without accepting agent-selected runtime hooks."""
     _validate_kernel(bundle=bundle, registry=registry)
@@ -130,7 +134,7 @@ def lower_run_bundle(
             subject_ids=missing,
         )
 
-    selected_task_refs = task_refs or bundle.harbor.task_refs
+    selected_task_refs = task_refs or tuple(task_snapshot_id(snapshot) for snapshot in bundle.task_snapshots)
     if not selected_task_refs or len(selected_task_refs) != len(set(selected_task_refs)):
         _fail(
             owner=CompilationOwner.PROGRAM,
@@ -155,7 +159,7 @@ def lower_run_bundle(
         bundle=bundle,
         registry=registry,
         selected_bindings=selected_bindings,
-        binding_id=bundle.harbor.agent_binding_id,
+        binding_id=_binding_id(bundle, AgentBindingConfig),
         configuration_type=AgentBindingConfig,
         runtime_type=AgentAdapterRuntime,
         role="agent",
@@ -164,7 +168,7 @@ def lower_run_bundle(
         bundle=bundle,
         registry=registry,
         selected_bindings=selected_bindings,
-        binding_id=bundle.harbor.compute_binding_id,
+        binding_id=_binding_id(bundle, ComputeBindingConfig),
         configuration_type=ComputeBindingConfig,
         runtime_type=HarborBackendRuntime,
         role="compute",
@@ -178,7 +182,7 @@ def lower_run_bundle(
             bundle=bundle,
             registry=registry,
             selected_bindings=selected_bindings,
-            binding_id=bundle.harbor.result_import_binding_id,
+            binding_id=_binding_id(bundle, ResultImportBindingConfig),
             configuration_type=ResultImportBindingConfig,
             runtime_type=ResultImporterRuntime,
             role="result import",
@@ -213,7 +217,7 @@ def lower_run_bundle(
         tasks=tasks,
         operation_runtime=harbor_operation,
         instruction_override=instruction_override,
-        repetitions=bundle.harbor.repetitions,
+        repetitions=repetitions,
     )
     if instruction_override is not None:
         parameters["kernel_instruction_override"] = instruction_override.model_dump(mode="json")
@@ -221,13 +225,16 @@ def lower_run_bundle(
     backend_runtime = cast(HarborBackendRuntime, compute_primitive.runtime)
     fanout_suffix = "" if fanout_index is None else f"-f{fanout_index}"
     run_suffix = "" if run_id is None else f"-{_safe_id(run_id)}"
-    experiment_id = f"{bundle.harbor.experiment_id}{run_suffix}-{_safe_id(program_node_id)}-a{attempt}{fanout_suffix}"
+    experiment_id = (
+        f"{bundle.run_manifest.experiment_id}{run_suffix}-{_safe_id(program_node_id)}-a{attempt}{fanout_suffix}"
+    )
     manifest = ExperimentManifest(
         experiment_id=experiment_id,
-        name=f"Adaptive harness {bundle.bundle_id} / {program_node_id} / attempt {attempt}",
+        name=f"Adaptive harness {bundle.run_manifest.run_id} / {program_node_id} / attempt {attempt}",
         description=(
-            f"RunBundle {bundle.bundle_id}; "
-            f"Hx {bundle.harness.instance_id}; px {bundle.program.program_id}@{bundle.program.version}."
+            f"Run plan {bundle.run_manifest.run_id}; "
+            f"Hx {bundle.harness.instance_id}; "
+            f"px {bundle.execution_program.program_id}@{bundle.execution_program.version}."
         ),
         tasks=TaskSelector(include_patterns=list(selected_task_refs)),
         agents=[
@@ -251,11 +258,11 @@ def lower_run_bundle(
                 ),
             ),
         ),
-        repetitions=bundle.harbor.repetitions,
+        repetitions=repetitions,
         disable_verification=not verification_enabled,
     )
     del agent_binding
-    trial_slots = len(tasks) * bundle.harbor.repetitions
+    trial_slots = len(tasks) * repetitions
     return LoweredHarborRun(
         manifest=manifest,
         tasks=tasks,
@@ -320,23 +327,26 @@ def _effective_instructions(
     return {task.task_id: instruction_override.effective_instruction}
 
 
-def _validate_kernel(*, bundle: RunBundle, registry: KernelRuntimeRegistry) -> None:
-    if bundle.kernel_ref != registry.manifest.ref:
+def _validate_kernel(*, bundle: RunPlan, registry: KernelRuntimeRegistry) -> None:
+    if bundle.harness.kernel_ref != registry.manifest.ref:
         _fail(
             owner=CompilationOwner.KERNEL,
             code="kernel_reference_mismatch",
-            message="RunBundle does not target the installed fixed kernel",
-            subject_ids=(bundle.kernel_ref.kernel_id,),
+            message="RunPlan does not target the installed fixed kernel",
+            subject_ids=(bundle.harness.kernel_ref.kernel_id,),
         )
 
 
 def _resolve_program_operation(
     *,
-    bundle: RunBundle,
+    bundle: RunPlan,
     registry: KernelRuntimeRegistry,
     program_node_id: str,
 ) -> tuple[ProgramOperationSpec, ProgramOperationRuntime]:
-    node = next((candidate for candidate in bundle.program.nodes if candidate.node_id == program_node_id), None)
+    node = next(
+        (candidate for candidate in bundle.execution_program.nodes if candidate.node_id == program_node_id),
+        None,
+    )
     if not isinstance(node, ActionNode | FanoutNode):
         _fail(
             owner=CompilationOwner.PROGRAM,
@@ -390,46 +400,30 @@ def _harbor_operation(
 
 def _resolve_exact_tasks(
     *,
-    bundle: RunBundle,
+    bundle: RunPlan,
     tasks_root: Path,
     task_refs: tuple[str, ...],
 ) -> tuple[TaskDefinition, ...]:
-    try:
-        current = resolve_task_snapshots(task_refs=task_refs, tasks_root=tasks_root)
-    except TaskSnapshotError as error:
-        _fail(
-            owner=CompilationOwner.WORLD,
-            code="task_snapshot_mismatch",
-            message=str(error),
-            subject_ids=task_refs,
-        )
     expected_by_id = {snapshot.task_id: snapshot for snapshot in bundle.task_snapshots}
     missing_snapshots = tuple(sorted(set(task_refs) - set(expected_by_id)))
     if missing_snapshots:
         _fail(
             owner=CompilationOwner.WORLD,
             code="runtime_task_snapshot_missing",
-            message="runtime task selection is absent from the immutable RunBundle snapshots",
+            message="runtime task selection is absent from the immutable RunPlan snapshots",
             subject_ids=missing_snapshots,
         )
     expected_snapshots = tuple(expected_by_id[task_ref] for task_ref in task_refs)
-    expected = tuple(
-        (snapshot.task_id, snapshot.definition_sha256, snapshot.package_sha256) for snapshot in expected_snapshots
+    mismatched = tuple(
+        snapshot.task_id
+        for snapshot in expected_snapshots
+        if not _task_material_matches(snapshot=snapshot, tasks_root=tasks_root)
     )
-    observed = tuple((snapshot.task_id, snapshot.definition_sha256, snapshot.package_sha256) for snapshot in current)
-    if observed != expected:
-        mismatched = tuple(
-            expected_snapshot.task_id
-            for expected_snapshot, observed_snapshot in zip(expected_snapshots, current, strict=True)
-            if (
-                expected_snapshot.definition_sha256 != observed_snapshot.definition_sha256
-                or expected_snapshot.package_sha256 != observed_snapshot.package_sha256
-            )
-        )
+    if mismatched:
         _fail(
             owner=CompilationOwner.WORLD,
             code="task_snapshot_mismatch",
-            message="task package bytes changed after RunBundle compilation",
+            message="task package bytes changed after RunPlan compilation",
             subject_ids=mismatched,
         )
     task_registry = TaskRegistry(tasks_root=Path(tasks_root))
@@ -451,9 +445,56 @@ def _resolve_exact_tasks(
     return tuple(by_id[task_ref] for task_ref in task_refs)
 
 
+def _task_material_matches(*, snapshot: TaskSnapshotRef, tasks_root: Path) -> bool:
+    task_dir = Path(tasks_root) / snapshot.task_id
+    try:
+        if isinstance(snapshot, ArtifactTaskSnapshotRef):
+            payload = build_task_snapshot_archive(task_dir)
+            return (
+                len(payload) == snapshot.artifact.size_bytes
+                and hashlib.sha256(payload).hexdigest() == snapshot.artifact.sha256
+            )
+        task = load_task_definition(task_dir, Path(tasks_root))
+        return build_task_snapshot(task=task, tasks_root=tasks_root) == snapshot
+    except (OSError, TaskSnapshotError, ValueError):
+        return False
+
+
+def _binding_id(bundle: RunPlan, configuration_type: type[HarnessBindingConfiguration]) -> str:
+    matching = tuple(
+        binding.binding_id
+        for binding in bundle.harness.bindings
+        if isinstance(binding.configuration, configuration_type)
+    )
+    if len(matching) != 1:
+        _fail(
+            owner=CompilationOwner.HARNESS,
+            code="run_plan_binding_role_invalid",
+            message=f"run plan requires exactly one {configuration_type.__name__} binding",
+            subject_ids=matching,
+        )
+    return matching[0]
+
+
+def _optional_binding_id(bundle: RunPlan, configuration_type: type[HarnessBindingConfiguration]) -> str | None:
+    matching = tuple(
+        binding.binding_id
+        for binding in bundle.harness.bindings
+        if isinstance(binding.configuration, configuration_type)
+    )
+    if len(matching) > 1:
+        _fail(
+            owner=CompilationOwner.HARNESS,
+            code="run_plan_binding_role_invalid",
+            message=f"run plan supports at most one {configuration_type.__name__} binding",
+            subject_ids=matching,
+        )
+    return matching[0] if matching else None
+
+
 def _selected_binding(
     *,
-    bundle: RunBundle,
+    bundle: RunPlan,
     registry: KernelRuntimeRegistry,
     selected_bindings: dict[str, CompiledHarnessBinding],
     binding_id: str,
@@ -488,11 +529,11 @@ def _selected_binding(
 
 def _verification_enabled(
     *,
-    bundle: RunBundle,
+    bundle: RunPlan,
     registry: KernelRuntimeRegistry,
     selected_bindings: dict[str, CompiledHarnessBinding],
 ) -> bool:
-    binding_id = bundle.harbor.verification_binding_id
+    binding_id = _optional_binding_id(bundle, VerificationBindingConfig)
     if binding_id is None:
         return False
     _, configuration, _ = _selected_binding(
@@ -509,7 +550,7 @@ def _verification_enabled(
 
 def _agent_parameters(
     *,
-    bundle: RunBundle,
+    bundle: RunPlan,
     registry: KernelRuntimeRegistry,
     tasks: tuple[TaskDefinition, ...],
     tasks_root: Path,
@@ -556,10 +597,10 @@ def _agent_parameters(
         )
     )
     lineage = MetaHarnessTrajectoryContext(
-        kernel_ref=bundle.kernel_ref,
+        kernel_ref=bundle.harness.kernel_ref,
         harness_ref=bundle.harness.ref,
-        program_ref=bundle.program.ref,
-        bundle_id=bundle.bundle_id,
+        program_ref=bundle.execution_program.ref,
+        plan_run_id=bundle.run_manifest.run_id,
         program_node_id=program_node_id,
         binding_ids=tuple(sorted(selected_bindings)),
         repair_iteration=repair_iteration,
@@ -745,7 +786,7 @@ def _task_output_completion_contract(
     return first
 
 
-def _runtime_seconds(*, bundle: RunBundle, remaining_runtime_seconds: int | None) -> int:
+def _runtime_seconds(*, bundle: RunPlan, remaining_runtime_seconds: int | None) -> int:
     if remaining_runtime_seconds is None:
         return bundle.harness.budget.max_runtime_seconds
     if remaining_runtime_seconds < 1:

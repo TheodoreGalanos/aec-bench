@@ -9,6 +9,7 @@ from typing import Any, cast
 import pytest
 from pydantic import ValidationError
 
+from aec_bench.contracts.artifacts import ArtifactRef
 from aec_bench.contracts.execution_program import ExecutionProgramRef
 from aec_bench.contracts.harness_instance import ProgramOperationRef
 from aec_bench.contracts.stage_execution import (
@@ -24,6 +25,7 @@ from aec_bench.contracts.stage_execution import (
     StageResourceEvidence,
     declared_stage_graph_from_payload,
 )
+from aec_bench.contracts.task_snapshot import ArtifactTaskSnapshotRef
 from aec_bench.contracts.trial_record import ArtifactReference
 
 
@@ -39,7 +41,7 @@ def _artifact(path: Path, *, kind: str, digest: str) -> ArtifactReference:
 def _stage_graph() -> DeclaredStageGraph:
     return DeclaredStageGraph(
         task_id="civil/review/drainage",
-        review_sidecar_sha256="a" * 64,
+        review_profile_id="review.civil.drainage",
         stages=(
             DeclaredStage(
                 stage_id="inventory",
@@ -76,7 +78,7 @@ def _stage_graph() -> DeclaredStageGraph:
 def test_declared_stage_graph_derives_routes_and_required_outputs() -> None:
     graph = _stage_graph()
 
-    assert graph.schema_version == "aecbench.declared-stage-graph.v2"
+    assert graph.schema_version == "aecbench.declared-stage-graph.v3"
     assert graph.topological_order == ("inventory", "authority", "decision")
     assert graph.predecessor_stage_ids("authority") == ("inventory",)
     assert graph.predecessor_stage_ids("decision") == ("inventory", "authority")
@@ -87,7 +89,7 @@ def test_declared_stage_graph_derives_routes_and_required_outputs() -> None:
     assert "content_sha256" not in graph.model_dump(mode="json")
 
     pre_cutover = graph.model_dump(mode="json")
-    pre_cutover["world_package_sha256"] = pre_cutover.pop("review_sidecar_sha256")
+    pre_cutover["world_package_sha256"] = "a" * 64
     with pytest.raises(ValidationError):
         DeclaredStageGraph.model_validate(pre_cutover)
 
@@ -101,7 +103,7 @@ def test_declared_stage_graph_rejects_cycles_and_ambiguous_producers() -> None:
     with pytest.raises(ValidationError, match="declared stage graph must be acyclic"):
         DeclaredStageGraph(
             task_id="civil/review/cycle",
-            review_sidecar_sha256="a" * 64,
+            review_profile_id="review.civil.cycle",
             stages=(
                 DeclaredStage(stage_id="a", consumes=("from_b",), produces=("from_a",)),
                 DeclaredStage(stage_id="b", consumes=("from_a",), produces=("from_b",)),
@@ -111,7 +113,7 @@ def test_declared_stage_graph_rejects_cycles_and_ambiguous_producers() -> None:
     with pytest.raises(ValidationError, match="declared stage outputs must have one producer"):
         DeclaredStageGraph(
             task_id="civil/review/ambiguous",
-            review_sidecar_sha256="a" * 64,
+            review_profile_id="review.civil.ambiguous",
             stages=(
                 DeclaredStage(stage_id="a", produces=("shared",)),
                 DeclaredStage(stage_id="b", produces=("shared",)),
@@ -123,7 +125,7 @@ def test_declared_stage_graph_payload_decoder_preserves_declared_field_order() -
     with pytest.raises(ValueError, match="declared stage text must be non-empty when supplied"):
         declared_stage_graph_from_payload(
             task_id="civil/review/drainage",
-            review_sidecar_sha256="a" * 64,
+            review_profile_id="review.civil.drainage",
             payload={
                 "stages": [
                     {
@@ -139,7 +141,7 @@ def test_declared_stage_graph_payload_decoder_preserves_declared_field_order() -
     with pytest.raises(ValueError, match="stage consumes must be a list"):
         declared_stage_graph_from_payload(
             task_id="civil/review/drainage",
-            review_sidecar_sha256="a" * 64,
+            review_profile_id="review.civil.drainage",
             payload={
                 "stages": [
                     {
@@ -156,14 +158,14 @@ def test_declared_stage_graph_payload_decoder_preserves_collection_order() -> No
     with pytest.raises(ValueError, match="declared task-review stage must be a mapping"):
         declared_stage_graph_from_payload(
             task_id="civil/review/drainage",
-            review_sidecar_sha256="a" * 64,
+            review_profile_id="review.civil.drainage",
             payload={"stages": [None], "handoffs": "not-a-list"},
         )
 
     with pytest.raises(ValueError, match="declared task-review handoff requires a non-empty id"):
         declared_stage_graph_from_payload(
             task_id="civil/review/drainage",
-            review_sidecar_sha256="a" * 64,
+            review_profile_id="review.civil.drainage",
             payload={
                 "stages": [{"id": "inventory"}],
                 "handoffs": [{"id": "", "producer_stage": ""}],
@@ -174,7 +176,7 @@ def test_declared_stage_graph_payload_decoder_preserves_collection_order() -> No
 def test_declared_stage_graph_payload_decoder_preserves_value() -> None:
     decoded = declared_stage_graph_from_payload(
         task_id="civil/review/drainage",
-        review_sidecar_sha256="a" * 64,
+        review_profile_id="review.civil.drainage",
         payload={
             "stages": [
                 {
@@ -203,7 +205,7 @@ def test_declared_stage_graph_payload_decoder_preserves_value() -> None:
     )
     expected = DeclaredStageGraph(
         task_id="civil/review/drainage",
-        review_sidecar_sha256="a" * 64,
+        review_profile_id="review.civil.drainage",
         stages=(
             DeclaredStage(
                 stage_id="inventory",
@@ -237,7 +239,7 @@ def test_declared_stage_graph_payload_decoder_ignores_handoffs_without_stages() 
     assert (
         declared_stage_graph_from_payload(
             task_id="civil/review/drainage",
-            review_sidecar_sha256="a" * 64,
+            review_profile_id="review.civil.drainage",
             payload={"handoffs": "not-a-list"},
         )
         is None
@@ -268,14 +270,22 @@ def test_stage_output_and_receipt_bind_exact_context_and_physical_artifacts(tmp_
         outputs={"provenance_ledger": {"status": "current"}},
     )
     receipt = StageExecutionReceipt(
-        bundle_id="bundle-stage",
+        plan_run_id="plan-stage",
         run_id="run-stage",
         program_ref=ExecutionProgramRef(program_id="program-stage", version="1.0.0"),
         program_node_id="authority",
         operation_ref=ProgramOperationRef(operation_id="run-stage"),
         attempt=1,
         task_id=graph.task_id,
-        task_package_sha256="7" * 64,
+        task_snapshot=ArtifactTaskSnapshotRef(
+            task_id=graph.task_id,
+            artifact=ArtifactRef(
+                artifact_id=f"artifacts/sha256/{'7' * 64}",
+                sha256="7" * 64,
+                size_bytes=1,
+                media_type="application/vnd.aec-bench.task-snapshot+tar+zstd",
+            ),
+        ),
         stage_graph_ref=graph.ref,
         stage_id="authority",
         context_manifest=_artifact(
@@ -302,13 +312,13 @@ def test_stage_output_and_receipt_bind_exact_context_and_physical_artifacts(tmp_
 
     assert "content_sha256" not in parsed.model_dump(mode="json")
     assert "content_sha256" not in context.model_dump(mode="json")
-    assert receipt.schema_version == "aecbench.stage-execution-receipt.v2"
+    assert receipt.schema_version == "aecbench.stage-execution-receipt.v3"
     assert "content_sha256" not in receipt.model_dump(mode="json")
     assert receipt.upstream_receipts == (upstream,)
     assert receipt.resources.tokens_in == 1_200
 
     pre_cutover = receipt.model_dump(mode="json")
-    pre_cutover["world_package_sha256"] = graph.review_sidecar_sha256
+    pre_cutover["world_package_sha256"] = "a" * 64
     with pytest.raises(ValidationError):
         StageExecutionReceipt.model_validate(pre_cutover)
 

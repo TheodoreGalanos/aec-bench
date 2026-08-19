@@ -19,7 +19,7 @@ class MetaHarnessTrajectoryContext(StrictModel):
     kernel_ref: KernelRef
     harness_ref: HarnessInstanceRef
     program_ref: ExecutionProgramRef
-    bundle_id: NonEmptyStr
+    plan_run_id: NonEmptyStr
     program_node_id: NonEmptyStr
     binding_ids: tuple[NonEmptyStr, ...] = ()
     repair_iteration: NonNegativeInt | None = None

@@ -12,7 +12,6 @@ from pathlib import Path
 import pytest
 
 from aec_bench.contracts.authority import AuthorityAction, AuthorityEvent
-from aec_bench.contracts.commitments import canonical_json_sha256
 from aec_bench.contracts.program_proposal.types import OptimizationSplit, ProgramCandidateKind
 from aec_bench.contracts.proposal_execution.session import ProposalSessionReceipt
 from aec_bench.contracts.trial_record import ExecutionStatus
@@ -118,16 +117,10 @@ def test_finalizes_exact_authorized_proposal_trial_with_complete_nested_provenan
     assert provenance.policy_id == (
         authorization.dispatch.bundle.compilation.proposal_freeze.candidate_manifest.manifest_id
     )
-    assert provenance.kernel_sha256 == canonical_json_sha256(
-        authorization.dispatch.bundle.fixed_harness.kernel_ref.model_dump(mode="json")
-    )
-    assert provenance.harness_sha256 == canonical_json_sha256(
-        authorization.dispatch.bundle.fixed_harness.model_dump(mode="json")
-    )
-    assert provenance.program_sha256 == canonical_json_sha256(
-        authorization.dispatch.bundle.compilation.compiled_program.model_dump(mode="json")
-    )
-    assert provenance.bundle_sha256 == canonical_json_sha256(authorization.dispatch.bundle.model_dump(mode="json"))
+    assert provenance.plan_run_id == authorization.dispatch.bundle.bundle_id
+    assert provenance.kernel_id == authorization.dispatch.bundle.fixed_harness.kernel_ref.kernel_id
+    assert provenance.harness_id == authorization.dispatch.bundle.fixed_harness.instance_id
+    assert provenance.program_id == authorization.dispatch.bundle.compilation.compiled_program.program_id
     assert provenance.proposal_session is not None
     assert provenance.proposal_session.session_id == result.import_receipt.session_id
     assert provenance.execution_seed == fixture.evaluation_coordinate.seed

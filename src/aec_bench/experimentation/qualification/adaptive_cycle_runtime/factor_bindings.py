@@ -13,8 +13,8 @@ from aec_bench.contracts.harness_instance import (
     TaskSourceBindingConfig,
     ToolBindingConfig,
 )
-from aec_bench.contracts.run_bundle import TaskSnapshotRef
 from aec_bench.contracts.task_definition import Visibility
+from aec_bench.contracts.task_snapshot import TaskSnapshotRef
 from aec_bench.evolution.repair_lifecycle import RepairCandidate
 from aec_bench.experimentation.governance.applicability import MotifApplicabilityAttestation
 from aec_bench.experimentation.qualification.harness_program_study.candidates import (
@@ -78,16 +78,14 @@ def validate_attestation_visibility(
     """Require complete task-review snapshots and the exact preregistered visibility."""
 
     missing_review = tuple(
-        projection.snapshot.task_id
-        for projection in applicability.projections
-        if projection.snapshot.task_review is None
+        projection.snapshot.task_id for projection in applicability.projections if projection.review is None
     )
     if missing_review:
         raise ValueError(f"adaptive cycle {label} tasks require task-review snapshots: " + ", ".join(missing_review))
     wrong_visibility = tuple(
         projection.snapshot.task_id
         for projection in applicability.projections
-        if projection.snapshot.task_review is not None and projection.snapshot.task_review.visibility is not expected
+        if projection.review is not None and projection.review.visibility is not expected
     )
     if wrong_visibility:
         raise ValueError(f"adaptive cycle {label} tasks must be {expected.value}: " + ", ".join(wrong_visibility))

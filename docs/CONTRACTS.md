@@ -34,6 +34,7 @@ readable.
 | Generated-task replay | Task generation | Template sources and sampling inputs become optional reproducibility data | Schema 1 sidecar; not a runtime task contract | [`GenerationManifest`](../src/aec_bench/generation/replay.py) and the `generate replay` command | Optional persisted sidecar |
 | Finite lifecycle execution | Lifecycle task and host | Stage-specific task evidence and actor results become one bounded host-controlled progression | Internal package and runtime contract; persisted accepted evidence is current-format only | [`EvidenceLifecycleSpec`](../src/aec_bench/contracts/evidence_lifecycle.py) and the [staged evidence protocol](protocols/staged-evidence-and-publication.md) | Packaged task, runtime state, and persisted accepted evidence |
 | Experiment manifest | Experiment orchestration | User configuration becomes an executable plan | Internal, except documented CLI/config behavior | [`ExperimentManifest`](../src/aec_bench/contracts/experiment_manifest.py) | Persisted configuration |
+| Run plan and published run package | Harness and ledger | One internal execution plan and its trial records become one portable retained package | Internal `RunPlan`; published package schema 1 | [`RunPlan` and `PublishedRunPackage`](../src/aec_bench/contracts/run_bundle.py), [`TaskSnapshotRef`](../src/aec_bench/contracts/task_snapshot.py), and [`run_package.py`](../src/aec_bench/ledger/run_package.py) | Internal plan; persisted and exportable package |
 | Trial and episode record | Harness and ledger | Execution, verifier, and authority evidence becomes reportable benchmark evidence | Protected schema 2; no historical reader | [`RunManifest` and `TrialRecord`](../src/aec_bench/contracts/trial_record.py) plus the owning episode or world protocol | Persisted and exportable |
 | Evaluation regime | Evaluation | Observable evaluation policy becomes one independently published compatibility identity | Envelope schema 1; legacy component plans migrate only when all inputs resolve | [`EvaluationRegimeEnvelope`](../src/aec_bench/contracts/evaluation_plane.py), `EvaluationRegimeRef`, and [`regime.py`](../src/aec_bench/evaluation/regime.py) | Persisted and independently publishable |
 | Evaluation result | Evaluation | Verifier output and review evidence become reward, validity, and diagnostics | Protected as part of a persisted trial or published result | [`EvaluationResult`](../src/aec_bench/contracts/evaluation_result.py) | Persisted and externally reported |
@@ -143,12 +144,20 @@ Durable identity is recorded as content or source revision:
 
 - `TaskReference.task_revision` binds a trial to the task revision observed by
   its execution/import path;
+- `TaskSnapshotRef` identifies runnable task material with either a full Git
+  commit and repository-relative task path or one detached task-package
+  `ArtifactRef`;
 - a dataset execution reference binds the selected tasks to a full Git commit
   and manifest path, or to one verified detached-bundle `ArtifactRef`; and
 - world builds identify exact executable source artifacts, profiles identify
   exact task-owned data, and task-owned run records bind replay state.
 
 Do not infer a revision from a mutable directory name.
+
+Task review data is separate from `TaskSnapshotRef`. An internal run plan can
+embed one `ReviewSnapshot` or reference one retained review artifact. A
+declared stage graph uses the stable review profile ID. It does not copy a
+review-sidecar digest into the task reference.
 
 ## Finite lifecycle execution
 
@@ -177,6 +186,29 @@ scheduling, branching, or parallel execution. Conditional evidence is an
 experimental staged-evidence capability with no registered task consumer.
 The current restriction against mixing conditional evidence and operations is
 host implementation policy for this subtype, not finite-lifecycle meaning.
+
+## Run plans and published run packages
+
+`RunPlan` is the plain internal execution value. It contains one `RunManifest`,
+the ordered exact task references, the compiled Harness, the compiled execution
+program, and optional separated review data. It validates task, Harness,
+program, provider-route, budget, verifier, and review relationships. It has no
+bundle ID, package digest, self-digest, provider-specific task identity, or
+copied task-package hash.
+
+`PublishedRunPackage` schema 1 contains one `RunPlan` and the `ArtifactRef` for
+each retained `TrialRecord`. Publication builds one deterministic `tar.zst`
+archive that also contains every directly or transitively referenced artifact.
+The archive is published once and receives one outer `ArtifactRef`. Import
+checks the canonical manifest, member paths, duplicate and unreferenced bytes,
+artifact IDs, sizes, SHA-256 digests, trial IDs, and run relationships before it
+writes to an empty ledger.
+
+`aec-bench run export <run-id> --output <path>` copies the one published archive.
+`aec-bench run import <path>` verifies and imports it. These commands do not
+reconstruct a package from mutable run directories.
+
+The provider route belongs to `RunManifest`. It does not change task identity.
 
 ## Trial and episode records
 
@@ -558,7 +590,7 @@ keys, stable set order, preserved list order, UTF-8, compact separators, and
 one final newline. It rejects non-finite numbers.
 
 Kernel, Harness, execution-program, evaluation, stage, task-snapshot, and
-run-bundle models do not carry a generic self-digest. They use stable domain
+run-plan models do not carry a generic self-digest. They use stable domain
 references, direct embedded-value validation, named commitments, or one
 `ArtifactRef` when bytes are retained independently. A schema that still emits
 self-addressed JSON must use the explicit legacy base until its owner migrates

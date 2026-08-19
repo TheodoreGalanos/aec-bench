@@ -14,6 +14,7 @@ from aec_bench.contracts.harness_kernel import validate_sha256
 from aec_bench.contracts.legacy_content_address import LegacyContentAddressedModel
 from aec_bench.contracts.proposal_execution.session import ProposalSessionReceipt
 from aec_bench.contracts.proposal_execution_types import ProposalSessionStatus
+from aec_bench.contracts.task_review_snapshot import TaskReviewSnapshot
 from aec_bench.contracts.trial_record import ArtifactReference, TrialRecord
 from aec_bench.contracts.validators import NonEmptyStr
 from aec_bench.experimentation.governance.authority_ledger import StoredAuthorityEvent, StoredBasis
@@ -43,7 +44,7 @@ class ProposalVerifierEvidence(LegacyContentAddressedModel):
 class ProposalTrialImportReceipt(LegacyContentAddressedModel):
     """Non-circular receipt binding one persisted TrialRecord to its proposal run."""
 
-    schema_version: Literal["aecbench.proposal-trial-import-receipt.v2"] = "aecbench.proposal-trial-import-receipt.v2"
+    schema_version: Literal["aecbench.proposal-trial-import-receipt.v3"] = "aecbench.proposal-trial-import-receipt.v3"
     import_id: NonEmptyStr
     dispatch_id: NonEmptyStr
     dispatch_sha256: str
@@ -57,8 +58,7 @@ class ProposalTrialImportReceipt(LegacyContentAddressedModel):
     proposal_graph_sha256: str
     compilation_sha256: str
     session_plan_sha256: str
-    review_sidecar_sha256: str
-    declared_surface_sha256: str
+    review: TaskReviewSnapshot
     verifier_evidence_sha256: str
     node_receipt_sha256s: tuple[str, ...] = Field(min_length=1)
 
@@ -70,8 +70,6 @@ class ProposalTrialImportReceipt(LegacyContentAddressedModel):
         "proposal_graph_sha256",
         "compilation_sha256",
         "session_plan_sha256",
-        "review_sidecar_sha256",
-        "declared_surface_sha256",
         "verifier_evidence_sha256",
     )
     @classmethod
@@ -201,14 +199,6 @@ class GovernedProposalCandidateFailureImport:
 
 
 ProposalTrialImportResult = GovernedProposalTrialImport | GovernedProposalCandidateFailureImport
-
-
-@dataclass(frozen=True)
-class TaskReviewLineage:
-    """Content identities for the immutable task review used by one import."""
-
-    review_sidecar_sha256: str
-    declared_surface_sha256: str
 
 
 @dataclass(frozen=True)

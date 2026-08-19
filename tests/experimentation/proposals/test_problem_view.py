@@ -40,13 +40,13 @@ def test_clean_real_task_builds_a_graph_hidden_problem_view(tmp_path: Path) -> N
     assert result.audit.finding_codes == ()
     assert result.audit.problem_view_sha256 == result.problem_view.content_sha256
     assert result.problem_view.task_id == fixture["task"].task_id
-    assert result.problem_view.task_revision == fixture["task_snapshot"].definition_sha256
+    assert result.problem_view.task_revision == fixture["task_snapshot"].commitment_sha256
     assert result.problem_view.output_contract == fixture["output_contract"]
     assert result.problem_view.fixed_harness.capability_ids == tuple(
         sorted(operation.operation_id for operation in fixture["harness"].program_surface.operations)
     )
     assert result.problem_view.fixed_harness.aggregate_budget == fixture["harness"].budget
-    assert fixture["harness"].content_sha256 not in json.dumps(
+    assert fixture["harness"].ref.instance_id not in json.dumps(
         result.problem_view.fixed_harness.model_dump(mode="json")
     )
     assert tuple(source.source_id for source in result.problem_view.public_sources) == ("rainfall-input",)

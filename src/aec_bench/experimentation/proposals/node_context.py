@@ -23,6 +23,7 @@ from aec_bench.contracts.legacy_content_address import LegacyContentAddressedMod
 from aec_bench.contracts.proposal_execution.graph import FinalSynthesisSpec, SemanticSubtaskSpec
 from aec_bench.contracts.proposal_execution_context import CompiledNodeContextScope, ScopedSourceMaterialization
 from aec_bench.contracts.proposal_execution_types import NodeInstructionVisibility
+from aec_bench.contracts.task_snapshot import TaskSnapshotRef
 from aec_bench.contracts.validators import NonEmptyStr
 from aec_bench.experimentation.proposals.program_compilation import (
     ProposalRunSessionBundle,
@@ -30,6 +31,10 @@ from aec_bench.experimentation.proposals.program_compilation import (
 from aec_bench.experimentation.proposals.task_package import (
     ProposalTaskPackageError,
     source_task_package_sha256,
+)
+from aec_bench.harness.compilation.task_snapshot import (
+    TaskSnapshotError,
+    assert_task_snapshot_matches_directory,
 )
 
 _MANIFEST_PATH = "context-manifest.json"
@@ -223,9 +228,9 @@ def materialize_proposal_node_context(
     graph = exact_bundle.compilation.proposal_graph
     node, node_scope = _resolve_node(exact_bundle, node_id=node_id)
 
-    source_root = _validate_source_task_root(
+    source_root, source_package_sha256 = _validate_source_task_root(
         source_task_root,
-        expected_package_sha256=exact_bundle.task_snapshot.package_sha256,
+        task_snapshot=exact_bundle.task_snapshot,
     )
     _assert_workspace_disjoint_from_source(
         workspace=workspace,
@@ -300,7 +305,7 @@ def materialize_proposal_node_context(
         )
 
     final_source_sha256 = _source_task_package_sha256(source_root)
-    if final_source_sha256 != exact_bundle.task_snapshot.package_sha256:
+    if final_source_sha256 != source_package_sha256:
         raise ProposalNodeContextError("source task package changed during node-context materialization")
 
     manifest = ProposalNodeContextManifest(
@@ -314,7 +319,7 @@ def materialize_proposal_node_context(
         session_plan_sha256=exact_bundle.session_plan.content_sha256,
         proposal_graph_sha256=graph.content_sha256,
         source_scope_manifest_sha256=(exact_bundle.compilation.source_scope_manifest.content_sha256),
-        source_task_package_sha256=exact_bundle.task_snapshot.package_sha256,
+        source_task_package_sha256=source_package_sha256,
         node_id=node_id,
         node_spec_sha256=canonical_json_sha256(node.model_dump(mode="json")),
         node_scope_sha256=node_scope.content_sha256,
@@ -395,8 +400,8 @@ def _assert_workspace_disjoint_from_source(
 def _validate_source_task_root(
     source_task_root: Path,
     *,
-    expected_package_sha256: str,
-) -> Path:
+    task_snapshot: TaskSnapshotRef,
+) -> tuple[Path, str]:
     root = Path(source_task_root)
     if root.is_symlink():
         raise ProposalNodeContextError("source task package root must not be a symbolic link")
@@ -407,9 +412,11 @@ def _validate_source_task_root(
     if not resolved.is_dir():
         raise ProposalNodeContextError("source task package root must be a directory")
     observed = _source_task_package_sha256(resolved)
-    if observed != expected_package_sha256:
-        raise ProposalNodeContextError("source task package does not match the frozen task snapshot")
-    return resolved
+    try:
+        assert_task_snapshot_matches_directory(reference=task_snapshot, task_dir=resolved)
+    except (OSError, TaskSnapshotError, ValueError) as error:
+        raise ProposalNodeContextError("source task package does not match the exact task reference") from error
+    return resolved, observed
 
 
 def _source_task_package_sha256(source_task_root: Path) -> str:

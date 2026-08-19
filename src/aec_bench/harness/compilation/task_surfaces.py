@@ -1,4 +1,4 @@
-# ABOUTME: Validates task-bound tool and context surfaces before RunBundle materialization.
+# ABOUTME: Validates task-bound tool and context surfaces before RunPlan materialization.
 # ABOUTME: Preserves binding-order attribution across world, harness, kernel, and runtime failures.
 
 from pathlib import Path

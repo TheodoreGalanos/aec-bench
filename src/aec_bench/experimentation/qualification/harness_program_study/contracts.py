@@ -19,7 +19,7 @@ from aec_bench.contracts.harness_kernel import (
     validate_sha256,
 )
 from aec_bench.contracts.legacy_content_address import LegacyContentAddressedModel
-from aec_bench.contracts.run_bundle import TaskSnapshotRef
+from aec_bench.contracts.task_snapshot import TaskSnapshotRef
 from aec_bench.contracts.trial_record import ArtifactReference
 from aec_bench.contracts.validators import NonEmptyStr
 from aec_bench.experimentation.governance.applicability import MotifApplicabilityAttestation
@@ -99,14 +99,13 @@ class HarnessProgramStudySpec(LegacyContentAddressedModel):
 
 
 class HarnessProgramStudyCellEvidence(FrozenStrictModel):
-    """One exact harness-program cell, executable bundle identity, and candidate-manifest artifact."""
+    """One exact harness-program cell and its executable plan relationships."""
 
     cell: HarnessProgramCell
     candidate_reference: HarnessProgramCandidateReference
     bundle_id: NonEmptyStr
     compiled_harness_ref: HarnessInstanceRef
     compiled_program_ref: ExecutionProgramRef
-    candidate_manifest: ArtifactReference
 
     @model_validator(mode="after")
     def validate_cell_identity(self) -> Self:

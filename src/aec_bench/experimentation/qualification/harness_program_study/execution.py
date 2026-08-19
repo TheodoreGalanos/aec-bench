@@ -12,7 +12,7 @@ from statistics import fmean
 from typing import Any, Literal
 
 from aec_bench.contracts.harness_kernel import canonical_json_sha256
-from aec_bench.contracts.run_bundle import TaskSnapshotRef
+from aec_bench.contracts.run_bundle import RunPlan
 from aec_bench.contracts.trial_record import (
     ArtifactReference,
     TrialRecord,
@@ -64,6 +64,7 @@ class HarnessProgramTrialExecution:
     execution_seed: int
     candidate_reference: HarnessProgramCandidateReference
     bundle_id: str
+    run_plan: RunPlan
     execution: RunBundleExecution
     records: tuple[TrialRecord, ...]
 
@@ -104,7 +105,7 @@ def execute_harness_program_study(
         manifest=manifest,
     )
     if any(
-        candidate.bundle.kernel_ref != registry.manifest.ref
+        candidate.bundle.harness.kernel_ref != registry.manifest.ref
         for materialized in materialized_sets
         for candidate in materialized.candidates
     ):
@@ -123,7 +124,7 @@ def execute_harness_program_study(
     for trial in plan.trials:
         candidate = candidates_by_reference.get(trial.candidate.reference_sha256)
         if candidate is None or candidate.reference != trial.candidate:
-            raise ValueError("harness-program plan candidate reference does not map to an exact RunBundle")
+            raise ValueError("harness-program plan candidate reference does not map to an exact RunPlan")
         execution_seed = _execution_seed(execution_seeds, trial)
         execution = execute_run_bundle(
             bundle=candidate.bundle,
@@ -160,7 +161,8 @@ def execute_harness_program_study(
                 trial=trial,
                 execution_seed=execution_seed,
                 candidate_reference=candidate.reference,
-                bundle_id=candidate.bundle.bundle_id,
+                bundle_id=candidate.bundle.run_manifest.run_id,
+                run_plan=candidate.bundle,
                 execution=execution,
                 records=records,
             )
@@ -372,8 +374,6 @@ def _validated_harness_program_execution_paths(
         raise ValueError(f"harness-program trial execution failed: {trial.trial_id}: {detail}")
     if not execution.harbor_invocations:
         raise ValueError("harness-program trial produced no Harbor invocations")
-    if candidate.bundle.harbor.repetitions != 1:
-        raise ValueError("harness-program trial Harbor invocations must each use exactly one attempt")
     if any(not invocation.imported_trial_paths for invocation in execution.harbor_invocations):
         raise ValueError("harness-program trial Harbor invocation produced no imported TrialRecords")
     paths = tuple(path for invocation in execution.harbor_invocations for path in invocation.imported_trial_paths)
@@ -404,7 +404,7 @@ def _validate_harness_program_record_coverage(
     task_ids = [record.task.task_id for record in records]
     if len(task_ids) != len(set(task_ids)):
         raise ValueError("duplicate harness-program TrialRecords for one task")
-    expected_task_ids = set(candidate.bundle.harbor.task_refs)
+    expected_task_ids = {snapshot.task_id for snapshot in candidate.bundle.task_snapshots}
     if set(task_ids) != expected_task_ids:
         missing = sorted(expected_task_ids - set(task_ids))
         unexpected = sorted(set(task_ids) - expected_task_ids)
@@ -454,37 +454,19 @@ def validate_harness_program_record_lineage(
     )
     if snapshot is None:
         raise ValueError(f"harness-program trial task has no compiled snapshot: {record.trial_id}")
-    expected_review_sidecar, expected_declared_surface = _snapshot_review_lineage(snapshot)
     if (
         provenance.run_id != trial.trial_id
         or provenance.execution_seed != execution_seed
         or provenance.harness_program_cell != trial.cell.value
         or provenance.paired_block_id != trial.block_id
         or provenance.harness_program_plan != plan_artifact
-        or provenance.bundle_id != candidate.bundle.bundle_id
-        or provenance.kernel_id != candidate.bundle.kernel_ref.kernel_id
+        or provenance.plan_run_id != candidate.bundle.run_manifest.run_id
+        or provenance.kernel_id != candidate.bundle.harness.kernel_ref.kernel_id
         or provenance.harness_id != candidate.reference.harness_ref.instance_id
         or provenance.harness_id != candidate.bundle.harness.instance_id
-        or provenance.program_id != candidate.bundle.program.program_id
-        or provenance.review_sidecar_sha256 != expected_review_sidecar
-        or provenance.declared_surface_sha256 != expected_declared_surface
+        or provenance.program_id != candidate.bundle.execution_program.program_id
         or provenance.repetition != 1
     ):
         raise ValueError(
             f"harness-program trial record lineage does not match its planned candidate: {record.trial_id}"
         )
-
-
-def _snapshot_review_lineage(snapshot: TaskSnapshotRef) -> tuple[str, str]:
-    if snapshot.task_review is not None:
-        return snapshot.task_review.review_sidecar_sha256, snapshot.task_review.declared_surface_sha256
-    return (
-        snapshot.package_sha256,
-        canonical_json_sha256(
-            {
-                "kind": "atomic-task",
-                "task_id": snapshot.task_id,
-                "task_package_sha256": snapshot.package_sha256,
-            }
-        ),
-    )

@@ -148,7 +148,7 @@ def test_semantic_node_preparation_lowers_exact_rlm_commit_h0_and_reservation(
     assert lineage["kernel_ref"] == bundle.compilation.kernel_ref.model_dump(mode="json")
     assert lineage["harness_ref"] == bundle.fixed_harness.ref.model_dump(mode="json")
     assert lineage["program_ref"] == bundle.compilation.lowered_program.ref.model_dump(mode="json")
-    assert lineage["bundle_id"] == bundle.bundle_id
+    assert lineage["plan_run_id"] == bundle.bundle_id
     assert lineage["execution_seed"] == _evaluation_coordinate(bundle).seed
     assert execution.request.output_path == "/workspace/node-output.md"
     assert execution.request.output_format == "markdown"
@@ -683,7 +683,7 @@ def _evaluation_coordinate(
     return MatchedEvaluationCoordinate(
         coordinate_id="evaluation.proposal-session.3",
         task_id=bundle.task_snapshot.task_id,
-        task_revision=bundle.task_snapshot.definition_sha256,
+        task_revision=bundle.task_snapshot.commitment_sha256,
         split=freeze.split,
         review_lineage_id=freeze.selected_review_lineage_id,
         seed=2701,

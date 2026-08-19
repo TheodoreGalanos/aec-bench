@@ -22,6 +22,7 @@ from aec_bench.contracts.harness_instance import (
     HarnessRecipe,
     TaskSourceBindingConfig,
 )
+from aec_bench.contracts.harness_kernel import canonical_json_sha256, kernel_abi_commitment
 from aec_bench.evolution.repair_lifecycle import RepairCandidate, RepairOwner, RepairProgramTemplate
 from aec_bench.experimentation.governance.motifs import (
     HarnessProgramEvidenceReference,
@@ -54,7 +55,7 @@ from aec_bench.experimentation.qualification.repair_runtime import (
     RepairPatchProposal,
     RepairTerminalRecord,
 )
-from aec_bench.harness.compilation.task_snapshot import resolve_task_snapshots
+from aec_bench.harness.compilation.task_snapshot import resolve_task_material
 from aec_bench.harness.harbor_workflow import SynchronousHarborWorkflow
 from aec_bench.harness.kernel_catalogue import KernelRuntimeRegistry
 from tests.experimentation.qualification.test_harness_program_study import HarnessProgramStudyHarborExecutor
@@ -71,19 +72,20 @@ class RewardByProgramIdentityHarborExecutor(RewardByTurnsHarborExecutor):
 
     def __init__(self) -> None:
         super().__init__()
-        self.program_hashes: list[str] = []
-        self._parent_program_sha256: str | None = None
+        self.program_refs: list[tuple[str, str]] = []
+        self._parent_program_ref: tuple[str, str] | None = None
 
     def _reward(self, *, kwargs: dict[str, object], turns: int) -> float:
         del turns
         context = kwargs["meta_harness_context"]
         assert isinstance(context, dict)
-        program_sha256 = context["program_sha256"]
-        assert isinstance(program_sha256, str)
-        self.program_hashes.append(program_sha256)
-        if self._parent_program_sha256 is None:
-            self._parent_program_sha256 = program_sha256
-        return 0.2 if program_sha256 == self._parent_program_sha256 else 0.9
+        program_ref = context["program_ref"]
+        assert isinstance(program_ref, dict)
+        identity = (str(program_ref["program_id"]), str(program_ref["version"]))
+        self.program_refs.append(identity)
+        if self._parent_program_ref is None:
+            self._parent_program_ref = identity
+        return 0.2 if identity == self._parent_program_ref else 0.9
 
 
 def test_solution_descriptor_is_derived_from_typed_harness_and_program(tmp_path: Path) -> None:
@@ -181,11 +183,13 @@ def test_task_review_sidecar_contributes_one_canonical_motif_lineage(tmp_path: P
         },
     }
     (task_dir / "task-review.json").write_text(json.dumps(review_payload, indent=2) + "\n", encoding="utf-8")
-    snapshot = resolve_task_snapshots(task_refs=(task_id,), tasks_root=runtime.tasks_root)[0]
-    assert snapshot.task_review is not None
+    material = resolve_task_material(task_refs=(task_id,), tasks_root=runtime.tasks_root)
+    snapshot = material.references[0]
+    assert material.review is not None
+    task_review = material.review.tasks[0]
 
     repair = capture_accepted_repair_evidence(runtime.execute())
-    review_lineage = snapshot.task_review.review_sidecar_sha256
+    review_lineage = canonical_json_sha256(task_review.model_dump(mode="json"))
     hx_template = MotifTemplate.create(kind="hx", payload={"id": "sidecar-hx"})
     px_template = MotifTemplate.create(kind="px", payload={"id": "sidecar-px"})
     harness_program_evidence = HarnessProgramEvidenceReference.create(
@@ -205,7 +209,7 @@ def test_task_review_sidecar_contributes_one_canonical_motif_lineage(tmp_path: P
     )
     motif = HarnessProgramMotif.create(
         status=MotifStatus.CANDIDATE,
-        kernel_abi_sha256=runtime.registry.manifest.content_sha256,
+        kernel_abi_sha256=kernel_abi_commitment(runtime.registry.manifest.ref),
         hx_template=hx_template,
         px_template=px_template,
         applicability=_applicability(),
@@ -217,7 +221,7 @@ def test_task_review_sidecar_contributes_one_canonical_motif_lineage(tmp_path: P
         harness_program_evidence_refs=(harness_program_evidence,),
     )
 
-    assert snapshot.package_sha256 != review_lineage
+    assert snapshot.commitment_sha256 != review_lineage
     assert repair.references[0].review_lineage_id == review_lineage
     assert motif.supporting_review_lineage_ids == (review_lineage,)
 
@@ -241,7 +245,7 @@ def test_real_internal_evidence_learns_provisional_motif_without_granting_author
     assert repair_execution.terminal.path.exists()
     proposal = repair_execution.terminal.path.read_text(encoding="utf-8")
     assert "program_max_total_attempts" in proposal
-    assert len(set(repair_executor.program_hashes)) == 2
+    assert len(set(repair_executor.program_refs)) == 2
     assert repair_execution.result.child_candidate_id is not None
     terminal_record = RepairTerminalRecord.model_validate_json(proposal)
     assert terminal_record.patch_proposal is not None

@@ -1,4 +1,4 @@
-# ABOUTME: Proves scored RunBundle Harbor invocations use the durable governed-attempt lifecycle.
+# ABOUTME: Proves scored RunPlan Harbor invocations use the durable governed-attempt lifecycle.
 # ABOUTME: Covers exact replay, reconciliation, usage, budget, authority, and import-integrity failures.
 
 from __future__ import annotations
@@ -10,7 +10,7 @@ from pathlib import Path
 import yaml  # type: ignore[import-untyped]
 
 from aec_bench.contracts.harness_instance import HarnessBudget
-from aec_bench.contracts.run_bundle import RunBundle
+from aec_bench.contracts.run_bundle import RunPlan
 from aec_bench.experimentation.governance.authority_ledger import AuthorityLedger
 from aec_bench.experimentation.qualification.run_bundle_evidence import MetaHarnessStudyContext
 from aec_bench.experimentation.qualification.run_bundle_runtime import execute_run_bundle
@@ -76,7 +76,7 @@ def test_scored_invocation_persists_complete_governed_lifecycle(
     assert execution.program.status is ProgramExecutionStatus.SUCCEEDED
     attempt_root = _attempt_root(
         artifacts_root=artifacts_root,
-        bundle_id=bundle.bundle_id,
+        bundle_id=bundle.run_manifest.run_id,
         run_id=study.run_id,
     )
     assert len(tuple(_records(attempt_root, "terminal"))) == 1
@@ -175,7 +175,7 @@ def test_missing_exact_usage_fails_closed_before_terminal(
     assert execution.program.error_code == "governed_usage_evidence_missing"
     attempt_root = _attempt_root(
         artifacts_root=artifacts_root,
-        bundle_id=bundle.bundle_id,
+        bundle_id=bundle.run_manifest.run_id,
         run_id=study.run_id,
     )
     assert not tuple(_records(attempt_root, "terminal"))
@@ -210,7 +210,7 @@ def test_budget_breach_closes_exact_usage_but_never_publishes_terminal(
     assert execution.budget.unaccounted_dispatches == 0
     attempt_root = _attempt_root(
         artifacts_root=artifacts_root,
-        bundle_id=bundle.bundle_id,
+        bundle_id=bundle.run_manifest.run_id,
         run_id=study.run_id,
     )
     assert not tuple(_records(attempt_root, "terminal"))
@@ -249,7 +249,7 @@ def test_scored_authority_failure_preserves_governed_backend_without_terminal(
     assert len(execution.harbor_invocations) == 1
     attempt_root = _attempt_root(
         artifacts_root=artifacts_root,
-        bundle_id=bundle.bundle_id,
+        bundle_id=bundle.run_manifest.run_id,
         run_id=study.run_id,
     )
     assert tuple(_records(attempt_root, "backend_receipt"))
@@ -296,7 +296,7 @@ def _case(
     task_id: str,
     run_id: str,
     budget: HarnessBudget | None = None,
-) -> tuple[RunBundle, SynchronousHarborWorkflow, Path, MetaHarnessStudyContext]:
+) -> tuple[RunPlan, SynchronousHarborWorkflow, Path, MetaHarnessStudyContext]:
     tasks_root = tmp_path / "tasks"
     write_adaptive_task(tasks_root, task_id=task_id)
     bundle = build_adaptive_bundle(

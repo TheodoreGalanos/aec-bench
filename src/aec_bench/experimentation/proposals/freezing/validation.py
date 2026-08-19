@@ -331,13 +331,9 @@ def _validate_selected_task(
             "problem view does not identify exactly one task in the selected structural split",
         )
     structural_item = matches[0]
-    if problem_view.task_revision != structural_item.public_snapshot.definition_sha256:
+    if problem_view.task_revision != structural_item.public_snapshot.commitment_sha256:
         raise GovernedProposalFreezeError(
             "problem-view task revision does not match the selected public structural snapshot",
-        )
-    if problem_view.public_task_snapshot_sha256 != structural_item.public_task_snapshot_sha256:
-        raise GovernedProposalFreezeError(
-            "problem-view task snapshot does not match the selected public structural snapshot",
         )
     return SelectedTaskBinding(
         content_sha256=canonical_json_sha256(

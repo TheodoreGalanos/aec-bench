@@ -60,7 +60,7 @@ class ProposalFreeze(LegacyContentAddressedModel):
     structural_split_sha256: str
     selected_structural_item_sha256: str | None = None
     evaluation_cohort: EvaluationCohortBinding | None = None
-    selected_review_lineage_id: str
+    selected_review_lineage_id: NonEmptyStr
     fixed_harness_ref: HarnessInstanceRef
     execution_profile_sha256: str | None = None
     operator_authority: OperatorAuthority
@@ -77,7 +77,6 @@ class ProposalFreeze(LegacyContentAddressedModel):
 
     @field_validator(
         "structural_split_sha256",
-        "selected_review_lineage_id",
         "proposal_policy_sha256",
         "policy_checkpoint_sha256",
     )

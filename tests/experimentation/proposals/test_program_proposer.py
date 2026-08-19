@@ -68,7 +68,6 @@ def _problem_view(policy: FrozenProgramProposerPolicy) -> DecompositionProblemVi
             "problem_id": "problem.calibration.alpha",
             "task_id": "civil/calibration/alpha",
             "task_revision": _sha("task-definition"),
-            "public_task_snapshot_sha256": _sha("public-snapshot"),
             "public_instruction": "Review the public drainage evidence and return a decision.",
             "public_sources": [
                 {

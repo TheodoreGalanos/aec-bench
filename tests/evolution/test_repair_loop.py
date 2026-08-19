@@ -30,7 +30,7 @@ from aec_bench.contracts.harness_instance import (
     ToolBindingConfig,
     VerificationBindingConfig,
 )
-from aec_bench.contracts.run_bundle import TaskSnapshotRef
+from aec_bench.contracts.task_snapshot import TaskSnapshotRef
 from aec_bench.evolution.paired_repair import (
     RepairAcceptancePolicy,
     RepairMutationScope,
@@ -61,7 +61,7 @@ from aec_bench.evolution.repair_lifecycle import (
 from aec_bench.harness.compilation import (
     compile_execution_program,
     compile_harness_instance,
-    compile_run_bundle,
+    compile_run_plan,
 )
 from aec_bench.harness.kernel_catalogue import KernelRuntimeRegistry, default_kernel_registry
 
@@ -515,14 +515,13 @@ class _DeterministicWorkflow:
         harness = compile_harness_instance(candidate.harness_request, registry=self.registry)
         source_program = candidate.program_template.bind(harness.ref)
         program = compile_execution_program(source_program, harness=harness, registry=self.registry)
-        bundle = compile_run_bundle(
-            bundle_id=f"bundle.{candidate.candidate_id}",
+        bundle = compile_run_plan(
+            run_id=f"bundle.{candidate.candidate_id}",
             harness=harness,
-            program=program,
+            execution_program=program,
             registry=self.registry,
             tasks_root=self.tasks_root,
             experiment_id="repair-loop",
-            repetitions=pairing.repetitions,
         )
         return CompiledRepairCandidate(
             candidate_id=candidate.candidate_id,
@@ -568,7 +567,7 @@ class _DeterministicWorkflow:
                     split=run.pairing.split,
                     candidate_id=candidate.candidate_id,
                     kernel_ref=candidate.harness.kernel_ref,
-                    resource_sha256=snapshots[task_id].package_sha256,
+                    resource_sha256=snapshots[task_id].commitment_sha256,
                     review_lineage_sha256=_review_lineage_sha256(snapshots[task_id]),
                     reward=reward,
                     complete=True,
@@ -905,5 +904,4 @@ def _sha(label: str) -> str:
 
 
 def _review_lineage_sha256(snapshot: TaskSnapshotRef) -> str:
-    task_review = snapshot.task_review
-    return str(task_review.review_sidecar_sha256 if task_review is not None else snapshot.package_sha256)
+    return snapshot.commitment_sha256

@@ -16,6 +16,7 @@ import pytest
 
 from aec_bench.contracts.execution_environment import PYDANTIC_RUNTIME_VERSION
 from aec_bench.contracts.stage_execution import KernelInstructionOverride
+from aec_bench.contracts.trial_record import ArtifactReference
 from aec_bench.harness.pump_station_harbor.export import (
     PUMP_STATION_HARBOR_BRIDGE_MODE,
     export_pump_station_harbor_task,
@@ -838,7 +839,12 @@ def test_bundle_uses_only_a_content_bound_kernel_instruction_override(
         original_instruction_sha256=hashlib.sha256(original.encode("utf-8")).hexdigest(),
         effective_instruction=effective,
         stage_id="source_inventory",
-        context_manifest_sha256="1" * 64,
+        context_manifest=ArtifactReference(
+            kind="stage-context-manifest",
+            path="artifacts/stage-context-manifest.json",
+            sha256="1" * 64,
+            media_type="application/json",
+        ),
     )
     agent = EntrypointAgent(
         logs_dir=tmp_path,
@@ -925,13 +931,10 @@ def test_bundle_materializes_harness_tools_context_and_lineage(tmp_path: Path) -
         }
     ]
     meta_harness_context = {
-        "kernel_sha256": "a" * 64,
-        "harness_id": "hx-review",
-        "harness_sha256": "b" * 64,
-        "program_id": "px-review",
-        "program_sha256": "c" * 64,
-        "bundle_id": "bundle-review",
-        "bundle_sha256": "d" * 64,
+        "kernel_ref": {"kernel_id": "kernel.fixed", "version": "1"},
+        "harness_ref": {"instance_id": "hx-review"},
+        "program_ref": {"program_id": "px-review", "version": "1"},
+        "plan_run_id": "bundle-review",
         "program_node_id": "review",
         "binding_ids": ["agent", "tools"],
         "repair_iteration": 0,

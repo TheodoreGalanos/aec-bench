@@ -45,11 +45,7 @@ class PreparedProposalTask(LegacyContentAddressedModel):
     def validate_public_task_surface(self) -> Self:
         task = self.cohort_task.task
         view = self.problem_view
-        if (
-            view.task_id != task.task_id
-            or view.task_revision != task.public_snapshot.definition_sha256
-            or view.public_task_snapshot_sha256 != task.public_task_snapshot_sha256
-        ):
+        if view.task_id != task.task_id or view.task_revision != task.public_snapshot.commitment_sha256:
             raise ValueError(
                 "prepared proposal task problem view differs from its cohort task",
             )

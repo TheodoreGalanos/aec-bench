@@ -15,12 +15,8 @@ from aec_bench.contracts.program_proposal.freeze import ProposalFreeze
 from aec_bench.contracts.program_proposal.types import ProgramCandidateKind
 from aec_bench.contracts.proposal_execution_context import ScopedSourceMaterialization
 from aec_bench.contracts.proposal_execution_profile import ProposalExecutionProfile
-from aec_bench.contracts.run_bundle import TaskSnapshotRef
+from aec_bench.contracts.task_snapshot import TaskSnapshotRef, task_snapshot_commitment
 from aec_bench.experimentation.proposals.freezing import GovernedProposalFreezeResult
-from aec_bench.harness.compilation.task_snapshot import (
-    TaskSnapshotError,
-    graph_hidden_task_snapshot_sha256,
-)
 from aec_bench.harness.kernel_catalogue import (
     AgentAdapterRuntime,
     HarborBackendRuntime,
@@ -190,18 +186,9 @@ def _validate_output_contract_and_task(
     )
     if output_contract_sha256 != expected_output_contract_sha256:
         raise ProposalCompilationHostError("host output-contract identity differs from the governed problem view")
-    try:
-        task_snapshot_sha256 = graph_hidden_task_snapshot_sha256(task_snapshot)
-    except TaskSnapshotError as error:
-        raise ProposalCompilationHostError(
-            f"proposal compilation requires a graph-hidden task snapshot: {error}"
-        ) from error
+    task_snapshot_sha256 = task_snapshot_commitment(task_snapshot)
     problem_view = proposal_freeze.problem_view
-    if (
-        task_snapshot.task_id != problem_view.task_id
-        or task_snapshot.definition_sha256 != problem_view.task_revision
-        or task_snapshot_sha256 != problem_view.public_task_snapshot_sha256
-    ):
+    if task_snapshot.task_id != problem_view.task_id or task_snapshot.commitment_sha256 != problem_view.task_revision:
         raise ProposalCompilationHostError("task snapshot differs from the exact governed problem view")
     return task_snapshot_sha256
 

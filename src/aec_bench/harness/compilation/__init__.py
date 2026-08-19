@@ -1,7 +1,7 @@
 # ABOUTME: Exposes the canonical public API for deterministic adaptive-harness compilation.
 # ABOUTME: Reexports each stable symbol from its single cohesive implementation module.
 
-from .bundle import compile_run_bundle
+from .bundle import compile_run_plan
 from .diagnostics import (
     CompilationDiagnostic,
     CompilationError,
@@ -20,5 +20,5 @@ __all__ = (
     "_operation_definition_for_compilation",
     "compile_execution_program",
     "compile_harness_instance",
-    "compile_run_bundle",
+    "compile_run_plan",
 )

@@ -8,6 +8,7 @@ from pydantic import TypeAdapter, ValidationError
 
 from aec_bench.adapters.base import AdapterStopReason
 from aec_bench.contracts.agent_output import AgentOutputStatus
+from aec_bench.contracts.artifacts import ArtifactRef
 from aec_bench.contracts.execution_program import (
     ActionNode,
     ExecutionProgramRef,
@@ -30,9 +31,12 @@ from aec_bench.contracts.harness_instance import (
     HarnessRecipe,
     HarnessTopologyRole,
 )
-from aec_bench.contracts.harness_kernel import KernelRef
+from aec_bench.contracts.harness_kernel import KernelRef, canonical_json_sha256
 from aec_bench.contracts.output_completion import OutputCompletionEvaluation, OutputCompletionReason
 from aec_bench.contracts.stage_execution import DeclaredStage, DeclaredStageGraph
+from aec_bench.contracts.task_definition import Visibility
+from aec_bench.contracts.task_review_snapshot import TaskReviewSnapshot
+from aec_bench.contracts.task_snapshot import ArtifactTaskSnapshotRef
 from aec_bench.evolution.repair_lifecycle import (
     RepairCandidate,
     RepairFailureDomain,
@@ -904,10 +908,10 @@ def _turn_limit_evidence() -> RepairRuntimeEvidence:
 
 def _declared_stage_graph_evidence() -> RepairRuntimeEvidence:
     task_id = "civil/calculation/attempt-limit"
-    review_sidecar_sha256 = "9" * 64
+    review_profile_id = "review.civil.attempt-limit"
     graph = DeclaredStageGraph(
         task_id=task_id,
-        review_sidecar_sha256=review_sidecar_sha256,
+        review_profile_id=review_profile_id,
         stages=(
             DeclaredStage(
                 stage_id="inventory",
@@ -926,10 +930,25 @@ def _declared_stage_graph_evidence() -> RepairRuntimeEvidence:
             ),
         ),
     )
+    snapshot = ArtifactTaskSnapshotRef(
+        task_id=task_id,
+        artifact=ArtifactRef(
+            artifact_id=f"artifacts/sha256/{'8' * 64}",
+            sha256="8" * 64,
+            size_bytes=1,
+            media_type="application/vnd.aec-bench.task-snapshot+tar+zstd",
+        ),
+    )
+    review = TaskReviewSnapshot(
+        task_id=task_id,
+        profile_id=review_profile_id,
+        visibility=Visibility.PUBLIC,
+        stage_graph=graph,
+    )
     task_graph = RepairDeclaredStageGraphEvidence(
         task_id=task_id,
-        task_package_sha256="8" * 64,
-        stage_graph=graph,
+        task_snapshot=snapshot,
+        review=review,
     )
     trial = RepairTrialEvidence(
         trial_id="trial.semantic-program",
@@ -949,8 +968,8 @@ def _declared_stage_graph_evidence() -> RepairRuntimeEvidence:
             completed=True,
             breakdown={"gates": {"closure": {"passed": False, "score": 0.2}}},
         ),
-        resource_sha256=task_graph.task_package_sha256,
-        review_lineage_sha256=review_sidecar_sha256,
+        resource_sha256=snapshot.commitment_sha256,
+        review_lineage_sha256=canonical_json_sha256(review.model_dump(mode="json")),
         error_codes=("reward_below_verifier_threshold",),
     )
     return RepairRuntimeEvidence(

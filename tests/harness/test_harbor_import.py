@@ -41,6 +41,7 @@ from aec_bench.experimentation.proposals.session_runtime import (
 from aec_bench.experimentation.proposals.task_package import (
     ProposalTaskPackageIdentity,
     build_proposal_task_package,
+    source_task_package_sha256,
 )
 from aec_bench.harness.harbor_importing.contracts import HarborImportError
 from aec_bench.harness.harbor_importing.core import (
@@ -1014,14 +1015,15 @@ def _write_proposal_harbor_trial(
     output_contract = OutputCompletionContract.model_validate(
         bundle.compilation.proposal_freeze.problem_view.output_contract,
     )
+    source_package_sha256 = source_task_package_sha256(source_task_root)
     derived_task = repo_root / "tasks" / bundle.task_snapshot.task_id
     derived = build_proposal_task_package(
         source_task_dir=source_task_root,
         destination_task_dir=derived_task,
         identity=ProposalTaskPackageIdentity(
             task_id=bundle.task_snapshot.task_id,
-            task_revision=bundle.task_snapshot.definition_sha256,
-            source_task_package_sha256=bundle.task_snapshot.package_sha256,
+            task_revision=bundle.task_snapshot.commitment_sha256,
+            source_task_package_sha256=source_package_sha256,
             problem_view_sha256=bundle.compilation.proposal_freeze.problem_view.content_sha256,
             output_contract_sha256=(bundle.compilation.proposal_graph.finalizer.output_completion_contract_sha256),
             visibility=Visibility.PUBLIC,
@@ -1034,7 +1036,7 @@ def _write_proposal_harbor_trial(
         bundle_file_sha256=hashlib.sha256(bundle_path.read_bytes()).hexdigest(),
         bundle_content_sha256=bundle.content_sha256,
         source_task_dir=str(source_task_root.resolve()),
-        source_task_package_sha256=bundle.task_snapshot.package_sha256,
+        source_task_package_sha256=source_package_sha256,
         runtime_archive_path=str(runtime.path.resolve()),
         runtime_archive_sha256=runtime.archive_sha256,
         runtime_archive_content_sha256=runtime.content_sha256,
@@ -1133,7 +1135,7 @@ def _write_proposal_harbor_trial_artifacts(
     _write_proposal_result(
         trial_dir=trial_dir,
         task_path=derived_task_dir.relative_to(repo_root).as_posix(),
-        task_revision=bundle.task_snapshot.definition_sha256,
+        task_revision=bundle.task_snapshot.commitment_sha256,
         model=_proposal_model(bundle),
         host_config=host_config,
         metadata=metadata,

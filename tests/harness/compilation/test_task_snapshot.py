@@ -1,5 +1,5 @@
-# ABOUTME: Tests deterministic runnable-task snapshots used by adaptive RunBundles.
-# ABOUTME: Verifies canonical definitions, package bytes, file modes, ordering, and path containment.
+# ABOUTME: Tests exact Git-or-artifact task references and separated review data.
+# ABOUTME: Verifies deterministic detached archives, path safety, ordering, and stage graphs.
 
 from __future__ import annotations
 
@@ -10,147 +10,45 @@ from typing import Any
 
 import pytest
 
-from aec_bench.contracts.harness_kernel import canonical_json_sha256
-from aec_bench.contracts.run_bundle import TaskReviewSnapshotRef
+from aec_bench.contracts.task_review_snapshot import ReviewSnapshot
+from aec_bench.contracts.task_snapshot import ArtifactTaskSnapshotRef
 from aec_bench.harness.compilation.task_snapshot import (
     TaskSnapshotError,
     build_task_snapshot,
-    graph_hidden_task_snapshot_sha256,
+    resolve_task_material,
     resolve_task_snapshots,
 )
+from aec_bench.ledger.artifact_repository import ArtifactRepository
 from aec_bench.tasks.loader import load_task_definition
+from aec_bench.tasks.snapshot import read_task_snapshot_archive
 
 
-def test_task_snapshot_binds_definition_and_all_runnable_package_bytes(tmp_path: Path) -> None:
+def test_detached_task_snapshot_binds_one_exact_archive(tmp_path: Path) -> None:
     tasks_root = tmp_path / "tasks"
     task_dir = _write_task(tasks_root, "civil/calculation/example")
+    repository = ArtifactRepository(tmp_path / "artifacts")
     task = load_task_definition(task_dir, tasks_root)
 
-    first = build_task_snapshot(task=task, tasks_root=tasks_root)
-    second = build_task_snapshot(task=task, tasks_root=tasks_root)
+    first = build_task_snapshot(task=task, tasks_root=tasks_root, artifact_repository=repository)
+    second = build_task_snapshot(task=task, tasks_root=tasks_root, artifact_repository=repository)
 
+    assert isinstance(first, ArtifactTaskSnapshotRef)
     assert first == second
     assert first.task_id == task.task_id
-    assert len(first.definition_sha256) == 64
-    assert len(first.package_sha256) == 64
+    assert (
+        read_task_snapshot_archive(repository.read_bytes(first.artifact))["environment/data.json"] == b'{"value": 1}\n'
+    )
 
     (task_dir / "environment" / "data.json").write_text('{"value": 2}\n', encoding="utf-8")
-    changed_bytes = build_task_snapshot(
+    changed = build_task_snapshot(
         task=load_task_definition(task_dir, tasks_root),
         tasks_root=tasks_root,
+        artifact_repository=repository,
     )
-    assert changed_bytes.definition_sha256 == first.definition_sha256
-    assert changed_bytes.package_sha256 != first.package_sha256
+    assert changed != first
 
 
-def test_graph_hidden_snapshot_identity_rejects_a_task_review_package(tmp_path: Path) -> None:
-    """A proposer-facing snapshot hash can only identify a physically graph-hidden package."""
-    tasks_root = tmp_path / "tasks"
-    task_dir = _write_task(tasks_root, "civil/calculation/example")
-    snapshot = build_task_snapshot(
-        task=load_task_definition(task_dir, tasks_root),
-        tasks_root=tasks_root,
-    )
-
-    assert graph_hidden_task_snapshot_sha256(snapshot) == canonical_json_sha256(
-        {
-            "task_id": snapshot.task_id,
-            "definition_sha256": snapshot.definition_sha256,
-            "package_sha256": snapshot.package_sha256,
-        }
-    )
-
-    review_bearing = snapshot.model_copy(
-        update={
-            "task_review": TaskReviewSnapshotRef(
-                profile_id="review.example",
-                review_profile_sha256="1" * 64,
-                review_sidecar_sha256="2" * 64,
-                declared_surface_sha256="3" * 64,
-                visibility="public",
-            )
-        }
-    )
-    with pytest.raises(TaskSnapshotError, match="graph-hidden"):
-        graph_hidden_task_snapshot_sha256(review_bearing)
-
-
-def test_task_snapshot_derives_review_lineage_from_a_strict_profile_sidecar(tmp_path: Path) -> None:
-    tasks_root = tmp_path / "tasks"
-    task_dir = _write_task(tasks_root, "civil/calculation/example")
-    review_payload: dict[str, Any] = {
-        "profile_id": "aec.task-review.civil.calculation",
-        "name": "Civil calculation review",
-        "task_unit": "generated-task-instance",
-        "logic_profile": {"closure_gates": [], "agentic_review": {"required": True}},
-        "operation_profile": {
-            "subset_axes": ["inputs"],
-            "difference_axes": ["method"],
-            "projection_axes": ["answer"],
-            "product_axes": ["discipline", "method"],
-        },
-    }
-    (task_dir / "task-review.json").write_text(json.dumps(review_payload, indent=2) + "\n", encoding="utf-8")
-
-    snapshot = build_task_snapshot(
-        task=load_task_definition(task_dir, tasks_root),
-        tasks_root=tasks_root,
-    )
-
-    assert snapshot.task_review is not None
-    assert snapshot.task_review.profile_id == "aec.task-review.civil.calculation"
-    assert len(snapshot.task_review.review_profile_sha256) == 64
-    assert len(snapshot.task_review.review_sidecar_sha256) == 64
-    assert len(snapshot.task_review.declared_surface_sha256) == 64
-    assert snapshot.task_review.visibility.value == "public"
-
-
-def test_task_snapshot_declared_surface_uses_only_declared_reward_blind_graph_fields(
-    tmp_path: Path,
-) -> None:
-    tasks_root = tmp_path / "tasks"
-    task_dir = _write_task(tasks_root, "civil/calculation/topology")
-    review_payload: dict[str, Any] = {
-        "profile_id": "aec.task-review.civil.topology",
-        "name": "Topology review",
-        "task_unit": "review-family",
-        "logic_profile": {"agentic_review": {"required": True}},
-        "stages": [{"id": "intake"}, {"id": "review"}, {"id": "decision"}],
-        "handoffs": [
-            {
-                "id": "intake-review",
-                "producer_stage": "intake",
-                "consumer_stages": ["review"],
-                "example_value": "gold-a",
-            },
-            {
-                "id": "review-decision",
-                "producer_stage": "review",
-                "consumer_stages": ["decision"],
-                "example_value": "gold-b",
-            },
-        ],
-    }
-    sidecar = task_dir / "task-review.json"
-    sidecar.write_text(json.dumps(review_payload, indent=2) + "\n", encoding="utf-8")
-    task = load_task_definition(task_dir, tasks_root)
-    serial = build_task_snapshot(task=task, tasks_root=tasks_root)
-
-    review_payload["handoffs"][0]["example_value"] = "changed hidden example"
-    sidecar.write_text(json.dumps(review_payload, indent=2) + "\n", encoding="utf-8")
-    hidden_changed = build_task_snapshot(task=task, tasks_root=tasks_root)
-    review_payload["handoffs"][0]["consumer_stages"] = ["decision"]
-    sidecar.write_text(json.dumps(review_payload, indent=2) + "\n", encoding="utf-8")
-    graph_changed = build_task_snapshot(task=task, tasks_root=tasks_root)
-
-    assert serial.task_review is not None
-    assert hidden_changed.task_review is not None
-    assert graph_changed.task_review is not None
-    assert serial.task_review.declared_surface_sha256 == hidden_changed.task_review.declared_surface_sha256
-    assert serial.task_review.declared_surface_sha256 != graph_changed.task_review.declared_surface_sha256
-
-
-def test_task_snapshot_binds_a_content_addressed_declared_stage_graph(tmp_path: Path) -> None:
+def test_review_data_is_separate_from_task_identity(tmp_path: Path) -> None:
     tasks_root = tmp_path / "tasks"
     task_dir = _write_task(tasks_root, "civil/calculation/staged")
     review_payload: dict[str, Any] = {
@@ -159,27 +57,8 @@ def test_task_snapshot_binds_a_content_addressed_declared_stage_graph(tmp_path: 
         "task_unit": "generated-task-instance",
         "logic_profile": {"agentic_review": {"required": True}},
         "stages": [
-            {
-                "id": "inventory",
-                "title": "Inventory",
-                "discipline": "civil",
-                "consumes": ["document_register"],
-                "produces": ["source_inventory"],
-            },
-            {
-                "id": "authority",
-                "title": "Authority",
-                "discipline": "civil",
-                "consumes": ["source_inventory"],
-                "produces": ["provenance_ledger"],
-            },
-            {
-                "id": "decision",
-                "title": "Decision",
-                "discipline": "civil",
-                "consumes": ["provenance_ledger"],
-                "produces": ["readiness_decision"],
-            },
+            {"id": "inventory", "produces": ["source_inventory"]},
+            {"id": "decision", "consumes": ["source_inventory"], "produces": ["decision"]},
         ],
         "handoffs": [
             {
@@ -189,88 +68,92 @@ def test_task_snapshot_binds_a_content_addressed_declared_stage_graph(tmp_path: 
             }
         ],
     }
-    sidecar = task_dir / "task-review.json"
-    sidecar.write_text(json.dumps(review_payload, indent=2) + "\n", encoding="utf-8")
-
-    snapshot = build_task_snapshot(
-        task=load_task_definition(task_dir, tasks_root),
+    (task_dir / "task-review.json").write_text(json.dumps(review_payload, indent=2) + "\n", encoding="utf-8")
+    material = resolve_task_material(
+        task_refs=("civil/calculation/staged",),
         tasks_root=tasks_root,
+        artifact_repository=ArtifactRepository(tmp_path / "artifacts"),
     )
 
-    assert snapshot.task_review is not None
-    graph = snapshot.task_review.stage_graph
-    assert graph is not None
-    assert graph.task_id == "civil/calculation/staged"
-    assert graph.review_sidecar_sha256 == snapshot.task_review.review_sidecar_sha256
-    assert graph.topological_order == ("inventory", "authority", "decision")
-    assert graph.predecessor_stage_ids("decision") == ("inventory", "authority")
-    assert graph.required_output_ids("inventory") == ("packet_id", "source_inventory")
+    assert isinstance(material.references[0], ArtifactTaskSnapshotRef)
+    assert isinstance(material.review, ReviewSnapshot)
+    task_review = material.review.tasks[0]
+    assert task_review.profile_id == "aec.task-review.civil.staged"
+    assert task_review.visibility.value == "public"
+    assert task_review.stage_graph is not None
+    assert task_review.stage_graph.topological_order == ("inventory", "decision")
+    assert "review" not in material.references[0].model_dump(mode="json")
 
 
-def test_task_snapshot_binds_executable_file_mode(tmp_path: Path) -> None:
+def test_detached_task_snapshot_binds_executable_file_mode(tmp_path: Path) -> None:
     tasks_root = tmp_path / "tasks"
     task_dir = _write_task(tasks_root, "civil/calculation/example")
+    repository = ArtifactRepository(tmp_path / "artifacts")
     task = load_task_definition(task_dir, tasks_root)
     script = task_dir / "tests" / "test.sh"
 
     script.chmod(0o644)
-    non_executable = build_task_snapshot(task=task, tasks_root=tasks_root)
+    non_executable = build_task_snapshot(task=task, tasks_root=tasks_root, artifact_repository=repository)
     script.chmod(0o755)
-    executable = build_task_snapshot(task=task, tasks_root=tasks_root)
+    executable = build_task_snapshot(task=task, tasks_root=tasks_root, artifact_repository=repository)
 
-    assert non_executable.package_sha256 != executable.package_sha256
+    assert non_executable != executable
 
 
-def test_task_snapshot_ignores_only_transient_python_cache_files(tmp_path: Path) -> None:
+def test_detached_task_snapshot_ignores_runtime_cache_files(tmp_path: Path) -> None:
     tasks_root = tmp_path / "tasks"
     task_dir = _write_task(tasks_root, "civil/calculation/example")
+    repository = ArtifactRepository(tmp_path / "artifacts")
     task = load_task_definition(task_dir, tasks_root)
-    before = build_task_snapshot(task=task, tasks_root=tasks_root)
+    before = build_task_snapshot(task=task, tasks_root=tasks_root, artifact_repository=repository)
 
     cache = task_dir / "environment" / "__pycache__"
     cache.mkdir()
     (cache / "tool.cpython-313.pyc").write_bytes(b"transient")
     (task_dir / ".DS_Store").write_bytes(b"transient")
 
-    assert build_task_snapshot(task=task, tasks_root=tasks_root) == before
+    assert build_task_snapshot(task=task, tasks_root=tasks_root, artifact_repository=repository) == before
 
 
-def test_task_snapshot_rejects_definition_drift_and_symlinks(tmp_path: Path) -> None:
+def test_detached_task_snapshot_rejects_definition_drift_and_symlinks(tmp_path: Path) -> None:
     tasks_root = tmp_path / "tasks"
     task_dir = _write_task(tasks_root, "civil/calculation/example")
+    repository = ArtifactRepository(tmp_path / "artifacts")
     task = load_task_definition(task_dir, tasks_root)
     (task_dir / "instruction.md").write_text("Changed after the task was loaded.\n", encoding="utf-8")
 
     with pytest.raises(TaskSnapshotError, match="definition changed"):
-        build_task_snapshot(task=task, tasks_root=tasks_root)
+        build_task_snapshot(task=task, tasks_root=tasks_root, artifact_repository=repository)
 
     current = load_task_definition(task_dir, tasks_root)
     target = tmp_path / "outside.txt"
     target.write_text("outside", encoding="utf-8")
     os.symlink(target, task_dir / "environment" / "outside-link")
-    with pytest.raises(TaskSnapshotError, match="symbolic links"):
-        build_task_snapshot(task=current, tasks_root=tasks_root)
+    with pytest.raises(ValueError, match="symbolic links"):
+        build_task_snapshot(task=current, tasks_root=tasks_root, artifact_repository=repository)
 
 
-def test_resolve_task_snapshots_preserves_exact_requested_order(tmp_path: Path) -> None:
+def test_resolve_task_snapshots_preserves_requested_order(tmp_path: Path) -> None:
     tasks_root = tmp_path / "tasks"
     _write_task(tasks_root, "civil/calculation/alpha")
     _write_task(tasks_root, "civil/calculation/beta")
+    repository = ArtifactRepository(tmp_path / "artifacts")
 
     snapshots = resolve_task_snapshots(
         task_refs=("civil/calculation/beta", "civil/calculation/alpha"),
         tasks_root=tasks_root,
+        artifact_repository=repository,
     )
 
     assert tuple(snapshot.task_id for snapshot in snapshots) == (
         "civil/calculation/beta",
         "civil/calculation/alpha",
     )
-
     with pytest.raises(TaskSnapshotError, match="unknown task refs"):
         resolve_task_snapshots(
             task_refs=("civil/calculation/missing",),
             tasks_root=tasks_root,
+            artifact_repository=repository,
         )
 
 
