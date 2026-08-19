@@ -26,7 +26,7 @@ class GraveyardEntry:
     mutation_description: str
     score_before: float
     score_after: float
-    workspace_version: str
+    candidate_id: str
     failure_reason: str
 
     # Enrichment fields — populated from engine data when available.

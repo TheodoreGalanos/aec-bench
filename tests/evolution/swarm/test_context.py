@@ -42,7 +42,7 @@ def _make_snapshot(version: str = "v1") -> WorkspaceSnapshot:
     return WorkspaceSnapshot(
         system_prompt="Test prompt",
         skills=[],
-        workspace_version=version,
+        candidate_id=version,
     )
 
 
@@ -58,7 +58,7 @@ def _make_graveyard_entry(
         mutation_description=f"cycle-{cycle} mutation",
         score_before=score_before,
         score_after=score_after,
-        workspace_version="v1",
+        candidate_id="v1",
         failure_reason=failure_reason,
     )
 

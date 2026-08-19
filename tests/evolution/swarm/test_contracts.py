@@ -141,8 +141,8 @@ def test_swarm_event_null_agent_for_global_events() -> None:
 
 def test_lineage_record_creation() -> None:
     record = LineageRecord(
-        entry_version="evo-sw-1",
-        parent_version="evo-sw-0",
+        entry_candidate_id="evo-sw-1",
+        parent_candidate_id="evo-sw-0",
         source_agent_id="agent-2",
         cross_agent=False,
         cross_agent_source=None,
@@ -151,14 +151,14 @@ def test_lineage_record_creation() -> None:
         surprise=False,
         timestamp="2026-04-07T10:05:00Z",
     )
-    assert record.entry_version == "evo-sw-1"
+    assert record.entry_candidate_id == "evo-sw-1"
     assert record.cross_agent is False
 
 
 def test_lineage_record_cross_agent() -> None:
     record = LineageRecord(
-        entry_version="evo-sw-5",
-        parent_version="evo-sw-3",
+        entry_candidate_id="evo-sw-5",
+        parent_candidate_id="evo-sw-3",
         source_agent_id="agent-3",
         cross_agent=True,
         cross_agent_source="agent-1",
@@ -188,7 +188,7 @@ def test_swarm_result_creation() -> None:
         eval_cost_usd=3.20,
         elapsed_seconds=1800.0,
         best_score=0.87,
-        best_workspace_version="evo-sw-31",
+        best_candidate_id="evo-sw-31",
         converged=False,
         lineage_record_count=42,
         event_count=150,

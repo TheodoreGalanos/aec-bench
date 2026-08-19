@@ -25,10 +25,12 @@ from aec_bench.contracts.evolution import (
     TraceQueryRequest,
     TraceSlice,
     TraceSliceTurn,
+    WorkspaceCandidateVersion,
     WorkspaceManifest,
+    WorkspaceMigrationCandidate,
+    WorkspaceMigrationPlan,
     WorkspaceReadRequest,
     WorkspaceSnapshot,
-    WorkspaceVersion,
     WorkspaceWriteRequest,
 )
 from aec_bench.contracts.experiment_manifest import TaskSelector
@@ -58,7 +60,7 @@ class TestWorkspaceManifest:
     def test_valid_manifest(self) -> None:
         manifest = self._valid_manifest()
         assert manifest.name == "structural-workspace"
-        assert manifest.version == "0.1.0"
+        assert manifest.schema_version == 1
         assert manifest.agent_adapter == "anthropic"
         assert EvolvableLayer.PROMPTS in manifest.evolvable_layers
         assert manifest.skill_budget == 10
@@ -137,6 +139,15 @@ class TestWorkspaceManifest:
                 unknown_field="oops",
             )
 
+    def test_unknown_schema_version_rejected(self) -> None:
+        with pytest.raises(ValidationError):
+            WorkspaceManifest(
+                schema_version=2,
+                name="my-workspace",
+                agent_adapter="anthropic",
+                evolvable_layers=[],
+            )
+
 
 class TestSkillEntry:
     def test_valid_skill(self) -> None:
@@ -174,56 +185,78 @@ class TestSkillEntry:
             )
 
 
-class TestWorkspaceVersion:
-    def test_valid_version_with_parent(self) -> None:
-        version = WorkspaceVersion(
-            tag="v0.2.0",
-            parent_tag="v0.1.0",
-            sha="abc123def456",
-            timestamp=datetime.now(UTC),
+class TestWorkspaceCandidateVersion:
+    def test_valid_candidate_with_parent(self) -> None:
+        candidate = WorkspaceCandidateVersion(
+            candidate_id="run:2",
+            parent_candidate_id="run:1",
+            source_revision="a" * 40,
             summary="Improved structural prompt.",
-            score_at_tag=0.74,
+            score=0.74,
+            label="evo-run-2",
         )
-        assert version.tag == "v0.2.0"
-        assert version.parent_tag == "v0.1.0"
-        assert version.score_at_tag == pytest.approx(0.74)
+        assert candidate.candidate_id == "run:2"
+        assert candidate.parent_candidate_id == "run:1"
+        assert candidate.score == pytest.approx(0.74)
 
-    def test_initial_version_no_parent(self) -> None:
-        version = WorkspaceVersion(
-            tag="v0.1.0",
-            sha="aabbccdd",
-            timestamp=datetime.now(UTC),
+    def test_initial_candidate_no_parent(self) -> None:
+        candidate = WorkspaceCandidateVersion(
+            candidate_id="baseline",
+            source_revision="b" * 40,
             summary="Initial workspace version.",
         )
-        assert version.parent_tag is None
-        assert version.score_at_tag is None
+        assert candidate.parent_candidate_id is None
+        assert candidate.score is None
 
-    def test_blank_tag_rejected(self) -> None:
+    def test_blank_candidate_id_rejected(self) -> None:
         with pytest.raises(ValidationError):
-            WorkspaceVersion(
-                tag="",
-                sha="aabbccdd",
-                timestamp=datetime.now(UTC),
-                summary="Some version.",
+            WorkspaceCandidateVersion(
+                candidate_id="",
+                source_revision="c" * 40,
             )
 
-    def test_blank_sha_rejected(self) -> None:
+    @pytest.mark.parametrize("revision", ["", "aabbccdd", "A" * 40, "g" * 40])
+    def test_non_full_git_sha_rejected(self, revision: str) -> None:
         with pytest.raises(ValidationError):
-            WorkspaceVersion(
-                tag="v0.1.0",
-                sha="   ",
-                timestamp=datetime.now(UTC),
-                summary="Some version.",
+            WorkspaceCandidateVersion(
+                candidate_id="candidate",
+                source_revision=revision,
             )
 
-    def test_blank_summary_rejected(self) -> None:
+    def test_blank_optional_summary_rejected(self) -> None:
         with pytest.raises(ValidationError):
-            WorkspaceVersion(
-                tag="v0.1.0",
-                sha="aabbccdd",
-                timestamp=datetime.now(UTC),
+            WorkspaceCandidateVersion(
+                candidate_id="candidate",
+                source_revision="d" * 40,
                 summary="",
             )
+
+
+class TestWorkspaceMigrationPlan:
+    def test_explicit_source_and_lineage(self) -> None:
+        plan = WorkspaceMigrationPlan(
+            candidates=(
+                WorkspaceMigrationCandidate(
+                    candidate_id="run:2",
+                    label="evo-2",
+                    parent_candidate_id="run:1",
+                    expected_source_revision="e" * 40,
+                ),
+            )
+        )
+        assert plan.schema_version == 1
+        assert plan.candidates[0].parent_candidate_id == "run:1"
+
+    def test_duplicate_candidate_ids_rejected(self) -> None:
+        item = WorkspaceMigrationCandidate(candidate_id="duplicate", label="evo-1")
+        with pytest.raises(ValidationError, match="candidate_id values must be unique"):
+            WorkspaceMigrationPlan(
+                candidates=(item, item.model_copy(update={"label": "evo-2"})),
+            )
+
+    def test_unknown_schema_version_rejected(self) -> None:
+        with pytest.raises(ValidationError):
+            WorkspaceMigrationPlan(schema_version=2, candidates=())
 
 
 class TestWorkspaceSnapshot:
@@ -238,15 +271,15 @@ class TestWorkspaceSnapshot:
         snapshot = WorkspaceSnapshot(
             system_prompt="You are a structural engineering agent.",
             skills=[self._valid_skill()],
-            workspace_version="v0.3.0",
+            candidate_id="run:3",
         )
         assert len(snapshot.skills) == 1
-        assert snapshot.workspace_version == "v0.3.0"
+        assert snapshot.candidate_id == "run:3"
 
     def test_empty_skills_allowed(self) -> None:
         snapshot = WorkspaceSnapshot(
             system_prompt="You are an agent.",
-            workspace_version="v0.1.0",
+            candidate_id="baseline",
         )
         assert snapshot.skills == []
 
@@ -254,14 +287,14 @@ class TestWorkspaceSnapshot:
         with pytest.raises(ValidationError):
             WorkspaceSnapshot(
                 system_prompt="   ",
-                workspace_version="v0.1.0",
+                candidate_id="baseline",
             )
 
-    def test_blank_workspace_version_rejected(self) -> None:
+    def test_blank_candidate_id_rejected(self) -> None:
         with pytest.raises(ValidationError):
             WorkspaceSnapshot(
                 system_prompt="You are an agent.",
-                workspace_version="",
+                candidate_id="",
             )
 
 
@@ -360,10 +393,10 @@ class TestEvolutionObservation:
         observation = EvolutionObservation(
             trial=make_trial_record(),
             enrichment=ObservationEnrichment(),
-            workspace_version="v0.2.0",
+            candidate_id="run:2",
             discipline="electrical",
         )
-        assert observation.workspace_version == "v0.2.0"
+        assert observation.candidate_id == "run:2"
         assert observation.discipline == "electrical"
 
     def test_blank_discipline_rejected(self) -> None:
@@ -371,7 +404,7 @@ class TestEvolutionObservation:
             EvolutionObservation(
                 trial=make_trial_record(),
                 enrichment=ObservationEnrichment(),
-                workspace_version="v0.1.0",
+                candidate_id="baseline",
                 discipline="",
             )
 
@@ -535,8 +568,8 @@ class TestEvolutionCycleRecord:
     def test_accepted_cycle_full(self) -> None:
         record = EvolutionCycleRecord(
             cycle=3,
-            workspace_version_before="v0.2.0",
-            workspace_version_after="v0.3.0",
+            candidate_id_before="run:2",
+            candidate_id_after="run:3",
             batch_score=0.75,
             discipline_scores=[self._make_discipline_score()],
             structural_score=0.68,
@@ -547,15 +580,15 @@ class TestEvolutionCycleRecord:
         )
         assert record.cycle == 3
         assert record.gate_decision == GateDecision.ACCEPTED
-        assert record.workspace_version_after == "v0.3.0"
+        assert record.candidate_id_after == "run:3"
         assert len(record.discipline_scores) == 1
         assert record.evolver_cost is None
 
     def test_skipped_cycle_same_versions(self) -> None:
         record = EvolutionCycleRecord(
             cycle=1,
-            workspace_version_before="v0.1.0",
-            workspace_version_after="v0.1.0",
+            candidate_id_before="baseline",
+            candidate_id_after="baseline",
             batch_score=0.50,
             structural_score=None,
             mutation=None,
@@ -564,15 +597,15 @@ class TestEvolutionCycleRecord:
             timestamp=datetime.now(UTC),
         )
         assert record.gate_decision == GateDecision.SKIPPED
-        assert record.workspace_version_before == record.workspace_version_after
+        assert record.candidate_id_before == record.candidate_id_after
         assert record.mutation is None
 
     def test_blank_version_before_rejected(self) -> None:
         with pytest.raises(ValidationError):
             EvolutionCycleRecord(
                 cycle=1,
-                workspace_version_before="",
-                workspace_version_after="v0.2.0",
+                candidate_id_before="",
+                candidate_id_after="run:2",
                 batch_score=0.5,
                 structural_score=None,
                 mutation=None,
@@ -586,8 +619,8 @@ class TestStepResult:
     def _make_cycle_record(self, gate: GateDecision = GateDecision.ACCEPTED) -> EvolutionCycleRecord:
         return EvolutionCycleRecord(
             cycle=1,
-            workspace_version_before="v0.1.0",
-            workspace_version_after="v0.2.0",
+            candidate_id_before="baseline",
+            candidate_id_after="run:2",
             batch_score=0.80,
             structural_score=None,
             mutation=None,
@@ -622,8 +655,8 @@ class TestEvolutionResult:
     def _make_cycle_record(self) -> EvolutionCycleRecord:
         return EvolutionCycleRecord(
             cycle=1,
-            workspace_version_before="v0.1.0",
-            workspace_version_after="v0.2.0",
+            candidate_id_before="baseline",
+            candidate_id_after="run:2",
             batch_score=0.82,
             structural_score=0.70,
             mutation=MutationSummary(prompt_modified=True),
@@ -639,7 +672,7 @@ class TestEvolutionResult:
             cycles_completed=10,
             final_score=0.85,
             best_score=0.88,
-            best_workspace_version="v0.9.0",
+            best_candidate_id="run:9",
             score_history=[0.60, 0.72, 0.80, 0.85, 0.88],
             converged=True,
             total_trials=100,
@@ -654,7 +687,7 @@ class TestEvolutionResult:
         stagnation = StagnationInfo(
             cycles_without_improvement=5,
             best_score=0.72,
-            best_workspace_version="v0.5.0",
+            best_candidate_id="run:5",
             rolled_back=True,
         )
         result = EvolutionResult(
@@ -663,7 +696,7 @@ class TestEvolutionResult:
             cycles_completed=20,
             final_score=0.70,
             best_score=0.72,
-            best_workspace_version="v0.5.0",
+            best_candidate_id="run:5",
             score_history=[0.60, 0.65, 0.70, 0.72, 0.71, 0.70],
             converged=False,
             stagnation=stagnation,
@@ -682,7 +715,7 @@ class TestEvolutionResult:
                 cycles_completed=1,
                 final_score=0.5,
                 best_score=0.5,
-                best_workspace_version="v0.1.0",
+                best_candidate_id="baseline",
                 score_history=[0.5],
                 converged=False,
                 total_trials=10,

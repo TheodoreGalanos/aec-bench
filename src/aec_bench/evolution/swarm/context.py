@@ -70,11 +70,11 @@ def _format_top_performers(archive: _ArchiveLike, k: int = 5) -> str:
         return "\n".join(lines)
 
     for i, entry in enumerate(entries, 1):
-        version = entry.snapshot.workspace_version
+        candidate_id = entry.snapshot.candidate_id
         reward = entry.bd.reward
         discipline = entry.discipline or "—"
         run_id = entry.run_id or "—"
-        lines.append(f"{i}. **{version}** — reward: {reward:.3f}, discipline: {discipline}, run: {run_id}")
+        lines.append(f"{i}. **{candidate_id}** — reward: {reward:.3f}, discipline: {discipline}, run: {run_id}")
 
     lines.append("")
     return "\n".join(lines)

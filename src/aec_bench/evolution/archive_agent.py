@@ -22,8 +22,8 @@ logger = logging.getLogger(__name__)
 class SelectionResult:
     """The parent cell chosen by the archive-explorer agent."""
 
-    parent_version: str
-    inspiration_versions: list[str]
+    parent_candidate_id: str
+    inspiration_candidate_ids: list[str]
     strategy: str
     reasoning: str
 
@@ -69,12 +69,12 @@ def build_archive_tools(
             return "Archive is empty — no entries to browse."
 
         lines = [
-            "| Version | Reward | Tokens | Verif | Tool | Explore | Discipline |",
+            "| Candidate | Reward | Tokens | Verif | Tool | Explore | Discipline |",
             "| --- | --- | --- | --- | --- | --- | --- |",
         ]
         for e in entries:
             lines.append(
-                f"| {e.snapshot.workspace_version}"
+                f"| {e.snapshot.candidate_id}"
                 f" | {e.bd.reward:.3f}"
                 f" | {e.bd.token_cost:.0f}"
                 f" | {e.bd.verification_depth:.3f}"
@@ -84,25 +84,25 @@ def build_archive_tools(
             )
         return "\n".join(lines)
 
-    def compare_cells(version_a: str, version_b: str) -> str:
+    def compare_cells(candidate_a: str, candidate_b: str) -> str:
         """Compare two archive entries: BD deltas, prompt previews, and skill diff."""
-        entry_a = archive.get_entry_by_version(version_a)
-        entry_b = archive.get_entry_by_version(version_b)
+        entry_a = archive.get_entry_by_candidate_id(candidate_a)
+        entry_b = archive.get_entry_by_candidate_id(candidate_b)
 
         missing = []
         if entry_a is None:
-            missing.append(version_a)
+            missing.append(candidate_a)
         if entry_b is None:
-            missing.append(version_b)
+            missing.append(candidate_b)
         if missing:
-            return f"Version(s) not found in archive: {', '.join(missing)}"
+            return f"Candidate(s) not found in archive: {', '.join(missing)}"
         assert entry_a is not None
         assert entry_b is not None
 
         bd_a = entry_a.bd
         bd_b = entry_b.bd
 
-        lines = [f"## Comparison: {version_a} vs {version_b}", ""]
+        lines = [f"## Comparison: {candidate_a} vs {candidate_b}", ""]
 
         # BD comparison table
         lines += [
@@ -127,10 +127,10 @@ def build_archive_tools(
         prompt_b = entry_b.snapshot.system_prompt[:500]
         lines += [
             "",
-            f"### Prompt A ({version_a}, first 500 chars)",
+            f"### Prompt A ({candidate_a}, first 500 chars)",
             prompt_a,
             "",
-            f"### Prompt B ({version_b}, first 500 chars)",
+            f"### Prompt B ({candidate_b}, first 500 chars)",
             prompt_b,
         ]
 
@@ -151,16 +151,16 @@ def build_archive_tools(
 
         return "\n".join(lines)
 
-    def inspect_cell(version: str) -> str:
+    def inspect_cell(candidate_id: str) -> str:
         """Return full detail for an archive entry: all BD values, tasks, prompt, skills."""
-        entry = archive.get_entry_by_version(version)
+        entry = archive.get_entry_by_candidate_id(candidate_id)
         if entry is None:
-            return f"Version not found in archive: {version!r}"
+            return f"Candidate not found in archive: {candidate_id!r}"
 
         bd = entry.bd
         snapshot = entry.snapshot
 
-        lines = [f"## Cell: {version}", ""]
+        lines = [f"## Cell: {candidate_id}", ""]
         lines += [
             "### Behaviour Descriptors",
             f"- reward: {bd.reward:.4f}",
@@ -227,7 +227,7 @@ def build_archive_tools(
                 f"- Description: {e.mutation_description}",
                 f"- Score change: {e.score_before:.3f} → {e.score_after:.3f} ({score_change:+.3f})",
                 f"- Failure reason: {e.failure_reason}",
-                f"- Workspace version: {e.workspace_version}",
+                f"- Candidate ID: {e.candidate_id}",
                 "",
             ]
         return "\n".join(lines)
@@ -279,15 +279,15 @@ def _parse_selection(text: str, shortlist: list[str]) -> SelectionResult:
             fallback,
         )
         return SelectionResult(
-            parent_version=fallback,
-            inspiration_versions=[],
+            parent_candidate_id=fallback,
+            inspiration_candidate_ids=[],
             strategy="conservative",
             reasoning="Fallback: agent output did not contain a valid SELECTED tag.",
         )
 
     return SelectionResult(
-        parent_version=selected,
-        inspiration_versions=inspiration,
+        parent_candidate_id=selected,
+        inspiration_candidate_ids=inspiration,
         strategy=strategy,
         reasoning=reason,
     )
@@ -311,8 +311,8 @@ producing a better offspring. Consider:
 
 Use the tools as needed, then end your response with EXACTLY:
 
-SELECTED: <version>
-INSPIRATION: <v1>, <v2>  (optional additional versions that informed your choice)
+SELECTED: <candidate_id>
+INSPIRATION: <candidate_id>, <candidate_id>  (optional additional candidates that informed your choice)
 STRATEGY: conservative | exploratory | crossover | graveyard_rescue
 REASON: <one sentence explaining your choice>
 """
@@ -338,8 +338,8 @@ def run_archive_selection(
     if not shortlist:
         logger.warning("Empty shortlist passed to run_archive_selection — returning empty result")
         return SelectionResult(
-            parent_version="",
-            inspiration_versions=[],
+            parent_candidate_id="",
+            inspiration_candidate_ids=[],
             strategy="conservative",
             reasoning="No shortlist provided.",
         )
@@ -359,7 +359,7 @@ def run_archive_selection(
     shortlist_text = "\n".join(f"- {v}" for v in shortlist)
     brief = (
         f"Current score: {current_score:.4f}\n\n"
-        f"Shortlisted candidate versions:\n{shortlist_text}\n\n"
+        f"Shortlisted candidate IDs:\n{shortlist_text}\n\n"
         "Browse the archive, compare candidates, and select the best parent."
     )
 

@@ -47,8 +47,8 @@ class EvolvableLayer(StrEnum):
 class WorkspaceManifest(StrictModel):
     """Top-level descriptor for an evolution workspace. Stored as manifest.toml."""
 
+    schema_version: Literal[1] = 1
     name: NonEmptyStr
-    version: str = "0.1.0"
     agent_adapter: NonEmptyStr
     evolvable_layers: list[EvolvableLayer]
     skill_budget: PositiveInt = 10
@@ -78,23 +78,92 @@ class SkillEntry(StrictModel):
     body: NonEmptyStr
 
 
-class WorkspaceVersion(StrictModel):
-    """An immutable snapshot of a workspace at a point in evolutionary history."""
+def _validate_full_git_sha(value: str) -> str:
+    if len(value) != 40 or any(character not in "0123456789abcdef" for character in value):
+        raise ValueError("source revision must be a lowercase 40-character Git commit")
+    return value
 
-    tag: NonEmptyStr
-    parent_tag: str | None = None
-    sha: NonEmptyStr
-    timestamp: datetime
-    summary: NonEmptyStr
-    score_at_tag: float | None = None
+
+class WorkspaceCandidateVersion(StrictModel):
+    """One evolution candidate bound to exact Git source and explicit domain lineage."""
+
+    candidate_id: NonEmptyStr
+    source_revision: NonEmptyStr
+    parent_candidate_id: NonEmptyStr | None = None
+    summary: NonEmptyStr | None = None
+    score: float | None = None
+    label: NonEmptyStr | None = None
+
+    @field_validator("source_revision")
+    @classmethod
+    def validate_source_revision(cls, value: str) -> str:
+        return _validate_full_git_sha(value)
+
+
+class WorkspaceMigrationCandidate(StrictModel):
+    """Explicit legacy label conversion supplied by the workspace owner."""
+
+    candidate_id: NonEmptyStr
+    label: NonEmptyStr
+    parent_candidate_id: NonEmptyStr | None = None
+    expected_source_revision: NonEmptyStr | None = None
+
+    @field_validator("expected_source_revision")
+    @classmethod
+    def validate_expected_source_revision(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        return _validate_full_git_sha(value)
+
+    @model_validator(mode="after")
+    def validate_parent(self) -> WorkspaceMigrationCandidate:
+        if self.parent_candidate_id == self.candidate_id:
+            raise ValueError("legacy workspace candidate cannot be its own parent")
+        return self
+
+
+class WorkspaceMigrationPlan(StrictModel):
+    """Owner-supplied conversion of legacy labels to candidate lineage."""
+
+    schema_version: Literal[1] = 1
+    candidates: tuple[WorkspaceMigrationCandidate, ...]
+
+    @model_validator(mode="after")
+    def validate_candidates(self) -> WorkspaceMigrationPlan:
+        candidate_ids = [item.candidate_id for item in self.candidates]
+        labels = [item.label for item in self.candidates]
+        if len(candidate_ids) != len(set(candidate_ids)):
+            raise ValueError("workspace migration candidate_id values must be unique")
+        if len(labels) != len(set(labels)):
+            raise ValueError("workspace migration labels must be unique")
+        return self
+
+
+class WorkspaceMigrationIssue(StrictModel):
+    """One legacy condition that blocks safe candidate registration."""
+
+    label: NonEmptyStr
+    code: Literal["candidate_conflict", "label_missing", "label_moved", "lineage_missing", "source_ambiguous"]
+    message: NonEmptyStr
+
+
+class WorkspaceMigrationReport(StrictModel):
+    """Result of an explicit legacy workspace migration attempt."""
+
+    migrated_candidate_ids: tuple[NonEmptyStr, ...] = ()
+    issues: tuple[WorkspaceMigrationIssue, ...] = ()
+
+    @property
+    def complete(self) -> bool:
+        return not self.issues
 
 
 class WorkspaceSnapshot(StrictModel):
-    """The full runtime state of a workspace at a given version."""
+    """The full runtime state of one evolution candidate."""
 
     system_prompt: NonEmptyStr
     skills: list[SkillEntry] = Field(default_factory=list)
-    workspace_version: NonEmptyStr
+    candidate_id: NonEmptyStr
 
 
 class FieldScore(StrictModel):
@@ -153,7 +222,7 @@ class EvolutionObservation(StrictModel):
 
     trial: TrialRecord
     enrichment: ObservationEnrichment
-    workspace_version: NonEmptyStr
+    candidate_id: NonEmptyStr
     discipline: NonEmptyStr
 
 
@@ -221,8 +290,8 @@ class EvolutionCycleRecord(StrictModel):
     """Immutable record of a single evolution cycle."""
 
     cycle: int
-    workspace_version_before: NonEmptyStr
-    workspace_version_after: NonEmptyStr
+    candidate_id_before: NonEmptyStr
+    candidate_id_after: NonEmptyStr
     batch_score: float
     discipline_scores: list[DisciplineScore] = Field(default_factory=list)
     structural_score: float | None
@@ -248,7 +317,7 @@ class StagnationInfo(StrictModel):
 
     cycles_without_improvement: int
     best_score: float
-    best_workspace_version: NonEmptyStr
+    best_candidate_id: NonEmptyStr
     rolled_back: bool
 
 
@@ -260,7 +329,7 @@ class EvolutionResult(StrictModel):
     cycles_completed: int
     final_score: float
     best_score: float
-    best_workspace_version: NonEmptyStr
+    best_candidate_id: NonEmptyStr
     score_history: list[float]
     converged: bool
     stagnation: StagnationInfo | None = None
@@ -398,8 +467,8 @@ class LineageRecord(StrictModel):
 
     model_config = ConfigDict(frozen=True)
 
-    entry_version: NonEmptyStr
-    parent_version: str | None = None
+    entry_candidate_id: NonEmptyStr
+    parent_candidate_id: str | None = None
     source_agent_id: NonEmptyStr
     cross_agent: bool = False
     cross_agent_source: str | None = None
@@ -414,7 +483,7 @@ class LineageNarrative(StrictModel):
 
     model_config = ConfigDict(frozen=True)
 
-    entry_version: NonEmptyStr
+    entry_candidate_id: NonEmptyStr
     agent_reasoning: NonEmptyStr
     investigation_context: str = ""
     surprise_explanation: str | None = None
@@ -461,7 +530,7 @@ class SwarmResult(StrictModel):
     eval_cost_usd: float = 0.0
     elapsed_seconds: float = 0.0
     best_score: float = 0.0
-    best_workspace_version: str = ""
+    best_candidate_id: str = ""
     converged: bool = False
     lineage_record_count: int = 0
     event_count: int = 0

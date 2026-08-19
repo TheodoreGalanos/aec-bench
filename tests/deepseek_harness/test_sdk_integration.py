@@ -375,10 +375,9 @@ def test_real_sdk_composition_writes_the_requested_workspace_artifact(
     assert list(sessions_path.rglob("*.jsonl"))
     manifest_path = Path(result.configuration_record["manifest_path"])
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    assert (
-        result.configuration_record["evidence_manifest_sha256"]
-        == hashlib.sha256(manifest_path.read_bytes()).hexdigest()
-    )
+    provider_evidence = result.configuration_record["provider_evidence_manifest"]
+    assert provider_evidence["sha256"] == hashlib.sha256(manifest_path.read_bytes()).hexdigest()
+    assert provider_evidence["size_bytes"] == manifest_path.stat().st_size
     assert result.configuration_record["optional_plugins"] == []
     composition = json.loads(Path(result.configuration_record["composition_path"]).read_text(encoding="utf-8"))
     assert composition["environment"]["provider_endpoint"].startswith("http://127.0.0.1:")
@@ -395,8 +394,9 @@ def test_real_sdk_composition_writes_the_requested_workspace_artifact(
         "system_prompt",
     }.issubset(roles)
     for artifact in manifest["artifacts"]:
-        evidence_path = evidence_root / artifact["path"]
-        assert hashlib.sha256(evidence_path.read_bytes()).hexdigest() == artifact["sha256"]
+        reference = artifact["artifact"]
+        evidence_path = evidence_root / reference["artifact_id"]
+        assert hashlib.sha256(evidence_path.read_bytes()).hexdigest() == reference["sha256"]
     exported_evidence = "".join(
         path.read_text(encoding="utf-8", errors="replace") for path in evidence_root.rglob("*") if path.is_file()
     )
@@ -500,9 +500,10 @@ def test_real_sdk_runs_through_the_serialized_harbor_entrypoint(
     assert payload["agent_output"]["status"] == "completed"
     assert payload["adapter_name"] == "entrypoint"
     assert payload["runtime_execution_attestation"]["adapter_kind"] == "deepseek_harness"
-    assert (
-        payload["runtime_execution_attestation"]["evidence_manifest_sha256"]
-        == (payload["configuration_record"]["evidence_manifest_sha256"])
+    assert payload["runtime_execution_attestation"]["provider_evidence_role"] == "provider_evidence"
+    assert "evidence_manifest_sha256" not in payload["runtime_execution_attestation"]
+    assert payload["configuration_record"]["provider_evidence_manifest"]["artifact_id"].endswith(
+        "evidence-manifest.json"
     )
 
 
@@ -597,15 +598,15 @@ def test_real_sdk_output_commit_plugin_accepts_and_concludes_the_turn(
     assert result.configuration_record["plugin_free_baseline"] is False
     manifest_plugins = result.configuration_record["optional_plugins"]
     assert len(manifest_plugins) == 1
-    assert manifest_plugins[0]["artifact_path"] == "plugins/output-commit/index.js"
-    assert manifest_plugins[0]["package_lock_path"] == "plugins/package-lock.json"
+    assert manifest_plugins[0]["artifact"]["artifact_id"] == "plugins/output-commit/index.js"
     assert manifest_plugins[0]["plugin_id"] == "@aec-bench/dsh-output-commit"
     assert manifest_plugins[0]["role"] == "output_commit"
     assert manifest_plugins[0]["version"] == "0.1.0"
-    assert len(manifest_plugins[0]["artifact_sha256"]) == 64
-    assert len(manifest_plugins[0]["package_lock_sha256"]) == 64
+    assert len(manifest_plugins[0]["artifact"]["sha256"]) == 64
     manifest_path = Path(result.configuration_record["manifest_path"])
-    assert json.loads(manifest_path.read_text(encoding="utf-8"))["plugins"] == manifest_plugins
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    assert manifest["plugins"] == manifest_plugins
+    assert manifest["plugin_package_lock"]["artifact_id"] == "plugins/package-lock.json"
     commit_evidence = Path(result.configuration_record["commit_evidence_path"]).read_text(encoding="utf-8")
     assert "keyless-test-token" not in commit_evidence
 

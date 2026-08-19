@@ -12,7 +12,7 @@ def _make_snapshot(
     return WorkspaceSnapshot(
         system_prompt=prompt,
         skills=skills or [],
-        workspace_version="evo-0",
+        candidate_id="baseline",
     )
 
 

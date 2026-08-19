@@ -31,40 +31,42 @@ class LineageTracker:
         self._narratives: dict[str, LineageNarrative] = {}
 
     def record(self, rec: LineageRecord) -> None:
-        """Add a lineage record, indexing by entry_version."""
+        """Add a lineage record, indexed by candidate ID."""
         self._records.append(rec)
-        self._index[rec.entry_version] = rec
+        self._index[rec.entry_candidate_id] = rec
 
     def all_records(self) -> list[LineageRecord]:
         """Return all records in insertion order."""
         return list(self._records)
 
-    def get_by_version(self, version: str) -> LineageRecord | None:
-        """Lookup a record by its entry_version."""
-        return self._index.get(version)
+    def get_by_candidate_id(self, candidate_id: str) -> LineageRecord | None:
+        """Look up a record by candidate ID."""
+        return self._index.get(candidate_id)
 
-    def get_lineage_chain(self, version: str) -> list[LineageRecord]:
-        """Walk the parent chain from *version* back to root."""
+    def get_lineage_chain(self, candidate_id: str) -> list[LineageRecord]:
+        """Walk the explicit parent candidate chain back to its root."""
         chain: list[LineageRecord] = []
-        current = self._index.get(version)
+        current = self._index.get(candidate_id)
         while current is not None:
             chain.append(current)
-            if current.parent_version is None:
+            if current.parent_candidate_id is None:
                 break
-            current = self._index.get(current.parent_version)
+            current = self._index.get(current.parent_candidate_id)
         return chain
 
     def attach_narrative(self, narrative: LineageNarrative) -> None:
         """Attach a freeform narrative to a lineage record."""
-        self._narratives[narrative.entry_version] = narrative
+        self._narratives[narrative.entry_candidate_id] = narrative
 
-    def get_narrative(self, version: str) -> LineageNarrative | None:
-        """Look up a narrative by entry version."""
-        return self._narratives.get(version)
+    def get_narrative(self, candidate_id: str) -> LineageNarrative | None:
+        """Look up a narrative by candidate ID."""
+        return self._narratives.get(candidate_id)
 
     def all_narratives(self) -> list[LineageNarrative]:
         """Return all narratives in insertion order."""
-        return [self._narratives[r.entry_version] for r in self._records if r.entry_version in self._narratives]
+        return [
+            self._narratives[r.entry_candidate_id] for r in self._records if r.entry_candidate_id in self._narratives
+        ]
 
     @property
     def size(self) -> int:
@@ -94,7 +96,7 @@ class LineageTracker:
         entries: list[dict[str, object]] = []
         for r in self._records:
             entry: dict[str, object] = {"record": r.model_dump(mode="json")}
-            narrative = self._narratives.get(r.entry_version)
+            narrative = self._narratives.get(r.entry_candidate_id)
             if narrative is not None:
                 entry["narrative"] = narrative.model_dump(mode="json")
             entries.append(entry)
@@ -109,11 +111,7 @@ class LineageTracker:
             return tracker
         raw = json.loads(path.read_text())
         for item in raw:
-            # Support both old format (flat record) and new format (record + narrative)
-            if "record" in item:
-                tracker.record(LineageRecord.model_validate(item["record"]))
-                if "narrative" in item:
-                    tracker.attach_narrative(LineageNarrative.model_validate(item["narrative"]))
-            else:
-                tracker.record(LineageRecord.model_validate(item))
+            tracker.record(LineageRecord.model_validate(item["record"]))
+            if "narrative" in item:
+                tracker.attach_narrative(LineageNarrative.model_validate(item["narrative"]))
         return tracker

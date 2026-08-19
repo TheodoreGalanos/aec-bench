@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import yaml
@@ -37,6 +38,7 @@ class TestEvolveInit:
         runner.invoke(app, ["evolve", "init", str(ws), "--name", "My Agent"])
 
         manifest = yaml.safe_load((ws / "manifest.yaml").read_text())
+        assert manifest["schema_version"] == 1
         assert manifest["name"] == "My Agent"
         assert manifest["agent_adapter"] == "rlm"
         assert "prompts" in manifest["evolvable_layers"]
@@ -121,14 +123,19 @@ class TestEvolveHistory:
 
         workspace = Workspace(ws)
         workspace.init_versioning()
-        # Create a legacy-style run tag so list_runs() returns a result
-        workspace._git("tag", "-a", "evo-1", "-m", "cycle 1 score=0.750")
+        workspace.commit_candidate(
+            candidate_id="run:1",
+            summary="cycle 1: score 0.750",
+            score=0.75,
+            parent_candidate_id="baseline",
+            label="evo-run-1",
+        )
 
         result = runner.invoke(app, ["evolve", "history", str(ws)])
         assert result.exit_code == 0
         # New grouped format shows run count in header and cycle tags per run
         assert "run(s)" in result.output
-        assert "evo-1" in result.output
+        assert "run:1" in result.output
 
     def test_history_shows_grouped_run_output(self, tmp_path: Path) -> None:
         """History should show workspace name, run count, and per-run cycle detail."""
@@ -139,10 +146,49 @@ class TestEvolveHistory:
 
         workspace = Workspace(ws)
         workspace.init_versioning()
-        workspace._git("tag", "-a", "evo-1", "-m", "cycle 1 score=0.750")
+        workspace.commit_candidate(
+            candidate_id="run:1",
+            summary="cycle 1: score 0.750",
+            score=0.75,
+            parent_candidate_id="baseline",
+            label="evo-run-1",
+        )
 
         result = runner.invoke(app, ["evolve", "history", str(ws)])
         assert result.exit_code == 0
         # Workspace name and run summary line should appear
         assert "Test" in result.output
         assert "cycle(s)" in result.output
+
+
+class TestEvolveWorkspaceMigration:
+    def test_reports_ambiguous_legacy_source(self, tmp_path: Path) -> None:
+        ws = tmp_path / "ws"
+        runner.invoke(app, ["evolve", "init", str(ws), "--name", "Test"])
+
+        from aec_bench.evolution.workspace import Workspace
+
+        workspace = Workspace(ws)
+        workspace._git("init")
+        workspace._git("config", "user.email", "test@example.com")
+        workspace._git("config", "user.name", "test")
+        workspace._git("add", "-A")
+        workspace._git("commit", "-m", "legacy baseline")
+        workspace._git("tag", "evo-0")
+        plan_path = tmp_path / "migration.json"
+        plan_path.write_text(
+            json.dumps(
+                {
+                    "schema_version": 1,
+                    "candidates": [{"candidate_id": "baseline", "label": "evo-0"}],
+                }
+            )
+        )
+
+        result = runner.invoke(
+            app,
+            ["evolve", "migrate-workspace", str(ws), "--plan", str(plan_path)],
+        )
+
+        assert result.exit_code == 2, result.output
+        assert "source_ambiguous" in result.output

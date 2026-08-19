@@ -77,8 +77,8 @@ class TestBuildEvolutionRunner:
             task_selector=TaskSelector(),
         )
         runner = build_evolution_runner(config=config, task_dirs=[], model="haiku")
-        versions = runner._workspace.list_versions()
-        assert any(v.tag == "evo-0" for v in versions)
+        candidates = runner._workspace.list_candidates()
+        assert any(candidate.candidate_id == "baseline" for candidate in candidates)
 
 
 class TestBuildEvolutionRunnerFromConfig:
@@ -248,7 +248,7 @@ class TestBuildEvolutionRunnerRemoteExecution:
         records = solve(
             WorkspaceSnapshot(
                 system_prompt="Use the evolved instructions.",
-                workspace_version="evo-1",
+                candidate_id="run:1",
             ),
             1,
         )

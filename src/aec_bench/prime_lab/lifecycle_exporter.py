@@ -1,8 +1,9 @@
-# ABOUTME: Exports materialized public evidence lifecycles as local-only Prime packages.
-# ABOUTME: Hash-binds absolute package references without copying lifecycle or runtime sources.
+# ABOUTME: Exports public evidence lifecycles as content-addressed local Prime packages.
+# ABOUTME: Retains one source identity and one archive reference for each packaged lifecycle.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import keyword
 import shutil
@@ -11,40 +12,38 @@ import textwrap
 import tomllib
 import warnings
 from dataclasses import dataclass
+from importlib import metadata as importlib_metadata
 from pathlib import Path
 from typing import Any, Literal
 
 from packaging.version import InvalidVersion, Version
-from pydantic import Field, PositiveInt, field_validator, model_validator
+from pydantic import Field, PositiveInt, PrivateAttr, model_validator
 
-from aec_bench.contracts.trial_record import ArtifactReference
+from aec_bench.contracts.artifacts import ArtifactRef, Sha256
+from aec_bench.contracts.provider_provenance import ProviderAdapterIdentity
 from aec_bench.contracts.validators import NonEmptyStr, StrictModel
-from aec_bench.experimentation.lifecycle_studies.experiment import repository_provenance
-from aec_bench.lifecycles.catalogue import (
-    lifecycle_package_variant,
-)
+from aec_bench.lifecycles.catalogue import lifecycle_package_variant
 from aec_bench.lifecycles.runtime.lifecycle import (
     evidence_lifecycle_package_identity,
     load_evidence_lifecycle_spec,
 )
 from aec_bench.prime_lab.exporter import DEFAULT_PRIME_ENVIRONMENTS_DIR, normalise_environment_id
+from aec_bench.providers.source_identity import (
+    resolve_provider_adapter_identity,
+    write_deterministic_source_snapshot,
+)
 
 
-class PrimeLifecycleSourceProvenance(StrictModel):
+class LegacyPrimeLifecycleSourceProvenance(StrictModel):
     root: NonEmptyStr
     commit: NonEmptyStr
     dirty: bool
-    dirty_digest: NonEmptyStr
-    source_inventory_sha256: NonEmptyStr
+    dirty_digest: Sha256
+    source_inventory_sha256: Sha256
     repository_kind: Literal["git", "source_tree"]
 
-    @field_validator("dirty_digest", "source_inventory_sha256")
-    @classmethod
-    def validate_hashes(cls, value: str) -> str:
-        return ArtifactReference.validate_sha256(value)
 
-
-class PrimeLifecyclePackageRecord(StrictModel):
+class LegacyPrimeLifecyclePackageRecord(StrictModel):
     package_dir: NonEmptyStr
     template_id: NonEmptyStr
     variant_id: NonEmptyStr
@@ -52,16 +51,11 @@ class PrimeLifecyclePackageRecord(StrictModel):
     lifecycle_id: NonEmptyStr
     checkpoint_ids: tuple[NonEmptyStr, ...] = Field(min_length=1)
     initial_instruction: NonEmptyStr
-    lifecycle_spec_sha256: NonEmptyStr
-    package_sha256: NonEmptyStr
-
-    @field_validator("lifecycle_spec_sha256", "package_sha256")
-    @classmethod
-    def validate_hashes(cls, value: str) -> str:
-        return ArtifactReference.validate_sha256(value)
+    lifecycle_spec_sha256: Sha256
+    package_sha256: Sha256
 
     @model_validator(mode="after")
-    def validate_checkpoint_ids(self) -> PrimeLifecyclePackageRecord:
+    def validate_checkpoint_ids(self) -> LegacyPrimeLifecyclePackageRecord:
         if len(set(self.checkpoint_ids)) != len(self.checkpoint_ids):
             raise ValueError("lifecycle checkpoint ids must be unique")
         if not Path(self.package_dir).is_absolute():
@@ -69,7 +63,7 @@ class PrimeLifecyclePackageRecord(StrictModel):
         return self
 
 
-class PrimeLifecycleExportManifest(StrictModel):
+class LegacyPrimeLifecycleExportManifest(StrictModel):
     schema_version: Literal["2"] = "2"
     environment_id: NonEmptyStr
     local_only: Literal[True] = True
@@ -81,11 +75,11 @@ class PrimeLifecycleExportManifest(StrictModel):
     continual_learning_supported: Literal[False] = False
     transfer_supported: Literal[False] = False
     max_turns: PositiveInt
-    source: PrimeLifecycleSourceProvenance
-    packages: tuple[PrimeLifecyclePackageRecord, ...] = Field(min_length=1)
+    source: LegacyPrimeLifecycleSourceProvenance
+    packages: tuple[LegacyPrimeLifecyclePackageRecord, ...] = Field(min_length=1)
 
     @model_validator(mode="after")
-    def validate_packages(self) -> PrimeLifecycleExportManifest:
+    def validate_packages(self) -> LegacyPrimeLifecycleExportManifest:
         identities = [(record.lifecycle_id, record.variant_id) for record in self.packages]
         if len(set(identities)) != len(identities):
             raise ValueError("duplicate lifecycle package identity")
@@ -93,6 +87,81 @@ class PrimeLifecycleExportManifest(StrictModel):
         if len(set(paths)) != len(paths):
             raise ValueError("duplicate lifecycle package path")
         return self
+
+
+class PrimeLifecycleProtocolVersions(StrictModel):
+    environment: Literal["aec-bench/prime-lifecycle-environment/1"] = "aec-bench/prime-lifecycle-environment/1"
+    evidence_request: Literal["1"] = "1"
+    lifecycle_operation: Literal["1"] = "1"
+
+
+class PrimeLifecyclePackageRecord(StrictModel):
+    package: ArtifactRef
+    template_id: NonEmptyStr
+    variant_id: NonEmptyStr
+    visibility: Literal["public"]
+    lifecycle_id: NonEmptyStr
+    checkpoint_ids: tuple[NonEmptyStr, ...] = Field(min_length=1)
+    initial_instruction: NonEmptyStr
+
+    _package_dir: Path | None = PrivateAttr(default=None)
+
+    @model_validator(mode="after")
+    def validate_checkpoint_ids(self) -> PrimeLifecyclePackageRecord:
+        if len(set(self.checkpoint_ids)) != len(self.checkpoint_ids):
+            raise ValueError("lifecycle checkpoint ids must be unique")
+        return self
+
+    def bind_package_dir(self, path: Path) -> PrimeLifecyclePackageRecord:
+        self._package_dir = Path(path)
+        return self
+
+    @property
+    def package_dir(self) -> str:
+        if self._package_dir is None:
+            raise RuntimeError("lifecycle package archive has not been materialized")
+        return str(self._package_dir)
+
+
+class PrimeLifecycleExportManifest(StrictModel):
+    schema_version: Literal["3"] = "3"
+    environment_id: NonEmptyStr
+    package_version: NonEmptyStr
+    local_only: Literal[True] = True
+    execution_mode: Literal["persistent_context"] = "persistent_context"
+    memory_visibility_policy: Literal["persistent_context"] = "persistent_context"
+    reward_owner: Literal["task_lifecycle_verifier"] = "task_lifecycle_verifier"
+    hosted_supported: Literal[False] = False
+    training_supported: Literal[False] = False
+    continual_learning_supported: Literal[False] = False
+    transfer_supported: Literal[False] = False
+    max_turns: PositiveInt
+    source: ProviderAdapterIdentity
+    protocols: PrimeLifecycleProtocolVersions = Field(default_factory=PrimeLifecycleProtocolVersions)
+    packages: tuple[PrimeLifecyclePackageRecord, ...] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def validate_packages(self) -> PrimeLifecycleExportManifest:
+        identities = [(record.lifecycle_id, record.variant_id) for record in self.packages]
+        if len(set(identities)) != len(identities):
+            raise ValueError("duplicate lifecycle package identity")
+        artifact_ids = [record.package.artifact_id for record in self.packages]
+        if len(set(artifact_ids)) != len(artifact_ids):
+            raise ValueError("duplicate lifecycle package artifact")
+        return self
+
+
+PrimeLifecycleManifestDocument = PrimeLifecycleExportManifest | LegacyPrimeLifecycleExportManifest
+
+
+@dataclass(frozen=True)
+class _ValidatedLifecyclePackage:
+    package_dir: Path
+    template_id: str
+    variant_id: str
+    lifecycle_id: str
+    checkpoint_ids: tuple[str, ...]
+    initial_instruction: str
 
 
 @dataclass(frozen=True)
@@ -115,7 +184,7 @@ class PrimeLifecycleExportResult:
 
 
 def export_prime_lifecycle_environment(config: PrimeLifecycleExportConfig) -> PrimeLifecycleExportResult:
-    """Write a thin local package that references immutable materialized lifecycles."""
+    """Write a local package with exact source and lifecycle package artifacts."""
     if not config.package_dirs:
         raise ValueError("at least one lifecycle package is required")
     if config.max_turns <= 0:
@@ -134,7 +203,7 @@ def export_prime_lifecycle_environment(config: PrimeLifecycleExportConfig) -> Pr
             key=lambda record: (record.template_id, record.lifecycle_id, record.variant_id, record.package_dir),
         )
     )
-    duplicate_paths = [record.package_dir for record in records]
+    duplicate_paths = [str(record.package_dir) for record in records]
     duplicate_identities = [(record.lifecycle_id, record.variant_id) for record in records]
     if len(set(duplicate_paths)) != len(duplicate_paths) or len(set(duplicate_identities)) != len(duplicate_identities):
         raise ValueError("duplicate lifecycle package reference")
@@ -143,24 +212,37 @@ def export_prime_lifecycle_environment(config: PrimeLifecycleExportConfig) -> Pr
     package_dir = output_dir / environment_id
     _assert_destination_is_safe(package_dir, environment_id, records)
 
-    source_root = (
-        Path(config.aec_bench_root).resolve() if config.aec_bench_root is not None else Path(__file__).resolve().parent
+    source_root = _validated_source_project_root(
+        Path(config.aec_bench_root).resolve()
+        if config.aec_bench_root is not None
+        else Path(__file__).resolve().parents[3]
     )
-    source_payload = repository_provenance(source_root)
-    source = PrimeLifecycleSourceProvenance.model_validate(source_payload)
-    source_root = _validated_source_project_root(source)
-    manifest = PrimeLifecycleExportManifest(
-        environment_id=environment_id,
-        max_turns=config.max_turns,
-        source=source,
-        packages=records,
-    )
+    source_paths = _prime_source_paths(source_root)
 
     output_dir.mkdir(parents=True, exist_ok=True)
     staging = Path(tempfile.mkdtemp(prefix=f".{environment_id}.tmp-", dir=output_dir))
     try:
         module_dir = staging / environment_id
         module_dir.mkdir(parents=True)
+        source = resolve_provider_adapter_identity(
+            adapter_id="aec-bench/prime-lifecycle",
+            package_version=_distribution_version("aec-bench"),
+            source_root=source_root,
+            source_paths=source_paths,
+            snapshot_path=module_dir / "provider-source.tar",
+            snapshot_artifact_id="provider-source.tar",
+        )
+        packaged_records = tuple(
+            _archive_lifecycle_package(record, module_dir=module_dir, index=index)
+            for index, record in enumerate(records)
+        )
+        manifest = PrimeLifecycleExportManifest(
+            environment_id=environment_id,
+            package_version=config.version,
+            max_turns=config.max_turns,
+            source=source,
+            packages=packaged_records,
+        )
         _write_text(module_dir / "__init__.py", _render_package_init(environment_id))
         _write_text(module_dir / "environment.py", _render_environment_wrapper())
         _write_json(module_dir / "lifecycle_manifest.json", manifest.model_dump(mode="json"))
@@ -170,11 +252,20 @@ def export_prime_lifecycle_environment(config: PrimeLifecycleExportConfig) -> Pr
                 environment_id=environment_id,
                 version=config.version,
                 description=config.description,
-                source_root=Path(source.root),
+                aec_bench_version=source.package_version,
             ),
         )
-        _write_text(staging / "README.md", _render_local_readme(environment_id, records))
-        actual_source = PrimeLifecycleSourceProvenance.model_validate(repository_provenance(source_root))
+        _write_text(staging / "README.md", _render_local_readme(environment_id, packaged_records))
+        recheck_path = staging / ".source-recheck.tar"
+        actual_source = resolve_provider_adapter_identity(
+            adapter_id="aec-bench/prime-lifecycle",
+            package_version=source.package_version,
+            source_root=source_root,
+            source_paths=source_paths,
+            snapshot_path=recheck_path,
+            snapshot_artifact_id="provider-source.tar",
+        )
+        recheck_path.unlink(missing_ok=True)
         if actual_source != source:
             raise ValueError(
                 "generated output changes bound aec-bench source provenance; "
@@ -193,13 +284,15 @@ def export_prime_lifecycle_environment(config: PrimeLifecycleExportConfig) -> Pr
     )
 
 
-def load_prime_lifecycle_manifest(path: Path) -> PrimeLifecycleExportManifest:
-    """Load and strictly validate one generated local lifecycle manifest."""
+def load_prime_lifecycle_manifest(path: Path) -> PrimeLifecycleManifestDocument:
+    """Load current package archives or retained local-reference manifests."""
     payload = json.loads(Path(path).read_text(encoding="utf-8"))
+    if payload.get("schema_version") == "2":
+        return LegacyPrimeLifecycleExportManifest.model_validate(payload)
     return PrimeLifecycleExportManifest.model_validate(payload)
 
 
-def _validated_public_package_record(package_dir: Path) -> PrimeLifecyclePackageRecord:
+def _validated_public_package_record(package_dir: Path) -> _ValidatedLifecyclePackage:
     package = Path(package_dir).resolve()
     if not package.is_dir():
         raise ValueError(f"lifecycle package directory not found: {package}")
@@ -225,21 +318,18 @@ def _validated_public_package_record(package_dir: Path) -> PrimeLifecyclePackage
     instruction_path = package / first_checkpoint.instruction_path
     if not instruction_path.is_file():
         raise ValueError(f"initial lifecycle instruction is missing: {instruction_path}")
-    return PrimeLifecyclePackageRecord(
-        package_dir=str(package),
+    return _ValidatedLifecyclePackage(
+        package_dir=package,
         template_id=template_id,
         variant_id=variant["variant_id"],
-        visibility="public",
         lifecycle_id=identity["lifecycle_id"],
         checkpoint_ids=tuple(checkpoint.checkpoint_id for checkpoint in spec.checkpoints),
         initial_instruction=instruction_path.read_text(encoding="utf-8"),
-        lifecycle_spec_sha256=identity["spec_sha256"],
-        package_sha256=identity["package_sha256"],
     )
 
 
-def _validated_source_project_root(source: PrimeLifecycleSourceProvenance) -> Path:
-    root = Path(source.root).resolve()
+def _validated_source_project_root(source_root: Path) -> Path:
+    root = Path(source_root).resolve()
     pyproject_path = root / "pyproject.toml"
     try:
         pyproject = tomllib.loads(pyproject_path.read_text(encoding="utf-8"))
@@ -255,6 +345,59 @@ def _validated_source_project_root(source: PrimeLifecycleSourceProvenance) -> Pa
     return root
 
 
+def _prime_source_paths(source_root: Path) -> tuple[Path, ...]:
+    package_root = source_root / "src" / "aec_bench"
+    if not package_root.is_dir():
+        package_root = source_root / "aec_bench"
+    paths = [
+        source_root / "pyproject.toml",
+        package_root / "prime_lab",
+        package_root / "lifecycles",
+        package_root / "contracts" / "provider_provenance.py",
+        package_root / "providers" / "source_identity.py",
+    ]
+    lockfile = source_root / "uv.lock"
+    if lockfile.is_file():
+        paths.append(lockfile)
+    return tuple(paths)
+
+
+def _archive_lifecycle_package(
+    record: _ValidatedLifecyclePackage,
+    *,
+    module_dir: Path,
+    index: int,
+) -> PrimeLifecyclePackageRecord:
+    archive_path = module_dir / "lifecycle-packages" / f"{index:04d}.tar"
+    write_deterministic_source_snapshot(
+        root=record.package_dir,
+        source_paths=(record.package_dir,),
+        destination=archive_path,
+    )
+    content = archive_path.read_bytes()
+    return PrimeLifecyclePackageRecord(
+        package=ArtifactRef(
+            artifact_id=archive_path.relative_to(module_dir).as_posix(),
+            sha256=hashlib.sha256(content).hexdigest(),
+            size_bytes=len(content),
+            media_type="application/x-tar",
+        ),
+        template_id=record.template_id,
+        variant_id=record.variant_id,
+        visibility="public",
+        lifecycle_id=record.lifecycle_id,
+        checkpoint_ids=record.checkpoint_ids,
+        initial_instruction=record.initial_instruction,
+    )
+
+
+def _distribution_version(name: str) -> str:
+    try:
+        return importlib_metadata.version(name)
+    except importlib_metadata.PackageNotFoundError:
+        return "not-installed"
+
+
 def _render_package_init(environment_id: str) -> str:
     return (
         "# ABOUTME: Exposes the generated local lifecycle environment loader.\n"
@@ -266,7 +409,7 @@ def _render_package_init(environment_id: str) -> str:
 
 def _render_environment_wrapper() -> str:
     return """# ABOUTME: Loads one local-only persistent AEC evidence-lifecycle environment.
-# ABOUTME: Delegates runtime behavior and task-owned scoring to the installed aec-bench checkout.
+# ABOUTME: Delegates runtime behavior and task-owned scoring to the attested aec-bench package.
 
 from __future__ import annotations
 
@@ -300,13 +443,13 @@ def _render_local_pyproject(
     environment_id: str,
     version: str,
     description: str | None,
-    source_root: Path,
+    aec_bench_version: str,
 ) -> str:
     package_description = description or "Local persistent AEC evidence-lifecycle environment"
     dependencies = [
         "datasets>=4.0",
         "verifiers>=0.1.14,<0.2",
-        "aec-bench[prime]",
+        f"aec-bench[prime]=={aec_bench_version}",
     ]
     dependency_lines = ",\n".join(f"    {json.dumps(item)}" for item in dependencies)
     return textwrap.dedent(
@@ -327,9 +470,6 @@ def _render_local_pyproject(
 
         [tool.hatch.build.targets.wheel]
         packages = [{json.dumps(environment_id)}]
-
-        [tool.uv.sources]
-        aec-bench = {{ path = {json.dumps(str(source_root.resolve()))}, editable = true }}
         """
     )
 
@@ -339,7 +479,7 @@ def _render_local_readme(
     records: tuple[PrimeLifecyclePackageRecord, ...],
 ) -> str:
     package_lines = "\n        ".join(
-        f"- `{record.variant_id}`: `{record.package_dir}` (`{record.package_sha256}`)" for record in records
+        f"- `{record.variant_id}`: `{record.package.artifact_id}` (`{record.package.sha256}`)" for record in records
     )
     return textwrap.dedent(
         f"""\
@@ -347,8 +487,8 @@ def _render_local_readme(
 
         This is a local-only Prime/Verifiers environment for persistent AEC evidence lifecycles.
         One rollout owns one complete lifecycle and one persistent conversation. The referenced
-        materialized packages remain outside this generated package and are checked by content hash
-        before every rollout.
+        materialized packages are retained inside this generated package and checked through their
+        `ArtifactRef` values before every rollout.
 
         The task lifecycle verifier is the sole reward authority. This export does not support remote
         publication, hosted execution, training, continual learning, or transfer claims.
@@ -359,13 +499,16 @@ def _render_local_readme(
 
         ## Local loading
 
-        Run from outside the aec-bench repository root so the repository `agents/` directory cannot
-        shadow the installed `openai-agents` package used by Verifiers.
+        Install the exact `aec-bench` version declared in `pyproject.toml` from its release artifact or
+        source distribution. Then install this generated package without replacing that resolved runtime.
+        Run the import from outside the aec-bench repository root so the repository `agents/` directory
+        cannot shadow the installed `openai-agents` package used by Verifiers.
 
         ```bash
-        uv sync --python 3.13 --project /absolute/path/to/generated-package
+        uv pip install /absolute/path/to/aec_bench-0.1.0-py3-none-any.whl
+        uv pip install --no-deps /absolute/path/to/generated-package
         cd /tmp
-        /absolute/path/to/generated-package/.venv/bin/python \\
+        python \\
           -c "from {environment_id} import load_environment; print(type(load_environment()).__name__)"
         ```
         """
@@ -384,7 +527,7 @@ def _write_text(path: Path, content: str) -> None:
 def _assert_destination_is_safe(
     package_dir: Path,
     environment_id: str,
-    records: tuple[PrimeLifecyclePackageRecord, ...],
+    records: tuple[_ValidatedLifecyclePackage, ...],
 ) -> None:
     destination = package_dir.resolve()
     for record in records:

@@ -35,6 +35,7 @@ from aec_bench.adapters.deepseek_harness.runtime import (
 )
 from aec_bench.adapters.deepseek_harness.tool_gateway import NativeToolDefinition
 from aec_bench.contracts.agent_output import AgentOutput, AgentOutputStatus
+from aec_bench.contracts.artifacts import ArtifactRef
 
 
 class DeepSeekHarnessAdapter:
@@ -155,7 +156,10 @@ class DeepSeekHarnessAdapter:
                 }
             )
             if self._runtime.paths.manifest.is_file():
-                configuration_record["evidence_manifest_sha256"] = _file_sha256(self._runtime.paths.manifest)
+                configuration_record["provider_evidence_manifest"] = _evidence_manifest_reference(
+                    self._runtime.paths.manifest,
+                    workspace=self._workspace,
+                )
         return AdapterResult(
             adapter_name=self._adapter_name,
             resolved_model=self._settings.model,
@@ -234,8 +238,8 @@ def _configuration_record(settings: DeepSeekHarnessSettings, run: DeepSeekHarnes
         "notifications_path": str(run.notifications_path),
         "stderr_path": str(run.stderr_path),
     }
-    if run.evidence_manifest_sha256 is not None:
-        record["evidence_manifest_sha256"] = run.evidence_manifest_sha256
+    if run.evidence_manifest is not None:
+        record["provider_evidence_manifest"] = run.evidence_manifest.model_dump(mode="json")
     if run.tool_gateway_close_report is not None:
         record["tool_gateway_close"] = {
             "quiescent": run.tool_gateway_close_report.quiescent,
@@ -270,3 +274,12 @@ def _has_direct_output(workspace: Path, requested_path: str) -> bool:
 
 def _file_sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _evidence_manifest_reference(path: Path, *, workspace: Path) -> dict[str, object]:
+    return ArtifactRef(
+        artifact_id=path.resolve().relative_to(workspace.resolve()).as_posix(),
+        sha256=_file_sha256(path),
+        size_bytes=path.stat().st_size,
+        media_type="application/json",
+    ).model_dump(mode="json")

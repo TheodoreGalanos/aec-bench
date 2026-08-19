@@ -53,7 +53,7 @@ def _make_obs(
     return EvolutionObservation(
         trial=record,
         enrichment=ObservationEnrichment(trace_digest=digest),
-        workspace_version="evo-1",
+        candidate_id="run:1",
         discipline="electrical",
     )
 
@@ -243,7 +243,7 @@ class TestMissingTraceDigest:
         obs = EvolutionObservation(
             trial=record,
             enrichment=ObservationEnrichment(trace_digest=None),
-            workspace_version="evo-1",
+            candidate_id="run:1",
             discipline="electrical",
         )
 

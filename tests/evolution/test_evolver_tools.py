@@ -55,7 +55,7 @@ def _make_observation(
                 agent_reasoning=agent_reasoning or [],
             ),
         ),
-        workspace_version="evo-1",
+        candidate_id="run:1",
         discipline=discipline,
     )
 
@@ -70,8 +70,8 @@ def _make_cycle_record(
 ) -> EvolutionCycleRecord:
     return EvolutionCycleRecord(
         cycle=cycle,
-        workspace_version_before=f"evo-{cycle}",
-        workspace_version_after=f"evo-{cycle + 1}",
+        candidate_id_before=f"run:{cycle}",
+        candidate_id_after=f"run:{cycle + 1}",
         batch_score=batch_score,
         structural_score=structural_score,
         mutation=mutation,
@@ -526,7 +526,7 @@ class TestReadGraveyard:
                 mutation_description="Added cable-sizing skill",
                 score_before=0.5,
                 score_after=0.3,
-                workspace_version="evo-1",
+                candidate_id="run:1",
                 failure_reason="Score delta: -0.20",
                 field_failures={"vc_mv_per_a_m": "too_high"},
                 detected_patterns=["no_verification"],
@@ -592,7 +592,7 @@ class TestReadGraveyard:
                 mutation_description="Rewrote system prompt",
                 score_before=0.6,
                 score_after=0.4,
-                workspace_version="evo-5",
+                candidate_id="run:5",
                 failure_reason="Score delta: -0.20",
             )
         )
@@ -623,7 +623,7 @@ class TestReadGraveyard:
                     mutation_description=f"Mutation {i}",
                     score_before=0.5,
                     score_after=0.3,
-                    workspace_version=f"evo-{i}",
+                    candidate_id=f"run:{i}",
                     failure_reason="Score delta: -0.20",
                 )
             )

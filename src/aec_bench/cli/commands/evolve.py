@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import json
 import time
 from pathlib import Path
 
@@ -39,6 +40,7 @@ def evolve_init(
     (ws_path / "skills").mkdir(exist_ok=True)
 
     manifest = {
+        "schema_version": 1,
         "name": name,
         "agent_adapter": adapter,
         "evolvable_layers": ["prompts", "skills"],
@@ -159,7 +161,7 @@ def evolve_run(
     console.print(f"  Cycles: {result.cycles_completed}")
     console.print(f"  Best score: {result.best_score:.1%}")
     console.print(f"  Final score: {result.final_score:.1%}")
-    console.print(f"  Best version: {result.best_workspace_version}")
+    console.print(f"  Best candidate: {result.best_candidate_id}")
     console.print(f"  Converged: {result.converged}")
     console.print(f"  Total trials: {result.total_trials}")
 
@@ -170,7 +172,7 @@ def evolve_run(
             "cycles_completed": result.cycles_completed,
             "best_score": result.best_score,
             "final_score": result.final_score,
-            "best_workspace_version": result.best_workspace_version,
+            "best_candidate_id": result.best_candidate_id,
             "converged": result.converged,
             "total_trials": result.total_trials,
         },
@@ -204,7 +206,11 @@ def evolve_history(
         emit("evolve history", data=None, errors=[str(exc)], start_time=start)
         raise typer.Exit(1) from exc
 
-    runs = list_runs(ws_path)
+    try:
+        runs = list_runs(ws_path)
+    except WorkspaceError as exc:
+        emit("evolve history", data=None, errors=[str(exc)], start_time=start)
+        raise typer.Exit(1) from exc
 
     if not runs:
         console.print("[yellow]No evolution history found. Run 'aec-bench evolve run' first.[/yellow]")
@@ -222,26 +228,16 @@ def evolve_history(
         strategy_label = f" ({strategy})" if strategy != "unknown" else ""
         console.print(f"[bold]Run {run_id}[/bold]{strategy_label} — {cycles} cycle(s), best: {best:.1%}")
 
-        # List individual cycles from workspace versions
+        # List individual candidates in this run.
         try:
-            if run_id == "legacy":
-                # Legacy runs: show only evo-N tags (not run-scoped)
-                import re
-
-                versions = workspace.list_versions()
-                for v in versions:
-                    if v.tag == "evo-0":
-                        continue
-                    if re.match(r"^evo-\d+$", v.tag):
-                        summary = v.summary.split(": ", 1)[-1] if ": " in v.summary else v.summary
-                        console.print(f"  {v.tag}: {summary}")
-            else:
-                versions = workspace.list_versions(run_id=run_id)
-                for v in versions:
-                    if v.tag == "evo-0":
-                        continue
-                    summary = v.summary.split(": ", 1)[-1] if ": " in v.summary else v.summary
-                    console.print(f"  {v.tag}: {summary}")
+            candidates = workspace.list_candidates(run_id=run_id)
+            for candidate in candidates:
+                if candidate.candidate_id == "baseline":
+                    continue
+                label = f" [{candidate.label}]" if candidate.label else ""
+                summary = candidate.summary or ""
+                committed_at = workspace.candidate_commit_time(candidate.candidate_id).isoformat()
+                console.print(f"  {candidate.candidate_id}{label} @ {committed_at}: {summary}")
         except WorkspaceError:
             pass
 
@@ -257,9 +253,9 @@ def evolve_history(
 @app.command("rollback")
 def evolve_rollback(
     workspace_path: str = typer.Argument(help="Path to the evolution workspace"),
-    tag: str = typer.Argument(help="Git tag to rollback to (e.g. evo-20260404-1220-2)"),
+    candidate: str = typer.Argument(help="Candidate ID or immutable label to restore"),
 ) -> None:
-    """Restore workspace to a previous version as a new commit (non-destructive)."""
+    """Restore workspace source from a candidate as a new commit."""
     start = time.monotonic()
     ws_path = Path(workspace_path)
 
@@ -280,34 +276,55 @@ def evolve_rollback(
         emit("evolve rollback", data=None, errors=[str(exc)], start_time=start)
         raise typer.Exit(1) from exc
 
-    # Verify tag exists
     try:
-        versions = workspace.list_versions()
-    except WorkspaceError:
-        versions = []
-
-    existing_tags = {v.tag for v in versions}
-    if tag not in existing_tags:
-        emit(
-            "evolve rollback",
-            data=None,
-            errors=[f"Tag '{tag}' not found. Use 'aec-bench evolve history' to see available tags."],
-            start_time=start,
-        )
-        raise typer.Exit(1)
-
-    try:
-        workspace.rollback_to_tag(tag)
+        resolved = workspace.resolve_candidate(candidate)
+        workspace.rollback_to_candidate(resolved.candidate_id)
     except WorkspaceError as exc:
         emit("evolve rollback", data=None, errors=[str(exc)], start_time=start)
         raise typer.Exit(1) from exc
 
-    console.print(f"[bold green]Rolled back to {tag}[/bold green]")
+    console.print(f"[bold green]Restored candidate {resolved.candidate_id}[/bold green]")
     console.print("  A new commit was created — history is preserved.")
     console.print(f"  Use 'aec-bench evolve history {workspace_path}' to verify.")
 
     emit(
         "evolve rollback",
-        {"workspace": str(ws_path), "tag": tag},
+        {"workspace": str(ws_path), "candidate_id": resolved.candidate_id},
         start_time=start,
     )
+
+
+@app.command("migrate-workspace")
+def evolve_migrate_workspace(
+    workspace_path: str = typer.Argument(help="Path to the legacy evolution workspace"),
+    plan_path: Path = typer.Option(..., "--plan", help="Path to the explicit migration plan JSON"),
+) -> None:
+    """Register legacy labels as candidates with explicit source and lineage."""
+    start = time.monotonic()
+    ws_path = Path(workspace_path)
+
+    from aec_bench.contracts.evolution import WorkspaceMigrationPlan
+    from aec_bench.evolution.workspace import Workspace, WorkspaceError
+
+    try:
+        plan = WorkspaceMigrationPlan.model_validate_json(plan_path.read_text(encoding="utf-8"))
+        report = Workspace(ws_path).migrate_legacy_versions(plan)
+    except (OSError, ValueError, WorkspaceError) as exc:
+        emit("evolve migrate-workspace", data=None, errors=[str(exc)], start_time=start)
+        raise typer.Exit(1) from exc
+
+    data = report.model_dump(mode="json")
+    if not report.complete:
+        for issue in report.issues:
+            console.print(f"[red]{issue.code}[/red] {issue.label}: {issue.message}")
+        emit(
+            "evolve migrate-workspace",
+            data=data,
+            errors=["Legacy workspace migration needs an unambiguous plan."],
+            start_time=start,
+        )
+        raise typer.Exit(1)
+
+    console.print(f"[bold green]Migrated {len(report.migrated_candidate_ids)} candidate(s).[/bold green]")
+    console.print(json.dumps(data, indent=2))
+    emit("evolve migrate-workspace", data=data, start_time=start)

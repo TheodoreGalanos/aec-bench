@@ -54,20 +54,18 @@ particular:
   supported shapes until their owning changes are implemented;
 - `RunManifest` owns shared run identity and `TrialRecord` keeps
   execution, evaluation, and evidence status separate;
-- current DeepSeek evidence v2 and the installed World actor protocols remain
+- current DeepSeek evidence v3, retained evidence v2, qualification v2,
+  retained qualification v1, and installed World actor protocols remain
   supported.
 
 New code must not copy a legacy pattern only because the baseline contains it.
 
 Registration is not proof that every current consumer verifies a claim. The
 registry records known gaps without inventing checks that do not exist. These
-gaps currently include remaining extension-level `ArtifactReference` consumers, the
-lack of a production reader for the actor and World
-transport JSONL evidence, incomplete read-time verification of the runtime
-attestation evidence-manifest digest, and incomplete cross-artifact checks for
-some DeepSeek evidence-v2 claim bindings. A temporary exception must name its
-scope and removal milestone. Later owning changes must close the check or
-remove the field.
+gaps currently include remaining extension-level `ArtifactReference`
+consumers and the lack of a production reader for the actor and World transport
+JSONL evidence. A temporary exception must name its scope and removal
+milestone. Later owning changes must close the check or remove the field.
 
 ## Provenance categories
 
@@ -90,9 +88,9 @@ for the same claim. Dirty source needs reconstructive bytes, such as a complete
 snapshot or a patch with its base revision. An opaque dirty-tree digest is not
 enough to reconstruct the source.
 
-Current DeepSeek evidence uses `aec_bench_revision`. New general contracts use
-`source_revision` unless an existing protected boundary requires another exact
-wire name.
+Current DeepSeek evidence uses `ProviderAdapterIdentity.source_revision` or a
+reconstructive `source_snapshot`. The retained v2 reader keeps
+`aec_bench_revision` for its protected wire shape.
 
 ### B. Artifact integrity
 
@@ -107,17 +105,16 @@ Current fail-closed examples include:
 
 - `ArtifactRef.sha256`, which `ArtifactRepository` checks with the
   digest-derived artifact ID and retained byte size on every read;
-- `DeepSeekEvidenceArtifact.sha256`, which is checked against the retained
-  file bytes and size;
+- each DeepSeek evidence-v3 `ArtifactRef`, which is checked against the
+  retained file bytes and size;
 - `ImmutableArtifact.sha256`, which the immutable byte store checks on read;
   and
 - the installed World actor client digest, which protects its deterministic
   installed byte tree.
 
-`ArtifactReference.sha256` and the evidence-manifest digest in runtime
-attestation are protected current fields, but they are registered temporary
-exceptions. Their current generic readers do not yet recalculate the retained
-bytes at every read boundary. Do not use either gap as a pattern for new
+`ArtifactReference.sha256` is a protected current field and a registered
+temporary exception. Its current generic readers do not yet recalculate the
+retained bytes at every read boundary. Do not use this gap as a pattern for new
 artifact fields.
 
 An embedded child value does not need an independent digest unless it is
@@ -148,8 +145,8 @@ Current valid examples include:
 - `aec-bench/actor-invocation-evidence/1`;
 - public library catalogue schema 2;
 - `aec-bench/native-world-tool-surface/1`;
-- `aec-bench/deepseek-evidence/2`; and
-- `aec-bench/deepseek-qualification/1`.
+- `aec-bench/deepseek-evidence/3`, with a retained v2 reader; and
+- `aec-bench/deepseek-qualification/2`, with a retained v1 reader.
 
 A registered version must identify its independent reader behavior. Do not add
 `schema_version` to an internal component only for symmetry. The current
@@ -214,8 +211,8 @@ route a capability was proved.
 
 Current DeepSeek evidence keeps these facts separate where applicable:
 
-- AEC-Bench package version and source revision;
-- SDK distribution version;
+- AEC-Bench package version and source revision or source snapshot;
+- SDK distribution and reported versions;
 - runtime distribution and reported versions;
 - plugin artifact and package-lock integrity;
 - declared, resolved-runtime, and model-visible evidence levels;
@@ -364,12 +361,11 @@ flag:
 - a semantic commitment stored as a generic self-hash; and
 - a deterministic definition with generation time.
 
-DeepSeek evidence v2 currently repeats path and SHA-256 values in some
-claim-specific references and in its artifact table. The manifest validator
-checks that the two declarations agree. This is a temporary registered
-exception because the repetition content-binds the claim. Do not remove it
-without a successor trust model and compatibility tests. Do not use it as a
-precedent for new duplication.
+Retained DeepSeek evidence v2 repeats path and SHA-256 values in some
+claim-specific references and in its artifact table. Its reader still checks
+that both declarations agree. New evidence v3 uses complete `ArtifactRef`
+values as authenticated table keys and verifies every reference against the
+table and retained bytes.
 
 ## Registry and scanner
 
@@ -437,8 +433,8 @@ Changes that later migrate a protected or persisted form follow these rules:
   available;
 - invalid authoritative evidence is rejected or quarantined;
 - migration does not invent a missing payload to preserve an old hash;
-- current DeepSeek evidence v2 and World actor protocols remain readable until
-  an explicit successor is accepted;
+- DeepSeek evidence v2, qualification v1, Prime lifecycle schema 2, and World
+  actor protocols remain readable through their explicit retained readers;
 - compatibility code lives in a clearly named legacy module;
 - golden fixtures state whether each old form migrates, remains read-only, is
   corrupt, or is unsupported; and

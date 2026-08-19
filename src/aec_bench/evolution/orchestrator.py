@@ -62,9 +62,8 @@ class EvolutionOrchestrator:
         history: list[EvolutionCycleRecord] = []
         score_history: list[float] = []
 
-        # Generate a unique run ID so tags don't clobber across runs.
-        # Format: YYYYMMDD-HHMM (compact, human-readable, sortable)
-        run_id = datetime.now(tz=UTC).strftime("%Y%m%d-%H%M")
+        # The run ID gives candidate IDs a stable namespace.
+        run_id = _timestamp_slug()
         self._engine.set_run_id(run_id)
         self._engine.set_strategy_name(self._strategy.summary().get("mode", ""))
         logger.info("Evolution run ID: %s", run_id)
@@ -79,28 +78,32 @@ class EvolutionOrchestrator:
         pending_selection: SelectionResult | None = None
 
         for cycle in range(self._config.max_cycles):
-            current_version = f"evo-{run_id}-{cycle}"
+            candidates = self._workspace.list_candidates()
+            current_candidate_id = (
+                history[-1].candidate_id_after if history else candidates[-1].candidate_id if candidates else "baseline"
+            )
 
             # 0. Apply selected parent from previous cycle (if any)
             if pending_selection is not None:
                 parent_snapshot = self._strategy.get_snapshot(
-                    pending_selection.parent_version,
+                    pending_selection.parent_candidate_id,
                 )
                 if parent_snapshot is not None:
                     self._workspace.apply_snapshot(parent_snapshot)
+                    current_candidate_id = parent_snapshot.candidate_id
                     logger.info(
                         "Applied parent: %s",
-                        pending_selection.parent_version,
+                        pending_selection.parent_candidate_id,
                     )
 
             # 1. Export current workspace snapshot
-            snapshot = self._workspace.export_snapshot(workspace_version=current_version)
+            snapshot = self._workspace.export_snapshot(candidate_id=current_candidate_id)
 
             # 2. Solve: run a batch of tasks via the injected backend
             trial_records = self._solve_fn(snapshot, self._config.batch_size)
 
             # 3. Enrich: wrap trial records as EvolutionObservations
-            observations = self._build_observations(trial_records, current_version)
+            observations = self._build_observations(trial_records, current_candidate_id)
 
             # Use the pending selection as the current cycle's selection context
             selection = pending_selection
@@ -138,7 +141,7 @@ class EvolutionOrchestrator:
 
             # 5b. Export post-mutation snapshot for strategy
             current_snapshot = self._workspace.export_snapshot(
-                workspace_version=step_result.cycle_record.workspace_version_after,
+                candidate_id=step_result.cycle_record.candidate_id_after,
             )
 
             # 5c. Feed graveyard on rejection
@@ -159,7 +162,7 @@ class EvolutionOrchestrator:
                         mutation_description=step_result.mutation.evolver_reasoning or "",
                         score_before=prev_score,
                         score_after=step_result.cycle_record.batch_score,
-                        workspace_version=step_result.cycle_record.workspace_version_after,
+                        candidate_id=step_result.cycle_record.candidate_id_after,
                         failure_reason=f"Score delta: {score_delta:+.3f}",
                         field_failures=self._extract_field_failures(observations),
                         mutation_actions=self._extract_mutation_actions(step_result.mutation),
@@ -195,7 +198,7 @@ class EvolutionOrchestrator:
             if pending_selection is not None:
                 logger.info(
                     "Next-cycle selection: parent=%s, strategy=%s",
-                    pending_selection.parent_version,
+                    pending_selection.parent_candidate_id,
                     pending_selection.strategy,
                 )
 
@@ -217,7 +220,7 @@ class EvolutionOrchestrator:
             cycles_completed=len(history),
             final_score=score_history[-1] if score_history else 0.0,
             best_score=max(score_history) if score_history else 0.0,
-            best_workspace_version=self._find_best_version(history),
+            best_candidate_id=self._find_best_candidate_id(history),
             score_history=score_history,
             converged=self._is_converged(score_history),
             total_trials=sum(len(cr.trial_ids) for cr in history),
@@ -293,7 +296,7 @@ class EvolutionOrchestrator:
     def _build_observations(
         self,
         trial_records: list[TrialRecord],
-        workspace_version: str,
+        candidate_id: str,
     ) -> list[EvolutionObservation]:
         """Wrap trial records as EvolutionObservations with empty enrichment.
 
@@ -306,7 +309,7 @@ class EvolutionOrchestrator:
             obs = EvolutionObservation(
                 trial=record,
                 enrichment=ObservationEnrichment(),
-                workspace_version=workspace_version,
+                candidate_id=candidate_id,
                 discipline=discipline,
             )
             observations.append(obs)
@@ -325,12 +328,12 @@ class EvolutionOrchestrator:
         recent = score_history[-window:]
         return (max(recent) - min(recent)) <= self._config.improvement_threshold
 
-    def _find_best_version(self, history: list[EvolutionCycleRecord]) -> str:
-        """Return the workspace_version_after of the cycle with the highest batch_score."""
+    def _find_best_candidate_id(self, history: list[EvolutionCycleRecord]) -> str:
+        """Return the candidate ID from the cycle with the highest batch score."""
         if not history:
-            return "evo-0"
+            return "baseline"
         best = max(history, key=lambda cr: cr.batch_score)
-        return best.workspace_version_after
+        return best.candidate_id_after
 
 
 # ---------------------------------------------------------------------------

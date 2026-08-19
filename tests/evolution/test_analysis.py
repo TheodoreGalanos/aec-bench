@@ -48,7 +48,7 @@ def _make_observation(
                 bond_sequence=bond_sequence,
             ),
         ),
-        workspace_version="evo-1",
+        candidate_id="run:1",
         discipline=discipline,
     )
 
@@ -205,7 +205,7 @@ class TestDetectBehavioralPatterns:
         obs_no_digest = EvolutionObservation(
             trial=record,
             enrichment=ObservationEnrichment(field_scores=[], trace_digest=None),
-            workspace_version="evo-1",
+            candidate_id="run:1",
             discipline="electrical",
         )
 

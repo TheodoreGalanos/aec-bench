@@ -33,7 +33,7 @@ def _make_snapshot(version: str = "v1") -> WorkspaceSnapshot:
     return WorkspaceSnapshot(
         system_prompt="You are a helpful assistant.",
         skills=[],
-        workspace_version=version,
+        candidate_id=version,
     )
 
 
@@ -133,7 +133,7 @@ def test_query_nearest_returns_snapshot() -> None:
 
     result = archive.query_nearest(bd=_make_bd())
     assert result is not None
-    assert result.workspace_version == "v_query"
+    assert result.candidate_id == "v_query"
 
 
 # ---------------------------------------------------------------------------
@@ -225,7 +225,7 @@ class TestQDArchivePersistence:
 
 
 # ---------------------------------------------------------------------------
-# Query methods: top_k, frontier, coverage_report, get_entry_by_version
+# Query methods: top_k, frontier, coverage_report, get_entry_by_candidate_id
 # ---------------------------------------------------------------------------
 
 
@@ -298,16 +298,16 @@ class TestQDArchiveQueries:
         assert report["total_centroids"] == 50
         assert report["coverage"] == pytest.approx(0.0)
 
-    def test_get_entry_by_version(self):
+    def test_get_entry_by_candidate_id(self):
         archive = QDArchive(n_centroids=50, seed=0)
         snapshot = _make_snapshot("evo-abc-123")
         archive.insert(_make_bd(reward=0.6), snapshot)
-        result = archive.get_entry_by_version("evo-abc-123")
+        result = archive.get_entry_by_candidate_id("evo-abc-123")
         assert result is not None
-        assert result.snapshot.workspace_version == "evo-abc-123"
+        assert result.snapshot.candidate_id == "evo-abc-123"
 
-    def test_get_entry_by_version_missing(self):
+    def test_get_entry_by_candidate_id_missing(self):
         archive = QDArchive(n_centroids=50, seed=0)
         archive.insert(_make_bd(reward=0.6), _make_snapshot("existing"))
-        result = archive.get_entry_by_version("nonexistent-version")
+        result = archive.get_entry_by_candidate_id("nonexistent-version")
         assert result is None

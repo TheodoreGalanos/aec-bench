@@ -23,7 +23,7 @@ def _make_snapshot(
     return WorkspaceSnapshot(
         system_prompt=prompt,
         skills=skills or [],
-        workspace_version=version,
+        candidate_id=version,
     )
 
 
@@ -268,7 +268,7 @@ class TestMakeLocalSolveFn:
 
         snapshot = WorkspaceSnapshot(
             system_prompt="Test prompt.",
-            workspace_version="evo-0",
+            candidate_id="baseline",
         )
         solve_fn = make_local_solve_fn(
             task_dirs=[],
