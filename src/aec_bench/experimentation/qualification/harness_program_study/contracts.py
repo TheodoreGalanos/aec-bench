@@ -20,7 +20,7 @@ from aec_bench.contracts.harness_kernel import (
 )
 from aec_bench.contracts.legacy_content_address import LegacyContentAddressedModel
 from aec_bench.contracts.task_snapshot import TaskSnapshotRef
-from aec_bench.contracts.trial_record import ArtifactReference
+from aec_bench.contracts.trial_record import ArtifactReference, TrialRecord
 from aec_bench.contracts.validators import NonEmptyStr
 from aec_bench.experimentation.governance.applicability import MotifApplicabilityAttestation
 from aec_bench.experimentation.qualification.harness_program_study.analysis import HarnessProgramAnalysis
@@ -364,7 +364,8 @@ def _validate_report_resource_aggregates(
 
 @dataclass(frozen=True)
 class HarnessProgramStudyRunResult:
-    """Persisted harness-program-study report and its content-addressed location."""
+    """In-memory trial evidence plus the persisted specialist report."""
 
     report: HarnessProgramStudyReport
     path: Path
+    records: tuple[TrialRecord, ...]

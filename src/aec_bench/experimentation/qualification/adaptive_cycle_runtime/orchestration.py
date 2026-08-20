@@ -4,10 +4,13 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 from aec_bench.contracts.harness_kernel import canonical_json_sha256
+from aec_bench.contracts.trial_record import TrialRecord
 from aec_bench.evolution.repair_lifecycle import RepairLoopStatus
 from aec_bench.experimentation.governance.motifs import MotifStatus
+from aec_bench.experimentation.meta_harness import HarnessCandidate, run_meta_harness
 from aec_bench.experimentation.qualification.adaptive_cycle_runtime.artifacts import (
     artifact_reference,
     write_cycle_report,
@@ -97,32 +100,133 @@ def _run_adaptive_cycle(
         kind="adaptive-cycle-spec",
     )
 
-    source_stage = run_harness_program_study(
-        spec=source.source_stage,
-        registry=registry,
-        workflow=workflow,
-        artifacts_root=root / "source-stage",
-        executor=selected_executors.source,
-    )
-    repair_runtime = RepairRuntime(
-        request=source.repair_request,
-        parent=source.repair_parent,
-        registry=registry,
-        workflow=workflow,
-        artifacts_root=root / "repair",
-        policy_id=f"{source.child_calibration.policy_id}.repair",
-        harness_generator_sha256=source.harness_generator_sha256,
-        program_generator_sha256=source.program_generator_sha256,
-        verifier_policy=source.repair_verifier_policy,
-        evidence_use_policy=(RepairEvidenceUsePolicy.calibration_gated_adaptive_cycle()),
-        diagnosis=diagnosis_function_for_configuration(source.diagnosis_rule),
-        preregistered_task_snapshots=task_snapshots_for_refs(
-            source.source_stage.applicability,
-            task_refs=source.repair_request.pairing.task_ids,
+    source_stage = None
+    repair_runtime = None
+    repair = None
+    repaired_candidate = None
+    repaired_candidate_reference = None
+    child_calibration = None
+
+    def evaluate_candidate(candidate: HarnessCandidate[tuple[str, Any]]) -> tuple[TrialRecord, ...]:
+        nonlocal source_stage, child_calibration
+        kind, value = candidate.value
+        if kind == "source":
+            source_stage = run_harness_program_study(
+                spec=source.source_stage,
+                registry=registry,
+                workflow=workflow,
+                artifacts_root=root / "source-stage",
+                executor=selected_executors.source,
+            )
+            return source_stage.records
+        if kind == "child":
+            child_calibration = run_harness_program_study(
+                spec=value,
+                registry=registry,
+                workflow=workflow,
+                artifacts_root=root / "child-calibration",
+                executor=selected_executors.child_calibration,
+            )
+            return child_calibration.records
+        if kind == "repair":
+            if repair_runtime is None:
+                raise RuntimeError("adaptive repair candidate has no repair runtime")
+            records = tuple(
+                record
+                for artifact in value.run_artifacts
+                for record in repair_runtime.verified_records(artifact.run_id)
+            )
+            return records
+        raise ValueError(f"unknown adaptive-cycle candidate kind: {kind}")
+
+    def propose_candidate(
+        current: HarnessCandidate[tuple[str, Any]],
+        previous_assessment: bool | None,
+    ) -> tuple[HarnessCandidate[tuple[str, Any]], ...]:
+        nonlocal repair_runtime, repair, repaired_candidate, repaired_candidate_reference
+        repair_runtime = RepairRuntime(
+            request=source.repair_request,
+            parent=source.repair_parent,
+            registry=registry,
+            workflow=workflow,
+            artifacts_root=root / "repair",
+            policy_id=f"{source.child_calibration.policy_id}.repair",
+            harness_generator_sha256=source.harness_generator_sha256,
+            program_generator_sha256=source.program_generator_sha256,
+            verifier_policy=source.repair_verifier_policy,
+            evidence_use_policy=(RepairEvidenceUsePolicy.calibration_gated_adaptive_cycle()),
+            diagnosis=diagnosis_function_for_configuration(source.diagnosis_rule),
+            preregistered_task_snapshots=task_snapshots_for_refs(
+                source.source_stage.applicability,
+                task_refs=source.repair_request.pairing.task_ids,
+            ),
+            executor=selected_executors.repair,
+        )
+        repair = repair_runtime.execute()
+        if repair.result.status is not RepairLoopStatus.ACCEPTED:
+            return (
+                HarnessCandidate(
+                    candidate_id=f"repair:{source.repair_request.attempt_id}",
+                    value=("repair", repair),
+                ),
+            )
+        terminal = RepairTerminalRecord.model_validate_json(repair.terminal.path.read_text(encoding="utf-8"))
+        if terminal.patch_proposal is None:
+            raise ValueError("accepted adaptive repair is missing its typed patch proposal")
+        repaired_candidate = repair_runtime.apply_patch(terminal.patch_proposal)
+        repaired_candidate_reference = write_json_artifact(
+            repaired_candidate.model_dump(mode="json"),
+            identity=canonical_json_sha256(repaired_candidate.model_dump(mode="json")),
+            root=root / "repair-candidates",
+            filename="repair-candidate.json",
+            kind="repair-candidate",
+        )
+        child_request = materialize_child_harness_program_request(
+            source.child_calibration,
+            repaired_candidate,
+        )
+        child_spec = prepare_harness_program_study_spec(
+            candidate_requests=(child_request,),
+            registry=registry,
+            tasks_root=workflow.tasks_root,
+            policy_id=source.child_calibration.policy_id,
+            randomization_seed=source.child_calibration.randomization_seed,
+            harness_generator_sha256=source.harness_generator_sha256,
+            program_generator_sha256=source.program_generator_sha256,
+            split="calibration",
+            confidence_level=source.child_calibration.confidence_level,
+            bootstrap_replicates=source.child_calibration.bootstrap_replicates,
+            bootstrap_seed=source.child_calibration.bootstrap_seed,
+        )
+        if child_spec.applicability != source.child_calibration.applicability:
+            raise ValueError("adaptive cycle child applicability drifted while materializing repaired factors")
+        return (
+            HarnessCandidate(
+                candidate_id=f"child:{repaired_candidate.candidate_id}",
+                value=("child", child_spec),
+            ),
+        )
+
+    def assess_candidates(*_: object) -> bool:
+        if repair is None:
+            raise RuntimeError("adaptive cycle assessment has no repair result")
+        return repair.result.status is RepairLoopStatus.ACCEPTED
+
+    run_meta_harness(
+        initial=HarnessCandidate(
+            candidate_id=f"source:{source.source_stage.content_sha256}",
+            value=("source", source.source_stage),
         ),
-        executor=selected_executors.repair,
+        propose=propose_candidate,
+        evaluate=evaluate_candidate,
+        assess=assess_candidates,
+        select=lambda current, candidates, accepted: candidates[0].candidate if accepted else current.candidate,
+        refine=lambda selected, assessment: selected,
+        stop=lambda round_result: True,
+        max_rounds=1,
     )
-    repair = repair_runtime.execute()
+    if source_stage is None or repair is None or repair_runtime is None:
+        raise RuntimeError("adaptive cycle composition did not produce its required source and repair evidence")
     if repair.result.status is not RepairLoopStatus.ACCEPTED:
         report = AdaptiveCycleReport(
             outcome=AdaptiveCycleOutcome.STOPPED,
@@ -150,44 +254,8 @@ def _run_adaptive_cycle(
             report=report,
             path=path,
         )
-    terminal = RepairTerminalRecord.model_validate_json(repair.terminal.path.read_text(encoding="utf-8"))
-    if terminal.patch_proposal is None:
-        raise ValueError("accepted adaptive repair is missing its typed patch proposal")
-    repaired_candidate = repair_runtime.apply_patch(terminal.patch_proposal)
-    repaired_candidate_reference = write_json_artifact(
-        repaired_candidate.model_dump(mode="json"),
-        identity=canonical_json_sha256(repaired_candidate.model_dump(mode="json")),
-        root=root / "repair-candidates",
-        filename="repair-candidate.json",
-        kind="repair-candidate",
-    )
-
-    child_request = materialize_child_harness_program_request(
-        source.child_calibration,
-        repaired_candidate,
-    )
-    child_spec = prepare_harness_program_study_spec(
-        candidate_requests=(child_request,),
-        registry=registry,
-        tasks_root=workflow.tasks_root,
-        policy_id=source.child_calibration.policy_id,
-        randomization_seed=source.child_calibration.randomization_seed,
-        harness_generator_sha256=source.harness_generator_sha256,
-        program_generator_sha256=source.program_generator_sha256,
-        split="calibration",
-        confidence_level=source.child_calibration.confidence_level,
-        bootstrap_replicates=source.child_calibration.bootstrap_replicates,
-        bootstrap_seed=source.child_calibration.bootstrap_seed,
-    )
-    if child_spec.applicability != source.child_calibration.applicability:
-        raise ValueError("adaptive cycle child applicability drifted while materializing repaired factors")
-    child_calibration = run_harness_program_study(
-        spec=child_spec,
-        registry=registry,
-        workflow=workflow,
-        artifacts_root=root / "child-calibration",
-        executor=selected_executors.child_calibration,
-    )
+    if repaired_candidate is None or repaired_candidate_reference is None or child_calibration is None:
+        raise RuntimeError("accepted adaptive cycle did not produce its repaired candidate and child study")
     learning = learn_and_promote_motif(
         source_stage_report=source_stage.report,
         child_calibration_report=child_calibration.report,

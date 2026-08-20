@@ -6,12 +6,37 @@ from __future__ import annotations
 import argparse
 import json
 import shlex
+from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from aec_bench.contracts.evaluation_result import EvaluationResult, ValidityCheck
+from aec_bench.contracts.trial_record import (
+    EvaluationStatus,
+    EvidenceStatus,
+    ExecutionStatus,
+    TimingRecord,
+    TrialInput,
+    TrialOutput,
+    TrialRecord,
+)
 from aec_bench.evaluation.logic_profile import evaluate_logic_profile
-from aec_bench.harness.process_runtime.autonomy import score_process_result
-from aec_bench.harness.process_runtime.world_process import build_problem_brief_request
+from aec_bench.evaluation.process_result import score_process_result
+from aec_bench.experimentation.meta_harness import (
+    HarnessCandidate,
+    HarnessCandidateTrials,
+    run_harness_study,
+)
+from aec_bench.harness.process_runtime.problem_model_process import build_problem_brief_request
+
+
+@dataclass(frozen=True)
+class _ComparisonInput:
+    label: str
+    world: dict[str, Any]
+    task_run: dict[str, Any]
+    record: TrialRecord
 
 
 def materialize_harness_comparison_recipe(
@@ -131,7 +156,7 @@ def run_harness_comparison_from_files(
     candidate_world = _load_json(candidate_world_path)
     baseline_run = _load_json(baseline_run_path)
     candidate_run = _load_json(candidate_run_path)
-    comparison = compare_harness_runs(
+    comparison = _run_harness_comparison(
         brief=brief,
         baseline_world=baseline_world,
         candidate_world=candidate_world,
@@ -145,7 +170,7 @@ def run_harness_comparison_from_files(
     return comparison
 
 
-def compare_harness_runs(
+def _run_harness_comparison(
     *,
     brief: dict[str, Any],
     baseline_world: dict[str, Any],
@@ -153,22 +178,48 @@ def compare_harness_runs(
     baseline_run: dict[str, Any],
     candidate_run: dict[str, Any],
 ) -> dict[str, Any]:
-    baseline = _evaluation_summary(label="baseline", world=baseline_world, task_run=baseline_run)
-    candidate = _evaluation_summary(label="candidate", world=candidate_world, task_run=candidate_run)
-    return {
-        "status": "complete",
-        "brief_ref": brief.get("brief_id"),
-        "objective": brief.get("objective"),
-        "baseline": baseline,
-        "candidate": candidate,
-        "deltas": {
-            "score_value": round(candidate["score"]["value"] - baseline["score"]["value"], 6),
-            "reward": _nullable_delta(candidate["reward"], baseline["reward"]),
-            "event_candidates": candidate["event_candidate_count"] - baseline["event_candidate_count"],
-            "artifact_count": candidate["artifact_count"] - baseline["artifact_count"],
-        },
-        "recommendation": _recommendation(baseline, candidate),
-    }
+    baseline = _comparison_candidate("baseline", world=baseline_world, task_run=baseline_run)
+    candidate = _comparison_candidate("candidate", world=candidate_world, task_run=candidate_run)
+
+    def assess(
+        baseline_trials: HarnessCandidateTrials[_ComparisonInput],
+        candidate_trials: tuple[HarnessCandidateTrials[_ComparisonInput], ...],
+    ) -> dict[str, Any]:
+        baseline_summary = _evaluation_summary(
+            label=baseline_trials.candidate.value.label,
+            world=baseline_trials.candidate.value.world,
+            task_run=baseline_trials.candidate.value.task_run,
+        )
+        candidate_value = candidate_trials[0].candidate.value
+        candidate_summary = _evaluation_summary(
+            label=candidate_value.label,
+            world=candidate_value.world,
+            task_run=candidate_value.task_run,
+        )
+        return {
+            "status": "complete",
+            "brief_ref": brief.get("brief_id"),
+            "objective": brief.get("objective"),
+            "baseline": baseline_summary,
+            "candidate": candidate_summary,
+            "deltas": {
+                "score_value": round(candidate_summary["score"]["value"] - baseline_summary["score"]["value"], 6),
+                "reward": _nullable_delta(candidate_summary["reward"], baseline_summary["reward"]),
+                "event_candidates": (
+                    candidate_summary["event_candidate_count"] - baseline_summary["event_candidate_count"]
+                ),
+                "artifact_count": candidate_summary["artifact_count"] - baseline_summary["artifact_count"],
+            },
+            "recommendation": _recommendation(baseline_summary, candidate_summary),
+        }
+
+    study = run_harness_study(
+        baseline=baseline,
+        candidates=(candidate,),
+        evaluate=lambda item: (item.value.record,),
+        assess=assess,
+    )
+    return study.assessment
 
 
 def comparison_cli(argv: list[str] | None = None) -> int:
@@ -415,6 +466,68 @@ def _comparison_command(command_prefix: str, paths: dict[str, str]) -> list[str]
 
 def _command(command_prefix: str, *parts: str) -> list[str]:
     return [*shlex.split(command_prefix), *parts]
+
+
+def _comparison_candidate(
+    label: str,
+    *,
+    world: dict[str, Any],
+    task_run: dict[str, Any],
+) -> HarnessCandidate[_ComparisonInput]:
+    run_id = str(task_run.get("run_id") or f"{label}.run")
+    value = _ComparisonInput(
+        label=label,
+        world=world,
+        task_run=task_run,
+        record=_comparison_record(run_id=run_id, world=world, task_run=task_run),
+    )
+    return HarnessCandidate(candidate_id=f"{label}:{run_id}", value=value)
+
+
+def _comparison_record(
+    *,
+    run_id: str,
+    world: dict[str, Any],
+    task_run: dict[str, Any],
+) -> TrialRecord:
+    """Adapt one legacy process-run input to in-memory trial evidence at the recipe boundary."""
+
+    evidence = task_run.get("evidence", task_run)
+    evidence = evidence if isinstance(evidence, dict) else {}
+    reward = _reward(evidence)
+    timestamp = datetime(1970, 1, 1, tzinfo=UTC)
+    return TrialRecord(
+        trial_id=run_id,
+        run_id=run_id,
+        task_id=str(world.get("world_id") or "meta-harness-comparison"),
+        execution_status=ExecutionStatus.COMPLETED,
+        evaluation_status=EvaluationStatus.COMPLETED if reward is not None else EvaluationStatus.NOT_REQUESTED,
+        evidence_status=EvidenceStatus.NOT_REQUIRED,
+        started_at=timestamp,
+        completed_at=timestamp,
+        input=TrialInput(
+            instruction="Compare supplied harness evidence.",
+            task_revision=str(world.get("world_id") or "unversioned-comparison-input"),
+        ),
+        output=TrialOutput(
+            agent_result=task_run,
+            terminated=True,
+            final_reason="supplied_comparison_evidence",
+        ),
+        evaluation=(
+            EvaluationResult(
+                reward=reward,
+                validity=ValidityCheck(
+                    output_parseable=True,
+                    schema_valid=True,
+                    verifier_completed=True,
+                ),
+            )
+            if reward is not None
+            else None
+        ),
+        timing=TimingRecord(total_seconds=0.0),
+    )
 
 
 def _evaluation_summary(label: str, world: dict[str, Any], task_run: dict[str, Any]) -> dict[str, Any]:

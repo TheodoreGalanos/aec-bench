@@ -22,7 +22,6 @@ EXPECTED_REPOSITORY_DOCS = {
     "plans/artifact-task-composition.md",
     "plans/evolution-functional-composition.md",
     "plans/environment-category-contracts.md",
-    "plans/meta-harness-functional-composition.md",
     "plans/prime-world-boundary-study.md",
     "plans/repository-architecture-implementation.md",
     "plans/repository-architecture-study.md",
@@ -41,7 +40,6 @@ MAINTAINED_INDEX_TARGETS = {
     "plans/artifact-task-composition.md",
     "plans/evolution-functional-composition.md",
     "plans/environment-category-contracts.md",
-    "plans/meta-harness-functional-composition.md",
     "plans/prime-world-boundary-study.md",
     "plans/repository-architecture-implementation.md",
     "plans/repository-architecture-study.md",
@@ -144,6 +142,16 @@ def test_packaged_skills_do_not_reference_retired_runtime_paths() -> None:
     }
 
     assert all(term not in guidance for term in retired_terms)
+
+
+def test_packaged_meta_harness_skill_uses_the_functional_api_boundary() -> None:
+    guidance = (SKILL_ROOT / "meta-harness" / "SKILL.md").read_text(encoding="utf-8")
+    workflows = (SKILL_ROOT / "meta-harness" / "references" / "experiment-workflows.md").read_text(encoding="utf-8")
+
+    assert "aec_bench.experimentation.meta_harness" in guidance
+    assert "aec_bench.experimentation.meta_harness" in workflows
+    assert "Always set `max_rounds`" in workflows
+    assert "not interactive worlds" in guidance
 
 
 def test_meta_harness_fixtures_live_outside_docs() -> None:

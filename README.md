@@ -564,8 +564,26 @@ replay, automatic continuation, verification, or evaluation.
 
 ### Meta-Harness
 
-Use the meta-harness workflow when a task needs an explicit world model, reviewer
-evidence, governance decisions, or candidate-vs-baseline harness comparison.
+Use the meta-harness workflow to compare or refine harness candidates from
+`TrialRecord` evidence. Python callers can use the runtime-neutral facade:
+
+```python
+from aec_bench.experimentation.meta_harness import run_harness_study
+
+study = run_harness_study(
+    baseline=baseline,
+    candidates=candidates,
+    evaluate=evaluate_candidate,
+    assess=assess_candidates,
+)
+```
+
+Candidate and assessment values remain caller-owned. The evaluator connects the
+candidate to its artifact-task, lifecycle, or interactive-world runtime. The
+core does not define a common runtime or persisted meta-harness format.
+
+The CLI also supports a concrete problem-model workflow, reviewer evidence,
+governance decisions, and candidate-versus-baseline comparison.
 
 ```bash
 uv run aec-bench meta-harness recipe \
@@ -573,7 +591,7 @@ uv run aec-bench meta-harness recipe \
   --output artefacts/meta-harness/demo
 ```
 
-The recipe writes a scriptable workspace for intake, world generation, reviewer
+The recipe writes a scriptable workspace for intake, problem-model generation, reviewer
 evidence, governance, and comparison artifacts. Run
 `aec-bench meta-harness --help` for the complete command surface.
 

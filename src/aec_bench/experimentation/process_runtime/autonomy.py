@@ -1,4 +1,4 @@
-# ABOUTME: Supervises the pauseable meta-harness runtime across bounded autonomous cycles.
+# ABOUTME: Composes the pauseable problem-model process through the functional meta-harness loop.
 # ABOUTME: Resolves waiting states, scores outcomes, gates governance, and records loop history.
 
 from __future__ import annotations
@@ -6,21 +6,46 @@ from __future__ import annotations
 import copy
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from aec_bench.contracts.evaluation_result import EvaluationResult, ValidityCheck
+from aec_bench.contracts.trial_record import (
+    EvaluationStatus,
+    EvidenceStatus,
+    ExecutionStatus,
+    TimingRecord,
+    TrialInput,
+    TrialOutput,
+    TrialRecord,
+)
+from aec_bench.evaluation.process_result import score_process_result
+from aec_bench.experimentation.meta_harness import (
+    HarnessCandidate,
+    HarnessCandidateTrials,
+    run_meta_harness,
+)
+from aec_bench.experimentation.process_runtime.problem_model_runtime import run_problem_model_process
 from aec_bench.harness.model_execution.model_runner import ModelEndpoint
-from aec_bench.harness.process_runtime.world_runtime import run_process
 from aec_bench.ledger.process_log import append_ledger_entry
 
 GOVERNANCE_SCOPES = {"run_only", "world_schema", "world_generator"}
 SELECTION_STRATEGIES = {"hill_climb", "none"}
 
 BriefResolver = Callable[[dict[str, Any]], dict[str, Any]]
-WorldResolver = Callable[[dict[str, Any]], dict[str, Any]]
+ProblemModelResolver = Callable[[dict[str, Any]], dict[str, Any]]
 TaskRunResolver = Callable[[dict[str, Any]], dict[str, Any]]
 OperationPlanResolver = Callable[[dict[str, Any]], dict[str, Any]]
 GovernanceResolver = Callable[[dict[str, Any]], dict[str, Any]]
+
+
+@dataclass(frozen=True)
+class _AutonomyAssessment:
+    stop_status: str | None
+    extra: dict[str, Any] | None
+    next_state: dict[str, Any] | None
+    last_result: dict[str, Any]
 
 
 @dataclass(frozen=True)
@@ -87,7 +112,7 @@ def run_autonomous_process(
     config: AutonomyConfig | None = None,
     attachments: list[dict[str, Any]] | None = None,
     problem_space_brief: dict[str, Any] | None = None,
-    world: dict[str, Any] | None = None,
+    problem_model: dict[str, Any] | None = None,
     task_run: dict[str, Any] | None = None,
     operation_plan: dict[str, Any] | None = None,
     governance_proposal: dict[str, Any] | None = None,
@@ -99,7 +124,7 @@ def run_autonomous_process(
     output_dir: Path | None = None,
     ledger_path: Path | None = None,
     brief_resolver: BriefResolver | None = None,
-    world_resolver: WorldResolver | None = None,
+    problem_model_resolver: ProblemModelResolver | None = None,
     task_run_resolver: TaskRunResolver | None = None,
     operation_plan_resolver: OperationPlanResolver | None = None,
     governance_resolver: GovernanceResolver | None = None,
@@ -109,7 +134,7 @@ def run_autonomous_process(
     resolved_ledger_path = _ledger_path(output_dir, ledger_path)
 
     current_brief = problem_space_brief
-    current_world = world
+    current_problem_model = problem_model
     current_task_run = task_run
     current_operation_plan = operation_plan
     current_governance_proposal = governance_proposal
@@ -119,25 +144,48 @@ def run_autonomous_process(
     iteration_records: list[dict[str, Any]] = []
     best_score: float | None = None
     best_iteration: int | None = None
-    selected_world: dict[str, Any] | None = copy.deepcopy(current_world)
+    selected_problem_model: dict[str, Any] | None = copy.deepcopy(current_problem_model)
     run_directives: list[dict[str, Any]] = []
     world_regenerations = 0
     governance_actions = 0
     total_cost_usd = 0.0
-    last_result: dict[str, Any] | None = None
+    final_assessment: _AutonomyAssessment | None = None
 
-    for iteration in range(1, resolved_config.max_iterations + 1):
+    initial_state: dict[str, Any] = {
+        "iteration": 1,
+        "execute": False,
+        "problem_space_brief": current_brief,
+        "problem_model": current_problem_model,
+        "task_run": current_task_run,
+        "operation_plan": current_operation_plan,
+        "governance_proposal": current_governance_proposal,
+        "governance_decision": current_governance_decision,
+    }
+
+    def propose_iteration(
+        current: HarnessCandidate[dict[str, Any]],
+        previous: _AutonomyAssessment | None,
+    ) -> tuple[HarnessCandidate[dict[str, Any]], ...]:
+        state = {**current.value, "execute": True}
+        iteration = int(state["iteration"])
+        return (HarnessCandidate(candidate_id=f"{resolved_process_id}.iteration.{iteration}", value=state),)
+
+    def evaluate_iteration(candidate: HarnessCandidate[dict[str, Any]]) -> tuple[TrialRecord, ...]:
+        state = candidate.value
+        iteration = int(state["iteration"])
+        if not state["execute"]:
+            return (_process_trial_record(candidate.candidate_id, iteration=iteration, runtime_result=None),)
         iteration_result = _run_iteration(
             iteration=iteration,
             task_text=task_text,
             process_id=resolved_process_id,
             attachments=attachments,
-            problem_space_brief=current_brief,
-            world=current_world,
-            task_run=current_task_run,
-            operation_plan=current_operation_plan,
-            governance_proposal=current_governance_proposal,
-            governance_decision=current_governance_decision,
+            problem_space_brief=state["problem_space_brief"],
+            problem_model=state["problem_model"],
+            task_run=state["task_run"],
+            operation_plan=state["operation_plan"],
+            governance_proposal=state["governance_proposal"],
+            governance_decision=state["governance_decision"],
             intake_endpoints=intake_endpoints,
             world_generation_endpoints=world_generation_endpoints,
             review_endpoints=review_endpoints,
@@ -148,19 +196,32 @@ def run_autonomous_process(
             governance_actions=governance_actions,
             run_directives=run_directives,
             brief_resolver=brief_resolver,
-            world_resolver=world_resolver,
+            problem_model_resolver=problem_model_resolver,
             task_run_resolver=task_run_resolver,
             operation_plan_resolver=operation_plan_resolver,
             governance_resolver=governance_resolver,
         )
+        state["iteration_result"] = iteration_result
+        return (
+            _process_trial_record(
+                candidate.candidate_id,
+                iteration=iteration,
+                runtime_result=iteration_result["runtime_result"],
+            ),
+        )
+
+    def assess_iteration(
+        current: HarnessCandidateTrials[dict[str, Any]],
+        candidates: tuple[HarnessCandidateTrials[dict[str, Any]], ...],
+    ) -> _AutonomyAssessment:
+        nonlocal best_score, best_iteration, selected_problem_model
+        nonlocal world_regenerations, governance_actions, total_cost_usd, final_assessment
+        state = candidates[0].candidate.value
+        iteration = int(state["iteration"])
+        iteration_result = state["iteration_result"]
         last_result = iteration_result["runtime_result"]
-        current_brief = iteration_result["problem_space_brief"]
-        current_world = iteration_result["world"]
-        current_task_run = iteration_result["task_run"]
-        current_operation_plan = iteration_result["operation_plan"]
-        current_governance_proposal = iteration_result["governance_proposal"]
-        current_governance_decision = iteration_result["governance_decision"]
         governance_actions = iteration_result["governance_actions"]
+        current_problem_model_value = iteration_result["problem_model"]
 
         non_improving_candidate = False
         score = score_process_result(last_result) if _has_task_evidence(last_result) else None
@@ -171,7 +232,11 @@ def run_autonomous_process(
             if _should_select_candidate(score_value, previous_best_score, resolved_config):
                 best_score = score_value
                 best_iteration = iteration
-                selected_world = copy.deepcopy(current_world) if isinstance(current_world, dict) else None
+                selected_problem_model = (
+                    copy.deepcopy(current_problem_model_value)
+                    if isinstance(current_problem_model_value, dict)
+                    else None
+                )
             elif (
                 resolved_config.selection_strategy == "hill_climb"
                 and world_regenerations > 0
@@ -179,16 +244,21 @@ def run_autonomous_process(
             ):
                 non_improving_candidate = True
 
-        _attach_autonomy_state(last_result, run_directives=run_directives, selected_world=selected_world)
-        iteration_record = {
-            "iteration": iteration,
-            "status": iteration_result["status"],
-            "runtime_status": last_result.get("status"),
-            "score": score,
-            "resolution_steps": iteration_result["resolution_steps"],
-            "world_id": current_world.get("world_id") if isinstance(current_world, dict) else None,
-        }
-        iteration_records.append(iteration_record)
+        _attach_autonomy_state(
+            last_result, run_directives=run_directives, selected_problem_model=selected_problem_model
+        )
+        iteration_records.append(
+            {
+                "iteration": iteration,
+                "status": iteration_result["status"],
+                "runtime_status": last_result.get("status"),
+                "score": score,
+                "resolution_steps": iteration_result["resolution_steps"],
+                "world_id": current_problem_model_value.get("world_id")
+                if isinstance(current_problem_model_value, dict)
+                else None,
+            }
+        )
         _record_autonomy(
             resolved_ledger_path,
             process_id=resolved_process_id,
@@ -201,148 +271,77 @@ def run_autonomous_process(
             },
         )
 
+        stop_status: str | None = None
+        extra = None
+        next_state = None
         if iteration_result["status"] != "complete":
-            return _finish(
-                status=iteration_result["status"],
-                stop_reason=iteration_result["status"],
-                config=resolved_config,
-                process_id=resolved_process_id,
-                iteration_records=iteration_records,
-                score_history=score_history,
-                best_score=best_score,
-                best_iteration=best_iteration,
-                world_regenerations=world_regenerations,
-                governance_actions=governance_actions,
-                total_cost_usd=total_cost_usd,
-                last_result=last_result,
-                ledger_path=resolved_ledger_path,
-                extra=iteration_result.get("extra"),
-            )
-
-        total_cost_usd += _estimate_cost_usd(last_result)
-        if resolved_config.max_cost_usd is not None and total_cost_usd > resolved_config.max_cost_usd:
-            return _finish(
-                status="max_cost",
-                stop_reason="max_cost",
-                config=resolved_config,
-                process_id=resolved_process_id,
-                iteration_records=iteration_records,
-                score_history=score_history,
-                best_score=best_score,
-                best_iteration=best_iteration,
-                world_regenerations=world_regenerations,
-                governance_actions=governance_actions,
-                total_cost_usd=total_cost_usd,
-                last_result=last_result,
-                ledger_path=resolved_ledger_path,
-            )
-
-        if non_improving_candidate:
-            return _finish(
-                status="no_improvement",
-                stop_reason="no_improvement",
-                config=resolved_config,
-                process_id=resolved_process_id,
-                iteration_records=iteration_records,
-                score_history=score_history,
-                best_score=best_score,
-                best_iteration=best_iteration,
-                world_regenerations=world_regenerations,
-                governance_actions=governance_actions,
-                total_cost_usd=total_cost_usd,
-                last_result=last_result,
-                ledger_path=resolved_ledger_path,
-            )
-
-        if _is_converged(score_history, resolved_config):
-            return _finish(
-                status="converged",
-                stop_reason="converged",
-                config=resolved_config,
-                process_id=resolved_process_id,
-                iteration_records=iteration_records,
-                score_history=score_history,
-                best_score=best_score,
-                best_iteration=best_iteration,
-                world_regenerations=world_regenerations,
-                governance_actions=governance_actions,
-                total_cost_usd=total_cost_usd,
-                last_result=last_result,
-                ledger_path=resolved_ledger_path,
-            )
-
-        if last_result.get("status") == "accepted_for_world_generation":
-            if world_regenerations >= resolved_config.max_world_regenerations:
-                return _finish(
-                    status="max_world_regenerations",
-                    stop_reason="max_world_regenerations",
-                    config=resolved_config,
-                    process_id=resolved_process_id,
-                    iteration_records=iteration_records,
-                    score_history=score_history,
-                    best_score=best_score,
-                    best_iteration=best_iteration,
-                    world_regenerations=world_regenerations,
-                    governance_actions=governance_actions,
-                    total_cost_usd=total_cost_usd,
-                    last_result=last_result,
-                    ledger_path=resolved_ledger_path,
+            stop_status = iteration_result["status"]
+            extra = iteration_result.get("extra")
+        else:
+            total_cost_usd += _estimate_cost_usd(last_result)
+            if resolved_config.max_cost_usd is not None and total_cost_usd > resolved_config.max_cost_usd:
+                stop_status = "max_cost"
+            elif non_improving_candidate:
+                stop_status = "no_improvement"
+            elif _is_converged(score_history, resolved_config):
+                stop_status = "converged"
+            elif last_result.get("status") == "accepted_for_world_generation":
+                if world_regenerations >= resolved_config.max_world_regenerations:
+                    stop_status = "max_world_regenerations"
+                elif problem_model_resolver is None:
+                    stop_status = "awaiting_world_generation"
+                else:
+                    current_problem_model_value = problem_model_resolver(
+                        last_result["governance"]["world_generation_request"]
+                    )
+                    world_regenerations += 1
+                    next_state = _next_process_state(
+                        iteration_result,
+                        iteration=iteration,
+                        problem_model=current_problem_model_value,
+                    )
+            elif last_result.get("status") == "accepted_for_run":
+                directive = last_result.get("governance", {}).get("run_directive")
+                if isinstance(directive, dict):
+                    run_directives.append(copy.deepcopy(directive))
+                _attach_autonomy_state(
+                    last_result, run_directives=run_directives, selected_problem_model=selected_problem_model
                 )
-            request = last_result["governance"]["world_generation_request"]
-            if world_resolver is None:
-                return _finish(
-                    status="awaiting_world_generation",
-                    stop_reason="awaiting_world_generation",
-                    config=resolved_config,
-                    process_id=resolved_process_id,
-                    iteration_records=iteration_records,
-                    score_history=score_history,
-                    best_score=best_score,
-                    best_iteration=best_iteration,
-                    world_regenerations=world_regenerations,
-                    governance_actions=governance_actions,
-                    total_cost_usd=total_cost_usd,
-                    last_result=last_result,
-                    ledger_path=resolved_ledger_path,
+                next_state = _next_process_state(
+                    iteration_result,
+                    iteration=iteration,
+                    problem_model=current_problem_model_value,
                 )
-            current_world = world_resolver(request)
-            world_regenerations += 1
-            current_task_run = None
-            current_operation_plan = None
-            current_governance_proposal = None
-            current_governance_decision = None
-            continue
+            else:
+                stop_status = last_result.get("status", "complete")
 
-        if last_result.get("status") == "accepted_for_run":
-            directive = last_result.get("governance", {}).get("run_directive")
-            if isinstance(directive, dict):
-                run_directives.append(copy.deepcopy(directive))
-            current_task_run = None
-            current_operation_plan = None
-            current_governance_proposal = None
-            current_governance_decision = None
-            _attach_autonomy_state(last_result, run_directives=run_directives, selected_world=selected_world)
-            continue
-
-        return _finish(
-            status=last_result.get("status", "complete"),
-            stop_reason=last_result.get("status", "complete"),
-            config=resolved_config,
-            process_id=resolved_process_id,
-            iteration_records=iteration_records,
-            score_history=score_history,
-            best_score=best_score,
-            best_iteration=best_iteration,
-            world_regenerations=world_regenerations,
-            governance_actions=governance_actions,
-            total_cost_usd=total_cost_usd,
+        final_assessment = _AutonomyAssessment(
+            stop_status=stop_status,
+            extra=extra,
+            next_state=next_state,
             last_result=last_result,
-            ledger_path=resolved_ledger_path,
         )
+        return final_assessment
 
+    run_meta_harness(
+        initial=HarnessCandidate(candidate_id=f"{resolved_process_id}.state.1", value=initial_state),
+        propose=propose_iteration,
+        evaluate=evaluate_iteration,
+        assess=assess_iteration,
+        select=lambda current, candidates, assessment: candidates[0].candidate,
+        refine=lambda selected, assessment: HarnessCandidate(
+            candidate_id=f"{resolved_process_id}.state.{len(iteration_records) + 1}",
+            value=assessment.next_state or {},
+        ),
+        stop=lambda round_result: round_result.study.assessment.stop_status is not None,
+        max_rounds=resolved_config.max_iterations,
+    )
+    if final_assessment is None:
+        raise RuntimeError("autonomous process produced no assessed iteration")
+    status = final_assessment.stop_status or "max_iterations"
     return _finish(
-        status="max_iterations",
-        stop_reason="max_iterations",
+        status=status,
+        stop_reason=status,
         config=resolved_config,
         process_id=resolved_process_id,
         iteration_records=iteration_records,
@@ -352,40 +351,85 @@ def run_autonomous_process(
         world_regenerations=world_regenerations,
         governance_actions=governance_actions,
         total_cost_usd=total_cost_usd,
-        last_result=last_result or {},
+        last_result=final_assessment.last_result,
         ledger_path=resolved_ledger_path,
+        extra=final_assessment.extra,
     )
 
 
-def score_process_result(result: dict[str, Any]) -> dict[str, Any]:
-    evidence = _evidence(result)
-    verifier_reward = _verifier_reward(evidence)
-    logic_certified = 1.0 if result.get("logic_evaluation", {}).get("overall_status") == "certified" else 0.0
-    review = evidence.get("agentic_review", {}) if isinstance(evidence, dict) else {}
-    review_complete = 1.0 if review.get("status") in {"complete", "certified"} else 0.0
-    evidence_completeness = _evidence_completeness(evidence)
-    governance_churn_penalty = _governance_churn_penalty(result)
-    unresolved_wait_penalty = 0.1 if str(result.get("status", "")).startswith("awaiting_") else 0.0
-    value = (
-        0.55 * verifier_reward
-        + 0.20 * logic_certified
-        + 0.15 * review_complete
-        + 0.10 * evidence_completeness
-        - governance_churn_penalty
-        - unresolved_wait_penalty
-    )
-    value = max(0.0, min(1.0, value))
+def _next_process_state(
+    iteration_result: dict[str, Any],
+    *,
+    iteration: int,
+    problem_model: dict[str, Any] | None,
+) -> dict[str, Any]:
     return {
-        "value": round(value, 6),
-        "components": {
-            "verifier_reward": verifier_reward,
-            "logic_certified": logic_certified,
-            "review_complete": review_complete,
-            "evidence_completeness": evidence_completeness,
-            "governance_churn_penalty": governance_churn_penalty,
-            "unresolved_wait_penalty": unresolved_wait_penalty,
-        },
+        "iteration": iteration + 1,
+        "execute": False,
+        "problem_space_brief": iteration_result["problem_space_brief"],
+        "problem_model": problem_model,
+        "task_run": None,
+        "operation_plan": None,
+        "governance_proposal": None,
+        "governance_decision": None,
     }
+
+
+def _process_trial_record(
+    candidate_id: str,
+    *,
+    iteration: int,
+    runtime_result: dict[str, Any] | None,
+) -> TrialRecord:
+    timestamp = datetime(1970, 1, 1, tzinfo=UTC)
+    if runtime_result is None:
+        return TrialRecord(
+            trial_id=f"{candidate_id}.planned",
+            run_id=candidate_id,
+            task_id="meta-harness-process",
+            execution_status=ExecutionStatus.PLANNED,
+            evaluation_status=EvaluationStatus.NOT_REQUESTED,
+            evidence_status=EvidenceStatus.NOT_REQUIRED,
+            started_at=timestamp,
+            input=TrialInput(
+                instruction="Prepare the next bounded meta-harness process iteration.",
+                task_revision=f"process-iteration-{iteration}",
+            ),
+            timing=TimingRecord(total_seconds=0.0),
+        )
+    score = score_process_result(runtime_result) if _has_task_evidence(runtime_result) else None
+    return TrialRecord(
+        trial_id=f"{candidate_id}.result",
+        run_id=candidate_id,
+        task_id="meta-harness-process",
+        execution_status=ExecutionStatus.COMPLETED,
+        evaluation_status=EvaluationStatus.COMPLETED if score is not None else EvaluationStatus.NOT_REQUESTED,
+        evidence_status=EvidenceStatus.NOT_REQUIRED,
+        started_at=timestamp,
+        completed_at=timestamp,
+        input=TrialInput(
+            instruction="Run one bounded meta-harness process iteration.",
+            task_revision=f"process-iteration-{iteration}",
+        ),
+        output=TrialOutput(
+            agent_result=runtime_result,
+            terminated=True,
+            final_reason=str(runtime_result.get("status") or "process_iteration_complete"),
+        ),
+        evaluation=(
+            EvaluationResult(
+                reward=score["value"],
+                validity=ValidityCheck(
+                    output_parseable=True,
+                    schema_valid=True,
+                    verifier_completed=True,
+                ),
+            )
+            if score is not None
+            else None
+        ),
+        timing=TimingRecord(total_seconds=0.0),
+    )
 
 
 def estimate_process_cost_usd(result: dict[str, Any]) -> float:
@@ -412,7 +456,7 @@ def _run_iteration(
     process_id: str,
     attachments: list[dict[str, Any]] | None,
     problem_space_brief: dict[str, Any] | None,
-    world: dict[str, Any] | None,
+    problem_model: dict[str, Any] | None,
     task_run: dict[str, Any] | None,
     operation_plan: dict[str, Any] | None,
     governance_proposal: dict[str, Any] | None,
@@ -427,13 +471,13 @@ def _run_iteration(
     governance_actions: int,
     run_directives: list[dict[str, Any]],
     brief_resolver: BriefResolver | None,
-    world_resolver: WorldResolver | None,
+    problem_model_resolver: ProblemModelResolver | None,
     task_run_resolver: TaskRunResolver | None,
     operation_plan_resolver: OperationPlanResolver | None,
     governance_resolver: GovernanceResolver | None,
 ) -> dict[str, Any]:
     current_brief = problem_space_brief
-    current_world = world
+    current_problem_model = problem_model
     current_task_run = task_run
     current_operation_plan = operation_plan
     current_governance_proposal = governance_proposal
@@ -441,12 +485,12 @@ def _run_iteration(
     resolution_steps: list[dict[str, Any]] = []
 
     for _step in range(1, 20):
-        runtime_result = run_process(
+        runtime_result = run_problem_model_process(
             task_text=task_text,
             process_id=process_id,
             attachments=attachments,
             problem_space_brief=current_brief,
-            world=current_world,
+            problem_model=current_problem_model,
             task_run=current_task_run,
             operation_plan=current_operation_plan,
             governance_proposal=current_governance_proposal,
@@ -465,9 +509,9 @@ def _run_iteration(
             resolution_steps.append({"status": status, "resolution": "problem_space_brief"})
             continue
 
-        if status == "awaiting_world_generation" and world_resolver is not None:
-            current_world = world_resolver(runtime_result["world_generation_request"])
-            resolution_steps.append({"status": status, "resolution": "world"})
+        if status == "awaiting_world_generation" and problem_model_resolver is not None:
+            current_problem_model = problem_model_resolver(runtime_result["world_generation_request"])
+            resolution_steps.append({"status": status, "resolution": "problem_model"})
             continue
 
         if status == "awaiting_task_run" and task_run_resolver is not None:
@@ -487,7 +531,7 @@ def _run_iteration(
                     runtime_result=runtime_result,
                     resolution_steps=resolution_steps,
                     problem_space_brief=current_brief,
-                    world=current_world,
+                    problem_model=current_problem_model,
                     task_run=current_task_run,
                     operation_plan=current_operation_plan,
                     governance_proposal=current_governance_proposal,
@@ -503,7 +547,7 @@ def _run_iteration(
                     runtime_result=runtime_result,
                     resolution_steps=resolution_steps,
                     problem_space_brief=current_brief,
-                    world=current_world,
+                    problem_model=current_problem_model,
                     task_run=current_task_run,
                     operation_plan=current_operation_plan,
                     governance_proposal=proposal,
@@ -523,7 +567,7 @@ def _run_iteration(
             runtime_result=runtime_result,
             resolution_steps=resolution_steps,
             problem_space_brief=current_brief or runtime_result.get("problem_space_brief"),
-            world=current_world or runtime_result.get("world"),
+            problem_model=current_problem_model or runtime_result.get("world"),
             task_run=current_task_run or runtime_result.get("task_run"),
             operation_plan=current_operation_plan,
             governance_proposal=current_governance_proposal,
@@ -536,7 +580,7 @@ def _run_iteration(
         runtime_result=runtime_result,
         resolution_steps=resolution_steps,
         problem_space_brief=current_brief,
-        world=current_world,
+        problem_model=current_problem_model,
         task_run=current_task_run,
         operation_plan=current_operation_plan,
         governance_proposal=current_governance_proposal,
@@ -551,7 +595,7 @@ def _iteration_result(
     runtime_result: dict[str, Any],
     resolution_steps: list[dict[str, Any]],
     problem_space_brief: dict[str, Any] | None,
-    world: dict[str, Any] | None,
+    problem_model: dict[str, Any] | None,
     task_run: dict[str, Any] | None,
     operation_plan: dict[str, Any] | None,
     governance_proposal: dict[str, Any] | None,
@@ -564,7 +608,7 @@ def _iteration_result(
         "runtime_result": runtime_result,
         "resolution_steps": resolution_steps,
         "problem_space_brief": problem_space_brief,
-        "world": world,
+        "problem_model": problem_model,
         "task_run": task_run,
         "operation_plan": operation_plan,
         "governance_proposal": governance_proposal,
@@ -689,54 +733,15 @@ def _attach_autonomy_state(
     result: dict[str, Any],
     *,
     run_directives: list[dict[str, Any]],
-    selected_world: dict[str, Any] | None,
+    selected_problem_model: dict[str, Any] | None,
 ) -> None:
     state = result.setdefault("autonomy_state", {})
     state["run_directives"] = copy.deepcopy(run_directives)
-    state["selected_world_id"] = selected_world.get("world_id") if selected_world else None
+    state["selected_world_id"] = selected_problem_model.get("world_id") if selected_problem_model else None
 
 
 def _has_task_evidence(result: dict[str, Any]) -> bool:
     return bool(result.get("task_run"))
-
-
-def _evidence(result: dict[str, Any]) -> dict[str, Any]:
-    task_run = result.get("task_run") or {}
-    evidence = task_run.get("evidence", task_run) if isinstance(task_run, dict) else {}
-    return evidence if isinstance(evidence, dict) else {}
-
-
-def _verifier_reward(evidence: dict[str, Any]) -> float:
-    score = evidence.get("score", {})
-    if not isinstance(score, dict):
-        return 0.0
-    reward = score.get("reward")
-    if isinstance(reward, int | float):
-        return max(0.0, min(1.0, float(reward)))
-    if score.get("passed") is True:
-        return 1.0
-    if score.get("passed") is False:
-        return 0.0
-    return 0.0
-
-
-def _evidence_completeness(evidence: dict[str, Any]) -> float:
-    checks = [
-        bool(evidence.get("score")),
-        bool(evidence.get("artifacts")),
-        bool(evidence.get("agentic_review")),
-    ]
-    return sum(1 for item in checks if item) / len(checks)
-
-
-def _governance_churn_penalty(result: dict[str, Any]) -> float:
-    governance = result.get("governance", {})
-    decision = governance.get("decision", {}) if isinstance(governance, dict) else {}
-    if result.get("status") == "accepted_for_world_generation":
-        return 0.05
-    if decision.get("scope") in {"world_schema", "world_generator"}:
-        return 0.05
-    return 0.0
 
 
 def _is_converged(score_history: list[float], config: AutonomyConfig) -> bool:

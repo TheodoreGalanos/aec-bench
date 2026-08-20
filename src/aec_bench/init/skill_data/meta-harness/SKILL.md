@@ -1,11 +1,11 @@
 ---
 name: meta-harness
-description: Guide an agent through creating or revising a task-world harness, running it against a baseline, reviewing evidence, and preparing a comparison. Use when the user wants to create a harness from prose, compare a candidate harness to an existing one, or investigate verifier/schema gaps.
+description: Guide an agent through evaluating or refining harness candidates, reviewing TrialRecord evidence, and preparing a comparison. Use when the user wants to create a harness from prose, compare a candidate harness to an existing one, or investigate verifier or schema gaps.
 ---
 
 # Meta-Harness
 
-Guide a user through the meta-harness workflow without turning the library into a chat system. The skill operates the CLI/API, preserves artifacts, and stops for governance when the evidence calls for a world or schema change.
+Guide a user through the meta-harness workflow without turning the library into a chat system. The skill operates the CLI or `aec_bench.experimentation.meta_harness` API, preserves artifacts, and stops for governance when the evidence calls for a problem-model or schema change.
 
 ## Provider-Free Quick Start
 
@@ -71,9 +71,9 @@ If some paths are not available yet, still create the recipe and leave placehold
 The generated `run_recipe.sh` deliberately runs only the provider-free comparison.
 Use the staged commands in `recipe.json` to create any missing inputs first.
 
-### Step 4 - Build or Revise the Candidate World
+### Step 4 - Build or Revise the Candidate Problem Model
 
-Use the recipe commands or direct CLI calls to create the intake packet and candidate world. If model endpoints are available, use the model-backed commands. If not, emit requests and ask the user or their agent to supply the structured artifacts.
+Use the recipe commands or direct CLI calls to create the intake packet and candidate problem model. The public CLI keeps its existing `--world` file flags. These files are generated problem representations, not interactive worlds. If model endpoints are available, use the model-backed commands. If not, emit requests and ask the user or their agent to supply the structured artifacts.
 
 Never invent verifier outputs or task-run evidence. Missing run evidence means the process is paused, not complete.
 
@@ -99,7 +99,7 @@ Report the reward delta, score delta, event-candidate delta, artifact-count delt
 
 Read `references/governance-rules.md`.
 
-If the comparison produces event candidates, verifier-language gaps, schema gaps, missing handles, or world-generator changes, stop and ask for a governance decision. Do not mutate the world or verifier silently.
+If the comparison produces event candidates, verifier-language gaps, schema gaps, missing handles, or problem-model generator changes, stop and ask for a governance decision. Do not mutate the problem model or verifier silently.
 
 ## Output
 

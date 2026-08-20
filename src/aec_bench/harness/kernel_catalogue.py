@@ -425,7 +425,7 @@ DEFAULT_KERNEL_EXECUTOR_SOURCE_PATHS: tuple[str, ...] = (
     "aec_bench/harness/process_runtime/harbor_task.py",
     "aec_bench/harness/process_runtime/operation_orchestrator.py",
     "aec_bench/harness/process_runtime/operation_profile.py",
-    "aec_bench/harness/process_runtime/world_process.py",
+    "aec_bench/harness/process_runtime/problem_model_process.py",
     "aec_bench/harness/program_execution/__init__.py",
     "aec_bench/harness/program_execution/budget.py",
     "aec_bench/harness/program_execution/contracts.py",

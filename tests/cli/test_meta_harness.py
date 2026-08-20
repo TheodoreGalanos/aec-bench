@@ -10,6 +10,8 @@ from unittest.mock import MagicMock
 import yaml
 from typer.testing import CliRunner
 
+import aec_bench.experimentation.process_runtime.autonomy as autonomy_module
+import aec_bench.experimentation.qualification.recipe as recipe_module
 from aec_bench.cli.main import app
 from aec_bench.lifecycles.stormwater_design.drainage_model import (
     materialize_drainage_model_lifecycle,
@@ -640,12 +642,21 @@ def test_meta_harness_model_plan_commands_share_endpoint_contract(tmp_path: Path
         assert data["models"][0]["model"] == "demo-model"
 
 
-def test_meta_harness_autonomous_command_runs_bounded_supervision(tmp_path: Path) -> None:
+def test_meta_harness_autonomous_command_runs_bounded_supervision(tmp_path: Path, monkeypatch) -> None:
     brief = tmp_path / "brief.json"
     world = tmp_path / "world.json"
     output_dir = tmp_path / "autonomous"
     _write_json(brief, _brief())
     _write_json(world, _world())
+    calls = 0
+    original = autonomy_module.run_meta_harness
+
+    def run_meta_harness_spy(*args, **kwargs):
+        nonlocal calls
+        calls += 1
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(autonomy_module, "run_meta_harness", run_meta_harness_spy)
 
     result = runner.invoke(
         app,
@@ -670,6 +681,7 @@ def test_meta_harness_autonomous_command_runs_bounded_supervision(tmp_path: Path
     data = json.loads(result.output)["data"]
     assert data["config"]["max_iterations"] == 1
     assert data["status"] == "awaiting_task_run"
+    assert calls == 1
     assert (output_dir / "process_ledger.jsonl").exists()
 
 
@@ -739,7 +751,7 @@ def test_meta_harness_example_command_runs_provider_free_comparison(tmp_path: Pa
     assert (output_dir / "comparison" / "comparison.json").exists()
 
 
-def test_meta_harness_compare_command_writes_reports(tmp_path: Path) -> None:
+def test_meta_harness_compare_command_writes_reports(tmp_path: Path, monkeypatch) -> None:
     example_dir = tmp_path / "example"
     example_result = runner.invoke(
         app,
@@ -747,6 +759,15 @@ def test_meta_harness_compare_command_writes_reports(tmp_path: Path) -> None:
     )
     assert example_result.exit_code == 0, example_result.output
     comparison_dir = tmp_path / "comparison"
+    calls = 0
+    original = recipe_module.run_harness_study
+
+    def run_harness_study_spy(*args, **kwargs):
+        nonlocal calls
+        calls += 1
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(recipe_module, "run_harness_study", run_harness_study_spy)
 
     result = runner.invoke(
         app,
@@ -773,6 +794,7 @@ def test_meta_harness_compare_command_writes_reports(tmp_path: Path) -> None:
     data = json.loads(result.output)["data"]
     assert data["status"] == "complete"
     assert data["deltas"]["reward"] == 0.5
+    assert calls == 1
     assert (comparison_dir / "comparison.md").exists()
 
 

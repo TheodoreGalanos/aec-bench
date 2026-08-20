@@ -55,7 +55,9 @@ aec-bench meta-harness intake --task-file task.md
 aec-bench meta-harness intake-models --task-file task.md --models-config models.json
 ```
 
-Use world commands to create or revise the candidate world:
+Use the existing world-named CLI commands to create or revise the candidate
+problem model. This public command vocabulary is retained for current scripts;
+it does not refer to the interactive-world runtime.
 
 ```bash
 aec-bench meta-harness world-request --brief brief.json
