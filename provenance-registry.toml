@@ -20,6 +20,22 @@ to_prefix = "aec_bench.prime_lab.lifecycle_exporter.LegacyPrimeLifecyclePackageR
 from_prefix = "aec_bench.prime_lab.lifecycle_exporter.PrimeLifecycleSourceProvenance."
 to_prefix = "aec_bench.prime_lab.lifecycle_exporter.LegacyPrimeLifecycleSourceProvenance."
 
+[[legacy_relocation]]
+from_prefix = "mapping:aec_bench.harness.model_execution.model_runner.build_world_generation_model_run_plan."
+to_prefix = "mapping:aec_bench.harness.model_execution.model_runner.build_problem_model_generation_run_plan."
+
+[[legacy_relocation]]
+from_prefix = "mapping:aec_bench.harness.process_runtime.world_process.build_governance_review_packet."
+to_prefix = "mapping:aec_bench.harness.process_runtime.problem_model_process.build_governance_review_packet."
+
+[[legacy_relocation]]
+from_prefix = "mapping:aec_bench.harness.process_runtime.world_process.build_problem_brief_request."
+to_prefix = "mapping:aec_bench.harness.process_runtime.problem_model_process.build_problem_brief_request."
+
+[[legacy_relocation]]
+from_prefix = "mapping:aec_bench.harness.process_runtime.world_process.build_world_generation_request."
+to_prefix = "mapping:aec_bench.harness.process_runtime.problem_model_process.build_problem_model_generation_request."
+
 [[manifest]]
 contract = "aec-bench/actor-invocation-evidence/1"
 sink = "aec_bench.harness.world_actor.authority.ActorInvocationAuthority._append_evidence"
