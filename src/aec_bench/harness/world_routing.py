@@ -3,14 +3,9 @@
 
 from __future__ import annotations
 
-from functools import partial
 from pathlib import Path
 
 from aec_bench.contracts.trial_record import TrialRecord
-from aec_bench.harness.dam_seepage_trial import run_dam_seepage_trial
-from aec_bench.harness.prime_world_actor import run_prime_world_actor_session
-from aec_bench.harness.pump_station_harbor.trial import run_pump_station_harbor_trial
-from aec_bench.harness.pump_station_trial import run_pump_station_trial
 from aec_bench.trials import PlannedTrial
 from aec_bench.worlds.monitoring.dam_seepage.world import DAM_SEEPAGE_TASK_WORLD_ID
 from aec_bench.worlds.stewardship.wastewater_pump_station.episode_runtime import PUMP_STATION_TASK_WORLD_ID
@@ -19,6 +14,13 @@ from aec_bench.worlds.tasks import WorldTask
 
 async def run_selected_world(task: WorldTask, trial: PlannedTrial, *, work_root: Path) -> TrialRecord:
     """Run one supported built-in world and provider route."""
+
+    from functools import partial
+
+    from aec_bench.harness.dam_seepage_trial import run_dam_seepage_trial
+    from aec_bench.harness.prime_world_actor import run_prime_world_actor_session
+    from aec_bench.harness.pump_station_harbor.trial import run_pump_station_harbor_trial
+    from aec_bench.harness.pump_station_trial import run_pump_station_trial
 
     routes = {
         (DAM_SEEPAGE_TASK_WORLD_ID, "prime-agent"): partial(

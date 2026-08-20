@@ -300,7 +300,6 @@ def _execute_manifest(
     reviewer_config: ReviewerRunConfig | None = None,
 ) -> None:
     effective_reviewer_config = reviewer_config or reviewer_config_from_manifest(manifest.reviewer)
-    from aec_bench.cli.harbor_environment import HARBOR_RUN_BACKENDS, resolve_harbor_environment_binding
     from aec_bench.harness.scheduler import select_manifest_task_values
     from aec_bench.tasks.registry import TaskRegistry
     from aec_bench.trials import plan_trials
@@ -316,6 +315,8 @@ def _execute_manifest(
     )
 
     if not selected_tasks:
+        if any(agent.adapter != "prime-agent" for agent in manifest.agents):
+            require_optional_extra("Experiment execution support", "execution", ("harbor",))
         emit(
             "run",
             data=None,
@@ -342,17 +343,25 @@ def _execute_manifest(
     if world_tasks:
         validate_world_routes(world_tasks, world_trials)
     needs_harbor = bool(artifact_tasks) or any(trial.agent.adapter == "deepseek_harness" for trial in world_trials)
-    if needs_harbor and manifest.compute.backend not in HARBOR_RUN_BACKENDS:
-        supported = ", ".join(HARBOR_RUN_BACKENDS)
-        emit(
-            "run",
-            data=None,
-            errors=[
-                f"backend '{manifest.compute.backend}' is not supported by 'aec-bench run'; choose one of: {supported}"
-            ],
-            start_time=start,
-        )
-        return
+    morph = manifest.compute.backend == "morph"
+    if needs_harbor:
+        require_optional_extra("Experiment execution support", "execution", ("harbor",))
+
+    if needs_harbor:
+        from aec_bench.cli.harbor_environment import HARBOR_RUN_BACKENDS
+
+        if manifest.compute.backend not in HARBOR_RUN_BACKENDS:
+            supported = ", ".join(HARBOR_RUN_BACKENDS)
+            emit(
+                "run",
+                data=None,
+                errors=[
+                    f"backend '{manifest.compute.backend}' is not supported by 'aec-bench run'; "
+                    f"choose one of: {supported}"
+                ],
+                start_time=start,
+            )
+            return
 
     if dry_run:
         plan_data = {
@@ -392,17 +401,16 @@ def _execute_manifest(
         emit("run", plan_data, start_time=start, human_renderer=_render_dry_run)
         return
 
-    morph = manifest.compute.backend == "morph"
     modules: tuple[str, ...] = ()
     commands: tuple[str, ...] = ()
     extras: list[str] = []
-    if artifact_tasks or any(trial.agent.adapter == "deepseek_harness" for trial in world_trials):
-        modules = ("harbor", "morphcloud") if morph else ("harbor",)
-        extras.append("execution,morph" if morph else "execution")
+    if needs_harbor and morph:
+        modules = ("morphcloud",)
+        extras.append("execution,morph")
     if world_tasks and any(trial.agent.adapter == "prime-agent" for trial in world_trials):
-        modules = (*modules, "verifiers")
-        commands = (*commands, "prime")
-        extras.append("prime")
+        modules = (*modules, "acp")
+        commands = (*commands, "prime-agent")
+        extras.append("prime-agent")
     if effective_reviewer_config is not None and effective_reviewer_config.enabled:
         modules = (*modules, "pydantic_ai")
         extras.append("local-agents")
@@ -424,6 +432,8 @@ def _execute_manifest(
     records = []
     result = None
     if artifact_tasks:
+        from aec_bench.cli.harbor_environment import resolve_harbor_environment_binding
+
         runtime = HarborExperimentRuntime(
             workflow=SynchronousHarborWorkflow(
                 project_root=project_root,
