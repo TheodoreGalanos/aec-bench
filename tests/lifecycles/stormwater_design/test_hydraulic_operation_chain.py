@@ -13,8 +13,8 @@ from aec_bench.lifecycles.catalogue import materialize_lifecycle
 from aec_bench.lifecycles.runtime.lifecycle import (
     execute_lifecycle_operation,
     open_checkpoint_attempt,
-    prepare_evidence_checkpoint,
-    submit_evidence_checkpoint,
+    release_checkpoint,
+    submit_checkpoint,
 )
 from aec_bench.lifecycles.stormwater_design.hydraulics.package import (
     build_hydraulic_run_request,
@@ -63,7 +63,7 @@ def _prepare_baseline(tmp_path: Path, variant_id: str = "tailwater_revision") ->
         variant_id=variant_id,
     )
     run = tmp_path / "run"
-    prepare_evidence_checkpoint(package, run, operation_resolver=resolve_operation_runtime(package, run))
+    release_checkpoint(package, run, operation_resolver=resolve_operation_runtime(package, run))
     open_checkpoint_attempt(
         package,
         run,
@@ -143,8 +143,8 @@ def _advance_to_revision(package: Path, run: Path) -> None:
     path = run / "workspace" / "submissions" / "baseline_analysis.json"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(submission), encoding="utf-8")
-    submit_evidence_checkpoint(package, run, operation_resolver=resolve_operation_runtime(package, run))
-    prepare_evidence_checkpoint(package, run, operation_resolver=resolve_operation_runtime(package, run))
+    submit_checkpoint(package, run, operation_resolver=resolve_operation_runtime(package, run))
+    release_checkpoint(package, run, operation_resolver=resolve_operation_runtime(package, run))
     open_checkpoint_attempt(
         package,
         run,

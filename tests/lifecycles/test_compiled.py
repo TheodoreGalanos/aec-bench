@@ -19,7 +19,7 @@ from aec_bench.lifecycles.catalogue import (
     verify_lifecycle,
 )
 from aec_bench.lifecycles.compiled import CompiledLifecycleEnvelope, compile_lifecycle
-from aec_bench.lifecycles.runtime.lifecycle import run_evidence_lifecycle
+from aec_bench.lifecycles.runtime.lifecycle import run_lifecycle
 from tests.support.kernel_source_closure import internal_source_closure
 
 TEMPLATE_ID = "hydraulic-interaction-lifecycle-review"
@@ -166,7 +166,7 @@ def test_compiled_hydraulic_review_fixture_executes_and_verifies(tmp_path: Path)
     operation_resolver = lifecycle_operation_resolver(compiled.package_dir, tmp_path / "run")
     assert operation_resolver is not None
 
-    run_evidence_lifecycle(
+    run_lifecycle(
         compiled.package_dir,
         tmp_path / "run",
         operation_resolver=operation_resolver,

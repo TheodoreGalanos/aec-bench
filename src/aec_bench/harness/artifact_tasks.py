@@ -34,12 +34,12 @@ from aec_bench.harness.local_runtime import (
     stage_verifier_assets,
 )
 from aec_bench.harness.model_execution.llm_reviewer import ReviewerRunConfig, run_workspace_reviewer
-from aec_bench.harness.trial import PlannedTrial
 from aec_bench.harness.trial_record_builder import build_trial_record
 from aec_bench.ledger.writer import materialize_trial_record
 from aec_bench.tasks.instance import ResolvedTaskInstance
 from aec_bench.tasks.snapshot import build_task_snapshot_archive
 from aec_bench.trajectory.writer import TrajectoryWriter
+from aec_bench.trials import PlannedTrial
 
 AdapterBuilder = Callable[..., Adapter]
 _VERIFIER_RETRY_PROMPT = "verifier_retry_prompt.md"

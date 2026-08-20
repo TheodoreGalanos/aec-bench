@@ -20,36 +20,7 @@ aec-bench meta-harness example \
 
 This is deterministic and makes no model, Harbor, Morph, Modal, or cloud call.
 
-## 2. Evidence-lifecycle ablation
-
-After `aec-bench init`, copy the example from the installed `meta-harness`
-skill directory. Choose the command for your agent harness.
-
-For Codex:
-
-```bash
-cp .agents/skills/meta-harness/examples/lifecycle-ablation.yaml experiment.yaml
-```
-
-For Claude Code:
-
-```bash
-cp .claude/skills/meta-harness/examples/lifecycle-ablation.yaml experiment.yaml
-```
-
-Replace `replace-with-your-model`, review the output and ledger roots, then
-inspect the exact trial plan without writing runs or calling a model:
-
-```bash
-aec-bench meta-harness lifecycle-ablation \
-  --config experiment.yaml \
-  --dry-run
-```
-
-Remove `--dry-run` only after the manifest, budgets, provider configuration, and
-output paths have been reviewed.
-
-## 3. Fixed-K candidate search
+## 2. Fixed-K candidate search
 
 Use a strict, preregistered `HarnessProgramStudySpec` when comparing fixed and
 candidate harnesses under matched budgets:
@@ -65,7 +36,7 @@ uv run python -m aec_bench.experimentation.qualification.harness_program_study_c
 This runner uses real Harbor execution and requires the providers and backends
 declared by the spec. It has no implicit demo or mock execution mode.
 
-## 4. Repair-only and adaptive-cycle runs
+## 3. Repair-only and adaptive-cycle runs
 
 Run a preregistered paired repair:
 

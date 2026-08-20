@@ -34,15 +34,15 @@ from aec_bench.experimentation.lifecycle_studies.ablation_plan import (
     LifecycleAblationManifest,
     LifecycleAblationPlan,
 )
-from aec_bench.experimentation.lifecycle_studies.experiment import (
-    LifecycleExperimentManifest,
-    LifecycleExperimentMetrics,
-    lifecycle_experiment_metrics_payload,
-)
 from aec_bench.ledger.artifact_repository import ArtifactRepository
 from aec_bench.ledger.immutable_byte_store import ImmutableArtifactIntegrityError
 from aec_bench.ledger.reader import read_trial_record
 from aec_bench.lifecycles.catalogue import lifecycle_operation_resolver, lifecycle_package_variant
+from aec_bench.lifecycles.recording import (
+    LifecycleExperimentManifest,
+    LifecycleExperimentMetrics,
+    lifecycle_experiment_metrics_payload,
+)
 from aec_bench.lifecycles.runtime.episode import (
     LifecycleExecutionMode,
     LifecycleOperationCurrentSource,

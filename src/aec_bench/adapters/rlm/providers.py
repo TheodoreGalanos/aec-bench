@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import logging
 import os
-from collections.abc import Mapping
 from typing import Any, TypedDict
 
 from aec_bench.adapters.pydantic_ai_runtime import (
@@ -19,69 +18,15 @@ from aec_bench.adapters.rlm.client import (
     RlmMessage,
     ToolCall,
 )
+from aec_bench.model_routing import detect_provider as detect_provider
+from aec_bench.model_routing import resolve_pydantic_provider as resolve_pydantic_provider
 
 logger = logging.getLogger(__name__)
-
-# Bedrock model name prefixes (region-qualified and plain)
-_BEDROCK_PREFIXES = (
-    "anthropic.claude",
-    "au.anthropic.",
-    "us.anthropic.",
-    "eu.anthropic.",
-    "ap.anthropic.",
-    "amazon.",
-    "us.amazon.",
-    "meta.llama",
-    "us.meta.",
-    "mistral.",
-    "us.mistral.",
-    "cohere.",
-    "us.cohere.",
-    "ai21.",
-    "us.ai21.",
-)
-
-# Azure OpenAI model name prefixes
-_AZURE_PREFIXES = ("gpt-", "gpt4", "o1-", "o3-", "o4-")
-
-# Direct Anthropic model name prefixes
-_ANTHROPIC_PREFIXES = ("claude-",)
 
 # Together OpenAI-compatible model prefix
 _TOGETHER_PREFIX = "together:"
 _TOGETHER_BASE_URL = "https://api.together.ai/v1"
 _BEDROCK_EXPLICIT_PREFIX = "bedrock:"
-
-
-def detect_provider(model_name: str) -> str:
-    """Detect the provider from the model name string.
-
-    Returns one of: ``"bedrock"``, ``"azure"``, ``"anthropic"``,
-    ``"together"``, ``"auto"``.
-    """
-    lower = model_name.lower()
-    if lower.startswith(_BEDROCK_EXPLICIT_PREFIX):
-        return "bedrock"
-    if lower.startswith(_TOGETHER_PREFIX):
-        return "together"
-    if any(lower.startswith(p) for p in _BEDROCK_PREFIXES):
-        return "bedrock"
-    if any(lower.startswith(p) for p in _AZURE_PREFIXES):
-        return "azure"
-    if any(lower.startswith(p) for p in _ANTHROPIC_PREFIXES):
-        return "anthropic"
-    return "auto"
-
-
-def resolve_pydantic_provider(model_name: str, env: Mapping[str, str] | None = None) -> str:
-    """Resolve the PydanticAI provider, using Azure credentials for deployment names."""
-    source = env if env is not None else os.environ
-    provider = detect_provider(model_name)
-    if provider == "auto" and ":" in model_name:
-        return "auto"
-    if provider == "auto" and _has_azure_credentials(source):
-        return "azure"
-    return provider
 
 
 def preflight_pydantic_model_configuration(model_name: str) -> None:
@@ -160,10 +105,6 @@ def _new_botocore_session() -> Any:
     import botocore.session
 
     return botocore.session.Session()
-
-
-def _has_azure_credentials(env: Mapping[str, str]) -> bool:
-    return bool(env.get("AZURE_OPENAI_ENDPOINT", "") and env.get("AZURE_OPENAI_API_KEY", ""))
 
 
 def _is_azure_v1_endpoint(endpoint: str) -> bool:

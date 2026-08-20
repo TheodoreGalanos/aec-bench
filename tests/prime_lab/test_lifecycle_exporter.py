@@ -18,7 +18,7 @@ from typer.testing import CliRunner
 
 from aec_bench.cli.main import app
 from aec_bench.lifecycles.catalogue import lifecycle_operation_resolver, materialize_lifecycle
-from aec_bench.lifecycles.runtime.lifecycle import prepare_evidence_checkpoint
+from aec_bench.lifecycles.runtime.lifecycle import release_checkpoint
 from aec_bench.prime_lab.lifecycle_environment import load_local_lifecycle_environment
 from aec_bench.prime_lab.lifecycle_exporter import (
     LegacyPrimeLifecycleExportManifest,
@@ -431,7 +431,7 @@ def test_generated_lifecycle_rollout_executes_hydraulic_operation_with_public_sc
         variant_id="tailwater_revision",
     )
     identity_run = tmp_path / "identity-run"
-    prepare_evidence_checkpoint(
+    release_checkpoint(
         package,
         identity_run,
         operation_resolver=lifecycle_operation_resolver(package, identity_run),

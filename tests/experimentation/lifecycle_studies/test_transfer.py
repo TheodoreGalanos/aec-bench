@@ -12,7 +12,7 @@ from typing import Literal
 import pytest
 from pydantic import ValidationError
 
-import aec_bench.experimentation.lifecycle_studies.experiment as experiment_runtime
+import aec_bench.lifecycles.recording as experiment_runtime
 from aec_bench.contracts.authority_evidence import AuthorityEvidenceKind
 from aec_bench.contracts.evaluation_result import EvaluationResult, ValidityCheck
 from aec_bench.contracts.evidence_lifecycle import EvidenceCheckpointSpec, EvidenceLifecycleSpec
@@ -49,7 +49,6 @@ from aec_bench.experimentation.lifecycle_studies.ablation_plan import (
     LifecycleRuntimeProvenance,
     build_lifecycle_ablation_plan,
 )
-from aec_bench.experimentation.lifecycle_studies.experiment import LifecycleExperimentMetrics
 from aec_bench.experimentation.lifecycle_studies.transfer import (
     LifecycleTransferCondition,
     LifecycleTransferEvaluationSpec,
@@ -64,6 +63,7 @@ from aec_bench.lifecycles.catalogue import (
     lifecycle_package_variant,
     materialize_lifecycle,
 )
+from aec_bench.lifecycles.recording import LifecycleExperimentMetrics
 from aec_bench.lifecycles.runtime.episode import (
     LifecycleExecutionMode,
     LifecycleVisibilityPolicy,
@@ -71,8 +71,8 @@ from aec_bench.lifecycles.runtime.episode import (
 from aec_bench.lifecycles.runtime.lifecycle import (
     execute_lifecycle_operation,
     open_checkpoint_attempt,
-    prepare_evidence_checkpoint,
-    submit_evidence_checkpoint,
+    release_checkpoint,
+    submit_checkpoint,
 )
 from aec_bench.lifecycles.runtime.operation_protocol import (
     lifecycle_operation_protocol_identity,
@@ -1104,7 +1104,7 @@ def test_evidence_request_state_contract_rejects_unknown_checkpoint_id(tmp_path:
     run_dir = tmp_path / "run"
     operation_resolver = lifecycle_operation_resolver(package, run_dir)
     assert operation_resolver is not None
-    prepare_evidence_checkpoint(package, run_dir, operation_resolver=operation_resolver)
+    release_checkpoint(package, run_dir, operation_resolver=operation_resolver)
     state = EvidenceLifecycleRunState.model_validate_json((run_dir / "state.json").read_bytes())
     state.checkpoint_runs[0].checkpoint_id = "unknown-checkpoint"
     spec = EvidenceLifecycleSpec.model_validate_json((package / "lifecycle.json").read_bytes())
@@ -1852,7 +1852,7 @@ def _upgrade_to_operation_snapshot(
     operation_resolver = lifecycle_operation_resolver(package_root, run_root)
     assert operation_resolver is not None
     for checkpoint_number, checkpoint in enumerate(validated_spec.checkpoints, start=1):
-        prepare_evidence_checkpoint(package_root, run_root, operation_resolver=operation_resolver)
+        release_checkpoint(package_root, run_root, operation_resolver=operation_resolver)
         open_checkpoint_attempt(
             package_root,
             run_root,
@@ -1879,7 +1879,7 @@ def _upgrade_to_operation_snapshot(
         submission_path = run_root / "workspace" / checkpoint.submission_path
         submission_path.parent.mkdir(parents=True, exist_ok=True)
         submission_path.write_text(json.dumps(submission, sort_keys=True), encoding="utf-8")
-        submit_evidence_checkpoint(package_root, run_root, operation_resolver=operation_resolver)
+        submit_checkpoint(package_root, run_root, operation_resolver=operation_resolver)
 
     state_path = run_root / "state.json"
     state = json.loads(state_path.read_text(encoding="utf-8"))

@@ -34,9 +34,9 @@ from aec_bench.lifecycles.runtime.lifecycle import (
     LifecycleEpisodeExecutionError,
     execute_lifecycle_operation,
     open_checkpoint_attempt,
-    prepare_evidence_checkpoint,
-    run_evidence_lifecycle,
-    submit_evidence_checkpoint,
+    release_checkpoint,
+    run_lifecycle,
+    submit_checkpoint,
 )
 from tests.support.lifecycle_operations import resolve_operation_runtime
 
@@ -172,7 +172,7 @@ def test_current_episode_request_binds_and_persists_public_operation_state(tmp_p
         variant_id="tailwater_revision",
     )
     run_dir = tmp_path / "run"
-    prepare_evidence_checkpoint(package, run_dir, operation_resolver=resolve_operation_runtime(package, run_dir))
+    release_checkpoint(package, run_dir, operation_resolver=resolve_operation_runtime(package, run_dir))
     open_checkpoint_attempt(
         package,
         run_dir,
@@ -192,9 +192,7 @@ def test_current_episode_request_binds_and_persists_public_operation_state(tmp_p
         reason="Compute the declared design hydrology.",
         session_id="baseline.session-001",
     )
-    raw_context = prepare_evidence_checkpoint(
-        package, run_dir, operation_resolver=resolve_operation_runtime(package, run_dir)
-    )
+    raw_context = release_checkpoint(package, run_dir, operation_resolver=resolve_operation_runtime(package, run_dir))
     context = LifecycleEpisodeContext.from_runtime_context(
         raw_context,
         visibility_policy=LifecycleVisibilityPolicy.PERSISTENT_CONTEXT,
@@ -241,7 +239,7 @@ def test_current_closeout_binds_prior_operation_evidence_without_offering_operat
         variant_id="tailwater_revision",
     )
     run_dir = tmp_path / "run"
-    prepare_evidence_checkpoint(package, run_dir, operation_resolver=resolve_operation_runtime(package, run_dir))
+    release_checkpoint(package, run_dir, operation_resolver=resolve_operation_runtime(package, run_dir))
     open_checkpoint_attempt(
         package,
         run_dir,
@@ -271,8 +269,8 @@ def test_current_closeout_binds_prior_operation_evidence_without_offering_operat
             "claim_boundary": {},
         },
     )
-    submit_evidence_checkpoint(package, run_dir, operation_resolver=resolve_operation_runtime(package, run_dir))
-    prepare_evidence_checkpoint(package, run_dir, operation_resolver=resolve_operation_runtime(package, run_dir))
+    submit_checkpoint(package, run_dir, operation_resolver=resolve_operation_runtime(package, run_dir))
+    release_checkpoint(package, run_dir, operation_resolver=resolve_operation_runtime(package, run_dir))
     open_checkpoint_attempt(
         package,
         run_dir,
@@ -293,10 +291,8 @@ def test_current_closeout_binds_prior_operation_evidence_without_offering_operat
             "claim_boundary": {},
         },
     )
-    submit_evidence_checkpoint(package, run_dir, operation_resolver=resolve_operation_runtime(package, run_dir))
-    raw_context = prepare_evidence_checkpoint(
-        package, run_dir, operation_resolver=resolve_operation_runtime(package, run_dir)
-    )
+    submit_checkpoint(package, run_dir, operation_resolver=resolve_operation_runtime(package, run_dir))
+    raw_context = release_checkpoint(package, run_dir, operation_resolver=resolve_operation_runtime(package, run_dir))
     context = LifecycleEpisodeContext.from_runtime_context(
         raw_context,
         visibility_policy=LifecycleVisibilityPolicy.PERSISTENT_CONTEXT,
@@ -324,7 +320,7 @@ def test_runner_opens_host_identity_before_environment_execution(tmp_path: Path)
     run_dir = tmp_path / "run"
     environment = _RecordingEnvironment()
 
-    lifecycle = run_evidence_lifecycle(
+    lifecycle = run_lifecycle(
         package,
         run_dir,
         episode_environment=environment,
@@ -368,7 +364,7 @@ def test_host_request_preserves_session_identity_across_publication_interrupt(
 
     monkeypatch.setattr(lifecycle_runtime, "open_checkpoint_attempt", interrupt_after_publication)
     with pytest.raises(KeyboardInterrupt, match="simulated publication interruption"):
-        run_evidence_lifecycle(
+        run_lifecycle(
             package,
             run_dir,
             episode_environment=environment,
@@ -380,7 +376,7 @@ def test_host_request_preserves_session_identity_across_publication_interrupt(
     assert not (first_session / "episode_result.json").exists()
 
     monkeypatch.setattr(lifecycle_runtime, "open_checkpoint_attempt", original_open_attempt)
-    result = run_evidence_lifecycle(
+    result = run_lifecycle(
         package,
         run_dir,
         episode_environment=environment,
@@ -411,7 +407,7 @@ def test_retry_adopts_identical_request_left_before_attempt_publication(
 
     monkeypatch.setattr(lifecycle_runtime, "open_checkpoint_attempt", interrupt_before_publication)
     with pytest.raises(KeyboardInterrupt, match="simulated pre-publication interruption"):
-        run_evidence_lifecycle(
+        run_lifecycle(
             package,
             run_dir,
             episode_environment=environment,
@@ -423,7 +419,7 @@ def test_retry_adopts_identical_request_left_before_attempt_publication(
     assert state["checkpoint_runs"][0]["attempts"] == []
 
     monkeypatch.setattr(lifecycle_runtime, "open_checkpoint_attempt", original_open_attempt)
-    result = run_evidence_lifecycle(
+    result = run_lifecycle(
         package,
         run_dir,
         episode_environment=environment,
@@ -451,7 +447,7 @@ def test_recovery_rejects_tampered_active_attempt_request(
 
     monkeypatch.setattr(lifecycle_runtime, "open_checkpoint_attempt", interrupt_after_publication)
     with pytest.raises(KeyboardInterrupt, match="simulated publication interruption"):
-        run_evidence_lifecycle(
+        run_lifecycle(
             package,
             run_dir,
             episode_environment=environment,
@@ -465,7 +461,7 @@ def test_recovery_rejects_tampered_active_attempt_request(
     monkeypatch.setattr(lifecycle_runtime, "open_checkpoint_attempt", original_open_attempt)
 
     with pytest.raises(EvidenceLifecycleError, match="episode request hash mismatch"):
-        run_evidence_lifecycle(
+        run_lifecycle(
             package,
             run_dir,
             episode_environment=environment,
@@ -482,7 +478,7 @@ def test_environment_exception_fails_attempt_without_archiving_submission(tmp_pa
     run_dir = tmp_path / "run"
 
     with pytest.raises(RuntimeError, match="environment exploded"):
-        run_evidence_lifecycle(
+        run_lifecycle(
             package,
             run_dir,
             episode_environment=_CrashingEnvironment(),
@@ -507,7 +503,7 @@ def test_blank_environment_failure_kind_is_closed_as_environment_exception(tmp_p
     run_dir = tmp_path / "run"
 
     with pytest.raises(ValueError, match="failure_kind must not be blank"):
-        run_evidence_lifecycle(
+        run_lifecycle(
             package,
             run_dir,
             episode_environment=_BlankFailureKindEnvironment(),
@@ -524,7 +520,7 @@ def test_environment_cannot_prepopulate_host_owned_result_path(tmp_path: Path) -
     run_dir = tmp_path / "run"
 
     with pytest.raises(EvidenceLifecycleError, match="reserved artifacts"):
-        run_evidence_lifecycle(
+        run_lifecycle(
             package,
             run_dir,
             episode_environment=_PreparedHostResultEnvironment(),
@@ -545,7 +541,7 @@ def test_mismatched_result_identity_fails_closed_before_submission(tmp_path: Pat
     run_dir = tmp_path / "run"
 
     with pytest.raises(EvidenceLifecycleError, match="episode result identity does not match request"):
-        run_evidence_lifecycle(
+        run_lifecycle(
             package,
             run_dir,
             episode_environment=_MismatchedEnvironment(),
@@ -569,7 +565,7 @@ def test_returned_failed_result_closes_attempt_without_submission(tmp_path: Path
     run_dir = tmp_path / "run"
 
     with pytest.raises(LifecycleEpisodeExecutionError, match="provider_error"):
-        run_evidence_lifecycle(
+        run_lifecycle(
             package,
             run_dir,
             episode_environment=_FailedEnvironment(),
@@ -592,7 +588,7 @@ def test_failure_reconciliation_error_does_not_leave_host_attempt_active(tmp_pat
     run_dir = tmp_path / "run"
 
     with pytest.raises(LifecycleEpisodeExecutionError, match="provider_error") as raised:
-        run_evidence_lifecycle(
+        run_lifecycle(
             package,
             run_dir,
             episode_environment=_ReconciliationCrashingEnvironment(),
@@ -610,7 +606,7 @@ def test_completed_result_without_submission_fails_attempt(tmp_path: Path) -> No
     run_dir = tmp_path / "run"
 
     with pytest.raises(EvidenceLifecycleError, match="checkpoint submission not found"):
-        run_evidence_lifecycle(
+        run_lifecycle(
             package,
             run_dir,
             episode_environment=_NoSubmissionEnvironment(),
@@ -627,7 +623,7 @@ def test_unvalidated_result_payload_is_rejected_and_attempt_is_failed(tmp_path: 
     run_dir = tmp_path / "run"
 
     with pytest.raises(EvidenceLifecycleError, match="invalid episode result"):
-        run_evidence_lifecycle(
+        run_lifecycle(
             package,
             run_dir,
             episode_environment=cast(LifecycleEpisodeEnvironment, _InvalidResultEnvironment()),
@@ -651,7 +647,7 @@ def test_retry_cannot_submit_candidate_left_by_failed_attempt(tmp_path: Path) ->
     run_dir = tmp_path / "run"
 
     with pytest.raises(LifecycleEpisodeExecutionError, match="provider_error"):
-        run_evidence_lifecycle(
+        run_lifecycle(
             package,
             run_dir,
             episode_environment=_FailedAfterWritingEnvironment(),
@@ -664,7 +660,7 @@ def test_retry_cannot_submit_candidate_left_by_failed_attempt(tmp_path: Path) ->
     assert not (run_dir / "workspace" / "submissions" / "initial_review.json").exists()
 
     with pytest.raises(EvidenceLifecycleError, match="checkpoint submission not found"):
-        run_evidence_lifecycle(
+        run_lifecycle(
             package,
             run_dir,
             episode_environment=_NoSubmissionEnvironment(),

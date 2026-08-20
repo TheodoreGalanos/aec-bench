@@ -19,10 +19,10 @@ from pydantic import ValidationError
 
 import aec_bench.experimentation.lifecycle_studies.ablation as ablation_runtime
 import aec_bench.experimentation.lifecycle_studies.ablation_plan as ablation_plan_runtime
-import aec_bench.experimentation.lifecycle_studies.experiment as experiment_runtime
 import aec_bench.experimentation.lifecycle_studies.transfer as transfer_runtime
 import aec_bench.experimentation.lifecycle_studies.trial_record as trial_record_runtime
 import aec_bench.ledger.writer as ledger_writer
+import aec_bench.lifecycles.recording as experiment_runtime
 from aec_bench.contracts.artifacts import ArtifactRef
 from aec_bench.contracts.experiment_manifest import AgentConfig
 from aec_bench.contracts.task_definition import Visibility
@@ -48,10 +48,6 @@ from aec_bench.experimentation.lifecycle_studies.evaluation import (
     build_lifecycle_ablation_evaluation,
     write_lifecycle_ablation_evaluation,
 )
-from aec_bench.experimentation.lifecycle_studies.experiment import (
-    LifecycleExperimentSweepContext,
-    repository_provenance,
-)
 from aec_bench.experimentation.lifecycle_studies.transfer import (
     LifecycleTransferCondition,
     LifecycleTransferEvaluationSpec,
@@ -60,13 +56,13 @@ from aec_bench.experimentation.lifecycle_studies.transfer import (
     build_lifecycle_transfer_evaluation,
 )
 from aec_bench.experimentation.lifecycle_studies.trial_record import (
+    _persist_lifecycle_ablation_record,
     build_lifecycle_trial_record,
-    finalize_lifecycle_trial_record,
     validate_historical_lifecycle_ablation_record,
 )
 from aec_bench.harness.lifecycle_local import (
     LifecycleVisibilityPolicy,
-    run_local_evidence_lifecycle_fresh_context,
+    _run_local_lifecycle_fresh_session,
 )
 from aec_bench.ledger.reader import read_trial_record
 from aec_bench.ledger.writer import DuplicateTrialRecordError
@@ -75,11 +71,15 @@ from aec_bench.lifecycles.catalogue import (
     materialize_lifecycle,
     verify_lifecycle,
 )
+from aec_bench.lifecycles.recording import (
+    LifecycleExperimentSweepContext,
+    repository_provenance,
+)
 from aec_bench.lifecycles.runtime.lifecycle import (
     open_checkpoint_attempt,
-    prepare_evidence_checkpoint,
-    read_evidence_lifecycle_state,
-    submit_evidence_checkpoint,
+    read_lifecycle,
+    release_checkpoint,
+    submit_checkpoint,
 )
 
 TEMPLATE_ID = "drainage-model-evidence-lifecycle-review"
@@ -226,7 +226,7 @@ def test_lifecycle_ablation_plan_and_trial_ids_bind_code_provenance(
 
 
 def test_repository_provenance_uses_content_identity_outside_git(tmp_path: Path) -> None:
-    source = Path(inspect.getsourcefile(repository_provenance) or "").parents[2]
+    source = Path(inspect.getsourcefile(repository_provenance) or "").parents[1]
     installed = tmp_path / "site-packages" / "aec_bench"
     shutil.copytree(source, installed)
 
@@ -257,7 +257,7 @@ def test_repository_provenance_does_not_attribute_ignored_install_to_caller_git(
     subprocess.run(["git", "config", "user.name", "Test"], cwd=caller, check=True)
     subprocess.run(["git", "add", ".gitignore", "pyproject.toml"], cwd=caller, check=True)
     subprocess.run(["git", "commit", "-qm", "caller"], cwd=caller, check=True)
-    source = Path(inspect.getsourcefile(repository_provenance) or "").parents[2]
+    source = Path(inspect.getsourcefile(repository_provenance) or "").parents[1]
     installed = caller / ".venv" / "lib" / "site-packages" / "aec_bench"
     shutil.copytree(source, installed)
 
@@ -269,7 +269,7 @@ def test_repository_provenance_does_not_attribute_ignored_install_to_caller_git(
 
 
 def test_repository_provenance_binds_installed_dependency_metadata(tmp_path: Path) -> None:
-    source = Path(inspect.getsourcefile(repository_provenance) or "").parents[2]
+    source = Path(inspect.getsourcefile(repository_provenance) or "").parents[1]
     site_packages = tmp_path / "site-packages"
     shutil.copytree(source, site_packages / "aec_bench")
     metadata_dir = site_packages / "pydantic_ai-1.0.0.dist-info"
@@ -597,10 +597,10 @@ def test_build_lifecycle_trial_record_maps_validated_working_provenance(tmp_path
     assert len(canonical["verifier"]["chain"]) == 2
 
 
-def test_finalize_lifecycle_trial_record_snapshots_artifacts_and_writes_once(tmp_path: Path) -> None:
+def test__persist_lifecycle_ablation_record_snapshots_artifacts_and_writes_once(tmp_path: Path) -> None:
     manifest, trial, package, run_dir = _recorded_trial(tmp_path)
 
-    record_path = finalize_lifecycle_trial_record(
+    record_path = _persist_lifecycle_ablation_record(
         manifest=manifest,
         trial=trial,
         package_dir=package,
@@ -628,7 +628,7 @@ def test_finalize_lifecycle_trial_record_snapshots_artifacts_and_writes_once(tmp
         assert (artifact_root / artifact.artifact.artifact_id).is_file()
 
     with pytest.raises(DuplicateTrialRecordError):
-        finalize_lifecycle_trial_record(
+        _persist_lifecycle_ablation_record(
             manifest=manifest,
             trial=trial,
             package_dir=package,
@@ -670,7 +670,7 @@ def test_conditional_evidence_transactions_are_declared_and_snapshot_validated(
             trial_record_runtime._validate_snapshotted_lifecycle_state(package, run_dir)
         unexpected.unlink()
 
-    record_path = finalize_lifecycle_trial_record(
+    record_path = _persist_lifecycle_ablation_record(
         manifest=manifest,
         trial=trial,
         package_dir=package,
@@ -737,7 +737,7 @@ def test_historical_lifecycle_record_without_visibility_still_validates_but_is_n
     tmp_path: Path,
 ) -> None:
     manifest, trial, package, run_dir = _recorded_trial(tmp_path)
-    record_path = finalize_lifecycle_trial_record(
+    record_path = _persist_lifecycle_ablation_record(
         manifest=manifest,
         trial=trial,
         package_dir=package,
@@ -794,9 +794,9 @@ def test_historical_lifecycle_record_without_visibility_still_validates_but_is_n
     assert "snapshot_record_mismatch" not in summary.calibration_results[0].reasons
 
 
-def test_finalize_lifecycle_trial_record_recovers_snapshot_left_before_record_write(tmp_path: Path) -> None:
+def test__persist_lifecycle_ablation_record_recovers_snapshot_left_before_record_write(tmp_path: Path) -> None:
     manifest, trial, package, run_dir = _recorded_trial(tmp_path)
-    record_path = finalize_lifecycle_trial_record(
+    record_path = _persist_lifecycle_ablation_record(
         manifest=manifest,
         trial=trial,
         package_dir=package,
@@ -811,7 +811,7 @@ def test_finalize_lifecycle_trial_record_recovers_snapshot_left_before_record_wr
     }
     record_path.unlink()
 
-    recovered = finalize_lifecycle_trial_record(
+    recovered = _persist_lifecycle_ablation_record(
         manifest=manifest,
         trial=trial,
         package_dir=package,
@@ -829,7 +829,7 @@ def test_run_lifecycle_ablation_snapshot_recovery_ignores_later_mutable_state_co
     tmp_path: Path,
 ) -> None:
     manifest, trial, package, run_dir = _recorded_trial(tmp_path)
-    record_path = finalize_lifecycle_trial_record(
+    record_path = _persist_lifecycle_ablation_record(
         manifest=manifest,
         trial=trial,
         package_dir=package,
@@ -871,7 +871,7 @@ def test_lifecycle_ablation_inspection_ignores_malformed_mutable_contract_for_co
     assert Path(result.record_paths[0]).is_file()
 
 
-def test_finalize_lifecycle_trial_record_recovers_after_atomic_record_publish_failure(
+def test__persist_lifecycle_ablation_record_recovers_after_atomic_record_publish_failure(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -884,7 +884,7 @@ def test_finalize_lifecycle_trial_record_recovers_after_atomic_record_publish_fa
     with monkeypatch.context() as patch:
         patch.setattr(ledger_writer, "_write_record_temp", interrupted_temp_write)
         with pytest.raises(OSError, match="simulated power loss"):
-            finalize_lifecycle_trial_record(
+            _persist_lifecycle_ablation_record(
                 manifest=manifest,
                 trial=trial,
                 package_dir=package,
@@ -897,7 +897,7 @@ def test_finalize_lifecycle_trial_record_recovers_after_atomic_record_publish_fa
     assert artifact_dir.is_dir()
     assert not list(record_path.parent.glob(f".{record_path.name}.*.tmp"))
 
-    recovered = finalize_lifecycle_trial_record(
+    recovered = _persist_lifecycle_ablation_record(
         manifest=manifest,
         trial=trial,
         package_dir=package,
@@ -908,7 +908,7 @@ def test_finalize_lifecycle_trial_record_recovers_after_atomic_record_publish_fa
     read_trial_record(recovered, ledger_root=Path(manifest.ledger_root))
 
 
-def test_finalize_lifecycle_trial_record_rejects_declared_session_artifact_tamper(tmp_path: Path) -> None:
+def test__persist_lifecycle_ablation_record_rejects_declared_session_artifact_tamper(tmp_path: Path) -> None:
     manifest, trial, package, run_dir = _recorded_trial(tmp_path)
     agent_result_path = next(run_dir.glob("**/agent_result.json"))
     agent_result = json.loads(agent_result_path.read_text(encoding="utf-8"))
@@ -916,7 +916,7 @@ def test_finalize_lifecycle_trial_record_rejects_declared_session_artifact_tampe
     agent_result_path.write_text(json.dumps(agent_result), encoding="utf-8")
 
     with pytest.raises(ValueError, match="run artifact hash does not match canonical manifest"):
-        finalize_lifecycle_trial_record(
+        _persist_lifecycle_ablation_record(
             manifest=manifest,
             trial=trial,
             package_dir=package,
@@ -924,7 +924,7 @@ def test_finalize_lifecycle_trial_record_rejects_declared_session_artifact_tampe
         )
 
 
-def test_finalize_lifecycle_trial_record_uses_canonical_manifest_not_mutable_alias(tmp_path: Path) -> None:
+def test__persist_lifecycle_ablation_record_uses_canonical_manifest_not_mutable_alias(tmp_path: Path) -> None:
     manifest, trial, package, run_dir = _recorded_trial(tmp_path)
     mutable_path = run_dir / "experiment-manifest.json"
     mutable = json.loads(mutable_path.read_text(encoding="utf-8"))
@@ -933,7 +933,7 @@ def test_finalize_lifecycle_trial_record_uses_canonical_manifest_not_mutable_ali
     canonical_path = next((run_dir / "experiments").glob("*/experiment-manifest.json"))
     canonical = json.loads(canonical_path.read_text(encoding="utf-8"))
 
-    record_path = finalize_lifecycle_trial_record(
+    record_path = _persist_lifecycle_ablation_record(
         manifest=manifest,
         trial=trial,
         package_dir=package,
@@ -948,7 +948,7 @@ def test_finalize_lifecycle_trial_record_uses_canonical_manifest_not_mutable_ali
 
 def test_finalized_trial_contains_no_mutable_working_run_references(tmp_path: Path) -> None:
     manifest, trial, package, run_dir = _recorded_trial(tmp_path)
-    record_path = finalize_lifecycle_trial_record(
+    record_path = _persist_lifecycle_ablation_record(
         manifest=manifest,
         trial=trial,
         package_dir=package,
@@ -1271,7 +1271,7 @@ def test_concurrent_finalization_repairs_shared_index_without_lost_entries(tmp_p
             variant_id=trial.variant_id,
         )
         run_dir = Path(trial.run_dir)
-        run_local_evidence_lifecycle_fresh_context(
+        _run_local_lifecycle_fresh_session(
             package_dir=package,
             run_dir=run_dir,
             model=trial.agent.model,
@@ -1297,7 +1297,7 @@ def test_concurrent_finalization_repairs_shared_index_without_lost_entries(tmp_p
 
     def finalize(item: tuple[LifecycleAblationTrial, Path, Path]) -> Path:
         trial, package, run_dir = item
-        return finalize_lifecycle_trial_record(
+        return _persist_lifecycle_ablation_record(
             manifest=manifest,
             trial=trial,
             package_dir=package,
@@ -1323,12 +1323,12 @@ def test_run_lifecycle_ablation_rejects_submitted_checkpoint_without_attempt_own
         variant_id=trial.variant_id,
     )
     run_dir = Path(trial.run_dir)
-    prepared = prepare_evidence_checkpoint(package, run_dir)
+    prepared = release_checkpoint(package, run_dir)
     gold = json.loads((package / "hidden" / "gold-submissions.json").read_text(encoding="utf-8"))
     submission = Path(prepared["submission_path"])
     submission.parent.mkdir(parents=True, exist_ok=True)
     submission.write_text(json.dumps(gold["initial_review"]), encoding="utf-8")
-    submit_evidence_checkpoint(package, run_dir)
+    submit_checkpoint(package, run_dir)
 
     inspection = inspect_lifecycle_ablation_plan(manifest)
     assert inspection["trial_statuses"][0]["status"] == "conflict"
@@ -1505,7 +1505,7 @@ def test_run_lifecycle_ablation_rejects_attempt_mode_outside_planned_condition(
         variant_id=trial.variant_id,
     )
     run_dir = Path(trial.run_dir)
-    context = prepare_evidence_checkpoint(package, run_dir)
+    context = release_checkpoint(package, run_dir)
     open_checkpoint_attempt(
         package,
         run_dir,
@@ -1516,7 +1516,7 @@ def test_run_lifecycle_ablation_rejects_attempt_mode_outside_planned_condition(
     submission = Path(context["submission_path"])
     submission.parent.mkdir(parents=True, exist_ok=True)
     submission.write_text(json.dumps(gold["initial_review"]), encoding="utf-8")
-    submit_evidence_checkpoint(package, run_dir)
+    submit_checkpoint(package, run_dir)
 
     inspection = inspect_lifecycle_ablation_plan(manifest)
     assert inspection["trial_statuses"][0]["status"] == "conflict"
@@ -1544,7 +1544,7 @@ def test_run_lifecycle_ablation_rejects_fresh_session_shared_across_checkpoints(
     session_id = "shared.session-001"
     gold = json.loads((package / "hidden" / "gold-submissions.json").read_text(encoding="utf-8"))
     for expected_checkpoint in ("initial_review", "response_review"):
-        context = prepare_evidence_checkpoint(package, run_dir)
+        context = release_checkpoint(package, run_dir)
         assert context["checkpoint_id"] == expected_checkpoint
         open_checkpoint_attempt(
             package,
@@ -1555,7 +1555,7 @@ def test_run_lifecycle_ablation_rejects_fresh_session_shared_across_checkpoints(
         submission = Path(context["submission_path"])
         submission.parent.mkdir(parents=True, exist_ok=True)
         submission.write_text(json.dumps(gold[expected_checkpoint]), encoding="utf-8")
-        submit_evidence_checkpoint(package, run_dir)
+        submit_checkpoint(package, run_dir)
 
     inspection = inspect_lifecycle_ablation_plan(manifest)
     assert inspection["trial_statuses"][0]["status"] == "conflict"
@@ -1599,7 +1599,7 @@ def test_run_lifecycle_ablation_resumes_matching_unfinalized_runtime_state(tmp_p
         Path(trial.package_dir),
         variant_id=trial.variant_id,
     )
-    prepared = prepare_evidence_checkpoint(package, Path(trial.run_dir))
+    prepared = release_checkpoint(package, Path(trial.run_dir))
     assert prepared["checkpoint_id"] == "initial_review"
     assert inspect_lifecycle_ablation_plan(manifest)["trial_statuses"][0]["status"] == "resumable"
 
@@ -1611,7 +1611,7 @@ def test_run_lifecycle_ablation_resumes_matching_unfinalized_runtime_state(tmp_p
     assert result.executed_trials == 1
     assert result.imported_orphans == 0
     assert inspect_lifecycle_ablation_plan(manifest)["trial_statuses"][0]["status"] == "complete"
-    state = read_evidence_lifecycle_state(package, Path(trial.run_dir))
+    state = read_lifecycle(package, Path(trial.run_dir))
     assert state["status"] == "complete"
 
 
@@ -1624,7 +1624,7 @@ def test_run_lifecycle_ablation_seals_interrupted_attempt_before_resume(tmp_path
         variant_id=trial.variant_id,
     )
     run_dir = Path(trial.run_dir)
-    prepared = prepare_evidence_checkpoint(package, run_dir)
+    prepared = release_checkpoint(package, run_dir)
     assert prepared["checkpoint_id"] == "initial_review"
     interrupted_session = "initial_review.session-001"
     open_checkpoint_attempt(
@@ -1673,7 +1673,7 @@ def test_run_lifecycle_ablation_seals_interrupted_persistent_session_before_resu
         variant_id=trial.variant_id,
     )
     run_dir = Path(trial.run_dir)
-    prepare_evidence_checkpoint(package, run_dir)
+    release_checkpoint(package, run_dir)
     open_checkpoint_attempt(
         package,
         run_dir,
@@ -2190,7 +2190,7 @@ def _recorded_trial(
         variant_id=trial.variant_id,
     )
     run_dir = Path(trial.run_dir)
-    run_local_evidence_lifecycle_fresh_context(
+    _run_local_lifecycle_fresh_session(
         package_dir=package,
         run_dir=run_dir,
         model=trial.agent.model,
@@ -2250,7 +2250,7 @@ def _conditional_recorded_trial(
         variant_id=trial.variant_id,
     )
     run_dir = Path(trial.run_dir)
-    run_local_evidence_lifecycle_fresh_context(
+    _run_local_lifecycle_fresh_session(
         package_dir=package,
         run_dir=run_dir,
         model=trial.agent.model,
@@ -2371,7 +2371,7 @@ def _terminal_persistent_state(
     (session_dir / "trajectory.jsonl").write_text("", encoding="utf-8")
     gold = json.loads((package / "hidden" / "gold-submissions.json").read_text(encoding="utf-8"))
     while True:
-        context = prepare_evidence_checkpoint(package, run_dir)
+        context = release_checkpoint(package, run_dir)
         if context["status"] == "complete":
             break
         checkpoint_id = context["checkpoint_id"]
@@ -2384,7 +2384,7 @@ def _terminal_persistent_state(
         submission = Path(context["submission_path"])
         submission.parent.mkdir(parents=True, exist_ok=True)
         submission.write_text(json.dumps(gold[checkpoint_id]), encoding="utf-8")
-        submit_evidence_checkpoint(package, run_dir)
+        submit_checkpoint(package, run_dir)
     return trial, package, run_dir, session_id
 
 
@@ -2584,7 +2584,7 @@ class _GoldPersistentRegistry:
         class _GoldPersistentAdapter:
             def execute(self, _request: object) -> object:
                 while True:
-                    state = read_evidence_lifecycle_state(registry.package, registry.run_dir)
+                    state = read_lifecycle(registry.package, registry.run_dir)
                     checkpoint_id = state["active_checkpoint_id"]
                     if checkpoint_id is None:
                         break

@@ -14,20 +14,20 @@ from typing import Any, cast
 
 from aec_bench.contracts.artifacts import ArtifactRef
 from aec_bench.contracts.provider_provenance import ProviderAdapterIdentity
-from aec_bench.experimentation.lifecycle_studies.experiment import repository_provenance
 from aec_bench.harness.lifecycle_local import (
     EvidenceLifecycleControlTool,
     EvidenceLifecycleWorkspaceTool,
 )
 from aec_bench.lifecycles.catalogue import lifecycle_operation_resolver, lifecycle_package_variant, verify_lifecycle
+from aec_bench.lifecycles.recording import repository_provenance
 from aec_bench.lifecycles.runtime.episode import LifecycleVisibilityPolicy
 from aec_bench.lifecycles.runtime.lifecycle import (
     evidence_lifecycle_package_identity,
     fail_checkpoint_attempt,
     load_evidence_lifecycle_spec,
     open_checkpoint_attempt,
-    prepare_evidence_checkpoint,
-    read_evidence_lifecycle_state,
+    read_lifecycle,
+    release_checkpoint,
 )
 from aec_bench.lifecycles.runtime.operation_protocol import CURRENT_SOURCE_WORKSPACE_PATH
 from aec_bench.lifecycles.runtime.state import CheckpointAttemptStatus
@@ -195,7 +195,7 @@ async def aec_bench_lifecycle_reward(state: dict[str, Any]) -> float:
         _assert_source_provenance(source)
     _assert_package_identity(record)
     operation_resolver = lifecycle_operation_resolver(package_dir, run_dir)
-    lifecycle = read_evidence_lifecycle_state(
+    lifecycle = read_lifecycle(
         package_dir,
         run_dir,
         operation_resolver=operation_resolver,
@@ -300,7 +300,7 @@ def _build_environment_type(
             package_dir = Path(record.package_dir)
             operation_resolver = lifecycle_operation_resolver(package_dir, run_dir)
             try:
-                initial = prepare_evidence_checkpoint(
+                initial = release_checkpoint(
                     package_dir,
                     run_dir,
                     operation_resolver=operation_resolver,

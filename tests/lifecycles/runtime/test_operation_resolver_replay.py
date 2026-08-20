@@ -19,8 +19,8 @@ from aec_bench.lifecycles.runtime.lifecycle import (
     execute_lifecycle_operation,
     load_evidence_lifecycle_spec,
     open_checkpoint_attempt,
-    prepare_evidence_checkpoint,
-    submit_evidence_checkpoint,
+    release_checkpoint,
+    submit_checkpoint,
 )
 from aec_bench.lifecycles.runtime.operation_protocol import (
     lifecycle_operation_state_sha256,
@@ -88,7 +88,7 @@ def _prepare(tmp_path: Path, *, variant_id: str) -> tuple[Path, Path]:
         variant_id=variant_id,
     )
     run = tmp_path / "run"
-    prepare_evidence_checkpoint(package, run, operation_resolver=resolve_operation_runtime(package, run))
+    release_checkpoint(package, run, operation_resolver=resolve_operation_runtime(package, run))
     open_checkpoint_attempt(
         package,
         run,
@@ -111,8 +111,8 @@ def _advance_to_revision(package: Path, run: Path) -> None:
     path = run / "workspace" / "submissions" / "baseline_analysis.json"
     path.parent.mkdir(parents=True, exist_ok=True)
     _write_json(path, submission)
-    submit_evidence_checkpoint(package, run, operation_resolver=resolve_operation_runtime(package, run))
-    prepare_evidence_checkpoint(package, run, operation_resolver=resolve_operation_runtime(package, run))
+    submit_checkpoint(package, run, operation_resolver=resolve_operation_runtime(package, run))
+    release_checkpoint(package, run, operation_resolver=resolve_operation_runtime(package, run))
     open_checkpoint_attempt(
         package,
         run,

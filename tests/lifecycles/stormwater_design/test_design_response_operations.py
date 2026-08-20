@@ -14,9 +14,9 @@ from aec_bench.lifecycles.catalogue import materialize_lifecycle
 from aec_bench.lifecycles.runtime.lifecycle import (
     execute_lifecycle_operation,
     open_checkpoint_attempt,
-    prepare_evidence_checkpoint,
-    read_evidence_lifecycle_state,
-    submit_evidence_checkpoint,
+    read_lifecycle,
+    release_checkpoint,
+    submit_checkpoint,
 )
 from aec_bench.lifecycles.runtime.request_protocol import EvidenceLifecycleError
 from aec_bench.lifecycles.stormwater_design.design_response import TEMPLATE_ID
@@ -85,7 +85,7 @@ def _execute_scenario_chains(
 
 
 def _archive_problem_analysis(package: Path, run: Path) -> dict[str, dict[str, Any]]:
-    context = prepare_evidence_checkpoint(package, run, operation_resolver=resolve_operation_runtime(package, run))
+    context = release_checkpoint(package, run, operation_resolver=resolve_operation_runtime(package, run))
     assert context["checkpoint_id"] == "problem_analysis"
     session_id = "problem.session-001"
     open_checkpoint_attempt(
@@ -112,12 +112,12 @@ def _archive_problem_analysis(package: Path, run: Path) -> dict[str, dict[str, A
             "claim_boundary": {},
         },
     )
-    submit_evidence_checkpoint(package, run, operation_resolver=resolve_operation_runtime(package, run))
+    submit_checkpoint(package, run, operation_resolver=resolve_operation_runtime(package, run))
     return actions
 
 
 def _archive_selection(package: Path, run: Path, intervention_id: str) -> str:
-    context = prepare_evidence_checkpoint(package, run, operation_resolver=resolve_operation_runtime(package, run))
+    context = release_checkpoint(package, run, operation_resolver=resolve_operation_runtime(package, run))
     assert context["checkpoint_id"] == "intervention_selection"
     submission = run / "workspace" / "submissions" / "intervention_selection.json"
     _write_json(
@@ -130,7 +130,7 @@ def _archive_selection(package: Path, run: Path, intervention_id: str) -> str:
             "claim_boundary": {},
         },
     )
-    submit_evidence_checkpoint(package, run, operation_resolver=resolve_operation_runtime(package, run))
+    submit_checkpoint(package, run, operation_resolver=resolve_operation_runtime(package, run))
     archived = run / "episodes" / "intervention_selection" / "submission.json"
     return hashlib.sha256(archived.read_bytes()).hexdigest()
 
@@ -147,7 +147,7 @@ def test_archived_selection_controls_source_and_selective_recomputation(
     run = tmp_path / "run"
     problem_actions = _archive_problem_analysis(package, run)
     selection_sha256 = _archive_selection(package, run, intervention_id)
-    context = prepare_evidence_checkpoint(package, run, operation_resolver=resolve_operation_runtime(package, run))
+    context = release_checkpoint(package, run, operation_resolver=resolve_operation_runtime(package, run))
     assert context["checkpoint_id"] == "intervention_analysis"
     problem_source_sha256 = str(
         _read_json(run / "workspace" / "operations" / "current-source.json")["physical_source_state_sha256"]
@@ -215,7 +215,7 @@ def test_undeclared_archived_selection_fails_before_intervention_release(tmp_pat
     _archive_selection(package, run, "invented_outlet_option")
 
     with pytest.raises(EvidenceLifecycleError, match="selection is not declared"):
-        prepare_evidence_checkpoint(package, run, operation_resolver=resolve_operation_runtime(package, run))
+        release_checkpoint(package, run, operation_resolver=resolve_operation_runtime(package, run))
 
 
 def test_archived_selection_cannot_be_changed_after_submission(tmp_path: Path) -> None:
@@ -229,7 +229,7 @@ def test_archived_selection_cannot_be_changed_after_submission(tmp_path: Path) -
     _write_json(archived, payload)
 
     with pytest.raises(EvidenceLifecycleError, match="archived checkpoint submission changed"):
-        prepare_evidence_checkpoint(package, run, operation_resolver=resolve_operation_runtime(package, run))
+        release_checkpoint(package, run, operation_resolver=resolve_operation_runtime(package, run))
 
 
 def test_selection_tampering_after_checkpoint_release_cannot_activate_an_option(tmp_path: Path) -> None:
@@ -237,7 +237,7 @@ def test_selection_tampering_after_checkpoint_release_cannot_activate_an_option(
     run = tmp_path / "run"
     _archive_problem_analysis(package, run)
     _archive_selection(package, run, "controlled_orifice_resize")
-    context = prepare_evidence_checkpoint(package, run, operation_resolver=resolve_operation_runtime(package, run))
+    context = release_checkpoint(package, run, operation_resolver=resolve_operation_runtime(package, run))
     assert context["checkpoint_id"] == "intervention_analysis"
     session_id = "intervention.session-001"
     open_checkpoint_attempt(
@@ -263,7 +263,7 @@ def test_selection_tampering_after_checkpoint_release_cannot_activate_an_option(
         )
 
     archived.write_bytes(original)
-    state = read_evidence_lifecycle_state(package, run, operation_resolver=resolve_operation_runtime(package, run))
+    state = read_lifecycle(package, run, operation_resolver=resolve_operation_runtime(package, run))
     checkpoint = next(item for item in state["checkpoint_runs"] if item["checkpoint_id"] == "intervention_analysis")
     assert checkpoint["operation_actions"] == []
     assert checkpoint["operation_budget_remaining"] == 7

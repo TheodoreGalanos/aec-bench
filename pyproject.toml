@@ -114,6 +114,7 @@ exclude = [
 ]
 artifacts = [
     "/src/aec_bench/adapters/deepseek_harness/plugin/dist/**",
+    "/src/aec_bench/init/skill_data/**/*.yaml",
     "/src/aec_bench/web/frontend/dist/**",
 ]
 
@@ -130,6 +131,7 @@ exclude = [
 artifacts = [
     "/src/aec_bench/adapters/deepseek_harness/plugin/dist/**",
     "/src/aec_bench/harness/pump_station_prime/skills/**",
+    "/src/aec_bench/init/skill_data/**/*.yaml",
     "/src/aec_bench/web/frontend/dist/**",
 ]
 

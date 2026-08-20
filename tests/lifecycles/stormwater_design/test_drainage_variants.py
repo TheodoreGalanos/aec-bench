@@ -11,9 +11,9 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from aec_bench.experimentation.lifecycle_studies.experiment import record_lifecycle_experiment
 from aec_bench.lifecycles.catalogue import lifecycle_package_variant, materialize_lifecycle
-from aec_bench.lifecycles.runtime.lifecycle import EvidenceLifecycleError, run_evidence_lifecycle
+from aec_bench.lifecycles.recording import record_lifecycle_experiment
+from aec_bench.lifecycles.runtime.lifecycle import EvidenceLifecycleError, run_lifecycle
 from aec_bench.lifecycles.stormwater_design.drainage_model import verify_drainage_model_lifecycle
 from aec_bench.lifecycles.stormwater_design.drainage_variants import (
     DEFAULT_DRAINAGE_LIFECYCLE_VARIANT_ID,
@@ -497,7 +497,7 @@ def _run_gold(package: Path, run_dir: Path) -> Path:
         _write_json(Path(context["submission_path"]), gold[context["checkpoint_id"]])
         return {"status": "completed"}
 
-    run_evidence_lifecycle(
+    run_lifecycle(
         package,
         run_dir,
         episode_environment=deterministic_episode_environment(resolve),

@@ -170,6 +170,14 @@ An adapter mismatch, unresolved provider identity, incomplete checkpoint,
 missing artifact, or identity drift makes the trial failed or partial. It is not
 evidence for the requested condition.
 
+The public application operations call the same coordinator directly:
+`release_checkpoint()`, `submit_checkpoint()`, `read_lifecycle()`,
+`revisit_checkpoint()`, `branch_lifecycle()`, and `run_lifecycle()`.
+`revisit_checkpoint()` is read-only. `run_lifecycle()` resumes from canonical
+state. It does not accept a start-point override. A branch copies the accepted
+prefix through one submitted checkpoint into a new run and then uses normal
+progression.
+
 ## Calibration and selection
 
 A selectable public calibration run preregisters its variant set, repetitions,
@@ -208,13 +216,17 @@ Authoritative implementations include:
 
 - [`EvidenceCheckpointSpec` and `ConditionalEvidenceSpec`](../../src/aec_bench/contracts/evidence_lifecycle.py)
 - [lifecycle coordination and recovery](../../src/aec_bench/lifecycles/runtime/lifecycle.py)
+- [functional lifecycle application](../../src/aec_bench/lifecycles/application.py)
+- [local fresh and persistent execution](../../src/aec_bench/harness/lifecycle_local.py)
+- [normal lifecycle trial construction](../../src/aec_bench/lifecycles/trial_record.py)
+- [lifecycle invocation recording](../../src/aec_bench/lifecycles/recording.py)
 - [episode request/result boundary](../../src/aec_bench/lifecycles/runtime/episode.py)
 - [structural facade submittal lifecycle](../../src/aec_bench/lifecycles/structural_review/facade_submittal.py)
 - [hydraulic-review Prime endpoint](../../src/aec_bench/harness/hydraulic_review_prime/endpoint.py)
 - [hydraulic-review Prime lifecycle composition](../../src/aec_bench/harness/hydraulic_review_prime/lifecycle.py)
 - [conditional-evidence publication](../../src/aec_bench/lifecycles/runtime/request_store.py)
 - [calibration freeze](../../src/aec_bench/experimentation/lifecycle_studies/calibration.py)
-- [lifecycle trial finalization](../../src/aec_bench/experimentation/lifecycle_studies/trial_record.py)
+- [ablation snapshot and finalization policy](../../src/aec_bench/experimentation/lifecycle_studies/trial_record.py)
 
 Focused proof includes:
 
@@ -222,6 +234,7 @@ Focused proof includes:
 - [structural facade lifecycle behaviour](../../tests/lifecycles/structural_review/test_facade_submittal.py)
 - [lifecycle state, publication, request, retry, branch, and recovery tests](../../tests/lifecycles/runtime/test_lifecycle.py)
 - [episode boundary and attempt-recovery tests](../../tests/lifecycles/runtime/test_episode.py)
+- [functional lifecycle trial and experiment tests](../../tests/lifecycles/test_application.py)
 - [hydraulic-review Prime endpoint and lifecycle tests](../../tests/harness/hydraulic_review_prime/)
 - [calibration and freeze tests](../../tests/experimentation/lifecycle_studies/test_calibration.py)
 - [trial-record completeness and visibility tests](../../tests/contracts/test_trial_record.py)

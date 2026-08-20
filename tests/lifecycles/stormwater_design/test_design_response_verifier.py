@@ -15,7 +15,7 @@ from aec_bench.lifecycles.catalogue import (
     materialize_lifecycle,
     verify_lifecycle,
 )
-from aec_bench.lifecycles.runtime.lifecycle import read_evidence_lifecycle_state, run_evidence_lifecycle
+from aec_bench.lifecycles.runtime.lifecycle import read_lifecycle, run_lifecycle
 from aec_bench.lifecycles.stormwater_design.design_response import TEMPLATE_ID
 from aec_bench.lifecycles.stormwater_design.design_response_smoke import (
     build_hydraulic_design_response_smoke_environment,
@@ -71,7 +71,7 @@ def _run_policy(tmp_path: Path, intervention_id: str) -> tuple[Path, Path, dict[
         selected_intervention_id=intervention_id,
     )
 
-    lifecycle = run_evidence_lifecycle(
+    lifecycle = run_lifecycle(
         package, run, operation_resolver=resolve_operation_runtime(package, run), episode_environment=environment
     )
     verification = verify_lifecycle(package, run)
@@ -83,7 +83,7 @@ def _run_policy(tmp_path: Path, intervention_id: str) -> tuple[Path, Path, dict[
 def test_feasible_intervention_completes_the_real_lifecycle(tmp_path: Path) -> None:
     _package, run, result = _run_policy(tmp_path, "controlled_orifice_resize")
 
-    state = read_evidence_lifecycle_state(_package, run, operation_resolver=resolve_operation_runtime(_package, run))
+    state = read_lifecycle(_package, run, operation_resolver=resolve_operation_runtime(_package, run))
     actions = [action for checkpoint in state["checkpoint_runs"] for action in checkpoint["operation_actions"]]
     closeout = _read_json(run / "episodes" / "closeout_review" / "submission.json")
 
@@ -121,10 +121,10 @@ def test_two_bounded_policies_diverge_from_the_same_problem_source(tmp_path: Pat
         "emergency_weir_enlargement",
     )
 
-    feasible_state = read_evidence_lifecycle_state(
+    feasible_state = read_lifecycle(
         _feasible_package, feasible_run, operation_resolver=resolve_operation_runtime(_feasible_package, feasible_run)
     )
-    infeasible_state = read_evidence_lifecycle_state(
+    infeasible_state = read_lifecycle(
         _infeasible_package,
         infeasible_run,
         operation_resolver=resolve_operation_runtime(_infeasible_package, infeasible_run),
@@ -182,7 +182,7 @@ def test_undeclared_duplicate_package_cannot_hijack_verifier_lookup(tmp_path: Pa
         selected_intervention_id="controlled_orifice_resize",
     )
 
-    run_evidence_lifecycle(
+    run_lifecycle(
         package, run, operation_resolver=resolve_operation_runtime(package, run), episode_environment=environment
     )
     result = verify_lifecycle(package, run)
@@ -261,7 +261,7 @@ def test_omitting_the_failing_major_chain_cannot_bypass_the_reward_cap(tmp_path:
         )
         return {"status": "completed"}
 
-    run_evidence_lifecycle(
+    run_lifecycle(
         package,
         run,
         operation_resolver=resolve_operation_runtime(package, run),

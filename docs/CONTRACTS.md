@@ -182,6 +182,13 @@ contract.
 
 The current implementation uses the staged-evidence subtype described in
 [Staged evidence and publication](protocols/staged-evidence-and-publication.md).
+The internal application values are `LifecycleTrial` and
+`LifecycleExecution`. They are ordinary in-memory values, not persisted
+schemas. `run_lifecycle_trial()` converts one execution and its verifier result
+to the normal protected `TrialRecord`; persistence is an explicit optional
+effect. `run_lifecycle_experiment()` returns the records that it creates, so a
+caller does not read the ledger to recover its immediate results.
+
 `EvidenceCheckpointSpec.depends_on` is only an earlier-checkpoint acceptance
 precondition inside the declared list order. It does not provide graph
 scheduling, branching, or parallel execution. Conditional evidence is an

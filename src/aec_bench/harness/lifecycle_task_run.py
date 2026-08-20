@@ -12,7 +12,7 @@ from aec_bench.lifecycles.runtime.episode import LifecycleEpisodeEnvironment
 from aec_bench.lifecycles.runtime.lifecycle import (
     LifecycleVerifier,
     load_evidence_lifecycle_spec,
-    run_evidence_lifecycle,
+    run_lifecycle,
     validate_lifecycle_verification,
 )
 from aec_bench.lifecycles.runtime.operation_protocol import LifecycleOperationResolver
@@ -30,7 +30,7 @@ def build_evidence_lifecycle_task_run_resolver(
     """Wrap a complete lifecycle as one existing harness task-run."""
 
     def resolve(runtime_result: dict[str, Any]) -> dict[str, Any]:
-        lifecycle = run_evidence_lifecycle(
+        lifecycle = run_lifecycle(
             package_dir,
             run_dir,
             episode_environment=episode_environment,

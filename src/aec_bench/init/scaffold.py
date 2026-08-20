@@ -15,6 +15,7 @@ _PACKAGED_SKILLS: tuple[str, ...] = (
     "create-template",
     "domain-check",
     "hardening-pass",
+    "lifecycle",
     "meta-harness",
 )
 

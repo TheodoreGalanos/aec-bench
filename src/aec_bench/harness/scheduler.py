@@ -5,8 +5,8 @@ from pathlib import Path
 
 from aec_bench.contracts.experiment_manifest import ExperimentManifest
 from aec_bench.contracts.task_definition import Lifecycle, TaskDefinition
-from aec_bench.harness.trial import PlannedTrial, build_trial_id
 from aec_bench.tasks.selector import select_tasks
+from aec_bench.trials import PlannedTrial, build_trial_id
 
 
 def select_manifest_tasks(

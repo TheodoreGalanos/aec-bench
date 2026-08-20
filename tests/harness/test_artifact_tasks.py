@@ -24,8 +24,8 @@ from aec_bench.harness.artifact_tasks import (
     self_select,
     single_attempt,
 )
-from aec_bench.harness.trial import PlannedTrial
 from aec_bench.tasks.instance import resolve_instance_paths
+from aec_bench.trials import PlannedTrial
 from tests.support.task_factories import make_task_definition
 
 

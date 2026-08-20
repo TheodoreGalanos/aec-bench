@@ -19,7 +19,7 @@ from aec_bench.harness.hydraulic_review_prime.endpoint import (
     HYDRAULIC_REVIEW_SOCKET_ENV,
 )
 from aec_bench.harness.hydraulic_review_prime.lifecycle import install_hydraulic_review_skill
-from aec_bench.lifecycles.runtime.lifecycle import read_evidence_lifecycle_state
+from aec_bench.lifecycles.runtime.lifecycle import read_lifecycle
 from aec_bench.lifecycles.stormwater_design.hydraulic_review_smoke import write_hydraulic_review_smoke_submission
 
 
@@ -93,7 +93,7 @@ async def test_installed_client_uses_all_six_calls_and_preserves_operation_ident
         assert not Path(case.request.submission_path).exists()
 
     assert not Path(environment[HYDRAULIC_REVIEW_SOCKET_ENV]).exists()
-    state = read_evidence_lifecycle_state(case.package, case.run, operation_resolver=case.resolver)
+    state = read_lifecycle(case.package, case.run, operation_resolver=case.resolver)
     baseline = next(item for item in state["checkpoint_runs"] if item["checkpoint_id"] == "baseline_analysis")
     assert {item["session_id"] for item in baseline["operation_actions"]} == {case.request.session_id}
     assert all(

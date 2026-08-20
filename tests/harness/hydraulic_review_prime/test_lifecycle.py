@@ -24,7 +24,7 @@ from aec_bench.lifecycles.runtime.episode import LifecycleEpisodeEnvironmentFail
 from aec_bench.lifecycles.runtime.lifecycle import (
     LifecycleEpisodeExecutionError,
     load_evidence_lifecycle_spec,
-    read_evidence_lifecycle_state,
+    read_lifecycle,
 )
 from aec_bench.lifecycles.stormwater_design.hydraulic_review import (
     build_hydraulic_operation_resolver,
@@ -179,7 +179,7 @@ def _runner(
             assert len(capabilities["operations"]) == 6
             if offer_submission:
                 resolver = build_hydraulic_operation_resolver(package, run)
-                state = read_evidence_lifecycle_state(package, run, operation_resolver=resolver)
+                state = read_lifecycle(package, run, operation_resolver=resolver)
                 checkpoint_id = str(state["active_checkpoint_id"])
                 session_id = actor_workspace.name
                 spec = load_evidence_lifecycle_spec(package)
@@ -307,7 +307,7 @@ def test_non_clean_prime_attempt_never_submits_or_advances(
         )
 
     resolver = build_hydraulic_operation_resolver(package, run)
-    state = read_evidence_lifecycle_state(package, run, operation_resolver=resolver)
+    state = read_lifecycle(package, run, operation_resolver=resolver)
     assert state["status"] == "awaiting_checkpoint_submission"
     assert state["active_checkpoint_id"] == "baseline_analysis"
     assert not (run / "episodes" / "baseline_analysis" / "submission.json").exists()
@@ -439,7 +439,7 @@ def test_aggregate_session_limit_stops_before_a_third_prime_process(
 
     assert len(calls) == 2
     resolver = build_hydraulic_operation_resolver(package, run)
-    state = read_evidence_lifecycle_state(package, run, operation_resolver=resolver)
+    state = read_lifecycle(package, run, operation_resolver=resolver)
     assert state["active_checkpoint_id"] == "closeout_review"
     manifest = json.loads((run / "prime" / "manifest.json").read_text(encoding="utf-8"))
     assert manifest["usage"]["model_calls"] == 2

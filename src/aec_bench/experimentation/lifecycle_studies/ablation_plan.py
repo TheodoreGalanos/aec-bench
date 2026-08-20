@@ -24,19 +24,17 @@ from pydantic import (
 from aec_bench.contracts.experiment_manifest import AgentConfig
 from aec_bench.contracts.trial_record import AdaptationProvenance, ArtifactReference
 from aec_bench.contracts.validators import NonEmptyStr, StrictModel
-from aec_bench.experimentation.lifecycle_studies.experiment import (
-    repository_provenance,
-    runtime_dependency_provenance,
-)
-from aec_bench.harness.lifecycle_local import (
-    run_local_evidence_lifecycle_fresh_context,
-)
+from aec_bench.harness.lifecycle_local import run_local_lifecycle
 from aec_bench.lifecycles.catalogue import (
     lifecycle_variant_ids,
     lifecycle_variant_metadata,
     lifecycle_verifier,
     materialize_lifecycle,
     verify_lifecycle,
+)
+from aec_bench.lifecycles.recording import (
+    repository_provenance,
+    runtime_dependency_provenance,
 )
 from aec_bench.lifecycles.runtime.episode import (
     LifecycleExecutionMode,
@@ -464,7 +462,7 @@ def _canonical_sha256(payload: object) -> str:
 def _ablation_code_provenance(template_id: str) -> LifecycleAblationCodeProvenance:
     planner_path = Path(__file__).resolve()
     lifecycle_runtime_path = Path(inspect.getsourcefile(evidence_lifecycle_package_identity) or "")
-    local_runner_path = Path(inspect.getsourcefile(run_local_evidence_lifecycle_fresh_context) or "")
+    local_runner_path = Path(inspect.getsourcefile(run_local_lifecycle) or "")
     importer_path = planner_path.with_name("trial_record.py")
     verifier_entrypoint_path = Path(inspect.getsourcefile(verify_lifecycle) or "")
     verifier = lifecycle_verifier(template_id)

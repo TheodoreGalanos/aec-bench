@@ -21,8 +21,8 @@ from aec_bench.lifecycles.runtime.lifecycle import (
     execute_lifecycle_operation,
     load_evidence_lifecycle_spec,
     open_checkpoint_attempt,
-    prepare_evidence_checkpoint,
-    read_evidence_lifecycle_state,
+    read_lifecycle,
+    release_checkpoint,
 )
 from aec_bench.lifecycles.runtime.state import (
     EvidenceLifecycleRunState,
@@ -74,7 +74,7 @@ def _prepare(tmp_path: Path) -> tuple[Path, Path, str]:
         variant_id="tailwater_revision",
     )
     run = tmp_path / "run"
-    prepare_evidence_checkpoint(package, run, operation_resolver=resolve_operation_runtime(package, run))
+    release_checkpoint(package, run, operation_resolver=resolve_operation_runtime(package, run))
     open_checkpoint_attempt(
         package,
         run,
@@ -149,7 +149,7 @@ def test_recovery_adopts_transaction_published_before_lifecycle_state(
     package, run, source_sha256 = _prepare(tmp_path)
     transaction = _crash_after_transaction_publish(monkeypatch, package, run, source_sha256)
 
-    recovered = read_evidence_lifecycle_state(package, run, operation_resolver=resolve_operation_runtime(package, run))
+    recovered = read_lifecycle(package, run, operation_resolver=resolve_operation_runtime(package, run))
 
     checkpoint = recovered["checkpoint_runs"][0]
     assert checkpoint["operation_budget_remaining"] == 5
@@ -177,7 +177,7 @@ def test_recovery_repairs_missing_commit_marker_and_operation_ledger(tmp_path: P
     retained = [entry for entry in read_ledger(ledger) if entry["stage"] != "lifecycle_operation"]
     ledger.write_text("".join(json.dumps(entry, sort_keys=True) + "\n" for entry in retained), encoding="utf-8")
 
-    recovered = read_evidence_lifecycle_state(package, run, operation_resolver=resolve_operation_runtime(package, run))
+    recovered = read_lifecycle(package, run, operation_resolver=resolve_operation_runtime(package, run))
 
     assert recovered["checkpoint_runs"][0]["operation_budget_remaining"] == 5
     assert _read_json(transaction / "committed.json")["status"] == "committed"
@@ -195,7 +195,7 @@ def test_recovery_rejects_orphan_with_invalid_pre_action_state(
     _write_json(transaction / "action.json", action)
 
     with pytest.raises(EvidenceLifecycleError, match="operation recovery pre-state hash does not match"):
-        read_evidence_lifecycle_state(package, run, operation_resolver=resolve_operation_runtime(package, run))
+        read_lifecycle(package, run, operation_resolver=resolve_operation_runtime(package, run))
 
 
 @pytest.mark.parametrize(
@@ -216,7 +216,7 @@ def test_recovery_replays_public_operation_kind_and_disposition(
     _rewrite_action(run, lambda action: action.__setitem__(field, value))
 
     with pytest.raises(EvidenceLifecycleError, match=message):
-        read_evidence_lifecycle_state(package, run, operation_resolver=resolve_operation_runtime(package, run))
+        read_lifecycle(package, run, operation_resolver=resolve_operation_runtime(package, run))
 
 
 def test_recovery_replays_exact_typed_rejection_reason(tmp_path: Path) -> None:
@@ -237,7 +237,7 @@ def test_recovery_replays_exact_typed_rejection_reason(tmp_path: Path) -> None:
     )
 
     with pytest.raises(EvidenceLifecycleError, match="rejection reason does not match"):
-        read_evidence_lifecycle_state(package, run, operation_resolver=resolve_operation_runtime(package, run))
+        read_lifecycle(package, run, operation_resolver=resolve_operation_runtime(package, run))
 
 
 def test_recovery_requires_every_action_to_have_its_declared_owner_attempt(tmp_path: Path) -> None:
@@ -251,7 +251,7 @@ def test_recovery_requires_every_action_to_have_its_declared_owner_attempt(tmp_p
     _rewrite_action(run, remove_owner)
 
     with pytest.raises(EvidenceLifecycleError, match="attempt owner|owner attempt"):
-        read_evidence_lifecycle_state(package, run, operation_resolver=resolve_operation_runtime(package, run))
+        read_lifecycle(package, run, operation_resolver=resolve_operation_runtime(package, run))
 
 
 @pytest.mark.parametrize(
@@ -313,7 +313,7 @@ def test_recovery_rejects_symlinked_transaction_root(tmp_path: Path) -> None:
     root.symlink_to(outside, target_is_directory=True)
 
     with pytest.raises(EvidenceLifecycleError, match="symlink"):
-        read_evidence_lifecycle_state(package, run, operation_resolver=resolve_operation_runtime(package, run))
+        read_lifecycle(package, run, operation_resolver=resolve_operation_runtime(package, run))
 
 
 def test_recovery_rejects_symlinked_transaction_directory(tmp_path: Path) -> None:
@@ -325,7 +325,7 @@ def test_recovery_rejects_symlinked_transaction_directory(tmp_path: Path) -> Non
     transaction.symlink_to(outside, target_is_directory=True)
 
     with pytest.raises(EvidenceLifecycleError, match="symlink"):
-        read_evidence_lifecycle_state(package, run, operation_resolver=resolve_operation_runtime(package, run))
+        read_lifecycle(package, run, operation_resolver=resolve_operation_runtime(package, run))
 
 
 @pytest.mark.parametrize(
@@ -350,7 +350,7 @@ def test_recovery_rejects_symlinked_transaction_metadata(
     metadata.symlink_to(outside)
 
     with pytest.raises(EvidenceLifecycleError, match="symlink"):
-        read_evidence_lifecycle_state(package, run, operation_resolver=resolve_operation_runtime(package, run))
+        read_lifecycle(package, run, operation_resolver=resolve_operation_runtime(package, run))
 
 
 def test_recovery_rejects_symlinked_artifact_ancestor(tmp_path: Path) -> None:
@@ -362,7 +362,7 @@ def test_recovery_rejects_symlinked_artifact_ancestor(tmp_path: Path) -> None:
     artifacts.symlink_to(outside, target_is_directory=True)
 
     with pytest.raises(EvidenceLifecycleError, match="symlink"):
-        read_evidence_lifecycle_state(package, run, operation_resolver=resolve_operation_runtime(package, run))
+        read_lifecycle(package, run, operation_resolver=resolve_operation_runtime(package, run))
 
 
 def test_recovery_rejects_symlinked_workspace_projection_ancestor(tmp_path: Path) -> None:
@@ -374,4 +374,4 @@ def test_recovery_rejects_symlinked_workspace_projection_ancestor(tmp_path: Path
     operations.symlink_to(outside, target_is_directory=True)
 
     with pytest.raises(EvidenceLifecycleError, match="symlink"):
-        read_evidence_lifecycle_state(package, run, operation_resolver=resolve_operation_runtime(package, run))
+        read_lifecycle(package, run, operation_resolver=resolve_operation_runtime(package, run))

@@ -15,8 +15,8 @@ from aec_bench.lifecycles.runtime.lifecycle import (
     EvidenceLifecycleError,
     execute_lifecycle_operation,
     open_checkpoint_attempt,
-    prepare_evidence_checkpoint,
-    read_evidence_lifecycle_state,
+    read_lifecycle,
+    release_checkpoint,
 )
 from aec_bench.lifecycles.runtime.operation_store import resolve_lifecycle_operation_current_source
 from aec_bench.lifecycles.runtime.state import EvidenceLifecycleRunState
@@ -43,7 +43,7 @@ def _prepare(tmp_path: Path) -> tuple[Path, Path, str]:
         variant_id="tailwater_revision",
     )
     run = tmp_path / "run"
-    prepare_evidence_checkpoint(package, run, operation_resolver=_resolver(package, run))
+    release_checkpoint(package, run, operation_resolver=_resolver(package, run))
     open_checkpoint_attempt(
         package,
         run,
@@ -109,7 +109,7 @@ def test_real_hydrology_action_is_immutable_projected_and_host_owned(tmp_path: P
     assert set(projected["catchment_peak_flows_m3_s"]) == {"CATCH-A", "CATCH-B"}
     assert projected["peak_total_inflow_m3_s"] > 0.0
     assert "maximum_node_hgl_m" not in projected
-    state = read_evidence_lifecycle_state(package, run, operation_resolver=_resolver(package, run))
+    state = read_lifecycle(package, run, operation_resolver=_resolver(package, run))
     checkpoint = state["checkpoint_runs"][0]
     assert checkpoint["operation_budget_remaining"] == 5
     assert len(checkpoint["operation_actions"]) == 1
@@ -144,7 +144,7 @@ def test_identical_operation_reuses_original_artifacts_without_budget(tmp_path: 
     assert repeated["budget_consumed"] == 0
     assert repeated["artifacts"] == first["artifacts"]
     assert not (run / "lifecycle_operations" / "operation-000002" / "result-manifest.json").exists()
-    state = read_evidence_lifecycle_state(package, run, operation_resolver=_resolver(package, run))
+    state = read_lifecycle(package, run, operation_resolver=_resolver(package, run))
     assert state["checkpoint_runs"][0]["operation_budget_remaining"] == 5
 
 

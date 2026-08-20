@@ -16,9 +16,9 @@ from aec_bench.harness.harbor_workflow import HarborWorkflowResult, SynchronousH
 from aec_bench.harness.model_execution.llm_reviewer import ReviewerRunConfig
 from aec_bench.harness.progress_tracker import WorkflowProgressSnapshot
 from aec_bench.harness.scheduler import build_trial_plan
-from aec_bench.harness.trial import PlannedTrial
 from aec_bench.ledger.reader import read_trial_record
 from aec_bench.tasks.instance import ResolvedTaskInstance
+from aec_bench.trials import PlannedTrial
 
 
 @dataclass

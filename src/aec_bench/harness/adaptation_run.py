@@ -7,7 +7,7 @@ from aec_bench.contracts.adaptation import AdaptationSpec, expand_adaptation_spe
 from aec_bench.contracts.experiment_manifest import AgentConfig, ComputeConfig
 from aec_bench.contracts.task_definition import TaskDefinition
 from aec_bench.contracts.trial_record import AdaptationProvenance, DerivationStepRecord
-from aec_bench.harness.trial import PlannedTrial, build_trial_id
+from aec_bench.trials import PlannedTrial, build_trial_id
 
 
 class AdaptationCoordinationError(Exception):

@@ -17,8 +17,8 @@ from aec_bench.lifecycles.runtime.lifecycle import (
     execute_lifecycle_operation,
     load_evidence_lifecycle_spec,
     open_checkpoint_attempt,
-    prepare_evidence_checkpoint,
-    submit_evidence_checkpoint,
+    release_checkpoint,
+    submit_checkpoint,
 )
 from aec_bench.lifecycles.runtime.operation_protocol import (
     lifecycle_operation_source_identity,
@@ -51,7 +51,7 @@ def _materialize(tmp_path: Path, *, variant_id: str = "administrative_no_op") ->
 
 
 def _open(package: Path, run_dir: Path, session_id: str) -> None:
-    prepare_evidence_checkpoint(package, run_dir, operation_resolver=resolve_operation_runtime(package, run_dir))
+    release_checkpoint(package, run_dir, operation_resolver=resolve_operation_runtime(package, run_dir))
     open_checkpoint_attempt(
         package,
         run_dir,
@@ -85,7 +85,7 @@ def _submit_active(package: Path, run_dir: Path) -> None:
     payload: dict[str, Any] = {field: [] for field in checkpoint.required_submission_fields}
     payload["checkpoint_id"] = checkpoint_id
     _write_json(run_dir / "workspace" / checkpoint.submission_path, payload)
-    submit_evidence_checkpoint(package, run_dir, operation_resolver=resolve_operation_runtime(package, run_dir))
+    submit_checkpoint(package, run_dir, operation_resolver=resolve_operation_runtime(package, run_dir))
 
 
 def _state(package: Path, run_dir: Path) -> tuple[EvidenceLifecycleRunState, EvidenceLifecycleSpec]:

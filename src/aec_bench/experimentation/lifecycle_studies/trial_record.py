@@ -52,14 +52,6 @@ from aec_bench.experimentation.lifecycle_studies.ablation_plan import (
     LifecycleAblationTrial,
     build_lifecycle_ablation_plan,
 )
-from aec_bench.experimentation.lifecycle_studies.experiment import (
-    LifecycleExperimentManifest,
-    LifecycleExperimentMetrics,
-    lifecycle_experiment_metrics_payload,
-)
-from aec_bench.experimentation.lifecycle_studies.session_records import (
-    parse_lifecycle_session_records,
-)
 from aec_bench.ledger.durability import (
     fsync_directory as _fsync_directory,
 )
@@ -71,13 +63,18 @@ from aec_bench.ledger.durability import (
 )
 from aec_bench.ledger.writer import DuplicateTrialRecordError, write_trial_record
 from aec_bench.lifecycles.catalogue import lifecycle_operation_resolver, lifecycle_package_variant
+from aec_bench.lifecycles.recording import (
+    LifecycleExperimentManifest,
+    LifecycleExperimentMetrics,
+    lifecycle_experiment_metrics_payload,
+)
 from aec_bench.lifecycles.runtime.episode import (
     LifecycleOperationCurrentSource,
 )
 from aec_bench.lifecycles.runtime.lifecycle import (
     evidence_request_catalog_payload,
     load_evidence_lifecycle_spec,
-    read_evidence_lifecycle_state,
+    read_lifecycle,
     validate_evidence_request_run_state,
     validate_lifecycle_verification,
 )
@@ -99,6 +96,9 @@ from aec_bench.lifecycles.runtime.state import (
     EvidenceLifecycleRunState,
     EvidenceRequestActionRecord,
 )
+from aec_bench.lifecycles.session_records import (
+    parse_lifecycle_session_records,
+)
 
 
 @dataclass(frozen=True)
@@ -116,13 +116,13 @@ _INDEX_LOCKS: dict[str, Lock] = {}
 
 def build_lifecycle_trial_record(
     *,
-    manifest: LifecycleAblationManifest,
     trial: LifecycleAblationTrial,
+    manifest: LifecycleAblationManifest,
     package_dir: Path,
     run_dir: Path,
     artifact_references: list[ArtifactReference] | None = None,
 ) -> TrialRecord:
-    """Build one validated record from the planned working package and canonical invocation."""
+    """Build one validated ablation record from the planned working package and invocation."""
     return _build_lifecycle_trial_record(
         manifest=manifest,
         trial=trial,
@@ -154,7 +154,7 @@ def _build_lifecycle_trial_record(
         raise ValueError("supplied run directory does not match planned trial")
 
     if require_planned_paths:
-        read_evidence_lifecycle_state(
+        read_lifecycle(
             package,
             run,
             operation_resolver=lifecycle_operation_resolver(package, run),
@@ -532,7 +532,7 @@ def _build_lifecycle_trial_record(
     return record.bind_run_manifest(run_manifest)
 
 
-def finalize_lifecycle_trial_record(
+def _persist_lifecycle_ablation_record(
     *,
     manifest: LifecycleAblationManifest,
     trial: LifecycleAblationTrial,

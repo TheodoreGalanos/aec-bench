@@ -595,6 +595,31 @@ The recipe writes a scriptable workspace for intake, problem-model generation, r
 evidence, governance, and comparison artifacts. Run
 `aec-bench meta-harness --help` for the complete command surface.
 
+### Finite Lifecycles
+
+All finite lifecycle commands are under `aec-bench task lifecycle`:
+
+```text
+list                    list-variants
+materialize             start
+submit                  status
+revisit                 branch
+run                     verify
+run-smoke               study ablation
+study calibration-freeze
+```
+
+`start` releases the next checkpoint. `submit` records the active checkpoint.
+`revisit` is read-only. `branch` creates a new run from a submitted checkpoint
+and keeps the accepted prefix. `run` resumes from the current lifecycle state.
+It does not accept a checkpoint start override.
+
+Python callers use `LifecycleTrial`, `LifecycleExecution`,
+`run_local_lifecycle()`, `run_lifecycle_trial()`, and
+`run_lifecycle_experiment()`. Trial execution returns the created
+`TrialRecord` directly and persists it only when the caller supplies a
+persistence function.
+
 ### Prime Lab Export
 
 AEC-Bench can export tasks as Prime Lab environments for local and hosted evals.
