@@ -5,17 +5,13 @@ from __future__ import annotations
 
 import time
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import typer
 
 from aec_bench.cli.commands.config import resolve_path
 from aec_bench.cli.output import console, emit, print_error, print_success
 from aec_bench.contracts.task_definition import Difficulty
-
-if TYPE_CHECKING:
-    from aec_bench.contracts.task_definition import TaskDefinition
-    from aec_bench.generation.replay import GenerationManifest
 
 app = typer.Typer(help="Create, publish, and inspect benchmark datasets.")
 
@@ -37,7 +33,9 @@ def create_dataset_cmd(
     """Create one immutable schema-2 manifest from selected local tasks."""
 
     from aec_bench.contracts.dataset import DatasetGeneration
-    from aec_bench.dataset.creator import create_dataset_from_tasks
+    from aec_bench.dataset.creator import compose_dataset
+    from aec_bench.dataset.storage import save_dataset
+    from aec_bench.generation.application import load_generated_tasks, read_generated_task_set
     from aec_bench.tasks.registry import TaskRegistry
 
     tasks_root = resolve_path("tasks_root")
@@ -50,8 +48,13 @@ def create_dataset_cmd(
 
     generation: DatasetGeneration | None = None
     if from_suite_output is not None:
-        suite = _load_suite_output_manifest(from_suite_output)
-        selected = _load_tasks_from_suite_output(from_suite_output, tasks_root, suite)
+        try:
+            generated = read_generated_task_set(from_suite_output)
+            selected = load_generated_tasks(generated, tasks_root=tasks_root)
+        except (FileNotFoundError, ValueError) as error:
+            print_error(str(error))
+            raise typer.Exit(1) from error
+        suite = generated.manifest
         generation = DatasetGeneration(seed=suite.instances[0].seed, config_ref=suite.config_ref)
     else:
         registry = TaskRegistry(tasks_root=tasks_root)
@@ -85,14 +88,14 @@ def create_dataset_cmd(
         raise typer.Exit(1)
 
     try:
-        manifest = create_dataset_from_tasks(
+        manifest = compose_dataset(
             dataset_id=name,
             tasks=selected,
             tasks_root=tasks_root,
-            datasets_root=datasets_root,
             description=description or f"Dataset {name}",
             generation=generation,
         )
+        save_dataset(datasets_root, manifest)
     except (FileExistsError, FileNotFoundError, ValueError) as error:
         print_error(str(error))
         raise typer.Exit(1) from error
@@ -452,40 +455,3 @@ def _parse_difficulties(values: list[str] | None) -> list[Difficulty]:
             print_error(f"unknown difficulty: {value}. Available: {', '.join(item.value for item in Difficulty)}")
             raise typer.Exit(1) from error
     return parsed
-
-
-def _load_suite_output_manifest(path: Path) -> GenerationManifest:
-    from aec_bench.generation.replay import GenerationManifest
-
-    if not path.is_file():
-        print_error(f"suite output not found: {path}")
-        raise typer.Exit(1)
-    try:
-        return GenerationManifest.model_validate_json(path.read_text(encoding="utf-8"))
-    except Exception as error:
-        print_error(f"failed to read suite output: {error}")
-        raise typer.Exit(1) from error
-
-
-def _load_tasks_from_suite_output(
-    path: Path,
-    tasks_root: Path,
-    manifest: GenerationManifest,
-) -> list[TaskDefinition]:
-    from aec_bench.tasks.loader import load_task_definition
-
-    suite_root = path.resolve().parent
-    root = tasks_root.resolve()
-    tasks: list[TaskDefinition] = []
-    for entry in manifest.instances:
-        task_directory = (suite_root / entry.task_id).resolve()
-        if not task_directory.is_dir():
-            print_error(f"suite output references missing task directory: {task_directory}")
-            raise typer.Exit(1)
-        try:
-            task_directory.relative_to(root)
-        except ValueError as error:
-            print_error(f"suite output task is outside tasks root: {task_directory}")
-            raise typer.Exit(1) from error
-        tasks.append(load_task_definition(task_directory, root))
-    return tasks

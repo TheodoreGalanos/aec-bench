@@ -126,7 +126,7 @@ def test_checked_in_harness_program_study_example_uses_the_current_kernel_identi
 
     current_ref = default_kernel_registry().manifest.ref
 
-    assert spec.content_sha256 == "55626838c25033fca175f4867f3975928153f1b94d7a7c3c0f57328981dee91a"
+    assert spec.content_sha256 == "d95aac321e7d151dd31e3f93df0be39ba55e796fdc72c097116b1b86cce7c1bd"
     assert {request.kernel_ref for request in spec.candidate_requests} == {current_ref}
 
 
@@ -154,9 +154,8 @@ def test_harness_program_study_runtime_preflight_checks_direct_provider_configur
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     registry, tasks_root, request = _factory_inputs(tmp_path)
-    recipe = _recipe(
+    harness_spec = _recipe(
         registry,
-        recipe_id="direct-preflight",
         task_refs=request.task_refs,
         adapter_capability="aecbench.adapter.direct",
         budget=request.harness_budget,
@@ -168,7 +167,7 @@ def test_harness_program_study_runtime_preflight_checks_direct_provider_configur
     )
 
     _preflight_harness_runtime(
-        recipes=(recipe,),
+        specs=(harness_spec,),
         project_root=tmp_path,
         repo_root=tmp_path,
         tasks_root=tasks_root,

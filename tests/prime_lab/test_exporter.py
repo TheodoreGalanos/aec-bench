@@ -18,7 +18,7 @@ from typer.testing import CliRunner
 from aec_bench.cli.main import app
 from aec_bench.contracts.dataset import DatasetManifest, DatasetTaskEntry
 from aec_bench.dataset.publication import publish_dataset
-from aec_bench.dataset.storage import write_manifest
+from aec_bench.dataset.storage import save_dataset
 from aec_bench.prime_lab.classifier import PrimeHarnessKind, classify_prime_harness
 from aec_bench.prime_lab.exporter import (
     DEFAULT_PRIME_ENVIRONMENTS_DIR,
@@ -50,7 +50,7 @@ def _write_dataset_manifest(
             for task_id in task_ids
         ],
     )
-    write_manifest(datasets_root, manifest)
+    save_dataset(datasets_root, manifest)
     publish_dataset(
         manifest=manifest,
         datasets_root=datasets_root,

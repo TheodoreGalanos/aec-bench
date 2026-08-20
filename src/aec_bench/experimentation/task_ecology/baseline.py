@@ -15,7 +15,7 @@ import yaml
 
 from aec_bench.contracts.evolution import WorkspaceSnapshot
 from aec_bench.contracts.trial_record import TrialRecord
-from aec_bench.evolution.backends.local import LocalSolver
+from aec_bench.evolution.backends.local import make_local_candidate_evaluator
 
 DEFAULT_BASELINE_PROMPT = (
     "You are an expert engineering agent. Solve the task carefully, use the available "
@@ -104,7 +104,7 @@ def run_baseline_dataset(
         if task.task_id in completed_ids:
             continue
         print(f"[{index}/{len(tasks)}] {task.task_id}", flush=True)
-        solver = LocalSolver(
+        solve = make_local_candidate_evaluator(
             task_dirs=[task.task_dir],
             model=model,
             experiment_id=experiment_id,
@@ -112,19 +112,16 @@ def run_baseline_dataset(
             timeout=timeout,
             workspace_root=workspace_root,
         )
-        try:
-            records = solver(snapshot, batch_size=1)
-            row = (
-                baseline_row_from_record(
-                    records[0],
-                    task=task,
-                    score_threshold=score_threshold,
-                )
-                if records
-                else failed_row(task)
+        records = solve(snapshot, 1)
+        row = (
+            baseline_row_from_record(
+                records[0],
+                task=task,
+                score_threshold=score_threshold,
             )
-        finally:
-            solver.cleanup()
+            if records
+            else failed_row(task)
+        )
         rows.append(row)
         completed_ids.add(task.task_id)
         with rows_path.open("a", encoding="utf-8") as handle:

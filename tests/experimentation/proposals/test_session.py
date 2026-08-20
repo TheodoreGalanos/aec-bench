@@ -357,10 +357,10 @@ def test_run_proposal_session_executes_every_node_in_a_fresh_container(
         runtime_archive_sha256=execution.runtime_archive_sha256,
     )
     for operation_id in (
-        "run_proposal_session.v1",
-        "run_semantic_subtask.v1",
-        "check_subtask_contract.v1",
-        "finalize_proposed_plan.v1",
+        "run_proposal_session",
+        "run_semantic_subtask",
+        "check_subtask_contract",
+        "finalize_proposed_plan",
     ):
         operation = bundle.fixed_harness.program_surface.operation(operation_id)
         definition = registry.operation_definition(operation_id)
@@ -481,10 +481,10 @@ def test_legacy_registry_without_definitions_executes_proposal_contract_operatio
     assert legacy.operation_definitions == ()
     assert legacy.is_legacy_definition_free is True
     for operation_id in (
-        "run_proposal_session.v1",
-        "run_semantic_subtask.v1",
-        "check_subtask_contract.v1",
-        "finalize_proposed_plan.v1",
+        "run_proposal_session",
+        "run_semantic_subtask",
+        "check_subtask_contract",
+        "finalize_proposed_plan",
     ):
         assert (
             _operation_definition_for_proposal_runtime(

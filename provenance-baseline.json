@@ -234,7 +234,6 @@
     "aec_bench.contracts.execution_program.ExecutionProgram.version",
     "aec_bench.contracts.execution_program.ExecutionProgramRef.version",
     "aec_bench.contracts.harness_instance.HarnessContractSpec.schema_ref",
-    "aec_bench.contracts.harness_instance.HarnessRecipe.version",
     "aec_bench.contracts.harness_instance.ProgramOperationSpec.input_schema_ref",
     "aec_bench.contracts.harness_instance.ProgramOperationSpec.output_schema_ref",
     "aec_bench.contracts.harness_kernel.KernelCapabilityRef.version",

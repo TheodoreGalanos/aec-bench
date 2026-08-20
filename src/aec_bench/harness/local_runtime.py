@@ -9,7 +9,7 @@ import tempfile
 from pathlib import Path
 
 
-def setup_workspace(task_dir: str) -> str:
+def setup_workspace(task_dir: str, *, work_root: str | Path | None = None) -> str:
     """Copy task files into a temp workspace directory.
 
     Files inside the ``environment/`` subdirectory are copied to the workspace
@@ -19,7 +19,7 @@ def setup_workspace(task_dir: str) -> str:
 
     Returns the workspace path. The caller is responsible for cleanup.
     """
-    workspace = tempfile.mkdtemp(prefix="aec-bench-local-")
+    workspace = tempfile.mkdtemp(prefix="aec-bench-local-", dir=work_root)
     task_path = Path(task_dir)
 
     for item in task_path.iterdir():
@@ -68,7 +68,7 @@ def unstage_verifier_assets(workspace: str | Path) -> None:
     shutil.rmtree(Path(workspace) / "tests", ignore_errors=True)
 
 
-def patch_workspace_paths(workspace: str) -> None:
+def patch_workspace_paths(workspace: str, *, source_workspace: str | None = None) -> None:
     """Replace /workspace/ references with the actual local temp directory path.
 
     Generated tasks use /workspace/ as the container mount point. Locally we
@@ -78,20 +78,29 @@ def patch_workspace_paths(workspace: str) -> None:
     normalised = workspace.rstrip("/")
     ws_path = Path(workspace)
 
+    replacements = [("/workspace", normalised)]
+    if source_workspace is not None:
+        replacements.append((source_workspace.rstrip("/"), normalised))
+
     for py_file in ws_path.rglob("*.py"):
         content = py_file.read_text(encoding="utf-8")
-        if '"/workspace"' in content or '"/workspace/' in content:
-            patched = content.replace('"/workspace"', f'"{normalised}"')
-            patched = patched.replace('"/workspace/', f'"{normalised}/')
+        patched = content
+        for source, target in replacements:
+            patched = patched.replace(f'"{source}"', f'"{target}"')
+            patched = patched.replace(f'"{source}/', f'"{target}/')
+        if patched != content:
             py_file.write_text(patched, encoding="utf-8")
 
     # Patch the instruction so tool paths resolve
     instruction = ws_path / "instruction.md"
     if instruction.exists():
         content = instruction.read_text(encoding="utf-8")
-        if "/workspace/" in content:
+        patched = content
+        for source, target in replacements:
+            patched = patched.replace(f"{source}/", f"{target}/")
+        if patched != content:
             instruction.write_text(
-                content.replace("/workspace/", f"{normalised}/"),
+                patched,
                 encoding="utf-8",
             )
 

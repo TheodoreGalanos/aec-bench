@@ -209,8 +209,8 @@ def test_execute_run_bundle_crosses_program_harbor_import_and_lineage_boundary(t
     )
     evaluation_regime_ref = fake_regime_ref(regime_id="evaluation-regime.stage-9")
     registry = default_kernel_registry()
-    batch_operation = bundle.harness.program_surface.operation("run_batch.v1")
-    batch_definition = registry.operation_definition("run_batch.v1")
+    batch_operation = bundle.harness.program_surface.operation("run_batch")
+    batch_definition = registry.operation_definition("run_batch")
     assert batch_operation is not None
     assert batch_definition is not None
     assert (
@@ -430,13 +430,13 @@ def test_completed_invocation_receipt_survives_a_later_process_interruption(tmp_
         nodes=(
             ActionNode(
                 node_id="run-alpha",
-                operation_id="run_batch.v1",
+                operation_id="run_batch",
                 arguments=(ProgramArgument(name="task_ref", value=LiteralValue(value=task_ids[0])),),
             ),
             ActionNode(
                 node_id="run-beta",
                 depends_on=("run-alpha",),
-                operation_id="run_batch.v1",
+                operation_id="run_batch",
                 arguments=(ProgramArgument(name="task_ref", value=LiteralValue(value=task_ids[1])),),
             ),
             StopNode(node_id="stop", depends_on=("run-beta",), outcome=StopOutcome.SUCCEEDED),
@@ -516,7 +516,7 @@ def test_execute_run_bundle_rejects_kernel_source_drift_before_harbor_dispatch(
     assert executor.calls == 0
 
 
-@pytest.mark.parametrize("operation_id", ["run_batch.v1", "enumerate_tasks.v1"])
+@pytest.mark.parametrize("operation_id", ["run_batch", "enumerate_tasks"])
 def test_execute_run_bundle_rejects_tampered_retry_taxonomy_before_harbor_dispatch(
     tmp_path: Path,
     operation_id: str,
@@ -560,7 +560,7 @@ def test_execute_run_bundle_rejects_tampered_retry_taxonomy_before_harbor_dispat
                 )
             }
         )
-        if operation_id == "run_batch.v1"
+        if operation_id == "run_batch"
         else bundle.execution_program
     )
     tampered_bundle = bundle.model_copy(
@@ -604,9 +604,9 @@ def test_decomposed_px_enumerates_tasks_then_fans_out_real_harbor_runs(tmp_path:
     executor = WritingHarborExecutor(model="claude-test-model")
 
     registry = default_kernel_registry()
-    enumeration = bundle.harness.program_surface.operation("enumerate_tasks.v1")
+    enumeration = bundle.harness.program_surface.operation("enumerate_tasks")
     assert enumeration is not None
-    definition = registry.operation_definition("enumerate_tasks.v1")
+    definition = registry.operation_definition("enumerate_tasks")
     assert definition is not None
     assert (
         _operation_definition_for_dispatch(
@@ -662,18 +662,18 @@ def test_legacy_registry_without_definitions_still_dispatches_v1_task_enumeratio
         package_fingerprint=current.package_fingerprint,
         operation_definitions=(),
     )
-    assert legacy.operation_definition("enumerate_tasks.v1") is None
-    assert legacy.operation_definition("run_batch.v1") is None
+    assert legacy.operation_definition("enumerate_tasks") is None
+    assert legacy.operation_definition("run_batch") is None
     bundle = build_adaptive_bundle(
         tasks_root=tasks_root,
         task_id=task_id,
         program_kind="fanout",
         registry=legacy,
     )
-    operation = bundle.harness.program_surface.operation("enumerate_tasks.v1")
-    batch_operation = bundle.harness.program_surface.operation("run_batch.v1")
-    current_operation = current_bundle.harness.program_surface.operation("enumerate_tasks.v1")
-    current_batch_operation = current_bundle.harness.program_surface.operation("run_batch.v1")
+    operation = bundle.harness.program_surface.operation("enumerate_tasks")
+    batch_operation = bundle.harness.program_surface.operation("run_batch")
+    current_operation = current_bundle.harness.program_surface.operation("enumerate_tasks")
+    current_batch_operation = current_bundle.harness.program_surface.operation("run_batch")
     assert operation is not None
     assert batch_operation is not None
     assert current_operation is not None

@@ -60,13 +60,49 @@ environment setup, tools, fixtures, and verifier code.
 The current path is:
 
 1. Author or generate a task and validate its `TaskDefinition`.
-2. Resolve one runnable task instance and stage its workspace.
-3. Run a provider-neutral adapter locally, lower the experiment to the one
-   Harbor dispatch-and-import workflow, or use the distinct Prime package and
-   hosted-evaluation integration.
-4. Collect output, the current trajectory, any provider-required transcript,
-   and verifier artifacts.
-5. Build an `EvaluationResult` and persist a `TrialRecord`.
+2. Resolve one `ResolvedTaskInstance` and expand the experiment into
+   `PlannedTrial` values.
+3. Call `run_experiment()`, which applies `run_trial()` directly for each local
+   trial. `LocalTaskRuntime.run_once()` performs one adapter execution in one
+   isolated workspace.
+4. Let an `AttemptRecipe` create and select attempts without verifier access.
+   `run_trial()` verifies only the selected workspace, builds one
+   `TrialRecord`, materializes its artifacts, and removes attempt workspaces.
+5. For Harbor, use the separate dispatch-and-import runtime through the same
+   `run_experiment()` boundary. Harbor accepts only recipe specifications that
+   its transport supports.
+6. Persist records through the ledger owner. Evaluation can summarize the
+   returned records directly without another ledger query.
+
+`HarnessSpec` describes runtime capabilities, bindings, contracts, and
+budgets. It does not control attempt branching or selection. Interactive-world
+and lifecycle runtimes do not use this artifact-task attempt path.
+
+### Agent evolution
+
+Evolution uses the same functional application shape as artifact-task
+execution:
+
+```text
+run_trial() -> run_experiment() -> run_evolution()
+```
+
+`run_evolution()` owns the evolution cycle loop. It receives an explicit
+`Workspace`, `EvolutionConfig`, `AECEvolutionEngine`, `CandidateEvaluator`, and
+selection strategy. The evaluator receives one `WorkspaceSnapshot` and a batch
+size. It returns `TrialRecord` values through the normal `run_experiment()`
+path. The loop converts those records to observations, applies engine and
+selection policy, persists cycle evidence, saves archive and graveyard state,
+and returns `EvolutionResult` directly.
+
+`run_evolution_from_config()` is the repository composition root. It loads the
+workspace and configured model clients, selects the local or Harbor candidate
+evaluator, builds the engine and strategy, and calls `run_evolution()`. The
+`aec-bench evolve run` command is a thin caller of this function.
+
+Best-of-K attempts stay inside one scored trial. Evolution cycles stay outside
+the trial and use the returned records as fitness evidence. Evolution does not
+own a separate task executor, verifier, artifact collector, or trial builder.
 
 Deterministic templates and suite generation live with authoring and generation.
 Generated instances remain derived artifacts. Runnable task directories contain

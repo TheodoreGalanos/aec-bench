@@ -19,7 +19,7 @@ from aec_bench.contracts.execution_program import (
 from aec_bench.contracts.harness_instance import (
     AgentBindingConfig,
     HarnessBindingSpec,
-    HarnessRecipe,
+    HarnessSpec,
     TaskSourceBindingConfig,
 )
 from aec_bench.contracts.harness_kernel import canonical_json_sha256, kernel_abi_commitment
@@ -95,11 +95,11 @@ def test_solution_descriptor_is_derived_from_typed_harness_and_program(tmp_path:
         factor_id="fanout-program",
         version="1.0.0",
         nodes=(
-            ActionNode(node_id="enumerate", operation_id="enumerate_tasks.v1"),
+            ActionNode(node_id="enumerate", operation_id="enumerate_tasks"),
             FanoutNode(
                 node_id="run-each",
                 depends_on=("enumerate",),
-                operation_id="run_batch.v1",
+                operation_id="run_batch",
                 items=ProgramOutputRef(node_id="enumerate", output_port="tasks"),
                 item_argument="task_ref",
                 max_parallelism=2,
@@ -109,13 +109,13 @@ def test_solution_descriptor_is_derived_from_typed_harness_and_program(tmp_path:
         limits=ProgramLimits(max_parallelism=3),
     )
 
-    descriptor = derive_motif_solution_descriptor(parent.harness_request.recipe, program)
+    descriptor = derive_motif_solution_descriptor(parent.harness_request.spec, program)
 
     assert descriptor.decomposition_pattern == "fanout"
     assert descriptor.orchestration_pattern == "bounded_parallel"
     assert descriptor.decomposition_depth == 2
     assert descriptor.maximum_parallelism == 2
-    assert descriptor.tool_surface == ("enumerate_tasks.v1", "run_batch.v1")
+    assert descriptor.tool_surface == ("enumerate_tasks", "run_batch")
     assert descriptor.state_mode == "ephemeral"
 
 
@@ -214,7 +214,7 @@ def test_task_review_sidecar_contributes_one_canonical_motif_lineage(tmp_path: P
         px_template=px_template,
         applicability=_applicability(),
         descriptor=derive_motif_solution_descriptor(
-            runtime.parent.harness_request.recipe,
+            runtime.parent.harness_request.spec,
             _program_factor(runtime.parent.program_template),
         ),
         accepted_repair_refs=repair.references,
@@ -263,8 +263,8 @@ def test_real_internal_evidence_learns_provisional_motif_without_granting_author
         program_limits=stage_program.limits,
         seeds=(41,),
         repetitions=1,
-        fixed_harness_recipe=_fixed_harness_recipe(terminal, runtime.registry),
-        learned_harness_recipe=runtime.parent.harness_request.recipe,
+        fixed_harness_spec=_fixed_harness_spec(terminal, runtime.registry),
+        learned_harness_spec=runtime.parent.harness_request.spec,
         fixed_program=_fanout_factor(stage_program.limits),
         learned_program=stage_program,
     )
@@ -308,12 +308,12 @@ def test_real_internal_evidence_learns_provisional_motif_without_granting_author
         program_limits=terminal.program_template.limits,
         seeds=(43,),
         repetitions=1,
-        fixed_harness_recipe=_rebind_recipe_tasks(
-            _fixed_harness_recipe(terminal, runtime.registry),
+        fixed_harness_spec=_rebind_recipe_tasks(
+            _fixed_harness_spec(terminal, runtime.registry),
             task_refs=child_tasks,
         ),
-        learned_harness_recipe=_rebind_recipe_tasks(
-            terminal.harness_request.recipe,
+        learned_harness_spec=_rebind_recipe_tasks(
+            terminal.harness_request.spec,
             task_refs=child_tasks,
         ),
         fixed_program=_fanout_factor(terminal.program_template.limits),
@@ -405,10 +405,10 @@ def _program_factor(template: RepairProgramTemplate) -> ProgramFactorTemplate:
     )
 
 
-def _fixed_harness_recipe(
+def _fixed_harness_spec(
     candidate: RepairCandidate,
     registry: KernelRuntimeRegistry,
-) -> HarnessRecipe:
+) -> HarnessSpec:
     bindings = tuple(
         HarnessBindingSpec(
             binding_id=binding.binding_id,
@@ -422,24 +422,22 @@ def _fixed_harness_recipe(
             contract_ids=binding.contract_ids,
             configuration=binding.configuration,
         )
-        for binding in candidate.harness_request.recipe.bindings
+        for binding in candidate.harness_request.spec.bindings
     )
-    return HarnessRecipe(
-        recipe_id="fixed-direct-harness",
-        version=candidate.harness_request.recipe.version,
+    return HarnessSpec(
         summary="Fixed direct-adapter baseline under the matched repaired resource budget.",
-        contracts=candidate.harness_request.recipe.contracts,
-        budget=candidate.harness_request.recipe.budget,
-        recursion_policy=candidate.harness_request.recipe.recursion_policy,
+        contracts=candidate.harness_request.spec.contracts,
+        budget=candidate.harness_request.spec.budget,
+        recursion_policy=candidate.harness_request.spec.recursion_policy,
         bindings=bindings,
     )
 
 
 def _rebind_recipe_tasks(
-    recipe: HarnessRecipe,
+    recipe: HarnessSpec,
     *,
     task_refs: tuple[str, ...],
-) -> HarnessRecipe:
+) -> HarnessSpec:
     bindings = tuple(
         HarnessBindingSpec(
             binding_id=binding.binding_id,
@@ -455,9 +453,7 @@ def _rebind_recipe_tasks(
         )
         for binding in recipe.bindings
     )
-    return HarnessRecipe(
-        recipe_id=recipe.recipe_id,
-        version=recipe.version,
+    return HarnessSpec(
         summary=recipe.summary,
         contracts=recipe.contracts,
         budget=recipe.budget,
@@ -471,11 +467,11 @@ def _fanout_factor(limits: ProgramLimits) -> ProgramFactorTemplate:
         factor_id="fixed-fanout",
         version="1.0.0",
         nodes=(
-            ActionNode(node_id="enumerate", operation_id="enumerate_tasks.v1"),
+            ActionNode(node_id="enumerate", operation_id="enumerate_tasks"),
             FanoutNode(
                 node_id="run-each",
                 depends_on=("enumerate",),
-                operation_id="run_batch.v1",
+                operation_id="run_batch",
                 items=ProgramOutputRef(node_id="enumerate", output_port="tasks"),
                 item_argument="task_ref",
                 max_parallelism=1,
@@ -489,7 +485,7 @@ def _fanout_factor(limits: ProgramLimits) -> ProgramFactorTemplate:
 def _agent_model(candidate: RepairCandidate) -> str:
     agents: list[AgentBindingConfig] = [
         binding.configuration
-        for binding in candidate.harness_request.recipe.bindings
+        for binding in candidate.harness_request.spec.bindings
         if isinstance(binding.configuration, AgentBindingConfig)
     ]
     assert len(agents) == 1
@@ -504,7 +500,7 @@ def _applicability() -> MotifApplicabilityDescriptor:
         fanout_characteristic="bounded",
         branching_characteristic="conditional",
         evidence_surfaces=("source_pack", "verifier_gates"),
-        required_tool_surface=("run_batch.v1",),
+        required_tool_surface=("run_batch",),
         state_mode="ephemeral",
     )
 

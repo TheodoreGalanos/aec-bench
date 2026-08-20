@@ -191,7 +191,7 @@ def validate_adaptive_diagnosis_feasibility(
 ) -> None:
     """Reject diagnosis patches that cannot fit the exact parent and fixed Hx budget."""
 
-    if candidate.harness_request.recipe.budget != pairing.budget:
+    if candidate.harness_request.spec.budget != pairing.budget:
         raise ValueError("candidate Hx budget must match the exact paired budget")
     rules = configuration.rules if isinstance(configuration, AdaptiveDiagnosisPolicy) else (configuration,)
     context = _RepairFeasibilityContext(candidate=candidate, pairing=pairing)
@@ -204,9 +204,7 @@ def _validate_harness_max_turns_feasibility(
     rule: HarnessMaxTurnsDiagnosisRule,
 ) -> None:
     matches = tuple(
-        binding
-        for binding in context.candidate.harness_request.recipe.bindings
-        if binding.binding_id == rule.binding_id
+        binding for binding in context.candidate.harness_request.spec.bindings if binding.binding_id == rule.binding_id
     )
     if len(matches) != 1 or not isinstance(
         matches[0].configuration,
@@ -224,9 +222,7 @@ def _validate_harness_agent_capability_feasibility(
     rule: HarnessAgentCapabilityDiagnosisRule,
 ) -> None:
     matches = tuple(
-        binding
-        for binding in context.candidate.harness_request.recipe.bindings
-        if binding.binding_id == rule.binding_id
+        binding for binding in context.candidate.harness_request.spec.bindings if binding.binding_id == rule.binding_id
     )
     if len(matches) != 1 or not isinstance(
         matches[0].configuration,
@@ -270,7 +266,7 @@ def _validate_program_batch_coalescing_feasibility(
     )
     agent_configurations = tuple(
         binding.configuration
-        for binding in context.candidate.harness_request.recipe.bindings
+        for binding in context.candidate.harness_request.spec.bindings
         if isinstance(binding.configuration, AgentBindingConfig)
     )
     if len(agent_configurations) != 1:

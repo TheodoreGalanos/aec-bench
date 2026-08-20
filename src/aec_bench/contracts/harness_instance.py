@@ -1,4 +1,4 @@
-# ABOUTME: Defines typed recipes and compiled task-specific harness instances over a fixed kernel.
+# ABOUTME: Defines typed harness specifications and compiled task-specific instances over a fixed kernel.
 # ABOUTME: Keeps Hx immutable, directly referenced, and limited to explicit program-surface operations.
 
 from __future__ import annotations
@@ -276,7 +276,7 @@ class HarnessContractSpec(FrozenStrictModel):
 
 
 class HarnessBindingSpec(FrozenStrictModel):
-    """One proposed recipe binding from a trusted capability to a typed Hx role."""
+    """One proposed spec binding from a trusted capability to a typed Hx role."""
 
     binding_id: NonEmptyStr
     capability_ref: KernelCapabilityRef
@@ -293,11 +293,9 @@ class HarnessBindingSpec(FrozenStrictModel):
         return self
 
 
-class HarnessRecipe(FrozenStrictModel):
-    """Agent-proposable, deterministic-compiler input for a task-specific harness."""
+class HarnessSpec(FrozenStrictModel):
+    """Declarative capability, binding, contract, and budget input for a harness."""
 
-    recipe_id: NonEmptyStr
-    version: NonEmptyStr
     summary: NonEmptyStr
     contracts: tuple[HarnessContractSpec, ...] = ()
     budget: HarnessBudget = Field(default_factory=HarnessBudget)
@@ -313,29 +311,16 @@ class HarnessRecipe(FrozenStrictModel):
         return self
 
     def binding(self, binding_id: str) -> HarnessBindingSpec | None:
-        """Return a recipe binding by id without exposing a mutable index."""
+        """Return a harness binding by id without exposing a mutable index."""
         return next((binding for binding in self.bindings if binding.binding_id == binding_id), None)
-
-    @property
-    def ref(self) -> HarnessRecipeRef:
-        """Return the stable identity of this recipe version."""
-
-        return HarnessRecipeRef(recipe_id=self.recipe_id, version=self.version)
-
-
-class HarnessRecipeRef(FrozenStrictModel):
-    """Stable reference to one harness recipe version."""
-
-    recipe_id: NonEmptyStr
-    version: NonEmptyStr
 
 
 class HarnessCompileRequest(FrozenStrictModel):
-    """Closed compile request that pairs one complete recipe with one fixed K."""
+    """Closed compile request that pairs one complete harness specification with one fixed K."""
 
     request_id: NonEmptyStr
     kernel_ref: KernelRef
-    recipe: HarnessRecipe
+    spec: HarnessSpec
 
 
 class CompiledHarnessBinding(FrozenStrictModel):
@@ -525,7 +510,7 @@ class CompiledHarnessInstance(FrozenStrictModel):
 
     instance_id: NonEmptyStr
     kernel_ref: KernelRef
-    source_recipe_ref: HarnessRecipeRef
+    source_spec: HarnessSpec
     contracts: tuple[HarnessContractSpec, ...] = ()
     budget: HarnessBudget = Field(default_factory=HarnessBudget)
     recursion_policy: HarnessRecursionPolicy = Field(default_factory=HarnessRecursionPolicy)

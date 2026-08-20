@@ -555,7 +555,7 @@ def _build_complete_trial_record(
         kernel_id=bundle.fixed_harness.kernel_ref.kernel_id,
         harness_id=bundle.fixed_harness.instance_id,
         program_id=bundle.compilation.compiled_program.program_id,
-        harness_generator_sha256=canonical_json_sha256(bundle.fixed_harness.source_recipe_ref.model_dump(mode="json")),
+        harness_generator_sha256=canonical_json_sha256(bundle.fixed_harness.source_spec.model_dump(mode="json")),
         program_generator_sha256=program_generator_sha256(authorization),
         split=meta_split(freeze.split),
         repetition=authorization.dispatch.evaluation_coordinate.repetition,

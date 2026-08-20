@@ -104,7 +104,7 @@ def test_monolithic_incumbent_compiles_as_one_budget_matched_task_resident_node(
     assert result.task_snapshot.task_id == fixture.problem_view.task_id
     action_nodes = tuple(node for node in result.compilation.lowered_program.nodes if isinstance(node, ActionNode))
     assert tuple(node.node_id for node in action_nodes) == ("finalize",)
-    assert action_nodes[0].operation_id == "finalize_proposed_plan.v1"
+    assert action_nodes[0].operation_id == "finalize_proposed_plan"
     assert action_nodes[0].depends_on == ()
     assert action_nodes[0].arguments == ()
     assert {candidate.candidate_id for candidate in governed.freeze.realized_candidates} == {
@@ -172,21 +172,19 @@ def test_serial_graph_compiles_to_exact_sequential_k9_program_and_session_bundle
     assert result.session_plan.compilation == compilation
     assert result.session_plan.planned_node_ids == graph.node_ids
     assert result.session_plan.topological_order == graph.topological_order
-    assert (
-        result.session_operation_ref == fixture.fixed_harness.program_surface.operation("run_proposal_session.v1").ref
-    )
+    assert result.session_operation_ref == fixture.fixed_harness.program_surface.operation("run_proposal_session").ref
     assert result.fixed_harness == fixture.fixed_harness
     assert result.task_snapshot == arguments["task_snapshot"]
     assert compilation.execution_profile == arguments["execution_profile"]
 
     operation_ids = {node.operation_id for node in compilation.lowered_program.nodes if isinstance(node, ActionNode)}
     assert operation_ids == {
-        "check_subtask_contract.v1",
-        "finalize_proposed_plan.v1",
-        "run_semantic_subtask.v1",
+        "check_subtask_contract",
+        "finalize_proposed_plan",
+        "run_semantic_subtask",
     }
     assert (
-        result.fixed_harness.program_surface.operation("run_proposal_session.v1").required_compilation_scope
+        result.fixed_harness.program_surface.operation("run_proposal_session").required_compilation_scope
         is ProgramOperationScope.PUBLIC
     )
     for internal_operation_id in operation_ids:
@@ -194,7 +192,7 @@ def test_serial_graph_compiles_to_exact_sequential_k9_program_and_session_bundle
             result.fixed_harness.program_surface.operation(internal_operation_id).required_compilation_scope
             is ProgramOperationScope.PROPOSAL_SESSION_INTERNAL
         )
-    assert "run_proposal_session.v1" not in operation_ids
+    assert "run_proposal_session" not in operation_ids
     assert not any(isinstance(node, FanoutNode) for node in compilation.lowered_program.nodes)
     assert compilation.lowered_program.limits.max_parallelism == 1
     assert (

@@ -50,13 +50,13 @@ def _profile(
         required_kernel_version="1.6.0",
         operation_constraints=(
             _operation(
-                "run_semantic_subtask.v1",
+                "run_semantic_subtask",
                 capability_id="aecbench.operation.proposal.run-semantic-subtask",
                 definition_sha256="b" * 64,
                 scope=ProgramOperationScope.PROPOSAL_SESSION_INTERNAL,
             ),
             _operation(
-                "run_proposal_session.v1",
+                "run_proposal_session",
                 capability_id="aecbench.operation.proposal.run-session",
                 definition_sha256="c" * 64,
                 scope=ProgramOperationScope.PUBLIC,
@@ -95,12 +95,12 @@ def test_profile_canonicalizes_exact_operations_and_is_deeply_immutable() -> Non
     profile = _profile()
 
     assert tuple(item.operation_id for item in profile.operation_constraints) == (
-        "run_proposal_session.v1",
-        "run_semantic_subtask.v1",
+        "run_proposal_session",
+        "run_semantic_subtask",
     )
     assert profile.required_operation_ids == (
-        "run_proposal_session.v1",
-        "run_semantic_subtask.v1",
+        "run_proposal_session",
+        "run_semantic_subtask",
     )
     assert len(profile.content_sha256) == 64
 

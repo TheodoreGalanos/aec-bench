@@ -84,11 +84,11 @@ class AECEvolutionEngine:
         self._strategy_name: str = ""
 
     def set_run_id(self, run_id: str) -> None:
-        """Set the run ID used for candidate IDs and labels. Called by the orchestrator."""
+        """Set the run ID used for candidate IDs and labels."""
         self._run_id = run_id
 
     def set_strategy_name(self, name: str) -> None:
-        """Set the strategy name included in candidate summaries. Called by the orchestrator."""
+        """Set the strategy name included in candidate summaries."""
         self._strategy_name = name
 
     # ------------------------------------------------------------------

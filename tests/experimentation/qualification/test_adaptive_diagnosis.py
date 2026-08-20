@@ -28,7 +28,7 @@ from aec_bench.contracts.harness_instance import (
     HarnessBudget,
     HarnessCompileRequest,
     HarnessInstanceRef,
-    HarnessRecipe,
+    HarnessSpec,
     HarnessTopologyRole,
 )
 from aec_bench.contracts.harness_kernel import KernelRef, canonical_json_sha256
@@ -236,11 +236,11 @@ def test_declared_stage_graph_rule_requires_an_exact_monolithic_source() -> None
             candidate=_candidate(
                 budget=budget,
                 nodes=(
-                    ActionNode(node_id="first", operation_id="run_batch.v1"),
+                    ActionNode(node_id="first", operation_id="run_batch"),
                     ActionNode(
                         node_id="second",
                         depends_on=("first",),
-                        operation_id="run_batch.v1",
+                        operation_id="run_batch",
                     ),
                     StopNode(
                         node_id="stop",
@@ -749,11 +749,11 @@ def test_program_retry_rule_accepts_an_exact_fanout_target() -> None:
     candidate = _candidate(
         budget=budget,
         nodes=(
-            ActionNode(node_id="source", operation_id="run_batch.v1"),
+            ActionNode(node_id="source", operation_id="run_batch"),
             FanoutNode(
                 node_id="fanout",
                 depends_on=("source",),
-                operation_id="run_batch.v1",
+                operation_id="run_batch",
                 items=ProgramOutputRef(node_id="source"),
                 item_argument="task_ref",
             ),
@@ -775,7 +775,7 @@ def test_program_retry_rule_must_strictly_increase_effective_attempts() -> None:
         nodes=(
             ActionNode(
                 node_id="run",
-                operation_id="run_batch.v1",
+                operation_id="run_batch",
                 retry=RetryPolicy(max_attempts=2, retry_on=("pre_dispatch_capacity_timeout",)),
             ),
             StopNode(node_id="stop", depends_on=("run",), outcome=StopOutcome.SUCCEEDED),
@@ -1034,13 +1034,13 @@ def _batch_coalescing_nodes() -> tuple[ActionNode | StopNode, ...]:
     return (
         ActionNode(
             node_id="run-primary",
-            operation_id="run_batch.v1",
+            operation_id="run_batch",
             arguments=(ProgramArgument(name="task_ref", value=LiteralValue(value=_BATCH_TASK_IDS[0])),),
         ),
         ActionNode(
             node_id="run-secondary",
             depends_on=("run-primary",),
-            operation_id="run_batch.v1",
+            operation_id="run_batch",
             arguments=(ProgramArgument(name="task_ref", value=LiteralValue(value=_BATCH_TASK_IDS[1])),),
         ),
         StopNode(
@@ -1145,9 +1145,7 @@ def _candidate(
         harness_request=HarnessCompileRequest(
             request_id="compile.feasibility",
             kernel_ref=registry.manifest.ref,
-            recipe=HarnessRecipe(
-                recipe_id="harness.feasibility",
-                version="1.0.0",
+            spec=HarnessSpec(
                 summary="Exercise static diagnosis-rule feasibility against a fixed Hx budget.",
                 budget=budget,
                 bindings=(
@@ -1176,7 +1174,7 @@ def _candidate(
             version="1.0.0",
             nodes=nodes
             or (
-                ActionNode(node_id="run", operation_id="run_batch.v1"),
+                ActionNode(node_id="run", operation_id="run_batch"),
                 StopNode(node_id="stop", depends_on=("run",), outcome=StopOutcome.SUCCEEDED),
             ),
             limits=limits or ProgramLimits(max_total_attempts=3),

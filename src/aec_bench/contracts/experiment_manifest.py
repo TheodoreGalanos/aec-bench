@@ -44,7 +44,14 @@ class AgentConfig(StrictModel):
     model: str
     client: ClientConfig | None = None
     parameters: dict[str, Any] = Field(default_factory=dict)
+    system_prompt: str | None = None
     system_prompt_file: str | None = None
+
+    @model_validator(mode="after")
+    def validate_system_prompt_source(self) -> "AgentConfig":
+        if self.system_prompt is not None and self.system_prompt_file is not None:
+            raise ValueError("agent config must provide system_prompt or system_prompt_file, not both")
+        return self
 
     @model_validator(mode="before")
     @classmethod

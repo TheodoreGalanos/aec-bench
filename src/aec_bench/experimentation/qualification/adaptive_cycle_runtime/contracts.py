@@ -98,7 +98,7 @@ class AdaptiveHarnessProgramStageSpec(FrozenStrictModel):
         task_refs = tuple(projection.snapshot.task_id for projection in self.applicability.projections)
         if task_refs != self.instantiation.task_refs:
             raise ValueError("adaptive harness-program applicability must cover the exact stage tasks")
-        if task_source_refs(self.instantiation.fixed_harness_recipe) != self.instantiation.task_refs:
+        if task_source_refs(self.instantiation.fixed_harness_spec) != self.instantiation.task_refs:
             raise ValueError("adaptive harness-program fixed harness task-source binding must match the stage tasks")
         return self
 
@@ -261,7 +261,7 @@ def _validate_cycle_applicability(cycle: AdaptiveCycleSpec) -> None:
 
 
 def _validate_cycle_task_surfaces(cycle: AdaptiveCycleSpec) -> None:
-    parent_task_refs = task_source_refs(cycle.repair_parent.harness_request.recipe)
+    parent_task_refs = task_source_refs(cycle.repair_parent.harness_request.spec)
     if cycle.repair_request.pairing.task_ids != parent_task_refs:
         raise ValueError("adaptive cycle repair pairing must match the parent task-source binding")
     stage_task_counts = {

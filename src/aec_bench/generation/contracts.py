@@ -1,9 +1,16 @@
 # ABOUTME: Ordinary in-process values produced while sampling task templates.
 # ABOUTME: Keeps generation inputs explicit without creating a serialized contract layer.
 
+from __future__ import annotations
+
 from dataclasses import dataclass
+from pathlib import Path
+from typing import TYPE_CHECKING
 
 from aec_bench.templates.contracts import VisibilityLevel
+
+if TYPE_CHECKING:
+    from aec_bench.generation.replay import GenerationManifest
 
 
 @dataclass(frozen=True, slots=True)
@@ -22,3 +29,12 @@ class SampledInstance:
     seed: int
     instance_index: int
     visibility_level: VisibilityLevel
+
+
+@dataclass(frozen=True, slots=True)
+class GeneratedTaskSet:
+    """Generated runnable task packages and their optional replay manifest."""
+
+    output_root: Path
+    task_paths: tuple[Path, ...]
+    manifest: GenerationManifest

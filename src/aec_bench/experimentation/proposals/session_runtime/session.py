@@ -304,7 +304,7 @@ async def run_proposal_session(
     _require_proposal_operation_handler(
         bundle=bundle,
         registry=resolved_registry,
-        operation_id="run_proposal_session.v1",
+        operation_id="run_proposal_session",
         expected=(KernelOperationHandlerKey.RUN_PROPOSAL_SESSION),
     )
     execution_profile = bundle.compilation.execution_profile

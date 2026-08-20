@@ -38,7 +38,7 @@ from aec_bench.contracts.harness_instance import (
     HarnessBindingSpec,
     HarnessBudget,
     HarnessCompileRequest,
-    HarnessRecipe,
+    HarnessSpec,
     HarnessTopologyRole,
     ResultImportBindingConfig,
     TaskSourceBindingConfig,
@@ -1199,7 +1199,7 @@ def test_repair_runtime_rejects_task_review_drift_before_child_execution(tmp_pat
 def test_agent_capability_patch_replaces_only_the_expected_agent_capability(tmp_path: Path) -> None:
     runtime, _ = _runtime(tmp_path, agent_capability_id="aecbench.adapter.rlm-uncached")
     parent_request = runtime.parent.harness_request
-    parent_binding = parent_request.recipe.binding("agent")
+    parent_binding = parent_request.spec.binding("agent")
     assert parent_binding is not None
     replacement = runtime.registry.capability("aecbench.adapter.rlm-output-contract").ref
 
@@ -1213,18 +1213,18 @@ def test_agent_capability_patch_replaces_only_the_expected_agent_capability(tmp_
         iteration=1,
     )
 
-    child_binding = child_request.recipe.binding("agent")
+    child_binding = child_request.spec.binding("agent")
     assert child_binding is not None
     assert child_binding.capability_ref == replacement
     assert child_binding.configuration == parent_binding.configuration
     assert child_binding.depends_on == parent_binding.depends_on
     assert child_binding.topology_role == parent_binding.topology_role
     assert child_binding.contract_ids == parent_binding.contract_ids
-    assert tuple(binding for binding in child_request.recipe.bindings if binding.binding_id != "agent") == tuple(
-        binding for binding in parent_request.recipe.bindings if binding.binding_id != "agent"
+    assert tuple(binding for binding in child_request.spec.bindings if binding.binding_id != "agent") == tuple(
+        binding for binding in parent_request.spec.bindings if binding.binding_id != "agent"
     )
-    assert child_request.recipe.budget == parent_request.recipe.budget
-    assert child_request.recipe.recursion_policy == parent_request.recipe.recursion_policy
+    assert child_request.spec.budget == parent_request.spec.budget
+    assert child_request.spec.recursion_policy == parent_request.spec.recursion_policy
 
 
 def test_agent_capability_patch_rejects_stale_expected_capability(tmp_path: Path) -> None:
@@ -1279,7 +1279,7 @@ def test_repair_runtime_rejects_candidate_kernel_drift_at_compile_boundary(tmp_p
         harness_request=HarnessCompileRequest(
             request_id=runtime.parent.harness_request.request_id,
             kernel_ref=wrong_kernel,
-            recipe=runtime.parent.harness_request.recipe,
+            spec=runtime.parent.harness_request.spec,
         ),
         program_template=runtime.parent.program_template,
     )
@@ -1358,7 +1358,7 @@ def test_program_retry_patch_must_strictly_increase_effective_attempts(
         nodes=(
             ActionNode(
                 node_id="run",
-                operation_id="run_batch.v1",
+                operation_id="run_batch",
                 retry=RetryPolicy(
                     max_attempts=3,
                     retry_on=("pre_dispatch_capacity_timeout",),
@@ -1564,7 +1564,7 @@ def test_program_batch_coalescing_patch_preserves_fixed_hx_and_all_program_limit
     assert child_source.program_template.nodes == (
         ActionNode(
             node_id="run-coalesced",
-            operation_id="run_batch.v1",
+            operation_id="run_batch",
             arguments=(ProgramArgument(name="task_refs", value=LiteralValue(value=list(task_ids))),),
         ),
         StopNode(
@@ -1645,7 +1645,7 @@ def test_declared_stage_graph_patch_compiles_the_exact_graph_without_changing_hx
     assert child.bundle.harness.kernel_ref == parent.bundle.harness.kernel_ref
     assert child.bundle.task_snapshots == parent.bundle.task_snapshots
     stage_actions = tuple(
-        node for node in child.program.nodes if isinstance(node, ActionNode) and node.operation_id == "run_stage.v1"
+        node for node in child.program.nodes if isinstance(node, ActionNode) and node.operation_id == "run_stage"
     )
     assert [
         next(
@@ -1664,7 +1664,7 @@ def test_declared_stage_graph_patch_compiles_the_exact_graph_without_changing_hx
         stage_actions[1].node_id,
     }
     finalizer = next(
-        node for node in child.program.nodes if isinstance(node, ActionNode) and node.operation_id == "finalize_task.v1"
+        node for node in child.program.nodes if isinstance(node, ActionNode) and node.operation_id == "finalize_task"
     )
     all_stages = next(node for node in child.program.nodes if node.node_id == finalizer.depends_on[0])
     assert isinstance(all_stages, JoinNode)
@@ -1739,10 +1739,10 @@ def test_declared_stage_graph_repair_runs_one_scored_finalization_per_task_and_s
     execution = runtime.execute()
 
     compiled_child = runtime._compiled[runtime.request.child_candidate_id]
-    stage_operation = compiled_child.harness.program_surface.operation("run_stage.v1")
-    stage_definition = runtime.registry.operation_definition("run_stage.v1")
-    finalize_operation = compiled_child.harness.program_surface.operation("finalize_task.v1")
-    finalize_definition = runtime.registry.operation_definition("finalize_task.v1")
+    stage_operation = compiled_child.harness.program_surface.operation("run_stage")
+    stage_definition = runtime.registry.operation_definition("run_stage")
+    finalize_operation = compiled_child.harness.program_surface.operation("finalize_task")
+    finalize_definition = runtime.registry.operation_definition("finalize_task")
     assert stage_operation is not None
     assert stage_definition is not None
     assert (
@@ -1803,8 +1803,8 @@ def test_legacy_registry_without_definitions_runs_scored_task_finalization(
         package_fingerprint=current.package_fingerprint,
     )
 
-    assert runtime.registry.operation_definition("run_stage.v1") is None
-    assert runtime.registry.operation_definition("finalize_task.v1") is None
+    assert runtime.registry.operation_definition("run_stage") is None
+    assert runtime.registry.operation_definition("finalize_task") is None
 
     execution = runtime.execute()
 
@@ -2415,7 +2415,7 @@ def _attempt_limit_runtime(
     nodes = (
         ActionNode(
             node_id="run-alpha",
-            operation_id="run_batch.v1",
+            operation_id="run_batch",
             arguments=(
                 ProgramArgument(
                     name="task_ref",
@@ -2426,7 +2426,7 @@ def _attempt_limit_runtime(
         ActionNode(
             node_id="run-beta",
             depends_on=("run-alpha",),
-            operation_id="run_batch.v1",
+            operation_id="run_batch",
             arguments=(
                 ProgramArgument(
                     name="task_ref",
@@ -2514,13 +2514,13 @@ def _batch_coalescing_runtime(
     nodes = (
         ActionNode(
             node_id="run-primary",
-            operation_id="run_batch.v1",
+            operation_id="run_batch",
             arguments=(ProgramArgument(name="task_ref", value=LiteralValue(value=task_ids[0])),),
         ),
         ActionNode(
             node_id="run-secondary",
             depends_on=("run-primary",),
-            operation_id="run_batch.v1",
+            operation_id="run_batch",
             arguments=(ProgramArgument(name="task_ref", value=LiteralValue(value=task_ids[1])),),
         ),
         StopNode(
@@ -2631,9 +2631,7 @@ def _parent_candidate(
 ) -> RepairCandidate:
     registry = default_kernel_registry()
     capability = registry.capability
-    recipe = HarnessRecipe(
-        recipe_id="runtime-repair-harness",
-        version="1.0.0",
+    recipe = HarnessSpec(
         summary="Run an exact task through the fixed kernel for paired repair.",
         budget=budget,
         bindings=(
@@ -2687,14 +2685,14 @@ def _parent_candidate(
         harness_request=HarnessCompileRequest(
             request_id="compile.repair.parent",
             kernel_ref=registry.manifest.ref,
-            recipe=recipe,
+            spec=recipe,
         ),
         program_template=RepairProgramTemplate(
             program_id="program.repair",
             version="1.0.0",
             nodes=nodes
             or (
-                ActionNode(node_id="run", operation_id="run_batch.v1"),
+                ActionNode(node_id="run", operation_id="run_batch"),
                 StopNode(
                     node_id="stop",
                     depends_on=("run",),

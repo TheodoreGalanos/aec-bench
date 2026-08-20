@@ -81,7 +81,7 @@ def build_trial_plan(
                         experiment_id=manifest.experiment_id,
                         task_id=task.task_id,
                         agent=agent,
-                        compute_backend=manifest.compute.backend,
+                        compute=manifest.compute,
                         repetition=repetition,
                     )
                 )

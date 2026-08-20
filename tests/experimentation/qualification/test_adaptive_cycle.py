@@ -56,7 +56,7 @@ from tests.experimentation.qualification.test_harness_program_study import Harne
 from tests.experimentation.qualification.test_motif_learning import (
     _agent_model,
     _fanout_factor,
-    _fixed_harness_recipe,
+    _fixed_harness_spec,
     _policy,
     _program_factor,
     _rebind_recipe_tasks,
@@ -115,7 +115,7 @@ def test_child_harness_program_study_rebinds_only_typed_repaired_program_task_in
             nodes=(
                 ActionNode(
                     node_id="run",
-                    operation_id="run_batch.v1",
+                    operation_id="run_batch",
                     arguments=(
                         ProgramArgument(
                             name="task_ref",
@@ -137,7 +137,7 @@ def test_child_harness_program_study_rebinds_only_typed_repaired_program_task_in
         ),
     )
     fixed_harness = _rebind_recipe_tasks(
-        _fixed_harness_recipe(parent, registry),
+        _fixed_harness_spec(parent, registry),
         task_refs=(child_task,),
     )
     stage = AdaptiveHarnessProgramStageSpec(
@@ -154,7 +154,7 @@ def test_child_harness_program_study_rebinds_only_typed_repaired_program_task_in
             program_limits=parent.program_template.limits,
             seeds=(43,),
             repetitions=1,
-            fixed_harness_recipe=fixed_harness,
+            fixed_harness_spec=fixed_harness,
             fixed_program=_fanout_factor(parent.program_template.limits),
         ),
         applicability=profile_task_applicability(
@@ -194,7 +194,7 @@ def test_adaptive_cycle_runs_and_persists_the_complete_fixed_k_example(
     for index, task_id in enumerate(fixture_runtime.request.pairing.task_ids, start=1):
         _write_world_sidecar(fixture_runtime.tasks_root / task_id, label=f"source-{index}")
     parent_program = _program_factor(parent.program_template)
-    fixed_harness = _fixed_harness_recipe(parent, registry)
+    fixed_harness = _fixed_harness_spec(parent, registry)
     fixed_program = _fanout_factor(parent.program_template.limits)
     source_request = HarnessProgramCandidateRequest(
         candidate_set_id="adaptive-cycle.source",
@@ -207,8 +207,8 @@ def test_adaptive_cycle_runs_and_persists_the_complete_fixed_k_example(
         program_limits=parent.program_template.limits,
         seeds=(41,),
         repetitions=1,
-        fixed_harness_recipe=fixed_harness,
-        learned_harness_recipe=parent.harness_request.recipe,
+        fixed_harness_spec=fixed_harness,
+        learned_harness_spec=parent.harness_request.spec,
         fixed_program=fixed_program,
         learned_program=parent_program,
     )
@@ -244,7 +244,7 @@ def test_adaptive_cycle_runs_and_persists_the_complete_fixed_k_example(
             program_limits=parent.program_template.limits,
             seeds=(43,),
             repetitions=1,
-            fixed_harness_recipe=_rebind_recipe_tasks(fixed_harness, task_refs=calibration_tasks),
+            fixed_harness_spec=_rebind_recipe_tasks(fixed_harness, task_refs=calibration_tasks),
             fixed_program=fixed_program,
         ),
         applicability=profile_task_applicability(
@@ -266,7 +266,7 @@ def test_adaptive_cycle_runs_and_persists_the_complete_fixed_k_example(
         program_limits=parent.program_template.limits,
         seeds=(43,),
         repetitions=1,
-        fixed_harness_recipe=fixed_harness,
+        fixed_harness_spec=fixed_harness,
         fixed_program=fixed_program,
     )
     with pytest.raises(ValueError, match="fixed harness task-source binding"):
@@ -313,7 +313,7 @@ def test_adaptive_cycle_runs_and_persists_the_complete_fixed_k_example(
             program_limits=parent.program_template.limits,
             seeds=(47,),
             repetitions=1,
-            fixed_harness_recipe=_rebind_recipe_tasks(fixed_harness, task_refs=target_tasks),
+            fixed_harness_spec=_rebind_recipe_tasks(fixed_harness, task_refs=target_tasks),
             fixed_program=fixed_program,
         ),
         applicability=profile_task_applicability(
@@ -363,7 +363,7 @@ def test_adaptive_cycle_runs_and_persists_the_complete_fixed_k_example(
             program_limits=parent.program_template.limits,
             seeds=(43,),
             repetitions=1,
-            fixed_harness_recipe=_rebind_recipe_tasks(
+            fixed_harness_spec=_rebind_recipe_tasks(
                 fixed_harness,
                 task_refs=single_child_task,
             ),
@@ -398,8 +398,8 @@ def test_adaptive_cycle_runs_and_persists_the_complete_fixed_k_example(
         program_limits=parent.program_template.limits,
         seeds=(41,),
         repetitions=1,
-        fixed_harness_recipe=fixed_harness,
-        learned_harness_recipe=parent.harness_request.recipe,
+        fixed_harness_spec=fixed_harness,
+        learned_harness_spec=parent.harness_request.spec,
         fixed_program=fixed_program,
         learned_program=ProgramFactorTemplate.model_validate(unrelated_program_payload),
     )

@@ -15,7 +15,7 @@ from pydantic import ValidationError
 from aec_bench.contracts.dataset import DatasetManifest, DatasetPublication, DatasetTaskEntry
 from aec_bench.dataset.hashing import hash_task_directory
 from aec_bench.dataset.publication import publish_dataset
-from aec_bench.dataset.storage import write_manifest
+from aec_bench.dataset.storage import save_dataset
 
 
 class LegacyMigrationStatus(StrEnum):
@@ -156,7 +156,7 @@ def migrate_v1_dataset(
     if result.status is not LegacyMigrationStatus.FULLY_VERIFIED or result.manifest is None or project_root is None:
         detail = "; ".join(result.issues) or result.status.value
         raise ValueError(f"v1 dataset must be fully verified before migration: {detail}")
-    write_manifest(datasets_root, result.manifest)
+    save_dataset(datasets_root, result.manifest)
     return publish_dataset(
         manifest=result.manifest,
         datasets_root=datasets_root,

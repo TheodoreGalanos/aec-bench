@@ -121,7 +121,7 @@ def test_regenerate_adaptive_repair_example_prepares_exact_offline_spec_with_ove
             ProgramMaxTotalAttemptsDiagnosisRule(max_total_attempts=2),
         )
     )
-    bindings = {binding.binding_id: binding for binding in spec.parent.harness_request.recipe.bindings}
+    bindings = {binding.binding_id: binding for binding in spec.parent.harness_request.spec.bindings}
     agent = bindings["agent"]
     compute = bindings["compute"]
     context = bindings["context"]
@@ -214,7 +214,7 @@ def test_regenerate_adaptive_repair_example_prepares_serial_program_recovery_spe
     assert spec.verifier_policy.require_complete_provenance is True
     assert spec.diagnosis_rule == ProgramMaxTotalAttemptsDiagnosisRule(max_total_attempts=2)
 
-    bindings = {binding.binding_id: binding for binding in spec.parent.harness_request.recipe.bindings}
+    bindings = {binding.binding_id: binding for binding in spec.parent.harness_request.spec.bindings}
     assert bindings["context"].configuration == ContextBindingConfig(
         source_ids=("workspace.system_prompt",),
         max_tokens=4_000,
@@ -236,13 +236,13 @@ def test_regenerate_adaptive_repair_example_prepares_serial_program_recovery_spe
     first, second, stop = spec.parent.program_template.nodes
     assert first == ActionNode(
         node_id="run-primary",
-        operation_id="run_batch.v1",
+        operation_id="run_batch",
         arguments=(ProgramArgument(name="task_ref", value=LiteralValue(value=task_ids[0])),),
     )
     assert second == ActionNode(
         node_id="run-secondary",
         depends_on=("run-primary",),
-        operation_id="run_batch.v1",
+        operation_id="run_batch",
         arguments=(ProgramArgument(name="task_ref", value=LiteralValue(value=task_ids[1])),),
     )
     assert isinstance(stop, StopNode)
@@ -286,7 +286,7 @@ def test_completion_policy_repair_keeps_turn_capacity_fixed_and_changes_only_age
         replacement_capability_ref=completion_ref,
     )
     parent_agent = next(
-        binding for binding in spec.parent.harness_request.recipe.bindings if binding.binding_id == "agent"
+        binding for binding in spec.parent.harness_request.spec.bindings if binding.binding_id == "agent"
     )
     assert parent_agent.capability_ref == ordinary_ref
     assert parent_agent.configuration == AgentBindingConfig(
@@ -369,7 +369,7 @@ def test_program_recovery_can_fix_completion_policy_harness_without_an_hx_fallba
         tasks_root=tasks_root,
     )
 
-    bindings = {binding.binding_id: binding for binding in spec.parent.harness_request.recipe.bindings}
+    bindings = {binding.binding_id: binding for binding in spec.parent.harness_request.spec.bindings}
     assert bindings["agent"].capability_ref.capability_id == "aecbench.adapter.rlm-output-contract"
     assert bindings["agent"].configuration.max_turns == 32
     assert spec.request.pairing.budget.max_agent_turns == 64
@@ -443,7 +443,7 @@ def test_program_batch_coalescing_can_fix_the_output_commit_harness_without_more
         tasks_root=tasks_root,
     )
 
-    bindings = {binding.binding_id: binding for binding in spec.parent.harness_request.recipe.bindings}
+    bindings = {binding.binding_id: binding for binding in spec.parent.harness_request.spec.bindings}
     assert bindings["agent"].capability_ref.capability_id == "aecbench.adapter.rlm-output-commit"
     assert bindings["agent"].configuration == AgentBindingConfig(
         agent_name="stage1-drainage-rlm",
@@ -731,7 +731,7 @@ def test_current_program_recovery_candidate_compiles_the_exact_parent_and_predic
     child = runtime.dependencies.compiler(child_candidate, spec.request.pairing)
 
     assert parent.harness == child.harness
-    assert parent.bundle.kernel_ref == child.bundle.kernel_ref == registry.manifest.ref
+    assert parent.bundle.harness.kernel_ref == child.bundle.harness.kernel_ref == registry.manifest.ref
     assert parent.bundle.task_snapshots == child.bundle.task_snapshots == spec.task_snapshots
     assert parent.program.ref != child.program.ref
     assert parent.program.limits.max_total_attempts == 1

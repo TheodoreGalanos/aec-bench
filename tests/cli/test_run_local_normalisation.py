@@ -4,7 +4,7 @@
 import json
 from pathlib import Path
 
-from aec_bench.cli.commands.run_local import (
+from aec_bench.harness.artifact_tasks import (
     apply_normalisation,
     load_canonical_refs,
 )

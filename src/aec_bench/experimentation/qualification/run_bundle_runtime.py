@@ -849,14 +849,14 @@ def _runtime_stage_selection(
     if not {"task_ref", "stage_id"}.issubset(arguments) or not set(arguments).issubset(allowed):
         raise OperationHandlerFailure(
             "invalid_stage_selection",
-            "run_stage.v1 requires task_ref/stage_id and optional output-derived upstream_receipts",
+            "run_stage requires task_ref/stage_id and optional output-derived upstream_receipts",
         )
     task_ref = arguments["task_ref"]
     stage_id = arguments["stage_id"]
     if not isinstance(task_ref, str) or not task_ref.strip() or not isinstance(stage_id, str) or not stage_id.strip():
         raise OperationHandlerFailure(
             "invalid_stage_selection",
-            "run_stage.v1 task_ref and stage_id must be non-blank strings",
+            "run_stage task_ref and stage_id must be non-blank strings",
         )
     return task_ref, stage_id, arguments.get("upstream_receipts")
 
@@ -867,13 +867,13 @@ def _runtime_finalization_selection(
     if set(arguments) != {"task_ref", "stage_receipts"}:
         raise OperationHandlerFailure(
             "invalid_finalization_selection",
-            "finalize_task.v1 requires task_ref and output-derived stage_receipts",
+            "finalize_task requires task_ref and output-derived stage_receipts",
         )
     task_ref = arguments["task_ref"]
     if not isinstance(task_ref, str) or not task_ref.strip():
         raise OperationHandlerFailure(
             "invalid_finalization_selection",
-            "finalize_task.v1 task_ref must be a non-blank string",
+            "finalize_task task_ref must be a non-blank string",
         )
     return task_ref, arguments["stage_receipts"]
 

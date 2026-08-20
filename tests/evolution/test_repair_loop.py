@@ -22,7 +22,7 @@ from aec_bench.contracts.harness_instance import (
     HarnessBindingSpec,
     HarnessBudget,
     HarnessCompileRequest,
-    HarnessRecipe,
+    HarnessSpec,
     HarnessTopologyRole,
     ResultImportBindingConfig,
     TaskSourceBindingConfig,
@@ -688,13 +688,13 @@ def _parent_candidate(
         harness_request=HarnessCompileRequest(
             request_id="compile-parent",
             kernel_ref=registry.manifest.ref,
-            recipe=recipe,
+            spec=recipe,
         ),
         program_template=RepairProgramTemplate(
             program_id="px-repair",
             version="1.0.0",
             nodes=(
-                ActionNode(node_id="run", operation_id="run_batch.v1"),
+                ActionNode(node_id="run", operation_id="run_batch"),
                 StopNode(node_id="stop", depends_on=("run",), outcome=StopOutcome.SUCCEEDED),
             ),
             limits=ProgramLimits(max_total_attempts=1),
@@ -704,7 +704,7 @@ def _parent_candidate(
 
 def _patched_harness_request(parent: HarnessCompileRequest) -> HarnessCompileRequest:
     bindings: list[HarnessBindingSpec] = []
-    for binding in parent.recipe.bindings:
+    for binding in parent.spec.bindings:
         configuration = binding.configuration
         if isinstance(configuration, AgentBindingConfig):
             configuration = AgentBindingConfig(
@@ -723,19 +723,17 @@ def _patched_harness_request(parent: HarnessCompileRequest) -> HarnessCompileReq
                 configuration=configuration,
             )
         )
-    recipe = HarnessRecipe(
-        recipe_id=parent.recipe.recipe_id,
-        version=parent.recipe.version,
-        summary=parent.recipe.summary,
-        contracts=parent.recipe.contracts,
-        budget=parent.recipe.budget,
-        recursion_policy=parent.recipe.recursion_policy,
+    recipe = HarnessSpec(
+        summary=parent.spec.summary,
+        contracts=parent.spec.contracts,
+        budget=parent.spec.budget,
+        recursion_policy=parent.spec.recursion_policy,
         bindings=tuple(bindings),
     )
     return HarnessCompileRequest(
         request_id="compile-child-hx",
         kernel_ref=parent.kernel_ref,
-        recipe=recipe,
+        spec=recipe,
     )
 
 
@@ -759,11 +757,9 @@ def _recipe(
     *,
     task_id: str,
     budget: HarnessBudget,
-) -> HarnessRecipe:
+) -> HarnessSpec:
     capability = registry.capability
-    return HarnessRecipe(
-        recipe_id="repair-review",
-        version="1.0.0",
+    return HarnessSpec(
         summary="Run one paired repair task through the fixed Harbor kernel.",
         budget=budget,
         bindings=(

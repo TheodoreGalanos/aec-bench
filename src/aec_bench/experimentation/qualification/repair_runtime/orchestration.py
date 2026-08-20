@@ -777,7 +777,7 @@ class RepairRuntime:
             )
             for node in execution.program_execution.node_evidence
             for attempt in node.attempts
-            if attempt.operation_ref.operation_id in {"run_batch.v1", "finalize_task.v1"}
+            if attempt.operation_ref.operation_id in {"run_batch", "finalize_task"}
             and attempt.status is OperationExecutionStatus.SUCCEEDED
         )
         observed_coordinates = sorted(

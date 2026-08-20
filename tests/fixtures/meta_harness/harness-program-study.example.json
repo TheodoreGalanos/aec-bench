@@ -1,6 +1,6 @@
 {
   "applicability": {
-    "content_sha256": "bddd48300ccf0774200601a341f81dac299511f47dbb7d4c7854463c3f183ab6",
+    "content_sha256": "c3128ebc6987a2b8b525cf0a0c5add7976304aac106104d8fcb1216d7c4c9b1d",
     "descriptor": {
       "branching_characteristic": "none",
       "evidence_surfaces": [
@@ -15,24 +15,22 @@
     },
     "descriptor_source": "kernel_reward_blind_task_profiler",
     "kernel_ref": {
-      "content_sha256": "b190d2d5394c23a5a63cec2607d3814b9f68ec68395763405999365fb6dd7de5",
       "kernel_id": "aec-bench.adaptive-harness",
       "version": "1.7.0"
     },
     "profile_input_sha256": "0c1b3c7a91e5114433e9e372a14b0a391f1d5f8cf3abf5186f747566481364cd",
     "profiler_ref": {
       "capability_id": "aecbench.profiler.declared-task-surface",
-      "content_sha256": "db06126467829f6afba80bb68544ed14e9656aa3e2bda9e67c5940b7f23eb6fa",
       "version": "1.0.0"
     },
     "projections": [
       {
-        "review_lineage_sha256": "f14ef1ea5503c99d2ff3854d67e4cb8886520d84d9556b7cbd9fa8d89913ac6d",
+        "review": null,
         "snapshot": {
-          "definition_sha256": "78fdacd711d154ccd292465c0991962689dcf8c465d57fc84b46311a3628a54d",
-          "package_sha256": "f14ef1ea5503c99d2ff3854d67e4cb8886520d84d9556b7cbd9fa8d89913ac6d",
+          "kind": "repository",
+          "source_revision": "4bb4073db1bc364bd7c4219c0abec4e903c5e9db",
           "task_id": "electrical/rlm-test",
-          "task_review": null
+          "task_path": "tasks/electrical/rlm-test"
         },
         "surface": {
           "branch_count": 0,
@@ -52,10 +50,10 @@
       }
     ],
     "review_lineage_ids": [
-      "f14ef1ea5503c99d2ff3854d67e4cb8886520d84d9556b7cbd9fa8d89913ac6d"
+      "unreviewed:electrical/rlm-test"
     ],
     "schema_version": "aecbench.motif-applicability-attestation.v3",
-    "source_snapshot_sha256": "ad460fb6b1cd90c44e2426e15acd94dcc5c39e9b018c309f41ecf76a3fc5c005",
+    "source_snapshot_sha256": "f211765257c232c0e08deb0bdf1d8e20b5971b44f78c3a63ec567de0816ff5fc",
     "topology_bases": [
       "opaque_atomic"
     ]
@@ -65,15 +63,14 @@
   "candidate_requests": [
     {
       "candidate_set_id": "adaptive-harness-program-study-electrical",
-      "content_sha256": "d2e44e5f3d732d071ac41199e7083b3241fa18f33df2a8962fd0f3673da6b03e",
+      "content_sha256": "df19a314c8a86526fa06e419563dd31197ecab86a6393ac8377d60924809931e",
       "experiment_id": "adaptive-harness-program-study-example",
-      "fixed_harness_recipe": {
+      "fixed_harness_spec": {
         "bindings": [
           {
             "binding_id": "tasks",
             "capability_ref": {
               "capability_id": "aecbench.tasks.registry",
-              "content_sha256": "b8dd57658a28a60ee2f618aac912fbfa9ed54afffce27fba8767ef26246d846e",
               "version": "1.0.0"
             },
             "configuration": {
@@ -90,7 +87,6 @@
             "binding_id": "agent",
             "capability_ref": {
               "capability_id": "aecbench.adapter.tool-loop",
-              "content_sha256": "621cbc7f39fd72f700188af9503b8b9a794fb7d490233b222f7346e4d7319fcf",
               "version": "1.0.0"
             },
             "configuration": {
@@ -110,7 +106,6 @@
             "binding_id": "compute",
             "capability_ref": {
               "capability_id": "aecbench.backend.harbor.morph",
-              "content_sha256": "cd1e6031539bb7e17df9b4912291cc9d2ece6d4e3fe06d498d19c3b68f9c25c9",
               "version": "1.0.0"
             },
             "configuration": {
@@ -128,7 +123,6 @@
             "binding_id": "verify",
             "capability_ref": {
               "capability_id": "aecbench.verifier.task",
-              "content_sha256": "3616cea33f6afe17da3ba8b7df340e946083a387f16a527af46b4997dfe82440",
               "version": "1.0.0"
             },
             "configuration": {
@@ -146,7 +140,6 @@
             "binding_id": "import",
             "capability_ref": {
               "capability_id": "aecbench.results.trial-record",
-              "content_sha256": "22d83a06cf3ff502c44848f3f07b4e147f2bd1abd884328f7a7228d9a4728d84",
               "version": "1.0.0"
             },
             "configuration": {
@@ -173,20 +166,17 @@
           "max_tool_calls": 64,
           "max_total_attempts": 16
         },
-        "content_sha256": "192ee5bde29006e895155ca9758343e8fc96d3e7b4010b9cd7a7529c48e91f75",
         "contracts": [],
-        "recipe_id": "harness-program-study-h0",
         "recursion_policy": {
           "allowed_binding_ids": [],
           "enabled": false,
           "max_calls": 0,
           "max_depth": 0
         },
-        "summary": "Execute the exact task through one fixed-K harness-program-study harness factor.",
-        "version": "1.0.0"
+        "summary": "Execute the exact task through one fixed-K harness-program-study harness factor."
       },
       "fixed_program": {
-        "content_sha256": "c31a655e9079de8c9ae3eefa01339d51f689b08ea31fabbb3ed4f0ea265fe230",
+        "content_sha256": "f993bd7b036d02991b2c0008e9b4d685650963551da6d75b560e5585b4dc7350",
         "factor_id": "harness-program-study-p0",
         "limits": {
           "max_nodes": 16,
@@ -201,7 +191,7 @@
             "depends_on": [],
             "kind": "action",
             "node_id": "run",
-            "operation_id": "run_batch.v1",
+            "operation_id": "run_batch",
             "recursion": null,
             "retry": null
           },
@@ -229,17 +219,15 @@
         "max_total_attempts": 16
       },
       "kernel_ref": {
-        "content_sha256": "b190d2d5394c23a5a63cec2607d3814b9f68ec68395763405999365fb6dd7de5",
         "kernel_id": "aec-bench.adaptive-harness",
         "version": "1.7.0"
       },
-      "learned_harness_recipe": {
+      "learned_harness_spec": {
         "bindings": [
           {
             "binding_id": "tasks",
             "capability_ref": {
               "capability_id": "aecbench.tasks.registry",
-              "content_sha256": "b8dd57658a28a60ee2f618aac912fbfa9ed54afffce27fba8767ef26246d846e",
               "version": "1.0.0"
             },
             "configuration": {
@@ -256,7 +244,6 @@
             "binding_id": "agent",
             "capability_ref": {
               "capability_id": "aecbench.adapter.rlm",
-              "content_sha256": "b1be0fa2b07214186303734f2aafe157939aa73bae0570bf1f2960fe4e8ec572",
               "version": "1.0.0"
             },
             "configuration": {
@@ -276,7 +263,6 @@
             "binding_id": "compute",
             "capability_ref": {
               "capability_id": "aecbench.backend.harbor.morph",
-              "content_sha256": "cd1e6031539bb7e17df9b4912291cc9d2ece6d4e3fe06d498d19c3b68f9c25c9",
               "version": "1.0.0"
             },
             "configuration": {
@@ -294,7 +280,6 @@
             "binding_id": "verify",
             "capability_ref": {
               "capability_id": "aecbench.verifier.task",
-              "content_sha256": "3616cea33f6afe17da3ba8b7df340e946083a387f16a527af46b4997dfe82440",
               "version": "1.0.0"
             },
             "configuration": {
@@ -312,7 +297,6 @@
             "binding_id": "import",
             "capability_ref": {
               "capability_id": "aecbench.results.trial-record",
-              "content_sha256": "22d83a06cf3ff502c44848f3f07b4e147f2bd1abd884328f7a7228d9a4728d84",
               "version": "1.0.0"
             },
             "configuration": {
@@ -339,20 +323,17 @@
           "max_tool_calls": 64,
           "max_total_attempts": 16
         },
-        "content_sha256": "146b6a5cf4897c7f0ffcd062bfde19b494be42d8fc83f24e970b99daeacf40f5",
         "contracts": [],
-        "recipe_id": "harness-program-study-hx",
         "recursion_policy": {
           "allowed_binding_ids": [],
           "enabled": false,
           "max_calls": 0,
           "max_depth": 0
         },
-        "summary": "Execute the exact task through one fixed-K harness-program-study harness factor.",
-        "version": "1.0.0"
+        "summary": "Execute the exact task through one fixed-K harness-program-study harness factor."
       },
       "learned_program": {
-        "content_sha256": "3c637a40a2ea9b889b5316a4ecc22828c3ca9ddedfd7412e68bc3c0d1be32e08",
+        "content_sha256": "2c3db58a8f0a63a7261031ba867072f83397eba18973ef97806fd61b7614c2a5",
         "factor_id": "harness-program-study-px",
         "limits": {
           "max_nodes": 16,
@@ -367,7 +348,7 @@
             "depends_on": [],
             "kind": "action",
             "node_id": "enumerate",
-            "operation_id": "enumerate_tasks.v1",
+            "operation_id": "enumerate_tasks",
             "recursion": null,
             "retry": null
           },
@@ -384,7 +365,7 @@
             "kind": "fanout",
             "max_parallelism": 2,
             "node_id": "run-each",
-            "operation_id": "run_batch.v1",
+            "operation_id": "run_batch",
             "recursion": null,
             "retry": null
           },
@@ -421,7 +402,7 @@
   ],
   "conclusion": "candidate_search",
   "confidence_level": 0.95,
-  "content_sha256": "55626838c25033fca175f4867f3975928153f1b94d7a7c3c0f57328981dee91a",
+  "content_sha256": "d95aac321e7d151dd31e3f93df0be39ba55e796fdc72c097116b1b86cce7c1bd",
   "harness_generator_sha256": "37a10b5ca1e11a3a61d8f8975fec15584a43e390733a164cd932f7cba46ab632",
   "policy_id": "policy.harness-program-study.fixed-k.v1",
   "program_generator_sha256": "4adf6f4db840cf7d4b4a981bb36b9ec6e859763374b0628f1475180c0a17ad86",
@@ -433,59 +414,91 @@
         "candidates": [
           {
             "cell": "h0_p0",
-            "harness_abi_sha256": "b190d2d5394c23a5a63cec2607d3814b9f68ec68395763405999365fb6dd7de5",
-            "harness_sha256": "eebb2b8137813618f833e03da58c5e658c34e568b5dd80470fca672cb9a12f71",
-            "kernel_abi_sha256": "b190d2d5394c23a5a63cec2607d3814b9f68ec68395763405999365fb6dd7de5",
-            "kernel_sha256": "b190d2d5394c23a5a63cec2607d3814b9f68ec68395763405999365fb6dd7de5",
+            "harness_abi_sha256": "67aecc341f46748feecdb7f9679bce01de93f109d6db55c1dda25d7e8cd650d0",
+            "harness_ref": {
+              "instance_id": "hx.d8d3001ddd84b2117ba808a8e4a5597edce50bf5520532d62e896e8e6c1151f8"
+            },
+            "kernel_abi_sha256": "67aecc341f46748feecdb7f9679bce01de93f109d6db55c1dda25d7e8cd650d0",
+            "kernel_ref": {
+              "kernel_id": "aec-bench.adaptive-harness",
+              "version": "1.7.0"
+            },
             "policy_sha256": "13207e0bc863c5e16ee22157f0ca70e866e4e79e71a6ea77211dc82d887cd8ce",
-            "program_abi_sha256": "b190d2d5394c23a5a63cec2607d3814b9f68ec68395763405999365fb6dd7de5",
-            "program_sha256": "c31a655e9079de8c9ae3eefa01339d51f689b08ea31fabbb3ed4f0ea265fe230",
-            "reference_sha256": "f6292c9eeed991c68f27481cbde7c67d524c272339fd5b4b969a34450909eaa9",
+            "program_abi_sha256": "67aecc341f46748feecdb7f9679bce01de93f109d6db55c1dda25d7e8cd650d0",
+            "program_ref": {
+              "program_id": "harness-program-study-p0",
+              "version": "1.0.0"
+            },
+            "reference_sha256": "f339222c9c0ea065fa582f1b1811f2168880beded55bf3752057da3787e055f7",
             "resource_sha256": "3aaa4a0436a57494ab4a4d87606fa8afcb1233576a1f9743c338e329abbb88b5",
             "task_set_id": "world.electrical.rlm-test",
-            "task_set_sha256": "1d6bf5cad551c3ab45f14d136620f145ca7842322d46c0f4e37f03a553e32c71"
+            "task_set_sha256": "ca28ae5df6f197a5aae2a91c70cb1326e91617fda96d5b17c692b38bdf9c86d4"
           },
           {
             "cell": "hx_p0",
-            "harness_abi_sha256": "b190d2d5394c23a5a63cec2607d3814b9f68ec68395763405999365fb6dd7de5",
-            "harness_sha256": "0c69b38e013e2c90af770e8c9b3a3b8bf39a3fb6d54543018a5ac712bc585b6f",
-            "kernel_abi_sha256": "b190d2d5394c23a5a63cec2607d3814b9f68ec68395763405999365fb6dd7de5",
-            "kernel_sha256": "b190d2d5394c23a5a63cec2607d3814b9f68ec68395763405999365fb6dd7de5",
+            "harness_abi_sha256": "67aecc341f46748feecdb7f9679bce01de93f109d6db55c1dda25d7e8cd650d0",
+            "harness_ref": {
+              "instance_id": "hx.e67ec831e44fbed08da98f27ac25855c8b9ccca8a6475ca39a336119b6ff033f"
+            },
+            "kernel_abi_sha256": "67aecc341f46748feecdb7f9679bce01de93f109d6db55c1dda25d7e8cd650d0",
+            "kernel_ref": {
+              "kernel_id": "aec-bench.adaptive-harness",
+              "version": "1.7.0"
+            },
             "policy_sha256": "13207e0bc863c5e16ee22157f0ca70e866e4e79e71a6ea77211dc82d887cd8ce",
-            "program_abi_sha256": "b190d2d5394c23a5a63cec2607d3814b9f68ec68395763405999365fb6dd7de5",
-            "program_sha256": "c31a655e9079de8c9ae3eefa01339d51f689b08ea31fabbb3ed4f0ea265fe230",
-            "reference_sha256": "7a6f5037715bb65a3dba097282b232c23ca8a9bc2689d302cc7514b092eaf3f3",
+            "program_abi_sha256": "67aecc341f46748feecdb7f9679bce01de93f109d6db55c1dda25d7e8cd650d0",
+            "program_ref": {
+              "program_id": "harness-program-study-p0",
+              "version": "1.0.0"
+            },
+            "reference_sha256": "acdbf8b65cd4d314093d21e2ec4e0a78211c26db09dfe7b96c2be8d259b960da",
             "resource_sha256": "3aaa4a0436a57494ab4a4d87606fa8afcb1233576a1f9743c338e329abbb88b5",
             "task_set_id": "world.electrical.rlm-test",
-            "task_set_sha256": "1d6bf5cad551c3ab45f14d136620f145ca7842322d46c0f4e37f03a553e32c71"
+            "task_set_sha256": "ca28ae5df6f197a5aae2a91c70cb1326e91617fda96d5b17c692b38bdf9c86d4"
           },
           {
             "cell": "h0_px",
-            "harness_abi_sha256": "b190d2d5394c23a5a63cec2607d3814b9f68ec68395763405999365fb6dd7de5",
-            "harness_sha256": "eebb2b8137813618f833e03da58c5e658c34e568b5dd80470fca672cb9a12f71",
-            "kernel_abi_sha256": "b190d2d5394c23a5a63cec2607d3814b9f68ec68395763405999365fb6dd7de5",
-            "kernel_sha256": "b190d2d5394c23a5a63cec2607d3814b9f68ec68395763405999365fb6dd7de5",
+            "harness_abi_sha256": "67aecc341f46748feecdb7f9679bce01de93f109d6db55c1dda25d7e8cd650d0",
+            "harness_ref": {
+              "instance_id": "hx.d8d3001ddd84b2117ba808a8e4a5597edce50bf5520532d62e896e8e6c1151f8"
+            },
+            "kernel_abi_sha256": "67aecc341f46748feecdb7f9679bce01de93f109d6db55c1dda25d7e8cd650d0",
+            "kernel_ref": {
+              "kernel_id": "aec-bench.adaptive-harness",
+              "version": "1.7.0"
+            },
             "policy_sha256": "13207e0bc863c5e16ee22157f0ca70e866e4e79e71a6ea77211dc82d887cd8ce",
-            "program_abi_sha256": "b190d2d5394c23a5a63cec2607d3814b9f68ec68395763405999365fb6dd7de5",
-            "program_sha256": "3c637a40a2ea9b889b5316a4ecc22828c3ca9ddedfd7412e68bc3c0d1be32e08",
-            "reference_sha256": "7fb31d1fd87db1fe875f4fcf4441f26d11224c7e7f63cef59402546e10758a74",
+            "program_abi_sha256": "67aecc341f46748feecdb7f9679bce01de93f109d6db55c1dda25d7e8cd650d0",
+            "program_ref": {
+              "program_id": "harness-program-study-px",
+              "version": "1.0.0"
+            },
+            "reference_sha256": "4e4a6b990461d9d421d4feb096eeb913ea08839499816faf0ee826354af864a6",
             "resource_sha256": "3aaa4a0436a57494ab4a4d87606fa8afcb1233576a1f9743c338e329abbb88b5",
             "task_set_id": "world.electrical.rlm-test",
-            "task_set_sha256": "1d6bf5cad551c3ab45f14d136620f145ca7842322d46c0f4e37f03a553e32c71"
+            "task_set_sha256": "ca28ae5df6f197a5aae2a91c70cb1326e91617fda96d5b17c692b38bdf9c86d4"
           },
           {
             "cell": "hx_px",
-            "harness_abi_sha256": "b190d2d5394c23a5a63cec2607d3814b9f68ec68395763405999365fb6dd7de5",
-            "harness_sha256": "0c69b38e013e2c90af770e8c9b3a3b8bf39a3fb6d54543018a5ac712bc585b6f",
-            "kernel_abi_sha256": "b190d2d5394c23a5a63cec2607d3814b9f68ec68395763405999365fb6dd7de5",
-            "kernel_sha256": "b190d2d5394c23a5a63cec2607d3814b9f68ec68395763405999365fb6dd7de5",
+            "harness_abi_sha256": "67aecc341f46748feecdb7f9679bce01de93f109d6db55c1dda25d7e8cd650d0",
+            "harness_ref": {
+              "instance_id": "hx.e67ec831e44fbed08da98f27ac25855c8b9ccca8a6475ca39a336119b6ff033f"
+            },
+            "kernel_abi_sha256": "67aecc341f46748feecdb7f9679bce01de93f109d6db55c1dda25d7e8cd650d0",
+            "kernel_ref": {
+              "kernel_id": "aec-bench.adaptive-harness",
+              "version": "1.7.0"
+            },
             "policy_sha256": "13207e0bc863c5e16ee22157f0ca70e866e4e79e71a6ea77211dc82d887cd8ce",
-            "program_abi_sha256": "b190d2d5394c23a5a63cec2607d3814b9f68ec68395763405999365fb6dd7de5",
-            "program_sha256": "3c637a40a2ea9b889b5316a4ecc22828c3ca9ddedfd7412e68bc3c0d1be32e08",
-            "reference_sha256": "30a999f831c9b6aac128a190c9418cd008c57e726a6ea7b1b068186e3cd25203",
+            "program_abi_sha256": "67aecc341f46748feecdb7f9679bce01de93f109d6db55c1dda25d7e8cd650d0",
+            "program_ref": {
+              "program_id": "harness-program-study-px",
+              "version": "1.0.0"
+            },
+            "reference_sha256": "f6c0ac0bf3266eb272ec2246cd4941e03f6141fabf6a978fc4e9d404f7f678d5",
             "resource_sha256": "3aaa4a0436a57494ab4a4d87606fa8afcb1233576a1f9743c338e329abbb88b5",
             "task_set_id": "world.electrical.rlm-test",
-            "task_set_sha256": "1d6bf5cad551c3ab45f14d136620f145ca7842322d46c0f4e37f03a553e32c71"
+            "task_set_sha256": "ca28ae5df6f197a5aae2a91c70cb1326e91617fda96d5b17c692b38bdf9c86d4"
           }
         ],
         "task_set_id": "world.electrical.rlm-test"

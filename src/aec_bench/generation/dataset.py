@@ -14,7 +14,7 @@ from pathlib import Path
 from pydantic import Field
 
 from aec_bench.contracts.validators import StrictModel
-from aec_bench.generation.replay import GenerationManifest
+from aec_bench.generation.contracts import GeneratedTaskSet
 from aec_bench.templates.contracts import ToolMode
 from aec_bench.templates.registry import LoadedTemplate
 
@@ -290,7 +290,7 @@ class DatasetSummary:
 
 @dataclass(frozen=True, slots=True)
 class CompositionPlan:
-    """The output of compose_dataset: a deterministic plan for generating instances."""
+    """The output of plan_suite: a deterministic plan for generating instances."""
 
     suite_name: str
     seed: int
@@ -448,7 +448,7 @@ def _validate_coverage(
     return warnings
 
 
-def compose_dataset(
+def plan_suite(
     config: SuiteConfig,
     templates: list[LoadedTemplate],
 ) -> CompositionPlan:
@@ -529,14 +529,14 @@ def load_suite_config(config_path: Path) -> SuiteConfig:
     return SuiteConfig.model_validate(raw)
 
 
-def execute_plan(
+def generate_instances(
     plan: CompositionPlan,
     config: SuiteConfig,
-) -> GenerationManifest:
+) -> GeneratedTaskSet:
     """Execute a composition plan and write one optional replay sidecar.
 
     Reuses the loaded template carried by each planned instance.
-    Returns the replay manifest that was written to disk.
+    Returns generated task paths with the replay manifest written to disk.
     """
     from aec_bench.generation.replay import (
         GenerationInstance,
@@ -598,7 +598,11 @@ def execute_plan(
         instances=tuple(entries),
     )
     write_generation_manifest(output_dir, manifest)
-    return manifest
+    return GeneratedTaskSet(
+        output_root=output_dir,
+        task_paths=tuple(output_dir / entry.task_id for entry in manifest.instances),
+        manifest=manifest,
+    )
 
 
 def _suite_generation_config(config: SuiteConfig) -> dict[str, object]:

@@ -70,7 +70,7 @@ class RepairRunSpec(LegacyContentAddressedModel):
             raise ValueError("repair parent does not match its request")
         source_bindings = tuple(
             binding.configuration
-            for binding in self.parent.harness_request.recipe.bindings
+            for binding in self.parent.harness_request.spec.bindings
             if isinstance(binding.configuration, TaskSourceBindingConfig)
         )
         if len(source_bindings) != 1:

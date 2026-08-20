@@ -19,7 +19,7 @@ from aec_bench.contracts.harness_instance import (
     AgentBindingConfig,
     HarnessBindingSpec,
     HarnessBudget,
-    HarnessRecipe,
+    HarnessSpec,
     TaskSourceBindingConfig,
 )
 from aec_bench.contracts.harness_kernel import (
@@ -48,7 +48,7 @@ class HarnessMotifTemplatePayload(FrozenStrictModel):
     """Closed payload stored inside an Hx motif template."""
 
     schema_version: Literal["aecbench.hx-motif-template.v1"] = "aecbench.hx-motif-template.v1"
-    recipe: HarnessRecipe
+    spec: HarnessSpec
 
 
 class ProgramMotifTemplatePayload(FrozenStrictModel):
@@ -71,7 +71,7 @@ class MotifHarnessProgramInstantiationRequest(LegacyContentAddressedModel):
     program_limits: ProgramLimits
     seeds: tuple[int, ...]
     repetitions: PositiveInt
-    fixed_harness_recipe: HarnessRecipe
+    fixed_harness_spec: HarnessSpec
     fixed_program: ProgramFactorTemplate
 
     @field_validator("task_refs")
@@ -110,11 +110,11 @@ class InstantiatedMotifFactors(LegacyContentAddressedModel):
         return validate_sha256(value)
 
 
-def encode_harness_motif_template(recipe: HarnessRecipe) -> MotifTemplate:
-    """Encode one typed source Hx recipe without permitting executable import hooks."""
+def encode_harness_motif_template(spec: HarnessSpec) -> MotifTemplate:
+    """Encode one typed source Hx spec without permitting executable import hooks."""
 
-    normalized = HarnessRecipe.model_validate(recipe.model_dump(mode="json"))
-    payload = HarnessMotifTemplatePayload(recipe=normalized)
+    normalized = HarnessSpec.model_validate(spec.model_dump(mode="json"))
+    payload = HarnessMotifTemplatePayload(spec=normalized)
     return MotifTemplate.create(kind="hx", payload=payload.model_dump(mode="json"))
 
 
@@ -141,15 +141,15 @@ def instantiate_selected_motif_factors(
     if selected.kernel_abi_sha256 != kernel_abi_commitment(request.kernel_ref):
         raise ValueError("selected motif does not target the requested fixed-kernel ABI")
 
-    source_recipe = _decode_harness_template(selected.hx_template)
+    source_spec = _decode_harness_template(selected.hx_template)
     source_program = _decode_program_template(selected.px_template)
     rebound_program = rebind_program_task_inputs(
         source_program,
-        source_task_refs=_task_source_refs(source_recipe),
+        source_task_refs=_task_source_refs(source_spec),
         target_task_refs=request.task_refs,
     )
-    learned_recipe = _rebind_harness_recipe(
-        source_recipe,
+    learned_spec = _rebind_harness_spec(
+        source_spec,
         motif_sha256=selected.motif_sha256,
         task_refs=request.task_refs,
         model=request.model,
@@ -172,8 +172,8 @@ def instantiate_selected_motif_factors(
         program_limits=request.program_limits,
         seeds=request.seeds,
         repetitions=request.repetitions,
-        fixed_harness_recipe=request.fixed_harness_recipe,
-        learned_harness_recipe=learned_recipe,
+        fixed_harness_spec=request.fixed_harness_spec,
+        learned_harness_spec=learned_spec,
         fixed_program=request.fixed_program,
         learned_program=learned_program,
     )
@@ -187,13 +187,13 @@ def instantiate_selected_motif_factors(
     )
 
 
-def _decode_harness_template(template: MotifTemplate) -> HarnessRecipe:
+def _decode_harness_template(template: MotifTemplate) -> HarnessSpec:
     if template.kind != "hx":
         raise ValueError("selected Hx motif template has the wrong kind")
     try:
-        return HarnessMotifTemplatePayload.model_validate(template.payload).recipe
+        return HarnessMotifTemplatePayload.model_validate(template.payload).spec
     except ValueError as error:
-        raise ValueError("selected Hx motif template is not a typed HarnessRecipe payload") from error
+        raise ValueError("selected Hx motif template is not a typed HarnessSpec payload") from error
 
 
 def _decode_program_template(template: MotifTemplate) -> ProgramFactorTemplate:
@@ -239,9 +239,9 @@ def _rebind_program_node_tasks(
     if not isinstance(node, ActionNode | FanoutNode):
         return node
     task_ports = {
-        "run_batch.v1": frozenset({"task_ref", "task_refs"}),
-        "run_stage.v1": frozenset({"task_ref"}),
-        "finalize_task.v1": frozenset({"task_ref"}),
+        "run_batch": frozenset({"task_ref", "task_refs"}),
+        "run_stage": frozenset({"task_ref"}),
+        "finalize_task": frozenset({"task_ref"}),
     }.get(node.operation_id, frozenset())
     arguments = tuple(
         _rebind_program_argument(argument, mapping=mapping) if argument.name in task_ports else argument
@@ -283,18 +283,16 @@ def _rebind_program_argument(
     )
 
 
-def _rebind_harness_recipe(
-    source: HarnessRecipe,
+def _rebind_harness_spec(
+    source: HarnessSpec,
     *,
     motif_sha256: str,
     task_refs: tuple[str, ...],
     model: str,
     budget: HarnessBudget,
-) -> HarnessRecipe:
+) -> HarnessSpec:
     bindings = tuple(_rebind_harness_binding(binding, task_refs=task_refs, model=model) for binding in source.bindings)
-    return HarnessRecipe(
-        recipe_id=f"{source.recipe_id}.motif-{motif_sha256[:12]}",
-        version=source.version,
+    return HarnessSpec(
         summary=source.summary,
         contracts=source.contracts,
         budget=budget,
@@ -303,11 +301,9 @@ def _rebind_harness_recipe(
     )
 
 
-def _task_source_refs(recipe: HarnessRecipe) -> tuple[str, ...]:
+def _task_source_refs(spec: HarnessSpec) -> tuple[str, ...]:
     sources = tuple(
-        binding.configuration
-        for binding in recipe.bindings
-        if isinstance(binding.configuration, TaskSourceBindingConfig)
+        binding.configuration for binding in spec.bindings if isinstance(binding.configuration, TaskSourceBindingConfig)
     )
     if len(sources) != 1:
         raise ValueError("motif Hx template requires exactly one typed task-source slot")

@@ -180,7 +180,7 @@ def test_stage_operations_expose_closed_content_addressed_abis() -> None:
 def test_task_enumeration_has_one_phase_neutral_kernel_operation_definition() -> None:
     registry = default_kernel_registry()
 
-    definition = registry.operation_definition("enumerate_tasks.v1")
+    definition = registry.operation_definition("enumerate_tasks")
     capability = registry.capability("aecbench.operation.tasks.enumerate")
     primitive = registry.resolve(capability.ref)
 
@@ -209,7 +209,7 @@ def test_three_low_effect_operations_have_phase_neutral_kernel_definitions() -> 
     registry = default_kernel_registry()
 
     expected = {
-        "check_subtask_contract.v1": {
+        "check_subtask_contract": {
             "capability_id": "aecbench.operation.proposal.check-subtask-contract",
             "input_schema_ref": "aecbench://subtask-contract-check-selection/v1",
             "output_schema_ref": "aecbench://subtask-contract-check-ref/v1",
@@ -230,7 +230,7 @@ def test_three_low_effect_operations_have_phase_neutral_kernel_definitions() -> 
             ),
             "allow_monolithic_without_arguments": False,
         },
-        "finalize_proposed_plan.v1": {
+        "finalize_proposed_plan": {
             "capability_id": "aecbench.operation.proposal.finalize-proposed-plan",
             "input_schema_ref": "aecbench://finalize-proposed-plan-selection/v1",
             "output_schema_ref": "aecbench://trial-record-set/v1",
@@ -251,7 +251,7 @@ def test_three_low_effect_operations_have_phase_neutral_kernel_definitions() -> 
             ),
             "allow_monolithic_without_arguments": True,
         },
-        "finalize_task.v1": {
+        "finalize_task": {
             "capability_id": "aecbench.operation.harbor.finalize-task",
             "input_schema_ref": "aecbench://finalize-task-selection/v1",
             "output_schema_ref": "aecbench://trial-record-set/v1",
@@ -301,7 +301,7 @@ def test_three_low_effect_operations_have_phase_neutral_kernel_definitions() -> 
             sorted(details["implementation_paths"])
         )
 
-    finalize_task = registry.operation_definition("finalize_task.v1")
+    finalize_task = registry.operation_definition("finalize_task")
     assert finalize_task is not None
     assert tuple(argument.name for argument in finalize_task.arguments) == (
         "task_ref",
@@ -315,7 +315,7 @@ def test_harbor_execution_operations_have_phase_neutral_kernel_definitions() -> 
     registry = default_kernel_registry()
 
     expected = {
-        "run_batch.v1": {
+        "run_batch": {
             "capability_id": "aecbench.operation.harbor.run-batch",
             "input_schema_ref": "aecbench://run-batch-selection/v1",
             "output_schema_ref": "aecbench://trial-record-set/v1",
@@ -329,7 +329,7 @@ def test_harbor_execution_operations_have_phase_neutral_kernel_definitions() -> 
                 "aec_bench/experimentation/qualification/run_bundle_runtime.py",
             ),
         },
-        "run_stage.v1": {
+        "run_stage": {
             "capability_id": "aecbench.operation.harbor.run-stage",
             "input_schema_ref": "aecbench://run-stage-selection/v1",
             "output_schema_ref": "aecbench://stage-execution-receipt-ref/v1",
@@ -372,7 +372,7 @@ def test_harbor_execution_operations_have_phase_neutral_kernel_definitions() -> 
             sorted(details["implementation_paths"])
         )
 
-    run_batch = registry.operation_definition("run_batch.v1")
+    run_batch = registry.operation_definition("run_batch")
     assert run_batch is not None
     assert run_batch.argument_policy is KernelOperationArgumentPolicy.DECLARED_ARGUMENTS_ACTION_OR_FANOUT
     assert tuple(
@@ -389,7 +389,7 @@ def test_harbor_execution_operations_have_phase_neutral_kernel_definitions() -> 
     assert run_batch.maximum_arguments == 1
     assert run_batch.fanout_item_argument == "task_ref"
 
-    run_stage = registry.operation_definition("run_stage.v1")
+    run_stage = registry.operation_definition("run_stage")
     assert run_stage is not None
     assert run_stage.argument_policy is KernelOperationArgumentPolicy.DECLARED_ARGUMENTS_ACTION
     assert tuple(
@@ -430,7 +430,7 @@ def test_proposal_execution_operations_have_phase_neutral_kernel_definitions() -
     registry = default_kernel_registry()
 
     expected = {
-        "run_proposal_session.v1": {
+        "run_proposal_session": {
             "capability_id": "aecbench.operation.proposal.run-session",
             "input_schema_ref": "aecbench://proposal-session-internal/v1",
             "output_schema_ref": "aecbench://proposal-session-receipt/v1",
@@ -446,7 +446,7 @@ def test_proposal_execution_operations_have_phase_neutral_kernel_definitions() -
                 "agents/entrypoint_agent.py",
             ),
         },
-        "run_semantic_subtask.v1": {
+        "run_semantic_subtask": {
             "capability_id": "aecbench.operation.proposal.run-semantic-subtask",
             "input_schema_ref": "aecbench://semantic-subtask-internal/v1",
             "output_schema_ref": "aecbench://semantic-subtask-result/v1",
@@ -536,7 +536,7 @@ def test_default_kernel_registry_rejects_an_omitted_operation_definition(
 
 def test_operation_definition_implementation_must_belong_to_the_kernel_executor_surface() -> None:
     registry = default_kernel_registry()
-    definition = registry.operation_definition("enumerate_tasks.v1")
+    definition = registry.operation_definition("enumerate_tasks")
     assert definition is not None
     outside = definition.model_copy(
         update={
@@ -564,7 +564,7 @@ def test_operation_definition_implementation_must_belong_to_the_kernel_executor_
 
 def test_operation_definition_rejects_handler_runtime_or_argument_drift() -> None:
     registry = default_kernel_registry()
-    definition = registry.operation_definition("check_subtask_contract.v1")
+    definition = registry.operation_definition("check_subtask_contract")
     assert definition is not None
     payload = definition.model_dump(mode="json", exclude={"content_sha256"})
 

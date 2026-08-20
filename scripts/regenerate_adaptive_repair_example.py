@@ -27,7 +27,7 @@ from aec_bench.contracts.harness_instance import (
     HarnessBindingSpec,
     HarnessBudget,
     HarnessCompileRequest,
-    HarnessRecipe,
+    HarnessSpec,
     HarnessTopologyRole,
     ResultImportBindingConfig,
     TaskSourceBindingConfig,
@@ -155,20 +155,7 @@ def prepare_example_spec(
         max_tokens=1_000_000 if program_recovery else 500_000,
         max_cost_usd=10.0,
     )
-    recipe_variant = (
-        "program-batch-coalescing"
-        if program_batch_coalescing
-        else "program-completion-recovery"
-        if completion_fixed_harness
-        else "program-recovery"
-        if program_recovery
-        else "completion-repair"
-        if completion_repair
-        else "repair"
-    )
-    recipe = HarnessRecipe(
-        recipe_id=f"stage1-drainage-{recipe_variant}-{backend}",
-        version="1.0.0",
+    harness_spec = HarnessSpec(
         summary=(
             "Run two exact long-horizon drainage reviews through a fixed RLM harness."
             if program_recovery
@@ -247,13 +234,13 @@ def prepare_example_spec(
         program_nodes = (
             ActionNode(
                 node_id="run-primary",
-                operation_id="run_batch.v1",
+                operation_id="run_batch",
                 arguments=(ProgramArgument(name="task_ref", value=LiteralValue(value=task_ids[0])),),
             ),
             ActionNode(
                 node_id="run-secondary",
                 depends_on=("run-primary",),
-                operation_id="run_batch.v1",
+                operation_id="run_batch",
                 arguments=(ProgramArgument(name="task_ref", value=LiteralValue(value=task_ids[1])),),
             ),
             StopNode(
@@ -287,7 +274,7 @@ def prepare_example_spec(
         )
     else:
         program_nodes = (
-            ActionNode(node_id="run", operation_id="run_batch.v1"),
+            ActionNode(node_id="run", operation_id="run_batch"),
             StopNode(node_id="stop", depends_on=("run",), outcome=StopOutcome.SUCCEEDED),
         )
         program_limits = ProgramLimits(
@@ -331,7 +318,7 @@ def prepare_example_spec(
         harness_request=HarnessCompileRequest(
             request_id=f"compile.{candidate_namespace}parent",
             kernel_ref=registry.manifest.ref,
-            recipe=recipe,
+            spec=harness_spec,
         ),
         program_template=RepairProgramTemplate(
             program_id="stage1.drainage.serial" if program_recovery else "stage1.drainage.monolithic",

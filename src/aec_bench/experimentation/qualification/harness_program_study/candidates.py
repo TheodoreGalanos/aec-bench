@@ -17,7 +17,7 @@ from aec_bench.contracts.harness_instance import (
     HarnessBudget,
     HarnessCompileRequest,
     HarnessInstanceRef,
-    HarnessRecipe,
+    HarnessSpec,
     TaskSourceBindingConfig,
     ToolBindingConfig,
 )
@@ -87,8 +87,8 @@ class HarnessProgramCandidateRequest(LegacyContentAddressedModel):
     program_limits: ProgramLimits
     seeds: tuple[int, ...]
     repetitions: PositiveInt
-    fixed_harness_recipe: HarnessRecipe
-    learned_harness_recipe: HarnessRecipe
+    fixed_harness_spec: HarnessSpec
+    learned_harness_spec: HarnessSpec
     fixed_program: ProgramFactorTemplate
     learned_program: ProgramFactorTemplate
 
@@ -152,7 +152,7 @@ class MaterializedHarnessProgramCandidateSet(LegacyContentAddressedModel):
         resource_sha256 = _resource_sha256(self.request)
         abi_sha256 = kernel_abi_commitment(self.request.kernel_ref)
         for cell, candidate in by_cell.items():
-            recipe = _harness_recipe(self.request, cell)
+            harness_spec = _harness_spec(self.request, cell)
             program_factor = _program_factor(self.request, cell)
             _validate_candidate_bundle_identity(
                 request=self.request,
@@ -163,7 +163,7 @@ class MaterializedHarnessProgramCandidateSet(LegacyContentAddressedModel):
             _validate_candidate_bundle_factors(
                 request=self.request,
                 bundle=candidate.bundle,
-                recipe=recipe,
+                harness_spec=harness_spec,
                 program_factor=program_factor,
             )
             _validate_candidate_reference(
@@ -187,17 +187,13 @@ def _validate_candidate_seed_block(request: HarnessProgramCandidateRequest) -> N
 def _validate_candidate_factor_differences(
     request: HarnessProgramCandidateRequest,
 ) -> None:
-    if request.fixed_harness_recipe == request.learned_harness_recipe:
-        raise ValueError("learned harness recipe must differ from the fixed harness recipe")
+    if request.fixed_harness_spec == request.learned_harness_spec:
+        raise ValueError("learned harness spec must differ from the fixed harness spec")
     if request.fixed_program == request.learned_program:
         raise ValueError("learned program factor must differ from the fixed program factor")
-    if request.fixed_harness_recipe.ref == request.learned_harness_recipe.ref:
-        raise ValueError("learned harness recipe must use a distinct stable reference")
     if request.fixed_program.ref == request.learned_program.ref:
         raise ValueError("learned program factor must use a distinct stable reference")
-    if harness_runtime_semantics(request.fixed_harness_recipe) == harness_runtime_semantics(
-        request.learned_harness_recipe
-    ):
+    if harness_runtime_semantics(request.fixed_harness_spec) == harness_runtime_semantics(request.learned_harness_spec):
         raise ValueError("learned harness must contain a runtime-effective harness difference")
     if program_runtime_semantics(request.fixed_program) == program_runtime_semantics(request.learned_program):
         raise ValueError("learned program must contain a runtime-effective program difference")
@@ -206,15 +202,15 @@ def _validate_candidate_factor_differences(
 def _validate_candidate_harness_controls(
     request: HarnessProgramCandidateRequest,
 ) -> None:
-    for recipe in (request.fixed_harness_recipe, request.learned_harness_recipe):
-        task_configuration = _single_recipe_configuration(recipe, TaskSourceBindingConfig, role="task source")
+    for spec in (request.fixed_harness_spec, request.learned_harness_spec):
+        task_configuration = _single_spec_configuration(spec, TaskSourceBindingConfig, role="task source")
         if task_configuration.task_refs != request.task_refs:
-            raise ValueError("harness-program harness recipes must use the exact task refs")
-        agent_configuration = _single_recipe_configuration(recipe, AgentBindingConfig, role="agent")
+            raise ValueError("harness-program harness specs must use the exact task refs")
+        agent_configuration = _single_spec_configuration(spec, AgentBindingConfig, role="agent")
         if agent_configuration.model != request.model:
-            raise ValueError("harness-program harness recipes must use one shared model")
-        if recipe.budget != request.harness_budget:
-            raise ValueError("harness-program harness recipes must use one shared harness budget")
+            raise ValueError("harness-program harness specs must use one shared model")
+        if spec.budget != request.harness_budget:
+            raise ValueError("harness-program harness specs must use one shared harness budget")
 
 
 def _validate_candidate_resource_controls(
@@ -225,8 +221,8 @@ def _validate_candidate_resource_controls(
         or request.learned_program.limits != request.program_limits
     ):
         raise ValueError("harness-program program factors must use one shared program limits budget")
-    if _runtime_budget_payload(request.fixed_harness_recipe) != _runtime_budget_payload(request.learned_harness_recipe):
-        raise ValueError("harness-program harness recipes must use one shared runtime resource budget")
+    if _runtime_budget_payload(request.fixed_harness_spec) != _runtime_budget_payload(request.learned_harness_spec):
+        raise ValueError("harness-program HarnessSpec values must use one shared runtime resource budget")
 
 
 def _validate_materialized_candidate_members(
@@ -266,10 +262,10 @@ def _validate_candidate_bundle_factors(
     *,
     request: HarnessProgramCandidateRequest,
     bundle: RunPlan,
-    recipe: HarnessRecipe,
+    harness_spec: HarnessSpec,
     program_factor: ProgramFactorTemplate,
 ) -> None:
-    if bundle.harness.source_recipe_ref != recipe.ref:
+    if bundle.harness.source_spec != harness_spec:
         raise ValueError("candidate harness does not match its harness factor")
     if bundle.harness.budget != request.harness_budget:
         raise ValueError("candidate bundles must use one shared harness budget")
@@ -343,7 +339,7 @@ def materialize_harness_program_candidates(
             HarnessCompileRequest(
                 request_id=f"{source.candidate_set_id}.compile-h0",
                 kernel_ref=source.kernel_ref,
-                recipe=source.fixed_harness_recipe,
+                spec=source.fixed_harness_spec,
             ),
             registry=registry,
         ),
@@ -351,7 +347,7 @@ def materialize_harness_program_candidates(
             HarnessCompileRequest(
                 request_id=f"{source.candidate_set_id}.compile-hx",
                 kernel_ref=source.kernel_ref,
-                recipe=source.learned_harness_recipe,
+                spec=source.learned_harness_spec,
             ),
             registry=registry,
         ),
@@ -410,10 +406,10 @@ def build_harness_program_candidate_reference(
     source = HarnessProgramCandidateRequest.model_validate(request.model_dump(mode="python"))
     compiled = RunPlan.model_validate(bundle.model_dump(mode="python"))
     factor = _program_factor(source, cell)
-    expected_recipe = source.learned_harness_recipe if _learned_harness(cell) else source.fixed_harness_recipe
+    expected_spec = source.learned_harness_spec if _learned_harness(cell) else source.fixed_harness_spec
     if compiled.harness.kernel_ref != source.kernel_ref:
         raise ValueError("harness-program candidate bundle does not use the requested fixed kernel")
-    if compiled.harness.source_recipe_ref != expected_recipe.ref:
+    if compiled.harness.source_spec != expected_spec:
         raise ValueError("harness-program candidate bundle does not use the requested harness factor")
     if compiled.execution_program.source_program_ref != factor.bind(compiled.harness.ref).ref:
         raise ValueError("harness-program candidate bundle does not use the requested program factor")
@@ -435,9 +431,9 @@ def build_harness_program_candidate_reference(
     )
 
 
-def harness_runtime_semantics(recipe: HarnessRecipe) -> dict[str, Any]:
+def harness_runtime_semantics(spec: HarnessSpec) -> dict[str, Any]:
     """Return only Hx fields that can change compilation, execution, verification, or evidence."""
-    source = HarnessRecipe.model_validate(recipe.model_dump(mode="python"))
+    source = HarnessSpec.model_validate(spec.model_dump(mode="python"))
     contract_semantics = {
         contract.contract_id: {
             "kind": contract.kind.value,
@@ -500,17 +496,17 @@ def _rewrite_program_node_ids(value: Any, node_ids: dict[str, str], *, field_nam
 ConfigurationT = TypeVar("ConfigurationT", bound=HarnessBindingConfiguration)
 
 
-def _single_recipe_configuration(
-    recipe: HarnessRecipe,
+def _single_spec_configuration(
+    spec: HarnessSpec,
     configuration_type: type[ConfigurationT],
     *,
     role: str,
 ) -> ConfigurationT:
     configurations = [
-        binding.configuration for binding in recipe.bindings if isinstance(binding.configuration, configuration_type)
+        binding.configuration for binding in spec.bindings if isinstance(binding.configuration, configuration_type)
     ]
     if len(configurations) != 1:
-        raise ValueError(f"harness-program harness recipe requires exactly one {role} binding")
+        raise ValueError(f"harness-program harness spec requires exactly one {role} binding")
     return configurations[0]
 
 
@@ -530,17 +526,17 @@ def _single_compiled_configuration(
     return configurations[0]
 
 
-def _runtime_budget_payload(recipe: HarnessRecipe) -> dict[str, Any]:
-    agent = _single_recipe_configuration(recipe, AgentBindingConfig, role="agent")
-    compute = _single_recipe_configuration(recipe, ComputeBindingConfig, role="compute")
+def _runtime_budget_payload(spec: HarnessSpec) -> dict[str, Any]:
+    agent = _single_spec_configuration(spec, AgentBindingConfig, role="agent")
+    compute = _single_spec_configuration(spec, ComputeBindingConfig, role="compute")
     contexts = sorted(
         configuration.max_tokens
-        for configuration in (binding.configuration for binding in recipe.bindings)
+        for configuration in (binding.configuration for binding in spec.bindings)
         if isinstance(configuration, ContextBindingConfig)
     )
     tools = sorted(
         configuration.max_calls
-        for configuration in (binding.configuration for binding in recipe.bindings)
+        for configuration in (binding.configuration for binding in spec.bindings)
         if isinstance(configuration, ToolBindingConfig)
     )
     return {
@@ -551,12 +547,12 @@ def _runtime_budget_payload(recipe: HarnessRecipe) -> dict[str, Any]:
         },
         "context_max_tokens": contexts,
         "tool_max_calls": tools,
-        "recursion_policy": recipe.recursion_policy.model_dump(mode="json"),
+        "recursion_policy": spec.recursion_policy.model_dump(mode="json"),
     }
 
 
-def _harness_recipe(request: HarnessProgramCandidateRequest, cell: HarnessProgramCell) -> HarnessRecipe:
-    return request.learned_harness_recipe if _learned_harness(cell) else request.fixed_harness_recipe
+def _harness_spec(request: HarnessProgramCandidateRequest, cell: HarnessProgramCell) -> HarnessSpec:
+    return request.learned_harness_spec if _learned_harness(cell) else request.fixed_harness_spec
 
 
 def _program_factor(request: HarnessProgramCandidateRequest, cell: HarnessProgramCell) -> ProgramFactorTemplate:
@@ -597,6 +593,6 @@ def _resource_sha256(request: HarnessProgramCandidateRequest) -> str:
             "schema_version": "1",
             "harness_budget": request.harness_budget.model_dump(mode="json"),
             "program_limits": request.program_limits.model_dump(mode="json"),
-            "runtime_budget": _runtime_budget_payload(request.fixed_harness_recipe),
+            "runtime_budget": _runtime_budget_payload(request.fixed_harness_spec),
         }
     )

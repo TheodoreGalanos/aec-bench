@@ -37,14 +37,14 @@ DEFAULT_KERNEL_ID = "aec-bench.adaptive-harness"
 DEFAULT_KERNEL_VERSION = "1.7.0"
 DEFAULT_KERNEL_OPERATION_IDS: frozenset[str] = frozenset(
     {
-        "check_subtask_contract.v1",
-        "enumerate_tasks.v1",
-        "finalize_proposed_plan.v1",
-        "finalize_task.v1",
-        "run_batch.v1",
-        "run_proposal_session.v1",
-        "run_semantic_subtask.v1",
-        "run_stage.v1",
+        "check_subtask_contract",
+        "enumerate_tasks",
+        "finalize_proposed_plan",
+        "finalize_task",
+        "run_batch",
+        "run_proposal_session",
+        "run_semantic_subtask",
+        "run_stage",
     }
 )
 
@@ -1234,14 +1234,14 @@ def _default_operation_definitions(
     )
     return (
         KernelOperationDefinition(
-            operation_id="enumerate_tasks.v1",
+            operation_id="enumerate_tasks",
             version=enumeration_primitive.spec.version,
             capability=enumeration_primitive.spec,
             runtime=enumeration_runtime,
             input_schema_ref="aecbench://empty/v1",
             output_schema_ref="aecbench://task-ref-set/v1",
             argument_policy=KernelOperationArgumentPolicy.NO_ARGUMENTS_ACTION,
-            argument_error_message=("enumerate_tasks.v1 accepts no arguments and cannot be a fanout target"),
+            argument_error_message=("enumerate_tasks accepts no arguments and cannot be a fanout target"),
             handler_key=KernelOperationHandlerKey.ENUMERATE_TASK_REFS,
             effect=KernelOperationEffect.NO_EXTERNAL_EFFECT,
             implementation=_operation_implementation_identity(
@@ -1255,7 +1255,7 @@ def _default_operation_definitions(
             ),
         ),
         KernelOperationDefinition(
-            operation_id="run_batch.v1",
+            operation_id="run_batch",
             version=batch_primitive.spec.version,
             capability=batch_primitive.spec,
             runtime=batch_runtime,
@@ -1277,7 +1277,7 @@ def _default_operation_definitions(
             maximum_arguments=1,
             fanout_item_argument="task_ref",
             argument_error_message=(
-                "run_batch.v1 accepts one optional task_ref/task_refs selection; fanout must bind exactly task_ref"
+                "run_batch accepts one optional task_ref/task_refs selection; fanout must bind exactly task_ref"
             ),
             handler_key=KernelOperationHandlerKey.RUN_BATCH,
             effect=KernelOperationEffect.SCORED_EXECUTION,
@@ -1293,7 +1293,7 @@ def _default_operation_definitions(
             ),
         ),
         KernelOperationDefinition(
-            operation_id="run_stage.v1",
+            operation_id="run_stage",
             version=stage_primitive.spec.version,
             capability=stage_primitive.spec,
             runtime=stage_runtime,
@@ -1318,7 +1318,7 @@ def _default_operation_definitions(
                 ),
             ),
             argument_error_message=(
-                "run_stage.v1 requires literal task_ref/stage_id arguments and accepts only "
+                "run_stage requires literal task_ref/stage_id arguments and accepts only "
                 "an output-derived upstream_receipts argument"
             ),
             handler_key=KernelOperationHandlerKey.RUN_STAGE,
@@ -1345,7 +1345,7 @@ def _default_operation_definitions(
             ),
         ),
         KernelOperationDefinition(
-            operation_id="run_proposal_session.v1",
+            operation_id="run_proposal_session",
             version=proposal_session_primitive.spec.version,
             capability=proposal_session_primitive.spec,
             runtime=proposal_session_runtime,
@@ -1353,7 +1353,7 @@ def _default_operation_definitions(
             output_schema_ref="aecbench://proposal-session-receipt/v1",
             argument_policy=KernelOperationArgumentPolicy.NO_ARGUMENTS_ACTION,
             argument_error_message=(
-                "run_proposal_session.v1 is an argument-free action whose exact context is supplied by the compiler"
+                "run_proposal_session is an argument-free action whose exact context is supplied by the compiler"
             ),
             handler_key=KernelOperationHandlerKey.RUN_PROPOSAL_SESSION,
             effect=KernelOperationEffect.GRAPH_ORCHESTRATION,
@@ -1371,7 +1371,7 @@ def _default_operation_definitions(
             ),
         ),
         KernelOperationDefinition(
-            operation_id="run_semantic_subtask.v1",
+            operation_id="run_semantic_subtask",
             version=semantic_subtask_primitive.spec.version,
             capability=semantic_subtask_primitive.spec,
             runtime=semantic_subtask_runtime,
@@ -1379,7 +1379,7 @@ def _default_operation_definitions(
             output_schema_ref="aecbench://semantic-subtask-result/v1",
             argument_policy=KernelOperationArgumentPolicy.NO_ARGUMENTS_ACTION,
             argument_error_message=(
-                "run_semantic_subtask.v1 is an argument-free action whose exact context is supplied by the compiler"
+                "run_semantic_subtask is an argument-free action whose exact context is supplied by the compiler"
             ),
             handler_key=KernelOperationHandlerKey.RUN_SEMANTIC_SUBTASK,
             effect=KernelOperationEffect.MODEL_EXECUTION,
@@ -1395,7 +1395,7 @@ def _default_operation_definitions(
             ),
         ),
         KernelOperationDefinition(
-            operation_id="check_subtask_contract.v1",
+            operation_id="check_subtask_contract",
             version=subtask_check_primitive.spec.version,
             capability=subtask_check_primitive.spec,
             runtime=subtask_check_runtime,
@@ -1409,7 +1409,7 @@ def _default_operation_definitions(
                     output_ports=("result",),
                 ),
             ),
-            argument_error_message=("check_subtask_contract.v1 requires exactly one output-derived subject argument"),
+            argument_error_message=("check_subtask_contract requires exactly one output-derived subject argument"),
             handler_key=KernelOperationHandlerKey.CHECK_SUBTASK_CONTRACT,
             effect=KernelOperationEffect.NO_EXTERNAL_EFFECT,
             implementation=_operation_implementation_identity(
@@ -1424,7 +1424,7 @@ def _default_operation_definitions(
             ),
         ),
         KernelOperationDefinition(
-            operation_id="finalize_proposed_plan.v1",
+            operation_id="finalize_proposed_plan",
             version=proposal_finalizer_primitive.spec.version,
             capability=proposal_finalizer_primitive.spec,
             runtime=proposal_finalizer_runtime,
@@ -1438,7 +1438,7 @@ def _default_operation_definitions(
                     output_ports=("result",),
                 ),
             ),
-            argument_error_message=("finalize_proposed_plan.v1 requires exactly one output-derived findings argument"),
+            argument_error_message=("finalize_proposed_plan requires exactly one output-derived findings argument"),
             allow_monolithic_without_arguments=True,
             handler_key=KernelOperationHandlerKey.FINALIZE_PROPOSED_PLAN,
             effect=KernelOperationEffect.MODEL_EXECUTION,
@@ -1454,7 +1454,7 @@ def _default_operation_definitions(
             ),
         ),
         KernelOperationDefinition(
-            operation_id="finalize_task.v1",
+            operation_id="finalize_task",
             version=task_finalizer_primitive.spec.version,
             capability=task_finalizer_primitive.spec,
             runtime=task_finalizer_runtime,
@@ -1474,7 +1474,7 @@ def _default_operation_definitions(
                 ),
             ),
             argument_error_message=(
-                "finalize_task.v1 requires a literal task_ref and output-derived stage_receipts argument"
+                "finalize_task requires a literal task_ref and output-derived stage_receipts argument"
             ),
             handler_key=KernelOperationHandlerKey.FINALIZE_TASK,
             effect=KernelOperationEffect.SCORED_EXECUTION,

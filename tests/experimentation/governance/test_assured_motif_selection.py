@@ -147,7 +147,6 @@ def _governed_plan(
     limits = ProgramLimits(max_parallelism=2)
     source_recipe = _recipe(
         registry,
-        recipe_id="assured-source-hx",
         task_refs=(task_ref,),
         model="claude-sonnet-4-6",
         adapter_capability="aecbench.adapter.rlm",
@@ -179,9 +178,8 @@ def _governed_plan(
             program_limits=limits,
             seeds=(17,),
             repetitions=1,
-            fixed_harness_recipe=_recipe(
+            fixed_harness_spec=_recipe(
                 registry,
-                recipe_id="assured-target-h0",
                 task_refs=(task_ref,),
                 model="claude-sonnet-4-6",
                 adapter_capability="aecbench.adapter.tool-loop",

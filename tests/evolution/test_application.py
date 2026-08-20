@@ -1,4 +1,4 @@
-# ABOUTME: Tests for the evolution orchestrator outer loop.
+# ABOUTME: Tests for the functional evolution application loop.
 # ABOUTME: Covers cycle counting, convergence detection, and result assembly.
 
 from __future__ import annotations
@@ -16,9 +16,10 @@ from aec_bench.contracts.evolution import (
 )
 from aec_bench.contracts.experiment_manifest import TaskSelector
 from aec_bench.contracts.trial_record import TrialRecord
-from aec_bench.evolution.backends.local import make_stub_solve_fn
+from aec_bench.evolution.application import run_evolution
+from aec_bench.evolution.backends.local import make_stub_candidate_evaluator
 from aec_bench.evolution.engine import AECEvolutionEngine
-from aec_bench.evolution.orchestrator import EvolutionOrchestrator
+from aec_bench.evolution.strategy import HillClimbStrategy
 from aec_bench.evolution.workspace import Workspace
 from tests.support.trial_record_factories import make_trial_record
 
@@ -128,12 +129,12 @@ def _make_record(reward: float, task_id: str = "electrical/voltage-drop/test") -
 
 
 # ---------------------------------------------------------------------------
-# TestEvolutionOrchestrator
+# Functional evolution loop
 # ---------------------------------------------------------------------------
 
 
-class TestEvolutionOrchestrator:
-    """Tests for the EvolutionOrchestrator outer loop."""
+class TestRunEvolution:
+    """Tests for the functional evolution loop."""
 
     def test_runs_configured_cycles(self, tmp_path: Path) -> None:
         """Orchestrator runs exactly max_cycles cycles when no convergence occurs."""
@@ -142,16 +143,15 @@ class TestEvolutionOrchestrator:
         ws.init_versioning()
 
         records = [_make_record(0.5), _make_record(0.6)]
-        solve_fn = make_stub_solve_fn(records)
+        solve_fn = make_stub_candidate_evaluator(records)
 
-        orchestrator = EvolutionOrchestrator(
+        result = run_evolution(
             workspace=ws,
             engine=_make_engine(),
-            solve_fn=solve_fn,
+            evaluate=solve_fn,
+            strategy=HillClimbStrategy(),
             config=_make_config(max_cycles=3, batch_size=2, stagnation_window=5),
         )
-
-        result = orchestrator.run()
 
         assert result.cycles_completed == 3
         assert len(result.score_history) == 3
@@ -164,12 +164,13 @@ class TestEvolutionOrchestrator:
 
         # Same reward every cycle → stagnation after stagnation_window
         records = [_make_record(0.8)]
-        solve_fn = make_stub_solve_fn(records)
+        solve_fn = make_stub_candidate_evaluator(records)
 
-        orchestrator = EvolutionOrchestrator(
+        result = run_evolution(
             workspace=ws,
             engine=_make_engine(),
-            solve_fn=solve_fn,
+            evaluate=solve_fn,
+            strategy=HillClimbStrategy(),
             config=_make_config(
                 max_cycles=10,
                 batch_size=1,
@@ -177,8 +178,6 @@ class TestEvolutionOrchestrator:
                 stagnation_window=2,
             ),
         )
-
-        result = orchestrator.run()
 
         assert result.converged is True
         assert result.cycles_completed < 10
@@ -197,14 +196,13 @@ class TestEvolutionOrchestrator:
             call_count[0] += 1
             return [_make_record(reward)]
 
-        orchestrator = EvolutionOrchestrator(
+        result = run_evolution(
             workspace=ws,
             engine=_make_engine(),
-            solve_fn=vary_solve,
+            evaluate=vary_solve,
+            strategy=HillClimbStrategy(),
             config=_make_config(max_cycles=3, batch_size=1, stagnation_window=5),
         )
-
-        result = orchestrator.run()
 
         assert abs(result.best_score - 0.9) < 1e-9
 
@@ -227,16 +225,15 @@ class TestEvolutionOrchestrator:
         engine.step = capturing_step  # type: ignore[method-assign]
 
         records = [_make_record(0.7, task_id="electrical/voltage-drop/test")]
-        solve_fn = make_stub_solve_fn(records)
+        solve_fn = make_stub_candidate_evaluator(records)
 
-        orchestrator = EvolutionOrchestrator(
+        run_evolution(
             workspace=ws,
             engine=engine,
-            solve_fn=solve_fn,
+            evaluate=solve_fn,
+            strategy=HillClimbStrategy(),
             config=_make_config(max_cycles=1, batch_size=1, stagnation_window=5),
         )
-
-        orchestrator.run()
 
         assert len(captured_observations) == 1
         first_cycle_obs = captured_observations[0]
@@ -250,7 +247,7 @@ class TestEvolutionOrchestrator:
 
 
 class TestSelectionPipeline:
-    """Tests for the archive selection pipeline wired into the orchestrator."""
+    """Tests for the archive selection pipeline in the evolution loop."""
 
     def test_graveyard_file_saved_after_run(self, tmp_path: Path) -> None:
         """Orchestrator writes graveyard.json to workspace root after run."""
@@ -259,15 +256,15 @@ class TestSelectionPipeline:
         ws.init_versioning()
 
         records = [_make_record(0.5)]
-        solve_fn = make_stub_solve_fn(records)
+        solve_fn = make_stub_candidate_evaluator(records)
 
-        orchestrator = EvolutionOrchestrator(
+        run_evolution(
             workspace=ws,
             engine=_make_engine(),
-            solve_fn=solve_fn,
+            evaluate=solve_fn,
+            strategy=HillClimbStrategy(),
             config=_make_config(max_cycles=1, batch_size=1, stagnation_window=5),
         )
-        orchestrator.run()
 
         assert (root / "graveyard.json").exists()
 
@@ -292,15 +289,15 @@ class TestSelectionPipeline:
         (root / "graveyard.json").write_text(json.dumps([existing_entry]))
 
         records = [_make_record(0.5)]
-        solve_fn = make_stub_solve_fn(records)
+        solve_fn = make_stub_candidate_evaluator(records)
 
-        orchestrator = EvolutionOrchestrator(
+        run_evolution(
             workspace=ws,
             engine=_make_engine(),
-            solve_fn=solve_fn,
+            evaluate=solve_fn,
+            strategy=HillClimbStrategy(),
             config=_make_config(max_cycles=1, batch_size=1, stagnation_window=5),
         )
-        orchestrator.run()
 
         # Graveyard file must still exist after run
         saved = json.loads((root / "graveyard.json").read_text())
@@ -326,15 +323,15 @@ class TestSelectionPipeline:
         engine.step = capturing_step  # type: ignore[method-assign]
 
         records = [_make_record(0.5)]
-        solve_fn = make_stub_solve_fn(records)
+        solve_fn = make_stub_candidate_evaluator(records)
 
-        orchestrator = EvolutionOrchestrator(
+        run_evolution(
             workspace=ws,
             engine=engine,
-            solve_fn=solve_fn,
+            evaluate=solve_fn,
+            strategy=HillClimbStrategy(),
             config=_make_config(max_cycles=1, batch_size=1, stagnation_window=5),
         )
-        orchestrator.run()
 
         # selection is None on cycle 1 (archive has 0 entries before first solve)
         assert len(captured_selections) == 1

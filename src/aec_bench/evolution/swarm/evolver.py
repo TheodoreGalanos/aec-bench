@@ -18,7 +18,8 @@ from aec_bench.contracts.evolution import (
     ObservationEnrichment,
 )
 from aec_bench.contracts.trial_record import CostRecord, TrialRecord
-from aec_bench.evolution.backends.local import SolveFn, make_local_solve_fn
+from aec_bench.evolution.application import CandidateEvaluator
+from aec_bench.evolution.backends.local import make_local_candidate_evaluator
 from aec_bench.evolution.behaviour import extract_behaviour_descriptor
 from aec_bench.evolution.engine import AECEvolutionEngine
 from aec_bench.evolution.graveyard import MutationGraveyard
@@ -100,7 +101,7 @@ def _extract_discipline(task_id: str) -> str:
 class SwarmAgentEvolver:
     """Runs one evolution cycle per step() call for a single swarm agent.
 
-    Wraps the existing 6-phase AECEvolutionEngine with a LocalSolver.
+    Wraps the existing 6-phase AECEvolutionEngine with the shared candidate evaluator.
     Each agent has its own workspace copy, engine instance, and solve function.
     The step() method is async (runs synchronous work in a thread executor).
     """
@@ -109,7 +110,7 @@ class SwarmAgentEvolver:
         self,
         workspace: Workspace,
         engine: AECEvolutionEngine,
-        solve_fn: SolveFn,
+        solve_fn: CandidateEvaluator,
         batch_size: int = 1,
     ) -> None:
         self._workspace = workspace
@@ -197,10 +198,6 @@ class SwarmAgentEvolver:
             # Restore original prompt to avoid context accumulation
             self._workspace.write_prompt(original_prompt)
 
-        # 5. Cleanup solver temp workspaces
-        if hasattr(self._solve_fn, "cleanup"):
-            self._solve_fn.cleanup()
-
         # 6. Track history
         if step_result.cycle_record is not None:
             self._history.append(step_result.cycle_record)
@@ -237,7 +234,7 @@ class SwarmEvolverFactory:
     Each agent gets:
     - An independent workspace copy (shutil.copytree from source)
     - Its own AECEvolutionEngine (separate stagnation tracking)
-    - Its own LocalSolver
+    - Its own local candidate evaluator
     LLM clients are shared across agents (stateless, thread-safe).
     """
 
@@ -315,7 +312,7 @@ class SwarmEvolverFactory:
 
         # 5. Create solver (uses agent's model, not factory default)
         experiment_id = f"swarm-{agent_id}"
-        solve_fn = make_local_solve_fn(
+        solve_fn = make_local_candidate_evaluator(
             task_dirs=self._task_dirs,
             model=solver_model,
             experiment_id=experiment_id,

@@ -95,6 +95,8 @@ def write_experiment_yaml(manifest: ExperimentManifest, output_path: str | None 
         }
         if agent.parameters:
             agent_data["parameters"] = dict(agent.parameters)
+        if agent.system_prompt:
+            agent_data["system_prompt"] = agent.system_prompt
         if agent.system_prompt_file:
             agent_data["system_prompt_file"] = agent.system_prompt_file
         data["agents"].append(agent_data)

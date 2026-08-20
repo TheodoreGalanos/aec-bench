@@ -210,6 +210,18 @@ uv run aec-bench run-local tasks/electrical/voltage-drop \
   --keep-workspace
 ```
 
+`run-local` executes one candidate by default. Use the built-in best-of-K
+recipe to run independent candidates and select the first candidate that
+completed with a non-empty primary output. Candidate-index order breaks ties.
+The official verifier runs only for the selected candidate.
+
+```bash
+uv run aec-bench run-local tasks/electrical/voltage-drop \
+  --model "azure:<deployment-name>" \
+  --best-of 3 \
+  --selector self
+```
+
 Local results retain the redacted Harness evidence under
 `logs/deepseek-harness/`, including `stderr.log` on failure.
 The provider prefix selects one credential route:

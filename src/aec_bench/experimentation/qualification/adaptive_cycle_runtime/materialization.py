@@ -9,7 +9,7 @@ from aec_bench.experimentation.qualification.adaptive_cycle_runtime.contracts im
 )
 from aec_bench.experimentation.qualification.adaptive_cycle_runtime.factor_bindings import (
     align_runtime_resource_budget,
-    rebind_recipe_task_sources,
+    rebind_harness_task_sources,
     task_source_refs,
 )
 from aec_bench.experimentation.qualification.harness_program_study.candidates import (
@@ -28,14 +28,14 @@ def materialize_child_harness_program_request(
     """Materialize repaired Hx/px factors on the preregistered child task surface."""
 
     request = stage.instantiation
-    source_task_refs = task_source_refs(repaired_candidate.harness_request.recipe)
-    learned_recipe = rebind_recipe_task_sources(
-        repaired_candidate.harness_request.recipe,
+    source_task_refs = task_source_refs(repaired_candidate.harness_request.spec)
+    learned_spec = rebind_harness_task_sources(
+        repaired_candidate.harness_request.spec,
         task_refs=request.task_refs,
     )
-    fixed_recipe = align_runtime_resource_budget(
-        request.fixed_harness_recipe,
-        learned_recipe,
+    fixed_spec = align_runtime_resource_budget(
+        request.fixed_harness_spec,
+        learned_spec,
     )
     source_program = ProgramFactorTemplate(
         factor_id=repaired_candidate.program_template.program_id,
@@ -59,8 +59,8 @@ def materialize_child_harness_program_request(
         program_limits=request.program_limits,
         seeds=request.seeds,
         repetitions=request.repetitions,
-        fixed_harness_recipe=fixed_recipe,
-        learned_harness_recipe=learned_recipe,
+        fixed_harness_spec=fixed_spec,
+        learned_harness_spec=learned_spec,
         fixed_program=request.fixed_program,
         learned_program=learned_program,
     )

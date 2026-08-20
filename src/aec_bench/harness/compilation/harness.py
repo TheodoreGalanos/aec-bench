@@ -1,4 +1,4 @@
-# ABOUTME: Compiles one task-specific harness recipe against the exact installed fixed kernel.
+# ABOUTME: Compiles one task-specific harness spec against the exact installed fixed kernel.
 # ABOUTME: Materializes the closed executable operation surface without changing operation order.
 
 from aec_bench.contracts.harness_instance import (
@@ -16,6 +16,7 @@ from aec_bench.contracts.harness_instance import (
     VerificationPlacement,
     VerificationStage,
 )
+from aec_bench.contracts.harness_kernel import canonical_json_sha256
 from aec_bench.harness.kernel_catalogue import (
     KernelRuntimeRegistry,
     KernelRuntimeRegistryError,
@@ -35,7 +36,7 @@ def compile_harness_instance(
     *,
     registry: KernelRuntimeRegistry,
 ) -> CompiledHarnessInstance:
-    """Resolve every Hx recipe binding against one exact installed fixed kernel."""
+    """Resolve every harness-spec binding against one exact installed fixed kernel."""
     if request.kernel_ref != registry.manifest.ref:
         _fail(
             owner=CompilationOwner.KERNEL,
@@ -43,7 +44,7 @@ def compile_harness_instance(
             message="harness compile request does not target the installed fixed kernel",
             subject_ids=(request.kernel_ref.kernel_id,),
         )
-    if request.recipe.recursion_policy.enabled:
+    if request.spec.recursion_policy.enabled:
         _fail(
             owner=CompilationOwner.KERNEL,
             code="recursive_program_operation_unavailable",
@@ -52,7 +53,7 @@ def compile_harness_instance(
         )
 
     compiled_bindings: list[CompiledHarnessBinding] = []
-    for binding in request.recipe.bindings:
+    for binding in request.spec.bindings:
         try:
             primitive = registry.resolve(binding.capability_ref)
         except KernelRuntimeRegistryError as exc:
@@ -96,7 +97,7 @@ def compile_harness_instance(
         )
     _validate_execution_bearing_harness(
         bindings=tuple(compiled_bindings),
-        contracts=request.recipe.contracts,
+        contracts=request.spec.contracts,
         registry=registry,
         task_binding=task_binding,
         agent_binding=agent_binding,
@@ -121,7 +122,7 @@ def compile_harness_instance(
         operation_output_schema_ref,
     ) = _resolve_program_operation_abi(
         registry=registry,
-        operation_id="run_batch.v1",
+        operation_id="run_batch",
         capability_id="aecbench.operation.harbor.run-batch",
         input_schema_ref="aecbench://run-batch-selection/v1",
         output_schema_ref="aecbench://trial-record-set/v1",
@@ -142,9 +143,9 @@ def compile_harness_instance(
         input_schema_ref=operation_input_schema_ref,
         output_schema_ref=operation_output_schema_ref,
         binding_ids=tuple(binding.binding_id for binding in compiled_bindings),
-        contract_ids=tuple(contract.contract_id for contract in request.recipe.contracts),
+        contract_ids=tuple(contract.contract_id for contract in request.spec.contracts),
         allowed_task_refs=task_configuration.task_refs,
-        max_parallelism=min(compute_configuration.max_concurrency, request.recipe.budget.max_parallelism),
+        max_parallelism=min(compute_configuration.max_concurrency, request.spec.budget.max_parallelism),
         supports_retry=bool(operation_retry_codes),
         retry_safe_error_codes=operation_retry_codes,
         supports_recursion=False,
@@ -158,7 +159,7 @@ def compile_harness_instance(
         stage_output_schema_ref,
     ) = _resolve_program_operation_abi(
         registry=registry,
-        operation_id="run_stage.v1",
+        operation_id="run_stage",
         capability_id="aecbench.operation.harbor.run-stage",
         input_schema_ref="aecbench://run-stage-selection/v1",
         output_schema_ref="aecbench://stage-execution-receipt-ref/v1",
@@ -177,11 +178,11 @@ def compile_harness_instance(
         input_schema_ref=stage_input_schema_ref,
         output_schema_ref=stage_output_schema_ref,
         binding_ids=stage_binding_ids,
-        contract_ids=tuple(contract.contract_id for contract in request.recipe.contracts),
+        contract_ids=tuple(contract.contract_id for contract in request.spec.contracts),
         allowed_task_refs=task_configuration.task_refs,
         max_parallelism=min(
             compute_configuration.max_concurrency,
-            request.recipe.budget.max_parallelism,
+            request.spec.budget.max_parallelism,
         ),
         supports_retry=bool(stage_runtime.retry_safe_error_codes),
         retry_safe_error_codes=stage_runtime.retry_safe_error_codes,
@@ -194,7 +195,7 @@ def compile_harness_instance(
         finalize_output_schema_ref,
     ) = _resolve_program_operation_abi(
         registry=registry,
-        operation_id="finalize_task.v1",
+        operation_id="finalize_task",
         capability_id="aecbench.operation.harbor.finalize-task",
         input_schema_ref="aecbench://finalize-task-selection/v1",
         output_schema_ref="aecbench://trial-record-set/v1",
@@ -205,11 +206,11 @@ def compile_harness_instance(
         input_schema_ref=finalize_input_schema_ref,
         output_schema_ref=finalize_output_schema_ref,
         binding_ids=tuple(binding.binding_id for binding in compiled_bindings),
-        contract_ids=tuple(contract.contract_id for contract in request.recipe.contracts),
+        contract_ids=tuple(contract.contract_id for contract in request.spec.contracts),
         allowed_task_refs=task_configuration.task_refs,
         max_parallelism=min(
             compute_configuration.max_concurrency,
-            request.recipe.budget.max_parallelism,
+            request.spec.budget.max_parallelism,
         ),
         supports_retry=bool(finalize_runtime.retry_safe_error_codes),
         retry_safe_error_codes=finalize_runtime.retry_safe_error_codes,
@@ -231,7 +232,7 @@ def compile_harness_instance(
         proposal_session_output_schema_ref,
     ) = _resolve_program_operation_abi(
         registry=registry,
-        operation_id="run_proposal_session.v1",
+        operation_id="run_proposal_session",
         capability_id="aecbench.operation.proposal.run-session",
         input_schema_ref="aecbench://proposal-session-internal/v1",
         output_schema_ref="aecbench://proposal-session-receipt/v1",
@@ -242,7 +243,7 @@ def compile_harness_instance(
         input_schema_ref=proposal_session_input_schema_ref,
         output_schema_ref=proposal_session_output_schema_ref,
         binding_ids=tuple(binding.binding_id for binding in compiled_bindings),
-        contract_ids=tuple(contract.contract_id for contract in request.recipe.contracts),
+        contract_ids=tuple(contract.contract_id for contract in request.spec.contracts),
         allowed_task_refs=task_configuration.task_refs,
         max_parallelism=1,
     )
@@ -254,7 +255,7 @@ def compile_harness_instance(
         semantic_subtask_output_schema_ref,
     ) = _resolve_program_operation_abi(
         registry=registry,
-        operation_id="run_semantic_subtask.v1",
+        operation_id="run_semantic_subtask",
         capability_id="aecbench.operation.proposal.run-semantic-subtask",
         input_schema_ref="aecbench://semantic-subtask-internal/v1",
         output_schema_ref="aecbench://semantic-subtask-result/v1",
@@ -265,7 +266,7 @@ def compile_harness_instance(
         input_schema_ref=semantic_subtask_input_schema_ref,
         output_schema_ref=semantic_subtask_output_schema_ref,
         binding_ids=stage_binding_ids,
-        contract_ids=tuple(contract.contract_id for contract in request.recipe.contracts),
+        contract_ids=tuple(contract.contract_id for contract in request.spec.contracts),
         allowed_task_refs=task_configuration.task_refs,
         max_parallelism=1,
         required_compilation_scope=ProgramOperationScope.PROPOSAL_SESSION_INTERNAL,
@@ -278,7 +279,7 @@ def compile_harness_instance(
         subtask_check_output_schema_ref,
     ) = _resolve_program_operation_abi(
         registry=registry,
-        operation_id="check_subtask_contract.v1",
+        operation_id="check_subtask_contract",
         capability_id="aecbench.operation.proposal.check-subtask-contract",
         input_schema_ref="aecbench://subtask-contract-check-selection/v1",
         output_schema_ref="aecbench://subtask-contract-check-ref/v1",
@@ -289,7 +290,7 @@ def compile_harness_instance(
         input_schema_ref=subtask_check_input_schema_ref,
         output_schema_ref=subtask_check_output_schema_ref,
         binding_ids=(task_binding.binding_id,),
-        contract_ids=tuple(contract.contract_id for contract in request.recipe.contracts),
+        contract_ids=tuple(contract.contract_id for contract in request.spec.contracts),
         allowed_task_refs=task_configuration.task_refs,
         max_parallelism=1,
         required_compilation_scope=ProgramOperationScope.PROPOSAL_SESSION_INTERNAL,
@@ -302,7 +303,7 @@ def compile_harness_instance(
         proposal_finalizer_output_schema_ref,
     ) = _resolve_program_operation_abi(
         registry=registry,
-        operation_id="finalize_proposed_plan.v1",
+        operation_id="finalize_proposed_plan",
         capability_id="aecbench.operation.proposal.finalize-proposed-plan",
         input_schema_ref="aecbench://finalize-proposed-plan-selection/v1",
         output_schema_ref="aecbench://trial-record-set/v1",
@@ -313,7 +314,7 @@ def compile_harness_instance(
         input_schema_ref=proposal_finalizer_input_schema_ref,
         output_schema_ref=proposal_finalizer_output_schema_ref,
         binding_ids=tuple(binding.binding_id for binding in compiled_bindings),
-        contract_ids=tuple(contract.contract_id for contract in request.recipe.contracts),
+        contract_ids=tuple(contract.contract_id for contract in request.spec.contracts),
         allowed_task_refs=task_configuration.task_refs,
         max_parallelism=1,
         required_compilation_scope=ProgramOperationScope.PROPOSAL_SESSION_INTERNAL,
@@ -335,7 +336,7 @@ def compile_harness_instance(
         enumeration_output_schema_ref,
     ) = _resolve_program_operation_abi(
         registry=registry,
-        operation_id="enumerate_tasks.v1",
+        operation_id="enumerate_tasks",
         capability_id="aecbench.operation.tasks.enumerate",
         input_schema_ref="aecbench://empty/v1",
         output_schema_ref="aecbench://task-ref-set/v1",
@@ -353,17 +354,18 @@ def compile_harness_instance(
         supports_retry=bool(enumeration_retry_codes),
         retry_safe_error_codes=enumeration_retry_codes,
     )
-    instance_id = f"hx.{request.recipe.recipe_id}.{request.recipe.version}"
+    spec_sha256 = canonical_json_sha256(request.spec.model_dump(mode="json"))
+    instance_id = f"hx.{spec_sha256}"
     return CompiledHarnessInstance(
         instance_id=instance_id,
         kernel_ref=registry.manifest.ref,
-        source_recipe_ref=request.recipe.ref,
-        contracts=request.recipe.contracts,
-        budget=request.recipe.budget,
-        recursion_policy=request.recipe.recursion_policy,
+        source_spec=request.spec,
+        contracts=request.spec.contracts,
+        budget=request.spec.budget,
+        recursion_policy=request.spec.recursion_policy,
         bindings=tuple(compiled_bindings),
         program_surface=ProgramSurface(
-            surface_id=f"surface.{request.recipe.recipe_id}.v1",
+            surface_id=f"surface.{spec_sha256}",
             operations=(
                 enumeration_operation,
                 operation,

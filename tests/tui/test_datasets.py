@@ -10,7 +10,7 @@ from textual.app import App
 from textual.widgets import DataTable, Sparkline, Static
 
 from aec_bench.contracts.dataset import DatasetManifest, DatasetTaskEntry
-from aec_bench.dataset.storage import write_manifest
+from aec_bench.dataset.storage import save_dataset
 from aec_bench.tui.screens.datasets import DatasetsScreen
 
 
@@ -18,7 +18,7 @@ def _write_manifest(datasets_root: Path, name: str, version: str, task_count: in
     """Write a minimal schema-2 manifest; version is a fixture-only ID suffix."""
 
     dataset_id = f"{name}-{version.replace('.', '-')}"
-    write_manifest(
+    save_dataset(
         datasets_root,
         DatasetManifest(
             dataset_id=dataset_id,

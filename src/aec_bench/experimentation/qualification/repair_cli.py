@@ -77,7 +77,7 @@ def _preflight_repair_runtime(
     """Preflight the immutable parent surface because typed repair cannot change provider or backend."""
 
     _preflight_harness_runtime(
-        recipes=(spec.parent.harness_request.recipe,),
+        specs=(spec.parent.harness_request.spec,),
         project_root=project_root,
         repo_root=repo_root,
         tasks_root=tasks_root,

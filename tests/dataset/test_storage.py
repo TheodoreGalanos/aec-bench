@@ -21,7 +21,7 @@ from aec_bench.dataset.storage import (
     manifest_path,
     read_manifest,
     resolve_dataset_reference,
-    write_manifest,
+    save_dataset,
     write_publication,
 )
 
@@ -60,7 +60,7 @@ def _publication(
 
 
 def test_manifest_storage_uses_one_dataset_id_path_and_canonical_bytes(tmp_path: Path) -> None:
-    stored = write_manifest(tmp_path, _manifest())
+    stored = save_dataset(tmp_path, _manifest())
 
     assert stored == tmp_path / "manifests" / "test-suite" / "manifest.json"
     assert stored.read_bytes().endswith(b"\n")
@@ -69,10 +69,10 @@ def test_manifest_storage_uses_one_dataset_id_path_and_canonical_bytes(tmp_path:
 
 
 def test_manifest_publication_is_immutable(tmp_path: Path) -> None:
-    write_manifest(tmp_path, _manifest())
+    save_dataset(tmp_path, _manifest())
 
     with pytest.raises(FileExistsError, match="already exists"):
-        write_manifest(tmp_path, _manifest(task_count=2))
+        save_dataset(tmp_path, _manifest(task_count=2))
 
 
 def test_manifest_path_rejects_path_like_dataset_ids(tmp_path: Path) -> None:
@@ -81,8 +81,8 @@ def test_manifest_path_rejects_path_like_dataset_ids(tmp_path: Path) -> None:
 
 
 def test_list_datasets_returns_only_schema_two_manifests(tmp_path: Path) -> None:
-    write_manifest(tmp_path, _manifest("beta"))
-    write_manifest(tmp_path, _manifest("alpha"))
+    save_dataset(tmp_path, _manifest("beta"))
+    save_dataset(tmp_path, _manifest("alpha"))
     (tmp_path / "other" / "old" / "1.0.0").mkdir(parents=True)
     (tmp_path / "other" / "old" / "1.0.0" / "manifest.json").write_text("{}", encoding="utf-8")
 
@@ -127,6 +127,6 @@ def test_latest_selector_is_rejected_instead_of_becoming_persisted_identity(tmp_
 
 
 def test_unpublished_manifest_does_not_resolve_for_execution(tmp_path: Path) -> None:
-    write_manifest(tmp_path, _manifest())
+    save_dataset(tmp_path, _manifest())
 
     assert resolve_dataset_reference(tmp_path, "test-suite") is None

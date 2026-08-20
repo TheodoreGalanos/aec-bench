@@ -296,11 +296,11 @@ def _compile_candidate(
             message="compiled candidate must preserve source candidate lineage",
             candidate_id=candidate.candidate_id,
         )
-    if compiled.harness.source_recipe_ref != candidate.harness_request.recipe.ref:
+    if compiled.harness.source_spec != candidate.harness_request.spec:
         _fail(
             stage=RepairLoopStage.COMPILE,
             code="compiled_harness_source_mismatch",
-            message="compiled harness must derive from the candidate Hx recipe",
+            message="compiled harness must derive from the candidate HarnessSpec",
             candidate_id=candidate.candidate_id,
         )
     expected_program = candidate.program_template.bind(compiled.harness.ref)
@@ -509,7 +509,7 @@ def _validate_source_pairing(
     *,
     stage: RepairLoopStage,
 ) -> None:
-    if candidate.harness_request.recipe.budget != pairing.budget:
+    if candidate.harness_request.spec.budget != pairing.budget:
         _fail(
             stage=stage,
             code="source_budget_mismatch",
@@ -518,7 +518,7 @@ def _validate_source_pairing(
         )
     task_configurations = [
         binding.configuration
-        for binding in candidate.harness_request.recipe.bindings
+        for binding in candidate.harness_request.spec.bindings
         if isinstance(binding.configuration, TaskSourceBindingConfig)
     ]
     if len(task_configurations) != 1 or task_configurations[0].task_refs != pairing.task_ids:

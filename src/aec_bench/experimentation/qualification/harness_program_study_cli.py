@@ -13,7 +13,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 from aec_bench.adapters.rlm.providers import preflight_pydantic_model_configuration
-from aec_bench.contracts.harness_instance import AgentBindingConfig, ComputeBindingConfig, HarnessRecipe
+from aec_bench.contracts.harness_instance import AgentBindingConfig, ComputeBindingConfig, HarnessSpec
 from aec_bench.experimentation.qualification.harness_program_study import (
     HarnessProgramStudyRunResult,
     HarnessProgramStudySpec,
@@ -117,13 +117,13 @@ def _preflight_runtime(
     repo_root: Path,
     tasks_root: Path,
 ) -> None:
-    recipes = tuple(
-        recipe
+    specs = tuple(
+        harness_spec
         for request in spec.candidate_requests
-        for recipe in (request.fixed_harness_recipe, request.learned_harness_recipe)
+        for harness_spec in (request.fixed_harness_spec, request.learned_harness_spec)
     )
     _preflight_harness_runtime(
-        recipes=recipes,
+        specs=specs,
         project_root=project_root,
         repo_root=repo_root,
         tasks_root=tasks_root,
@@ -133,7 +133,7 @@ def _preflight_runtime(
 
 def _preflight_harness_runtime(
     *,
-    recipes: tuple[HarnessRecipe, ...],
+    specs: tuple[HarnessSpec, ...],
     project_root: Path,
     repo_root: Path,
     tasks_root: Path,
@@ -149,20 +149,20 @@ def _preflight_harness_runtime(
     if shutil.which("uv") is None:
         raise RuntimeError(f"{surface_name} requires the uv executable used to launch the real Harbor CLI")
 
-    agent_models, uses_morph = _preflight_runtime_requirements(recipes)
+    agent_models, uses_morph = _preflight_runtime_requirements(specs)
     if uses_morph and not os.environ.get("MORPH_API_KEY", "").strip():
         raise RuntimeError(f"{surface_name} Morph execution requires MORPH_API_KEY")
     _preflight_runtime_models(agent_models, surface_name=surface_name)
 
 
 def _preflight_runtime_requirements(
-    recipes: tuple[HarnessRecipe, ...],
+    specs: tuple[HarnessSpec, ...],
 ) -> tuple[set[str], bool]:
     agent_models: set[str] = set()
     uses_morph = False
     registry = default_kernel_registry()
-    for recipe in recipes:
-        for binding in recipe.bindings:
+    for spec in specs:
+        for binding in spec.bindings:
             if isinstance(binding.configuration, AgentBindingConfig):
                 runtime = registry.resolve(binding.capability_ref).runtime
                 if isinstance(runtime, AgentAdapterRuntime) and runtime.adapter_kind in {

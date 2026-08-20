@@ -983,7 +983,7 @@ def _proposal_artifact(
             {
                 "candidate_id": candidate_id,
                 "task_context": context_label,
-                "nodes": [{"node_id": "run", "operation_id": "run_batch.v1"}],
+                "nodes": [{"node_id": "run", "operation_id": "run_batch"}],
             },
             sort_keys=True,
             separators=(",", ":"),

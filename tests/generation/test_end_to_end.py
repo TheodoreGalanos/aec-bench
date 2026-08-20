@@ -128,8 +128,8 @@ def test_dataset_generation_verifier_scores_golden_pass(tmp_path: Path) -> None:
         TemplateSelection,
         ToolModeMix,
         VisibilityMix,
-        compose_dataset,
-        execute_plan,
+        generate_instances,
+        plan_suite,
     )
     from aec_bench.templates.registry import discover_templates
 
@@ -152,13 +152,13 @@ def test_dataset_generation_verifier_scores_golden_pass(tmp_path: Path) -> None:
 
     templates, diagnostics = discover_templates()
     assert diagnostics == []
-    plan = compose_dataset(suite, templates)
+    plan = plan_suite(suite, templates)
     assert plan.summary.total_instances == 2
 
-    manifest = execute_plan(plan, suite)
-    assert len(manifest.instances) == 2
+    generated = generate_instances(plan, suite)
+    assert len(generated.task_paths) == 2
 
-    for entry in manifest.instances:
+    for entry in generated.manifest.instances:
         instance_dir = output_dir / entry.task_id
         assert instance_dir.is_dir(), f"Instance dir missing: {instance_dir}"
 
@@ -202,8 +202,8 @@ def test_dataset_with_three_templates(tmp_path: Path) -> None:
 
     from aec_bench.generation.dataset import (
         SuiteConfig,
-        compose_dataset,
-        execute_plan,
+        generate_instances,
+        plan_suite,
     )
     from aec_bench.templates.registry import discover_templates
 
@@ -236,7 +236,7 @@ def test_dataset_with_three_templates(tmp_path: Path) -> None:
 
     templates, diagnostics = discover_templates()
     assert diagnostics == []
-    plan = compose_dataset(config, templates)
+    plan = plan_suite(config, templates)
 
     # All ground templates represented (2 instances each)
     template_names = {p.template_name for p in plan.planned_instances}
@@ -247,8 +247,8 @@ def test_dataset_with_three_templates(tmp_path: Path) -> None:
     assert plan.summary.total_instances == expected_count
 
     # Execute and verify manifest
-    manifest = execute_plan(plan, config)
-    assert len(manifest.instances) == expected_count
+    generated = generate_instances(plan, config)
+    assert len(generated.task_paths) == expected_count
 
     generation_manifest = tmp_path / "generation-manifest.json"
     assert generation_manifest.exists()

@@ -22,7 +22,7 @@ from aec_bench.contracts.harness_instance import (
     ComputeBindingConfig,
     HarnessBindingSpec,
     HarnessBudget,
-    HarnessRecipe,
+    HarnessSpec,
     HarnessTopologyRole,
     ResultImportBindingConfig,
     TaskSourceBindingConfig,
@@ -64,7 +64,6 @@ def test_selected_motif_materializes_target_specific_factors_and_real_candidates
     target_limits = ProgramLimits(max_parallelism=3)
     source_recipe = _recipe(
         registry,
-        recipe_id="source-hx",
         task_refs=("source/family/world",),
         model="source-model",
         adapter_capability="aecbench.adapter.rlm",
@@ -94,9 +93,8 @@ def test_selected_motif_materializes_target_specific_factors_and_real_candidates
             program_limits=target_limits,
             seeds=(17, 29),
             repetitions=2,
-            fixed_harness_recipe=_recipe(
+            fixed_harness_spec=_recipe(
                 registry,
-                recipe_id="target-h0",
                 task_refs=(target_task,),
                 model="claude-sonnet-4-6",
                 adapter_capability="aecbench.adapter.tool-loop",
@@ -117,14 +115,14 @@ def test_selected_motif_materializes_target_specific_factors_and_real_candidates
     assert instantiated.selection_decision_sha256 == selection.decision_sha256
     assert instantiated.source_harness_template_sha256 == motif.hx_template.template_sha256
     assert instantiated.source_program_template_sha256 == motif.px_template.template_sha256
-    assert instantiated.harness_program_request.learned_harness_recipe.budget == target_budget
+    assert instantiated.harness_program_request.learned_harness_spec.budget == target_budget
     assert instantiated.harness_program_request.learned_program.limits == target_limits
     learned_tasks = _configuration(
-        instantiated.harness_program_request.learned_harness_recipe,
+        instantiated.harness_program_request.learned_harness_spec,
         TaskSourceBindingConfig,
     )
     learned_agent = _configuration(
-        instantiated.harness_program_request.learned_harness_recipe,
+        instantiated.harness_program_request.learned_harness_spec,
         AgentBindingConfig,
     )
     assert learned_tasks.task_refs == (target_task,)
@@ -143,7 +141,6 @@ def test_motif_materialization_rejects_no_selection_and_untyped_template_payload
     limits = ProgramLimits()
     fixed_recipe = _recipe(
         registry,
-        recipe_id="fixed",
         task_refs=("target/world",),
         model="claude-sonnet-4-6",
         adapter_capability="aecbench.adapter.tool-loop",
@@ -160,7 +157,7 @@ def test_motif_materialization_rejects_no_selection_and_untyped_template_payload
         program_limits=limits,
         seeds=(17,),
         repetitions=1,
-        fixed_harness_recipe=fixed_recipe,
+        fixed_harness_spec=fixed_recipe,
         fixed_program=_monolithic_program("fixed-p0", limits),
     )
 
@@ -186,7 +183,7 @@ def test_motif_materialization_rejects_no_selection_and_untyped_template_payload
     malformed_library = MotifLibrary.create((malformed,))
     malformed_request = _selection_request(malformed_library)
     malformed_decision = select_motif(malformed_library, malformed_request)
-    with pytest.raises(ValueError, match="typed HarnessRecipe payload"):
+    with pytest.raises(ValueError, match="typed HarnessSpec payload"):
         instantiate_selected_motif_factors(
             library=malformed_library,
             selection_request=malformed_request,
@@ -204,7 +201,7 @@ def test_program_task_rebinding_changes_only_declared_operation_input_slots() ->
         nodes=(
             ActionNode(
                 node_id="run",
-                operation_id="run_batch.v1",
+                operation_id="run_batch",
                 arguments=(
                     ProgramArgument(
                         name="task_ref",
@@ -242,7 +239,7 @@ def test_program_task_rebinding_rejects_ambiguous_or_foreign_task_coordinates() 
         nodes=(
             ActionNode(
                 node_id="run",
-                operation_id="run_batch.v1",
+                operation_id="run_batch",
                 arguments=(ProgramArgument(name="task_ref", value=LiteralValue(value="foreign/world")),),
             ),
             StopNode(node_id="stop", depends_on=("run",), outcome=StopOutcome.SUCCEEDED),
@@ -263,7 +260,7 @@ def test_program_task_rebinding_rejects_ambiguous_or_foreign_task_coordinates() 
         )
 
 
-def _motif(recipe: HarnessRecipe, program: ProgramFactorTemplate) -> HarnessProgramMotif:
+def _motif(recipe: HarnessSpec, program: ProgramFactorTemplate) -> HarnessProgramMotif:
     registry = default_kernel_registry()
     return HarnessProgramMotif.create(
         status=MotifStatus.REUSABLE,
@@ -314,7 +311,7 @@ def _monolithic_program(factor_id: str, limits: ProgramLimits) -> ProgramFactorT
         factor_id=factor_id,
         version="1.0.0",
         nodes=(
-            ActionNode(node_id="run", operation_id="run_batch.v1"),
+            ActionNode(node_id="run", operation_id="run_batch"),
             StopNode(node_id="stop", depends_on=("run",), outcome=StopOutcome.SUCCEEDED),
         ),
         limits=limits,
@@ -326,11 +323,11 @@ def _fanout_program(factor_id: str, limits: ProgramLimits) -> ProgramFactorTempl
         factor_id=factor_id,
         version="1.0.0",
         nodes=(
-            ActionNode(node_id="enumerate", operation_id="enumerate_tasks.v1"),
+            ActionNode(node_id="enumerate", operation_id="enumerate_tasks"),
             FanoutNode(
                 node_id="run-each",
                 depends_on=("enumerate",),
-                operation_id="run_batch.v1",
+                operation_id="run_batch",
                 items=ProgramOutputRef(node_id="enumerate", output_port="tasks"),
                 item_argument="task_ref",
                 max_parallelism=2,
@@ -344,16 +341,13 @@ def _fanout_program(factor_id: str, limits: ProgramLimits) -> ProgramFactorTempl
 def _recipe(
     registry: KernelRuntimeRegistry,
     *,
-    recipe_id: str,
     task_refs: tuple[str, ...],
     model: str,
     adapter_capability: str,
     budget: HarnessBudget,
-) -> HarnessRecipe:
+) -> HarnessSpec:
     capability = registry.capability
-    return HarnessRecipe(
-        recipe_id=recipe_id,
-        version="1.0.0",
+    return HarnessSpec(
         summary="One transferable fixed-K harness motif.",
         budget=budget,
         bindings=(
@@ -369,7 +363,7 @@ def _recipe(
                 depends_on=("tasks",),
                 topology_role=HarnessTopologyRole.ORCHESTRATOR,
                 configuration=AgentBindingConfig(
-                    agent_name=f"{recipe_id}-agent",
+                    agent_name="motif-agent",
                     model=model,
                     max_turns=8,
                     timeout_seconds=300,
@@ -400,7 +394,7 @@ def _recipe(
     )
 
 
-def _configuration[ConfigurationT](recipe: HarnessRecipe, kind: type[ConfigurationT]) -> ConfigurationT:
+def _configuration[ConfigurationT](recipe: HarnessSpec, kind: type[ConfigurationT]) -> ConfigurationT:
     matches = [binding.configuration for binding in recipe.bindings if isinstance(binding.configuration, kind)]
     assert len(matches) == 1
     return matches[0]

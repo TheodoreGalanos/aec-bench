@@ -37,6 +37,7 @@ At least one agent is required. Each agent specifies how to run tasks.
 | `model` | string | Yes | — | Full model name (e.g., `claude-sonnet-4-20250514`, `gpt-4o`). |
 | `client` | object | No | null | Provider override accepted by the contract. The unified entrypoint usually derives clients from `model`; only use this when the active runner explicitly supports the client payload. |
 | `parameters` | dict | No | {} | Agent-specific config (e.g., `max_turns: 20`, `command_timeout: 180`). |
+| `system_prompt` | string | No | null | Inline custom system prompt. Do not use with `system_prompt_file`. |
 | `system_prompt_file` | string | No | null | Path to custom system prompt file, relative to the config file's directory. |
 
 ### Client Config

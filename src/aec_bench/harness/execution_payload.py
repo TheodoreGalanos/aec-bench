@@ -102,7 +102,7 @@ def build_entrypoint_execution_bundle(
     adapter_kind = configuration.get("adapter", "rlm")
     if not isinstance(adapter_kind, str) or not adapter_kind.strip():
         raise ValueError("adapter must be a non-empty string when provided")
-    system_prompt = _entrypoint_system_prompt(configuration.get("system_prompt"))
+    system_prompt = _entrypoint_system_prompt(configuration.pop("system_prompt", None))
     tools = _entrypoint_tool_payloads(configuration.get("tools", []))
     execution_payload: dict[str, Any] = {}
     client_payload = configuration.get("client")

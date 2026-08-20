@@ -1,11 +1,10 @@
 # ABOUTME: Coordinates adaptation families into ordinary planned trials for the harness layer.
 # ABOUTME: Resolves task-family candidates by metadata and attaches adaptation provenance per run.
 
-from dataclasses import dataclass
 from typing import Any
 
 from aec_bench.contracts.adaptation import AdaptationSpec, expand_adaptation_spec
-from aec_bench.contracts.experiment_manifest import AgentConfig
+from aec_bench.contracts.experiment_manifest import AgentConfig, ComputeConfig
 from aec_bench.contracts.task_definition import TaskDefinition
 from aec_bench.contracts.trial_record import AdaptationProvenance, DerivationStepRecord
 from aec_bench.harness.trial import PlannedTrial, build_trial_id
@@ -15,26 +14,20 @@ class AdaptationCoordinationError(Exception):
     pass
 
 
-@dataclass(frozen=True)
-class AdaptationPlannedTrial:
-    planned_trial: PlannedTrial
-    adaptation: AdaptationProvenance
-
-
 def build_adaptation_trial_plan(
     *,
     experiment_id: str,
     spec: AdaptationSpec,
     tasks: list[TaskDefinition],
     agents: list[AgentConfig],
-    compute_backend: str,
+    compute: ComputeConfig,
     repetitions: int = 1,
-) -> list[AdaptationPlannedTrial]:
+) -> list[PlannedTrial]:
     if repetitions <= 0:
         raise ValueError("repetitions must be positive")
 
     candidates = expand_adaptation_spec(spec)
-    plan: list[AdaptationPlannedTrial] = []
+    plan: list[PlannedTrial] = []
     for candidate in candidates:
         task = _resolve_task_for_candidate(
             candidate_family_id=spec.family_id,
@@ -58,21 +51,19 @@ def build_adaptation_trial_plan(
         for agent in agents:
             for repetition in range(1, repetitions + 1):
                 plan.append(
-                    AdaptationPlannedTrial(
-                        planned_trial=PlannedTrial(
-                            trial_id=build_trial_id(
-                                experiment_id=experiment_id,
-                                task_id=task.task_id,
-                                agent_name=agent.name,
-                                repetition=repetition,
-                            ),
+                    PlannedTrial(
+                        trial_id=build_trial_id(
                             experiment_id=experiment_id,
                             task_id=task.task_id,
-                            agent=agent,
-                            compute_backend=compute_backend,
+                            agent_name=agent.name,
                             repetition=repetition,
                         ),
-                        adaptation=adaptation,
+                        experiment_id=experiment_id,
+                        task_id=task.task_id,
+                        agent=agent,
+                        compute=compute,
+                        repetition=repetition,
+                        extensions={"adaptation": adaptation},
                     )
                 )
     return plan

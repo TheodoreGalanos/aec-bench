@@ -42,11 +42,14 @@ def summarize_evaluation_records(
     calibration_agreement: float | None = None,
 ) -> dict[str, Any]:
     n_trials = len(records)
-    rewards = [record.evaluation.reward for record in records]
+    evaluated_records = [record for record in records if record.evaluation is not None]
+    rewards = [record.evaluation.reward for record in evaluated_records if record.evaluation is not None]
     total_cost = sum(record.cost.estimated_cost_usd or 0.0 for record in records if record.cost is not None)
 
     summary: dict[str, Any] = {
         "n_trials": n_trials,
+        "n_evaluated": len(evaluated_records),
+        "n_unevaluated": n_trials - len(evaluated_records),
         "mean_reward": mean(rewards),
         "total_cost_usd": total_cost,
         "by_adapter": _group_summary(records, key_fn=lambda record: record.agent.adapter),
@@ -59,7 +62,7 @@ def summarize_evaluation_records(
     }
     if behavioral_classifier is not None:
         summary["behavioral"] = summarize_behavioral_records(
-            records,
+            evaluated_records,
             classifier=behavioral_classifier,
         )
     summary["automated_judgment"] = assess_automated_judgment_readiness(
@@ -120,10 +123,13 @@ def _group_summary(
         grouped[str(key_fn(record))].append(record)
     result: dict[str, dict[str, float | int]] = {}
     for key, group_records in sorted(grouped.items()):
-        rewards = [record.evaluation.reward for record in group_records]
+        rewards = [record.evaluation.reward for record in group_records if record.evaluation is not None]
         n = len(rewards)
+        n_trials = len(group_records)
         result[key] = {
-            "n_trials": n,
+            "n_trials": n_trials,
+            "n_evaluated": n,
+            "n_unevaluated": n_trials - n,
             "mean_reward": mean(rewards),
             "perfect_rate": sum(1 for r in rewards if r >= 1.0) / n if n else 0.0,
             "zero_rate": sum(1 for r in rewards if r <= 0.0) / n if n else 0.0,
