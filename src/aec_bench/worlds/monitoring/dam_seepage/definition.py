@@ -9,6 +9,7 @@ from functools import cache
 from pathlib import Path
 
 from aec_bench.contracts.interactive_world import InteractiveWorldProfileRef, WorldBuildRef
+from aec_bench.contracts.task_definition import Difficulty, Lifecycle, Visibility
 from aec_bench.worlds.monitoring.dam_seepage.world import (
     DAM_SEEPAGE_TASK_WORLD_ID,
     SeepageScenario,
@@ -17,6 +18,7 @@ from aec_bench.worlds.monitoring.dam_seepage.world import (
 )
 from aec_bench.worlds.runtime.definition import (
     InteractiveWorldDefinition,
+    InteractiveWorldProfileMetadata,
     LoadedInteractiveWorldProfile,
     source_tree_world_build,
 )
@@ -87,6 +89,23 @@ def dam_seepage_world_definition() -> InteractiveWorldDefinition:
     profile = _profile_ref()
     return InteractiveWorldDefinition(
         build=_world_build(),
+        title="Dam seepage monitoring",
+        summary="Monitor rising seepage conditions and take safe, timely actions.",
+        domain="civil",
+        tags=("dam", "monitoring", "seepage"),
+        capabilities=frozenset(),
         profiles=(profile,),
+        profile_metadata=(
+            InteractiveWorldProfileMetadata(
+                profile_id=profile.profile_id,
+                title="Synthetic rising seepage",
+                summary="A bounded synthetic episode with increasing dam seepage risk.",
+                category="monitoring",
+                difficulty=Difficulty.MEDIUM,
+                lifecycle=Lifecycle.ACTIVE,
+                visibility=Visibility.PUBLIC,
+                tags=("dam", "monitoring", "seepage", "synthetic"),
+            ),
+        ),
         profile_loader=_load_profile,
     )

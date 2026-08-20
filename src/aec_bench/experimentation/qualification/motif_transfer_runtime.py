@@ -13,6 +13,7 @@ from typing import Literal, Self
 
 from pydantic import Field, FiniteFloat, NonNegativeFloat, PositiveInt, field_validator, model_validator
 
+from aec_bench.contracts.evaluation_result import EvaluationResult
 from aec_bench.contracts.harness_kernel import (
     FrozenStrictModel,
     canonical_json_sha256,
@@ -238,7 +239,7 @@ class MotifTransferRuntimeResult:
     finalization: MotifTransferResult
 
 
-def execute_motif_transfer(
+async def execute_motif_transfer(
     *,
     frozen_library: MotifLibrary,
     plan: GovernedMotifTransferPlan,
@@ -267,7 +268,7 @@ def execute_motif_transfer(
         authority_ledger=authority_ledger,
         boundary=MotifAssuranceBoundary.DISPATCH,
     )
-    evaluation = _execute_motif_transfer_evaluation(
+    evaluation = await _execute_motif_transfer_evaluation(
         library=library,
         source_plan=source_plan,
         registry=registry,
@@ -290,7 +291,7 @@ def execute_motif_transfer(
     return MotifTransferRuntimeResult(evaluation=evaluation, finalization=finalization)
 
 
-def _execute_motif_transfer_evaluation(
+async def _execute_motif_transfer_evaluation(
     *,
     library: MotifLibrary,
     source_plan: MotifTransferPlan,
@@ -338,7 +339,7 @@ def _execute_motif_transfer_evaluation(
         repetitions=request.repetitions,
         candidate_sets=(materialized.references,),
     )
-    execution = execute_harness_program_study(
+    execution = await execute_harness_program_study(
         candidates=materialized,
         manifest=manifest,
         registry=registry,
@@ -554,7 +555,7 @@ def _verify_transfer_trial(
         candidate=candidate,
         records=records,
     )
-    mean_reward = fmean(record.evaluation.reward for record in records)
+    mean_reward = fmean(_required_evaluation(record).reward for record in records)
     if not math.isclose(mean_reward, float(trial.mean_reward), rel_tol=0.0, abs_tol=1e-12):
         raise ValueError("transfer trial reward does not match its TrialRecords")
     valid_records = sum(_valid(record) for record in records)
@@ -630,7 +631,7 @@ def _load_verified_transfer_records(
     task_ids = {snapshot.task_id for snapshot in bundle.task_snapshots}
     if len(records) != len(task_ids) or {record.task.task_id for record in records} != task_ids:
         raise ValueError("transfer TrialRecords do not exactly cover their compiled tasks")
-    if any(not record.evaluation.validity.verifier_completed for record in records):
+    if any(not _required_evaluation(record).validity.verifier_completed for record in records):
         raise ValueError("transfer TrialRecord verifier evidence is incomplete")
     return tuple(records)
 
@@ -789,7 +790,7 @@ def _trial_evidence(execution: HarnessProgramTrialExecution) -> MotifTransferTri
         run_plan=execution.run_plan,
         trial_record_ids=tuple(record.trial_id for record in records),
         trial_records=artifacts,
-        mean_reward=fmean(record.evaluation.reward for record in records),
+        mean_reward=fmean(_required_evaluation(record).reward for record in records),
         validity_rate=valid / len(records),
         estimated_cost_usd=sum(costs),
         cost_evidence_complete=True,
@@ -855,5 +856,11 @@ def _verify_artifact(reference: ArtifactReference) -> None:
 
 
 def _valid(record: TrialRecord) -> bool:
-    validity = record.evaluation.validity
+    validity = _required_evaluation(record).validity
     return validity.output_parseable and validity.schema_valid and validity.verifier_completed
+
+
+def _required_evaluation(record: TrialRecord) -> EvaluationResult:
+    if record.evaluation is None:
+        raise ValueError(f"transfer TrialRecord lacks evaluation: {record.trial_id}")
+    return record.evaluation

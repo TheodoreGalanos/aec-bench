@@ -14,21 +14,19 @@ from typing import Literal, Self
 
 from pydantic import field_validator, model_validator
 
+from aec_bench import worlds
 from aec_bench.contracts.evaluation_result import StewardshipEvaluation
+from aec_bench.contracts.experiment_manifest import AgentConfig, ComputeConfig
 from aec_bench.contracts.harness_kernel import validate_sha256
 from aec_bench.contracts.legacy_content_address import LegacyContentAddressedModel
+from aec_bench.contracts.trial_record import ExecutionStatus, TrialRecord
 from aec_bench.contracts.validators import FrozenStrictModel, NonEmptyStr
-from aec_bench.contracts.world_session import (
-    StewardshipStateSnapshotRef,
-    WorldSessionExecutionKind,
-    WorldSessionOpenMode,
-    WorldSessionRequest,
-)
+from aec_bench.experimentation.meta_harness import HarnessCandidate, HarnessCandidateTrials, run_harness_study
+from aec_bench.harness.prime_world_actor import run_prime_world_actor_session
 from aec_bench.harness.pump_station_prime.evidence import PumpStationPrimeJourneyLimits
-from aec_bench.harness.pump_station_prime.journey import (
-    PumpStationPrimeJourneyRun,
-    run_pump_station_prime_journey,
-)
+from aec_bench.harness.pump_station_trial import run_pump_station_trial
+from aec_bench.harness.world_trials import WorldTrialRunner, run_world_experiment
+from aec_bench.ledger.writer import write_trial_record_at
 from aec_bench.prime_agent.acp import PrimeAcpIsolation
 from aec_bench.prime_agent.refinement import (
     PrimeRefinementCandidate,
@@ -37,19 +35,12 @@ from aec_bench.prime_agent.refinement import (
     validate_refinement_request,
 )
 from aec_bench.prime_agent.session_evidence import PrimeAcpUsage
-from aec_bench.worlds.stewardship.wastewater_pump_station.episode_runtime import (
-    PUMP_STATION_TASK_WORLD_ID,
-)
+from aec_bench.trials import plan_trials
+from aec_bench.worlds.stewardship.wastewater_pump_station.episode_runtime import PUMP_STATION_TASK_WORLD_ID
 from aec_bench.worlds.stewardship.wastewater_pump_station.reference_system import (
     PUMP_STATION_REFERENCE_SYSTEM_ID,
     PUMP_STATION_REFERENCE_SYSTEM_RS2_ID,
     list_reference_system_ids,
-)
-from aec_bench.worlds.stewardship.wastewater_pump_station.world_run import (
-    PumpStationWorldRun,
-)
-from aec_bench.worlds.stewardship.wastewater_pump_station.world_run_repository import (
-    PumpStationWorldRunRepository,
 )
 
 QUALIFICATION_REPORT_NAME = "prime-refinement-qualification.json"
@@ -261,8 +252,9 @@ async def run_prime_refinement_qualification(
     pump_station_guidance: bool = False,
     executable: str = "prime-agent",
     environment: Mapping[str, str] | None = None,
+    run_trial: WorldTrialRunner | None = None,
 ) -> PrimeRefinementQualificationRun:
-    """Compare an empty harness with one exact candidate in clean journeys."""
+    """Compare an empty harness with one candidate through normal world trial records."""
     validate_refinement_request(PrimeRefinementMode.CANDIDATE, candidate)
     _validate_design(profile_ids, repetitions)
     output_directory = output_directory.resolve()
@@ -271,46 +263,82 @@ async def run_prime_refinement_qualification(
     candidate_file.write_text(candidate.model_dump_json(indent=2) + "\n", encoding="utf-8")
 
     baseline = empty_refinement_candidate()
+    tasks = [
+        worlds.task(PUMP_STATION_TASK_WORLD_ID, profile=profile_id, instruction=instruction)
+        for profile_id in profile_ids
+    ]
+    selected_runner = run_trial
+    if selected_runner is None:
+        from functools import partial
+
+        selected_runner = partial(run_pump_station_trial, actor=run_prime_world_actor_session)
+
+    async def evaluate_candidate(
+        harness: HarnessCandidate[PrimeRefinementCandidate],
+    ) -> list[TrialRecord]:
+        parameters: dict[str, object] = {
+            "isolation": isolation.value,
+            "max_sessions": limits.max_sessions,
+            "max_host_controls": limits.max_host_controls,
+            "max_world_actions": limits.max_world_actions,
+            "max_model_calls": limits.max_model_calls,
+            "max_tokens": limits.max_tokens,
+            "max_cost_usd": str(limits.max_cost_usd),
+            "max_wall_seconds": limits.max_wall_seconds,
+            "pump_station_guidance": pump_station_guidance,
+            "refinement_mode": PrimeRefinementMode.CANDIDATE.value,
+            "refinement_candidate": harness.value.model_dump(mode="json"),
+            "executable": executable,
+        }
+        if environment is not None:
+            parameters["environment"] = dict(environment)
+        agent = AgentConfig(name=harness.candidate_id, adapter="prime-agent", model=model, parameters=parameters)
+        trials = plan_trials(
+            f"{qualification_id}-{harness.candidate_id}",
+            tasks=tasks,
+            agents=[agent],
+            compute=ComputeConfig(backend="local"),
+            repetitions=repetitions,
+        )
+        records = await run_world_experiment(tasks=tasks, trials=trials, run_trial=selected_runner)
+        for record in records:
+            write_trial_record_at(
+                path=output_directory / "cells" / harness.candidate_id / f"{record.trial_id}.json",
+                record=record,
+            )
+        return records
+
+    study = await run_harness_study(
+        baseline=HarnessCandidate(PrimeRefinementTreatment.BASELINE.value, baseline),
+        candidates=[HarnessCandidate(PrimeRefinementTreatment.CANDIDATE.value, candidate)],
+        evaluate=evaluate_candidate,
+        assess=lambda _baseline, _candidates: None,
+    )
+    candidate_trials = study.candidates[0]
+    record_cells = {
+        (profile_id, repetition, treatment): record
+        for treatment, trial_set in (
+            (PrimeRefinementTreatment.BASELINE, study.baseline),
+            (PrimeRefinementTreatment.CANDIDATE, candidate_trials),
+        )
+        for profile_id in profile_ids
+        for repetition, record in _records_for_profile(trial_set, profile_id)
+    }
     observations: list[PrimeRefinementQualificationObservation] = []
     contrasts: list[PrimeRefinementQualificationContrast] = []
-    for profile_index, profile_id in enumerate(profile_ids):
-        for repetition in range(repetitions):
+    for profile_id in profile_ids:
+        for repetition in range(1, repetitions + 1):
             paired: dict[PrimeRefinementTreatment, PrimeRefinementQualificationObservation] = {}
-            for treatment in PrimeRefinementTreatment:
-                selected_candidate = baseline if treatment is PrimeRefinementTreatment.BASELINE else candidate
-                cell = (
-                    output_directory
-                    / "cells"
-                    / f"profile-{profile_index + 1:02d}"
-                    / (f"repeat-{repetition + 1:03d}-{treatment.value}")
-                )
-                request = _prepare_world(
-                    cell / "world",
-                    qualification_id=qualification_id,
-                    cell_id=f"p{profile_index + 1:02d}-r{repetition + 1:03d}-{treatment.value}",
-                    profile_id=profile_id,
-                )
-                result = await run_pump_station_prime_journey(
-                    actor_workspace=cell / "actor",
-                    world_run_directory=cell / "world",
-                    evidence_directory=cell / "evidence",
-                    session_request=request,
-                    instruction=instruction,
-                    model=model,
-                    isolation=isolation,
-                    limits=limits,
-                    pump_station_guidance=pump_station_guidance,
-                    refinement_mode=PrimeRefinementMode.CANDIDATE,
-                    refinement_candidate=selected_candidate,
-                    executable=executable,
-                    environment=environment,
-                )
-                observation = _observation(
-                    result,
+            for treatment, selected_candidate in (
+                (PrimeRefinementTreatment.BASELINE, baseline),
+                (PrimeRefinementTreatment.CANDIDATE, candidate),
+            ):
+                observation = _observation_from_record(
+                    record_cells[(profile_id, repetition, treatment)],
                     output_directory=output_directory,
                     order=len(observations),
                     profile_id=profile_id,
-                    repetition=repetition + 1,
+                    repetition=repetition,
                     treatment=treatment,
                     candidate=selected_candidate,
                 )
@@ -319,7 +347,7 @@ async def run_prime_refinement_qualification(
             contrasts.append(
                 PrimeRefinementQualificationContrast(
                     profile_id=profile_id,
-                    repetition=repetition + 1,
+                    repetition=repetition,
                     baseline_observation_sha256=paired[PrimeRefinementTreatment.BASELINE].content_sha256,
                     candidate_observation_sha256=paired[PrimeRefinementTreatment.CANDIDATE].content_sha256,
                 )
@@ -358,46 +386,15 @@ def _validate_design(profile_ids: tuple[str, ...], repetitions: int) -> None:
         raise ValueError("Prime refinement qualification repetitions must be positive")
 
 
-def _prepare_world(
-    world_directory: Path,
-    *,
-    qualification_id: str,
-    cell_id: str,
-    profile_id: str,
-) -> WorldSessionRequest:
-    run_id = f"{qualification_id}-{cell_id}-run"
-    episode_id = f"{qualification_id}-{cell_id}-episode"
-    branch_id = f"{qualification_id}-{cell_id}-branch"
-    run = PumpStationWorldRun.create_reference_system(
-        repository=PumpStationWorldRunRepository(world_directory),
-        run_id=run_id,
-        episode_id=episode_id,
-        world_branch_id=branch_id,
-        reference_system_id=profile_id,
-    )
-    snapshot = run.snapshot()
-    return WorldSessionRequest(
-        execution_kind=WorldSessionExecutionKind.STEWARDSHIP,
-        open_mode=WorldSessionOpenMode.RESUME,
-        session_id=f"{qualification_id}-{cell_id}-session",
-        task_world_id=PUMP_STATION_TASK_WORLD_ID,
-        agent_tenure_id="prime-composite-actor",
-        run_id=run_id,
-        episode_id=episode_id,
-        world_branch_id=branch_id,
-        start_snapshot=StewardshipStateSnapshotRef(
-            run_id=snapshot.run_id,
-            episode_id=snapshot.episode_id,
-            world_branch_id=snapshot.world_branch_id,
-            sequence=snapshot.sequence,
-            state_id=snapshot.state_id,
-            commit_id=snapshot.commit_id,
-        ),
-    )
+def _records_for_profile(
+    trial_set: HarnessCandidateTrials[PrimeRefinementCandidate], profile_id: str
+) -> list[tuple[int, TrialRecord]]:
+    selected = [record for record in trial_set.records if record.task_id.endswith(f"/{profile_id}")]
+    return [(index, record) for index, record in enumerate(selected, start=1)]
 
 
-def _observation(
-    result: PumpStationPrimeJourneyRun,
+def _observation_from_record(
+    record: TrialRecord,
     *,
     output_directory: Path,
     order: int,
@@ -406,25 +403,47 @@ def _observation(
     treatment: PrimeRefinementTreatment,
     candidate: PrimeRefinementCandidate,
 ) -> PrimeRefinementQualificationObservation:
-    journey = json.loads(result.run_file.read_text(encoding="utf-8"))
+    if record.output is None or record.output.agent_output is None or record.output.agent_result is None:
+        raise ValueError("Prime world TrialRecord lacks its normalized result")
+    if record.evaluation is None or record.cost is None:
+        raise ValueError("Prime world TrialRecord lacks evaluation or usage")
+    journey_file = Path(record.output.agent_output.output_path)
+    journey = json.loads(journey_file.read_text(encoding="utf-8"))
     host_policy_sha256 = journey.get("host_policy_sha256")
     if not isinstance(host_policy_sha256, str):
         raise ValueError("Prime journey evidence lacks its host policy digest")
+    evaluation = record.evaluation
+    cost = record.cost
+    stewardship = evaluation.stewardship
+    if stewardship is None:
+        raise ValueError("Prime world TrialRecord lacks pump stewardship evaluation")
+    result = record.output.agent_result
     return PrimeRefinementQualificationObservation(
         order=order,
         profile_id=profile_id,
         repetition=repetition,
         treatment=treatment,
         candidate_sha256=candidate.content_sha256,
-        journey_file=result.run_file.relative_to(output_directory).as_posix(),
+        journey_file=(output_directory / "cells" / treatment.value / f"{record.trial_id}.json")
+        .relative_to(output_directory)
+        .as_posix(),
         host_policy_sha256=host_policy_sha256,
-        completion=result.completion,
-        world_state=result.world_state,
-        stop_reason=result.stop_reason,
-        benchmark_valid=result.benchmark_valid,
-        verification_valid=result.verification.valid,
-        evaluation=result.evaluation,
-        usage=result.usage,
-        elapsed_seconds=result.elapsed_seconds,
-        world_action_count=result.world_action_count,
+        completion=str(result["completion"]),
+        world_state=str(result["world_state"]),
+        stop_reason=str(result["stop_reason"]),
+        benchmark_valid=record.execution_status is ExecutionStatus.COMPLETED,
+        verification_valid=evaluation.validity.verifier_completed,
+        evaluation=stewardship,
+        usage=PrimeAcpUsage(
+            complete=record.execution_status is ExecutionStatus.COMPLETED,
+            model_calls=cost.model_calls or 0,
+            input_tokens=cost.tokens_in or 0,
+            output_tokens=cost.tokens_out or 0,
+            cache_read_tokens=cost.cache_read_tokens or 0,
+            cache_write_tokens=cost.cache_write_tokens or 0,
+            total_tokens=(cost.tokens_in or 0) + (cost.tokens_out or 0),
+            cost_usd=Decimal(str(cost.estimated_cost_usd or 0)),
+        ),
+        elapsed_seconds=record.timing.agent_seconds or record.timing.total_seconds,
+        world_action_count=int(result["world_action_count"]),
     )

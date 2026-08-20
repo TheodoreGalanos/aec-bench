@@ -45,7 +45,8 @@ def test_run_harbor_forwards_and_reports_world_action_budget(
         [
             "--json",
             "task",
-            "pump-station-world",
+            "world",
+            "pump-station",
             "run-harbor",
             "--task-dir",
             str(tmp_path / "task"),

@@ -420,7 +420,7 @@ Several parts already have the required functional shape:
 - [`compose_dataset()`](../../src/aec_bench/generation/dataset.py) is already a
   pure suite planner, although its current name suggests that it creates a
   benchmark dataset. `execute_plan()` writes the generated task packages.
-- [`build_trial_plan()`](../../src/aec_bench/harness/scheduler.py) already
+- [`plan_trials()`](../../src/aec_bench/trials.py) already
   expands tasks, agents, and repetitions without executing them.
 - [`build_trial_record()`](../../src/aec_bench/harness/trial_record_builder.py)
   already builds the current trial contract and accepts typed extensions.
@@ -685,7 +685,7 @@ def solve(snapshot: WorkspaceSnapshot, batch_size: int) -> list[TrialRecord]:
     agent = materialize_evolution_agent(snapshot)
     experiment = build_candidate_experiment(agent=agent, batch_size=batch_size)
     tasks = select_manifest_tasks(task_catalogue, experiment)
-    trials = build_trial_plan(experiment, tasks)
+    trials = plan_trials(experiment, tasks)
     return run_experiment(
         runtime=runtime,
         tasks=resolve_instances(tasks),
@@ -732,7 +732,7 @@ Replace and remove the duplicate execution effects:
   generation application functions cover it.
 
 The retained `SolveFn` becomes a thin composition of agent materialization,
-experiment planning, `build_trial_plan()`, and `run_experiment()`. Both local
+experiment planning, `plan_trials()`, and `run_experiment()`. Both local
 and Harbor execution use the shared harness path. The migration slice removes
 the replaced code in the same change. It does not leave the current and new
 solvers in parallel.
@@ -752,7 +752,7 @@ dataset_ref = publish_dataset(dataset)
 experiment = build_experiment_config(dataset_ref, agents, compute)
 resolved_dataset = resolve_dataset(dataset_ref)
 verify_resolved_dataset(resolved_dataset)
-trials = build_trial_plan(experiment, resolved_dataset.tasks)
+trials = plan_trials(experiment, resolved_dataset.tasks)
 
 records = run_experiment(
     runtime=runtime,
@@ -776,7 +776,7 @@ enter `compose_dataset()` through the same validation and selection boundary.
 | `publish_dataset()` | Produce the current immutable dataset reference and publication record. | Repository or bundle boundary |
 | `build_experiment_config()` | Build an `ExperimentManifest` from a dataset reference, agents, and compute configuration. | Pure |
 | `resolve_dataset()` and `verify_resolved_dataset()` | Resolve the dataset reference, check integrity, and load task material. | Read and integrity boundary |
-| `build_trial_plan()` | Expand verified tasks, agents, compute configuration, and repetitions into planned trials. | Pure and deterministic |
+| `plan_trials()` | Expand verified tasks, agents, compute configuration, and repetitions into planned trials. | Pure and deterministic |
 | `run_experiment()` | Apply one recipe through `run_trial()` for each planned trial and return or stream `TrialRecord` values. | Agent, verifier, reviewer, and persistence effects |
 | `summarize_evaluation_records()` | Build the current evaluation summary from supplied records. | Pure |
 
@@ -1018,7 +1018,7 @@ temporary compatibility API.
 - Materialize each evolved agent snapshot as explicit agent configuration or
   system-prompt input. Do not write it into a task source directory.
 - Make the local and Harbor solve functions compose experiment planning,
-  `build_trial_plan()`, and `run_experiment()`.
+  `plan_trials()`, and `run_experiment()`.
 - Replace and delete `LocalSolver`, `collect_local_trial_record()`,
   `_run_adapter_in_workspace()`, and the duplicate execution body of
   `_build_harbor_solve_fn()`.

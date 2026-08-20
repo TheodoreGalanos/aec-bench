@@ -17,12 +17,14 @@ from aec_bench.contracts.world_session import (
     WorldSessionOpenMode,
     WorldSessionRequest,
 )
+from aec_bench.harness.prime_world_actor import run_prime_world_actor_session
 from aec_bench.harness.pump_station_prime import evidence as journey_evidence
 from aec_bench.harness.pump_station_prime.session import (
     PumpStationPrimeSessionLimits,
     PumpStationPrimeSessionRun,
     run_pump_station_prime_session,
 )
+from aec_bench.harness.world_trials import WorldActorSessionRunner
 from aec_bench.prime_agent.acp import PrimeAcpIsolation
 from aec_bench.prime_agent.refinement import (
     PrimeRefinementCandidate,
@@ -30,6 +32,7 @@ from aec_bench.prime_agent.refinement import (
     validate_refinement_request,
 )
 from aec_bench.prime_agent.session_evidence import PrimeAcpUsage, acp_usage_payload, aggregate_acp_usage
+from aec_bench.trials import PlannedTrial
 from aec_bench.worlds.stewardship.wastewater_pump_station import host_continuation as pump_host
 from aec_bench.worlds.stewardship.wastewater_pump_station.evaluation import (
     evaluate_pump_station_reference_run,
@@ -99,6 +102,8 @@ async def run_pump_station_prime_journey(
     resume: bool = False,
     executable: str = "prime-agent",
     environment: Mapping[str, str] | None = None,
+    planned_trial: PlannedTrial | None = None,
+    actor: WorldActorSessionRunner = run_prime_world_actor_session,
 ) -> PumpStationPrimeJourneyRun:
     """Run clean Prime sessions and exact pump-owned host continuation."""
     if pump_station_guidance and actor_ledger_plan:
@@ -219,6 +224,8 @@ async def run_pump_station_prime_journey(
                 refinement_candidate=checkpoint.refinement_candidate,
                 executable=executable,
                 environment=environment,
+                planned_trial=planned_trial,
+                actor=actor,
             )
             _remove_closed_prime_runtime(actor_workspace, runtime_directory)
             run = _resume_verified_run(world_run_directory)

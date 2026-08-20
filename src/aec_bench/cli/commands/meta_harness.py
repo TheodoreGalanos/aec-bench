@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import time
 from collections.abc import Callable
@@ -681,22 +682,24 @@ def autonomous_command(
         require_human_for=tuple(require_human_for or ["world_schema", "world_generator"]),
         selection_strategy=selection_strategy,
     )
-    result = run_autonomous_process(
-        task_text=_task_text(task_text, task_file),
-        process_id=process_id,
-        config=config,
-        problem_space_brief=_load_optional_json(brief),
-        problem_model=_load_optional_json(world),
-        intake_endpoints=_load_stage_endpoints(intake_model, intake_models_config),
-        world_generation_endpoints=_load_stage_endpoints(world_model, world_models_config),
-        review_endpoints=_load_stage_endpoints(review_model, review_models_config),
-        operation_endpoints=_load_stage_endpoints(operation_model, operation_models_config),
-        output_dir=output,
-        ledger_path=ledger,
-        problem_model_resolver=_queue_resolver(_load_queue(world_candidate), "world candidate"),
-        task_run_resolver=_queue_resolver(_load_queue(task_run), "task run"),
-        operation_plan_resolver=_queue_resolver(_load_queue(operation_plan), "operation plan"),
-        governance_resolver=_governance_queue_resolver(proposals, decisions),
+    result = asyncio.run(
+        run_autonomous_process(
+            task_text=_task_text(task_text, task_file),
+            process_id=process_id,
+            config=config,
+            problem_space_brief=_load_optional_json(brief),
+            problem_model=_load_optional_json(world),
+            intake_endpoints=_load_stage_endpoints(intake_model, intake_models_config),
+            world_generation_endpoints=_load_stage_endpoints(world_model, world_models_config),
+            review_endpoints=_load_stage_endpoints(review_model, review_models_config),
+            operation_endpoints=_load_stage_endpoints(operation_model, operation_models_config),
+            output_dir=output,
+            ledger_path=ledger,
+            problem_model_resolver=_queue_resolver(_load_queue(world_candidate), "world candidate"),
+            task_run_resolver=_queue_resolver(_load_queue(task_run), "task run"),
+            operation_plan_resolver=_queue_resolver(_load_queue(operation_plan), "operation plan"),
+            governance_resolver=_governance_queue_resolver(proposals, decisions),
+        )
     )
     emit("meta-harness autonomous", result, start_time=start)
 
@@ -765,13 +768,15 @@ def compare_command(
 ) -> None:
     """Compare complete baseline and candidate evidence without model calls."""
     start = time.monotonic()
-    result = run_harness_comparison_from_files(
-        brief_path=brief,
-        baseline_world_path=baseline_world,
-        candidate_world_path=candidate_world,
-        baseline_run_path=baseline_run,
-        candidate_run_path=candidate_run,
-        output_dir=output,
+    result = asyncio.run(
+        run_harness_comparison_from_files(
+            brief_path=brief,
+            baseline_world_path=baseline_world,
+            candidate_world_path=candidate_world,
+            baseline_run_path=baseline_run,
+            candidate_run_path=candidate_run,
+            output_dir=output,
+        )
     )
     emit("meta-harness compare", result, start_time=start)
 
@@ -783,9 +788,11 @@ def example_command(
 ) -> None:
     """Run a complete provider-free baseline-versus-candidate comparison."""
     start = time.monotonic()
-    result = materialize_harness_comparison_example(
-        output_dir=output,
-        command_prefix=command_prefix,
+    result = asyncio.run(
+        materialize_harness_comparison_example(
+            output_dir=output,
+            command_prefix=command_prefix,
+        )
     )
     emit("meta-harness example", result, start_time=start)
 

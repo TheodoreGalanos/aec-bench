@@ -7,6 +7,8 @@ import copy
 import json
 from pathlib import Path
 
+import pytest
+
 from aec_bench.evaluation.process_result import score_process_result
 from aec_bench.experimentation.process_runtime.autonomy import (
     AutonomyConfig,
@@ -23,7 +25,7 @@ from aec_bench.harness.process_runtime.problem_model_process import (
 from aec_bench.ledger.process_log import read_ledger
 
 
-def test_problem_brief_and_world_generation_requests_preserve_boundaries() -> None:
+async def test_problem_brief_and_world_generation_requests_preserve_boundaries() -> None:
     intake = build_problem_brief_request(
         task_text="Create a calculation task that exposes verifier/artifact disagreement.",
         attachments=[{"path": "runs/demo/result.json", "kind": "run_artifact"}],
@@ -43,7 +45,7 @@ def test_problem_brief_and_world_generation_requests_preserve_boundaries() -> No
     assert world_generation["request"]["payload"]["source_world"]["world_id"] == "world.base"
 
 
-def test_governance_routes_accepted_schema_changes_back_to_world_generation() -> None:
+async def test_governance_routes_accepted_schema_changes_back_to_world_generation() -> None:
     world = _world()
     original = copy.deepcopy(world)
     operation_run = {
@@ -93,7 +95,7 @@ def test_governance_routes_accepted_schema_changes_back_to_world_generation() ->
     assert world == original
 
 
-def test_runtime_pauses_and_records_ledger_entries(tmp_path: Path) -> None:
+async def test_runtime_pauses_and_records_ledger_entries(tmp_path: Path) -> None:
     ledger_path = tmp_path / "ledger.jsonl"
 
     intake_only = run_problem_model_process(
@@ -115,7 +117,7 @@ def test_runtime_pauses_and_records_ledger_entries(tmp_path: Path) -> None:
     assert with_brief["world_generation_request"]["request"]["environment"]["environment_id"] == "world_generator"
 
 
-def test_runtime_reaches_governed_world_generation_with_supplied_artifacts(tmp_path: Path) -> None:
+async def test_runtime_reaches_governed_world_generation_with_supplied_artifacts(tmp_path: Path) -> None:
     output_dir = tmp_path / "process"
     ledger_path = output_dir / "process_ledger.jsonl"
 
@@ -152,7 +154,7 @@ def test_runtime_reaches_governed_world_generation_with_supplied_artifacts(tmp_p
     ]
 
 
-def test_autonomy_scores_runs_and_human_gates_world_schema_governance() -> None:
+async def test_autonomy_scores_runs_and_human_gates_world_schema_governance() -> None:
     config = AutonomyConfig(max_iterations=3)
     runtime_result = run_problem_model_process(
         task_text="Create a diagnostic task.",
@@ -168,7 +170,7 @@ def test_autonomy_scores_runs_and_human_gates_world_schema_governance() -> None:
     machine_decision["decided_by"] = "governance-agent"
 
     score = score_process_result(runtime_result)
-    autonomous = run_autonomous_process(
+    autonomous = await run_autonomous_process(
         task_text="Create a diagnostic task.",
         process_id="process.autonomy-human-gate",
         config=config,
@@ -189,7 +191,7 @@ def test_autonomy_scores_runs_and_human_gates_world_schema_governance() -> None:
     assert autonomous["pending_decision"]["scope"] == "world_schema"
 
 
-def test_autonomy_cost_estimate_counts_model_stage_costs() -> None:
+async def test_autonomy_cost_estimate_counts_model_stage_costs() -> None:
     result = {
         "cost_usd": 0.01,
         "intake_model_run": {"cost": {"estimated_cost_usd": 0.02}},
@@ -305,3 +307,6 @@ def _task_run() -> dict:
             },
         },
     }
+
+
+pytestmark = pytest.mark.asyncio

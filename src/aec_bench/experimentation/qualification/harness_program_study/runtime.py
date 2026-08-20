@@ -89,7 +89,7 @@ def prepare_harness_program_study_spec(
     )
 
 
-def run_harness_program_study(
+async def run_harness_program_study(
     *,
     spec: HarnessProgramStudySpec,
     registry: KernelRuntimeRegistry,
@@ -117,7 +117,7 @@ def run_harness_program_study(
         raise ValueError("materialized task inputs do not match preregistered candidate references")
 
     spec_artifact = _write_spec_artifact(source, artifacts_root=artifacts_root)
-    execution = execute_harness_program_study(
+    execution = await execute_harness_program_study(
         candidates=materialized,
         manifest=source.study_manifest,
         registry=registry,

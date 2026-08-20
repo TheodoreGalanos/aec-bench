@@ -1,12 +1,14 @@
 # ABOUTME: Manifest-driven trial planning and bounded batching for the Python harness.
 # ABOUTME: Expands tasks, agents, and repetitions into deterministic planned trials.
 
+from collections.abc import Sequence
 from pathlib import Path
 
 from aec_bench.contracts.experiment_manifest import ExperimentManifest
 from aec_bench.contracts.task_definition import Lifecycle, TaskDefinition
-from aec_bench.harness.trial import PlannedTrial, build_trial_id
 from aec_bench.tasks.selector import select_tasks
+from aec_bench.trials import PlannedTrial
+from aec_bench.worlds.tasks import WorldTask
 
 
 def select_manifest_tasks(
@@ -15,12 +17,39 @@ def select_manifest_tasks(
     *,
     datasets_root: Path | None = None,
     project_root: Path | None = None,
+    tasks_root: Path | None = None,
 ) -> list[TaskDefinition]:
+    """Select artifact tasks for the existing artifact-only harness callers."""
+
+    selected = select_manifest_task_values(
+        tasks,
+        manifest,
+        datasets_root=datasets_root,
+        project_root=project_root,
+        tasks_root=tasks_root,
+    )
+    if any(isinstance(task, WorldTask) for task in selected):
+        raise ValueError("artifact harness cannot execute Interactive World dataset entries")
+    return [task for task in selected if isinstance(task, TaskDefinition)]
+
+
+def select_manifest_task_values(
+    tasks: Sequence[TaskDefinition | WorldTask],
+    manifest: ExperimentManifest,
+    *,
+    datasets_root: Path | None = None,
+    project_root: Path | None = None,
+    tasks_root: Path | None = None,
+) -> list[TaskDefinition | WorldTask]:
+    """Select concrete artifact and world values for the top-level run application."""
+
+    tasks = list(tasks)
     selector = manifest.tasks
 
     if selector.dataset is not None:
         from aec_bench.config import load_config
         from aec_bench.dataset.publication import resolve_dataset, verify_resolved_dataset
+        from aec_bench.dataset.tasks import load_dataset_tasks
 
         config = load_config(project_root)
         resolved_root = datasets_root or config.datasets_root
@@ -39,12 +68,11 @@ def select_manifest_tasks(
         )
         if not integrity.is_clean:
             raise ValueError("resolved dataset task materialisation failed integrity verification")
-        dataset_task_ids = {task.task_id for task in resolved.manifest.tasks}
-        available_task_ids = {task.task_id for task in tasks}
-        missing_task_ids = sorted(dataset_task_ids - available_task_ids)
-        if missing_task_ids:
-            raise ValueError(f"resolved dataset tasks are not registered: {', '.join(missing_task_ids)}")
-        tasks = [task for task in tasks if task.task_id in dataset_task_ids]
+        tasks = load_dataset_tasks(
+            resolved.manifest,
+            project_root=resolved_project,
+            tasks_root=tasks_root or resolved_project / "tasks",
+        )
 
     return select_tasks(
         tasks,
@@ -59,33 +87,6 @@ def select_manifest_tasks(
             Lifecycle.RETIRED,
         ],
     )
-
-
-def build_trial_plan(
-    manifest: ExperimentManifest,
-    tasks: list[TaskDefinition],
-) -> list[PlannedTrial]:
-    selected_tasks = sorted(tasks, key=lambda task: task.task_id)
-    plan: list[PlannedTrial] = []
-    for task in selected_tasks:
-        for agent in manifest.agents:
-            for repetition in range(1, manifest.repetitions + 1):
-                plan.append(
-                    PlannedTrial(
-                        trial_id=build_trial_id(
-                            experiment_id=manifest.experiment_id,
-                            task_id=task.task_id,
-                            agent_name=agent.name,
-                            repetition=repetition,
-                        ),
-                        experiment_id=manifest.experiment_id,
-                        task_id=task.task_id,
-                        agent=agent,
-                        compute=manifest.compute,
-                        repetition=repetition,
-                    )
-                )
-    return plan
 
 
 def batch_planned_trials(

@@ -1,13 +1,38 @@
 # ABOUTME: Task selection helpers for filtering validated task definitions in aec-bench.
 # ABOUTME: Applies experiment-facing filters while keeping lifecycle policy visible and testable.
 
+from collections.abc import Sequence
 from fnmatch import fnmatch
+from typing import Protocol, TypeVar
 
-from aec_bench.contracts.task_definition import Difficulty, Lifecycle, TaskDefinition, Visibility
+from aec_bench.contracts.task_definition import Difficulty, Lifecycle, Visibility
+
+
+class SelectableTask(Protocol):
+    @property
+    def task_id(self) -> str: ...
+
+    @property
+    def domain(self) -> str: ...
+
+    @property
+    def difficulty(self) -> Difficulty: ...
+
+    @property
+    def lifecycle(self) -> Lifecycle: ...
+
+    @property
+    def visibility(self) -> Visibility: ...
+
+    @property
+    def tags(self) -> Sequence[str]: ...
+
+
+SelectableTaskT = TypeVar("SelectableTaskT", bound=SelectableTask)
 
 
 def select_tasks(
-    tasks: list[TaskDefinition],
+    tasks: list[SelectableTaskT],
     *,
     domains: list[str] | None = None,
     difficulties: list[Difficulty] | None = None,
@@ -16,7 +41,7 @@ def select_tasks(
     tags: list[str] | None = None,
     include_patterns: list[str] | None = None,
     exclude_patterns: list[str] | None = None,
-) -> list[TaskDefinition]:
+) -> list[SelectableTaskT]:
     return [
         task
         for task in tasks
@@ -34,7 +59,7 @@ def select_tasks(
 
 
 def _matches(
-    task: TaskDefinition,
+    task: SelectableTask,
     *,
     domains: list[str] | None,
     difficulties: list[Difficulty] | None,

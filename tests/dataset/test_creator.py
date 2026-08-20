@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+from aec_bench import worlds
 from aec_bench.contracts.dataset import DatasetGeneration, DatasetManifest
 from aec_bench.contracts.task_definition import Difficulty
 from aec_bench.dataset.creator import compose_dataset
@@ -65,14 +66,20 @@ def test_create_orders_tasks_by_stable_task_id(tmp_path: Path) -> None:
     assert [task.task_id for task in manifest.tasks] == ["civil/task-a", "mechanical/task-b"]
 
 
-def test_create_uses_explicit_task_kind_metadata(tmp_path: Path) -> None:
+def test_create_writes_world_kind_from_concrete_task_family(tmp_path: Path) -> None:
     tasks_root = tmp_path / "tasks"
     task_id = "civil/pump-world"
     _create_task_on_disk(tasks_root, task_id)
 
+    world_task = worlds.task(
+        "wastewater-pump-station-stewardship.v1",
+        profile="pump-station-reference-system.asw-8-rs1.v1",
+        instruction="Operate the pump station.",
+        task_id=task_id,
+    )
     manifest = compose_dataset(
         dataset_id="worlds",
-        tasks=[make_task_definition(task_id=task_id, domain="civil", metadata={"task_kind": "world"})],
+        tasks=[world_task],
         tasks_root=tasks_root,
         description="World tasks",
     )
@@ -108,15 +115,16 @@ def test_create_cannot_overwrite_an_existing_dataset_id(tmp_path: Path) -> None:
         save_dataset(tmp_path / "datasets", manifest)
 
 
-def test_create_rejects_unknown_task_kind_instead_of_inventing_one(tmp_path: Path) -> None:
+def test_create_does_not_infer_task_kind_from_metadata(tmp_path: Path) -> None:
     tasks_root = tmp_path / "tasks"
     task_id = "civil/task-a"
     _create_task_on_disk(tasks_root, task_id)
 
-    with pytest.raises(ValueError, match="task_kind"):
-        compose_dataset(
-            dataset_id="bad-kind",
-            tasks=[make_task_definition(task_id=task_id, domain="civil", metadata={"task_kind": "mystery"})],
-            tasks_root=tasks_root,
-            description="Bad kind",
-        )
+    manifest = compose_dataset(
+        dataset_id="concrete-kind",
+        tasks=[make_task_definition(task_id=task_id, domain="civil", metadata={"task_kind": "mystery"})],
+        tasks_root=tasks_root,
+        description="Concrete kind",
+    )
+
+    assert manifest.tasks[0].task_kind == "artifact"

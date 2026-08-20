@@ -1725,6 +1725,7 @@ format = "lowercase 40-character Git commit when present"
 
 [[field]]
 symbol = "aec_bench.contracts.trial_record.TrialInput.task_revision"
+aliases = ["aec_bench.worlds.tasks.WorldTask.task_revision"]
 surface = "pydantic_model"
 wire_name = "task_revision"
 category = "source_identity"
@@ -2025,7 +2026,7 @@ event = "actor invocation authority closed"
 
 [[field]]
 symbol = "aec_bench.harness.world_actor.client_bundle.InstalledClient.content_sha256"
-aliases = ["aec_bench.harness.dam_seepage_prime.session.DamSeepagePrimeSessionRun.world_actor_client_sha256", "aec_bench.harness.pump_station_prime.session.PumpStationPrimeSessionRun.world_actor_client_sha256", "manifest:aecbench.prime-world-run.v1[*].world_actor_client_sha256"]
+aliases = ["aec_bench.harness.dam_seepage_prime.session.DamSeepagePrimeSessionRun.world_actor_client_sha256", "aec_bench.harness.prime_world_actor.WorldActorSession.world_actor_client_sha256", "aec_bench.harness.pump_station_prime.session.PumpStationPrimeSessionRun.world_actor_client_sha256", "manifest:aecbench.prime-world-run.v1[*].world_actor_client_sha256"]
 surface = "dataclass"
 wire_name = "content_sha256"
 category = "artifact_integrity"

@@ -88,7 +88,7 @@ class RewardByProgramIdentityHarborExecutor(RewardByTurnsHarborExecutor):
         return 0.2 if identity == self._parent_program_ref else 0.9
 
 
-def test_solution_descriptor_is_derived_from_typed_harness_and_program(tmp_path: Path) -> None:
+async def test_solution_descriptor_is_derived_from_typed_harness_and_program(tmp_path: Path) -> None:
     runtime, _ = _runtime(tmp_path)
     parent = runtime.parent
     program = ProgramFactorTemplate(
@@ -119,7 +119,7 @@ def test_solution_descriptor_is_derived_from_typed_harness_and_program(tmp_path:
     assert descriptor.state_mode == "ephemeral"
 
 
-def test_rejected_repair_cannot_be_captured_as_learning_evidence(tmp_path: Path) -> None:
+async def test_rejected_repair_cannot_be_captured_as_learning_evidence(tmp_path: Path) -> None:
     runtime, _ = _runtime(tmp_path)
     execution = runtime.execute()
     decision = execution.result.decision
@@ -141,7 +141,7 @@ def test_rejected_repair_cannot_be_captured_as_learning_evidence(tmp_path: Path)
         capture_accepted_repair_evidence(rejected_execution)
 
 
-def test_transfer_requires_every_target_task_to_be_declared_holdout(tmp_path: Path) -> None:
+async def test_transfer_requires_every_target_task_to_be_declared_holdout(tmp_path: Path) -> None:
     tasks_root = tmp_path / "tasks"
     task_id = "civil/calculation/public-transfer-target"
     _write_task(tasks_root, task_id)
@@ -166,7 +166,7 @@ def test_transfer_requires_every_target_task_to_be_declared_holdout(tmp_path: Pa
     )
 
 
-def test_task_review_sidecar_contributes_one_canonical_motif_lineage(tmp_path: Path) -> None:
+async def test_task_review_sidecar_contributes_one_canonical_motif_lineage(tmp_path: Path) -> None:
     runtime, _ = _runtime(tmp_path)
     task_id = runtime.request.pairing.task_ids[0]
     task_dir = runtime.tasks_root / task_id
@@ -226,7 +226,7 @@ def test_task_review_sidecar_contributes_one_canonical_motif_lineage(tmp_path: P
     assert motif.supporting_review_lineage_ids == (review_lineage,)
 
 
-def test_real_internal_evidence_learns_provisional_motif_without_granting_authority(
+async def test_real_internal_evidence_learns_provisional_motif_without_granting_authority(
     tmp_path: Path,
 ) -> None:
     repair_executor = RewardByProgramIdentityHarborExecutor()
@@ -279,7 +279,7 @@ def test_real_internal_evidence_learns_provisional_motif_without_granting_author
         split="discovery",
         bootstrap_replicates=8,
     )
-    stage_result = run_harness_program_study(
+    stage_result = await run_harness_program_study(
         spec=stage_spec,
         registry=runtime.registry,
         workflow=_workflow(runtime.tasks_root.parent, runtime.tasks_root),
@@ -330,7 +330,7 @@ def test_real_internal_evidence_learns_provisional_motif_without_granting_author
         split="calibration",
         bootstrap_replicates=8,
     )
-    child_result = run_harness_program_study(
+    child_result = await run_harness_program_study(
         spec=child_spec,
         registry=runtime.registry,
         workflow=_workflow(runtime.tasks_root.parent, runtime.tasks_root),
@@ -369,7 +369,7 @@ def test_real_internal_evidence_learns_provisional_motif_without_granting_author
     assert learned.report.promotion_decisions[-1].accepted is True
     assert learned.report.promotion_decisions[-1].target_status is MotifStatus.REUSABLE
 
-    invalid_child_result = run_harness_program_study(
+    invalid_child_result = await run_harness_program_study(
         spec=child_spec,
         registry=runtime.registry,
         workflow=_workflow(
@@ -538,3 +538,6 @@ def _workflow(
         ledger_root=root / f"ledger{suffix}",
         jobs_root=root / f"jobs{suffix}",
     )
+
+
+pytestmark = pytest.mark.asyncio

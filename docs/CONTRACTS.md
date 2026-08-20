@@ -48,7 +48,7 @@ readable.
 | Prime package and evaluation integration | Prime integration | Current public task or lifecycle material becomes an independently installed package; hosted samples return as untrusted provider evidence | Public command and external package behavior; samples normalize into current records | [`exporter.py`](../src/aec_bench/prime_lab/exporter.py), [`lifecycle_exporter.py`](../src/aec_bench/prime_lab/lifecycle_exporter.py), and [`eval_import.py`](../src/aec_bench/prime_lab/eval_import.py) | External package and provider ingestion |
 | Artifact and evidence reference | Harness, ledger, and the producing domain | Filesystem or provider output becomes content-bound evidence | Protected when stored in a trial, dataset, freeze, or published record | `ArtifactRef` in [`artifacts.py`](../src/aec_bench/contracts/artifacts.py), `ArtifactReference` in [`trial_record.py`](../src/aec_bench/contracts/trial_record.py), and narrower owner-specific references | Persisted reference |
 | Visibility classification | Task ownership and evaluation policy | Material enters public, calibration, or holdout handling | Protected | `Visibility` in [`task_definition.py`](../src/aec_bench/contracts/task_definition.py) and visibility checks in persisted records | Persisted and policy-bearing |
-| Interactive-world execution | Interactive-world runtime and registered task worlds | An exact build and profile become one task-owned state, observation, action, transition, and evaluation loop | Internal functional core; task-owned persisted records where a world adds persistence | [`interactive_world.py`](../src/aec_bench/contracts/interactive_world.py), [`world_logic.py`](../src/aec_bench/worlds/runtime/world_logic.py), [`episode.py`](../src/aec_bench/worlds/runtime/episode.py), [`catalogue.py`](../src/aec_bench/worlds/catalogue.py), and the task functions described in [World authoring](world-authoring.md) | Internal, with protected owner-specific extensions |
+| Interactive-world execution | Interactive-world runtime and registered task worlds | A `WorldTask`, exact build, and profile become one complete evaluated world trial | Supported Python discovery, task, planning, and trial API; task-owned persisted records remain protected | [`worlds`](../src/aec_bench/worlds/__init__.py), [`tasks.py`](../src/aec_bench/worlds/tasks.py), [`world_trials.py`](../src/aec_bench/harness/world_trials.py), and the [runtime protocol](protocols/interactive-world-runtime.md) | Python API, persisted task package, and trial evidence |
 | Installed world actor and host calls | Interactive-world runtime and concrete integration owners | An actor or host request crosses a process boundary and reaches the permitted task-owned authority | Versioned local actor protocol; pump-owned persisted run records | [`world_interface.py`](../src/aec_bench/contracts/world_interface.py), the shared [`world_actor`](../src/aec_bench/harness/world_actor/) authority, protocol, endpoint, and staged client, plus the [runtime protocol](protocols/interactive-world-runtime.md) | Internal, persisted, and installed JSON |
 
 ## Task specification
@@ -61,6 +61,18 @@ remain task-owned; the global contract does not attempt to model every output.
 Executable interactive worlds use their registered world definition and
 profile instead of pretending to be a static `TaskDefinition`. Both families
 can still enter the same experiment, trial, evaluation, and reporting layers.
+
+`WorldTask` is the provider-neutral runnable value. It binds one objective to
+exact `WorldBuildRef` and `InteractiveWorldProfileRef` values and carries the
+normal selection fields. Its revision covers normalized task ID, instruction,
+world and profile references, and selection metadata. `WorldInfo` and
+`WorldProfileInfo` are read-only discovery projections. They do not expose a
+profile loader or provider object.
+
+A file-backed world task contains `instruction.md` and `world.toml`. The task
+directory path relative to `tasks/` supplies `task_id`. `world.toml` declares
+the exact registered world, profile, and selection metadata. Loading rejects a
+stale build, stale profile, or metadata that differs from registration.
 
 ## Task genome reviews
 
@@ -260,6 +272,12 @@ world.
 Trial records are append-only evidence once accepted. Internal builders and
 temporary run directories remain replaceable implementation.
 
+A world action and a provider session are not trials. The dam, pump, and pump
+Harbor trial functions each return one `TrialRecord` with `task_kind="world"`.
+The record keeps provider, actor-authority, world, usage, timing, output, and
+evaluation facts separate. A returned record cannot reference a session
+artifact that cleanup removed.
+
 The reader requires `schema_version = 2`. It rejects missing or unsupported
 versions. It does not guess the shape of historical records.
 
@@ -345,6 +363,11 @@ reference. Labels support discovery only. Interactive `dataset_id` or
 trial data use only the exact reference or its documented transitional key.
 `latest` is not a persisted selector. Dataset manifests, references, bundles,
 and publication events cannot be overwritten.
+
+`DatasetTaskEntry.task_kind` selects the concrete artifact, lifecycle, or world
+task loader. A world entry points to its `world.toml` task package. Dataset
+construction writes task kind from the concrete task family; arbitrary task
+metadata cannot change it.
 
 The named schema-1 migration reader reports `fully_verified`,
 `partially_verified`, or `invalid`. Only a fully verified manifest, including
@@ -598,6 +621,12 @@ segments. A non-quiescent or unknown authority outcome blocks a complete
 pump-station trial record. The task-owned world repository remains the
 transition and replay authority; the actor stream records admission and
 dispatch semantics at the actor boundary.
+
+A single-session world trial references the sealed actor stream with
+`aec-bench/actor-invocation-evidence/1`. A multi-session pump trial references
+an ordered manifest of sealed session streams with
+`aec-bench/actor-invocation-manifest/1`. The manifest does not replace the
+task-owned world event stream.
 
 A DeepSeek native world trial also retains
 `native-world-tool-surface.json`. This record contains the complete canonical

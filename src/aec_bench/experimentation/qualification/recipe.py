@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import asyncio
 import json
 import shlex
 from dataclasses import dataclass
@@ -98,7 +99,7 @@ def materialize_harness_comparison_recipe(
     }
 
 
-def materialize_harness_comparison_example(
+async def materialize_harness_comparison_example(
     *,
     output_dir: Path,
     command_prefix: str = "aec-bench",
@@ -127,7 +128,7 @@ def materialize_harness_comparison_example(
         candidate_run=candidate_run_path,
         command_prefix=command_prefix,
     )
-    comparison = run_harness_comparison_from_files(
+    comparison = await run_harness_comparison_from_files(
         brief_path=brief_path,
         baseline_world_path=baseline_world_path,
         candidate_world_path=candidate_world_path,
@@ -142,7 +143,7 @@ def materialize_harness_comparison_example(
     }
 
 
-def run_harness_comparison_from_files(
+async def run_harness_comparison_from_files(
     *,
     brief_path: Path,
     baseline_world_path: Path,
@@ -156,7 +157,7 @@ def run_harness_comparison_from_files(
     candidate_world = _load_json(candidate_world_path)
     baseline_run = _load_json(baseline_run_path)
     candidate_run = _load_json(candidate_run_path)
-    comparison = _run_harness_comparison(
+    comparison = await _run_harness_comparison(
         brief=brief,
         baseline_world=baseline_world,
         candidate_world=candidate_world,
@@ -170,7 +171,7 @@ def run_harness_comparison_from_files(
     return comparison
 
 
-def _run_harness_comparison(
+async def _run_harness_comparison(
     *,
     brief: dict[str, Any],
     baseline_world: dict[str, Any],
@@ -213,7 +214,7 @@ def _run_harness_comparison(
             "recommendation": _recommendation(baseline_summary, candidate_summary),
         }
 
-    study = run_harness_study(
+    study = await run_harness_study(
         baseline=baseline,
         candidates=(candidate,),
         evaluate=lambda item: (item.value.record,),
@@ -231,13 +232,15 @@ def comparison_cli(argv: list[str] | None = None) -> int:
     parser.add_argument("--candidate-run", type=Path, required=True)
     parser.add_argument("--output", type=Path, default=Path("comparison"))
     args = parser.parse_args(argv)
-    comparison = run_harness_comparison_from_files(
-        brief_path=args.brief,
-        baseline_world_path=args.baseline_world,
-        candidate_world_path=args.candidate_world,
-        baseline_run_path=args.baseline_run,
-        candidate_run_path=args.candidate_run,
-        output_dir=args.output,
+    comparison = asyncio.run(
+        run_harness_comparison_from_files(
+            brief_path=args.brief,
+            baseline_world_path=args.baseline_world,
+            candidate_world_path=args.candidate_world,
+            baseline_run_path=args.baseline_run,
+            candidate_run_path=args.candidate_run,
+            output_dir=args.output,
+        )
     )
     print(json.dumps(comparison, indent=2, sort_keys=True))
     return 0

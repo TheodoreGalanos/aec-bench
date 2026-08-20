@@ -35,7 +35,8 @@ def test_harness_candidate_requires_a_non_blank_identity_and_is_frozen() -> None
         candidate.candidate_id = "candidate.changed"  # type: ignore[misc]
 
 
-def test_evaluate_harness_candidate_normalises_records_and_retains_failures() -> None:
+@pytest.mark.asyncio
+async def test_evaluate_harness_candidate_normalises_records_and_retains_failures() -> None:
     candidate = HarnessCandidate(candidate_id="candidate.baseline", value="baseline")
     failed = _record(
         "trial.failed",
@@ -54,9 +55,22 @@ def test_evaluate_harness_candidate_normalises_records_and_retains_failures() ->
         output=None,
     )
 
-    result = evaluate_harness_candidate(candidate, evaluate=lambda _candidate: [failed, invalid])
+    result = await evaluate_harness_candidate(candidate, evaluate=lambda _candidate: [failed, invalid])
 
     assert result == HarnessCandidateTrials(candidate=candidate, records=(failed, invalid))
+
+
+@pytest.mark.asyncio
+async def test_evaluate_harness_candidate_awaits_async_evaluator() -> None:
+    candidate = HarnessCandidate(candidate_id="candidate.async", value="async")
+    record = _record("trial.async")
+
+    async def evaluate(_candidate: HarnessCandidate[str]) -> list[TrialRecord]:
+        return [record]
+
+    result = await evaluate_harness_candidate(candidate, evaluate=evaluate)
+
+    assert result.records == (record,)
 
 
 @pytest.mark.parametrize(
@@ -67,7 +81,8 @@ def test_evaluate_harness_candidate_normalises_records_and_retains_failures() ->
         ([object()], "TrialRecord values"),
     ],
 )
-def test_evaluate_harness_candidate_rejects_invalid_evaluator_output(
+@pytest.mark.asyncio
+async def test_evaluate_harness_candidate_rejects_invalid_evaluator_output(
     records: list[object],
     message: str,
 ) -> None:
@@ -77,10 +92,11 @@ def test_evaluate_harness_candidate_rejects_invalid_evaluator_output(
         return records  # type: ignore[return-value]
 
     with pytest.raises((TypeError, ValueError), match=message):
-        evaluate_harness_candidate(candidate, evaluate=invalid_evaluator)
+        await evaluate_harness_candidate(candidate, evaluate=invalid_evaluator)
 
 
-def test_run_harness_study_evaluates_each_candidate_once_and_keeps_caller_assessment() -> None:
+@pytest.mark.asyncio
+async def test_run_harness_study_evaluates_each_candidate_once_and_keeps_caller_assessment() -> None:
     baseline = HarnessCandidate(candidate_id="candidate.baseline", value=1)
     candidates = (
         HarnessCandidate(candidate_id="candidate.two", value=2),
@@ -93,7 +109,7 @@ def test_run_harness_study_evaluates_each_candidate_once_and_keeps_caller_assess
         calls.append(candidate.candidate_id)
         return [_record(f"trial.{candidate.candidate_id}")]
 
-    result = run_harness_study(
+    result = await run_harness_study(
         baseline=baseline,
         candidates=candidates,
         evaluate=evaluate,
@@ -114,7 +130,8 @@ def test_run_harness_study_evaluates_each_candidate_once_and_keeps_caller_assess
         (("candidate.baseline",), "candidate_id values must be unique"),
     ],
 )
-def test_run_harness_study_rejects_invalid_candidate_sets(
+@pytest.mark.asyncio
+async def test_run_harness_study_rejects_invalid_candidate_sets(
     candidate_ids: tuple[str, ...],
     message: str,
 ) -> None:
@@ -124,7 +141,7 @@ def test_run_harness_study_rejects_invalid_candidate_sets(
     )
 
     with pytest.raises(ValueError, match=message):
-        run_harness_study(
+        await run_harness_study(
             baseline=baseline,
             candidates=candidates,
             evaluate=lambda candidate: [_record(f"trial.{candidate.candidate_id}")],
@@ -132,11 +149,12 @@ def test_run_harness_study_rejects_invalid_candidate_sets(
         )
 
 
-def test_run_meta_harness_selects_only_evaluated_work_and_stops_early() -> None:
+@pytest.mark.asyncio
+async def test_run_meta_harness_selects_only_evaluated_work_and_stops_early() -> None:
     initial = HarnessCandidate(candidate_id="candidate.initial", value=0)
     proposed = HarnessCandidate(candidate_id="candidate.proposed", value=1)
 
-    result = run_meta_harness(
+    result = await run_meta_harness(
         initial=initial,
         propose=lambda current, previous: (proposed,),
         evaluate=lambda candidate: [_record(f"trial.{candidate.candidate_id}")],
@@ -154,7 +172,8 @@ def test_run_meta_harness_selects_only_evaluated_work_and_stops_early() -> None:
     assert result.stop_reason == "stop_condition"
 
 
-def test_run_meta_harness_refines_with_new_identity_and_stops_at_maximum_rounds() -> None:
+@pytest.mark.asyncio
+async def test_run_meta_harness_refines_with_new_identity_and_stops_at_maximum_rounds() -> None:
     initial = HarnessCandidate(candidate_id="candidate.0", value=0)
     evaluated: list[str] = []
     proposed_from: list[tuple[str, object]] = []
@@ -170,7 +189,7 @@ def test_run_meta_harness_refines_with_new_identity_and_stops_at_maximum_rounds(
         evaluated.append(candidate.candidate_id)
         return [_record(f"trial.{candidate.candidate_id}")]
 
-    result = run_meta_harness(
+    result = await run_meta_harness(
         initial=initial,
         propose=propose,
         evaluate=evaluate,
@@ -191,9 +210,10 @@ def test_run_meta_harness_refines_with_new_identity_and_stops_at_maximum_rounds(
     assert result.stop_reason == "max_rounds"
 
 
-def test_run_meta_harness_rejects_an_unevaluated_selection() -> None:
+@pytest.mark.asyncio
+async def test_run_meta_harness_rejects_an_unevaluated_selection() -> None:
     with pytest.raises(ValueError, match="selected candidate must be evaluated in the current round"):
-        run_meta_harness(
+        await run_meta_harness(
             initial=HarnessCandidate(candidate_id="candidate.initial", value=0),
             propose=lambda current, previous: (HarnessCandidate(candidate_id="candidate.proposed", value=1),),
             evaluate=lambda candidate: [_record(f"trial.{candidate.candidate_id}")],
@@ -218,12 +238,13 @@ def test_run_meta_harness_rejects_an_unevaluated_selection() -> None:
         ),
     ],
 )
-def test_run_meta_harness_rejects_invalid_proposals(
+@pytest.mark.asyncio
+async def test_run_meta_harness_rejects_invalid_proposals(
     proposed: tuple[HarnessCandidate[int], ...],
     message: str,
 ) -> None:
     with pytest.raises(ValueError, match=message):
-        run_meta_harness(
+        await run_meta_harness(
             initial=HarnessCandidate(candidate_id="candidate.initial", value=0),
             propose=lambda current, previous: proposed,
             evaluate=lambda candidate: [_record(f"trial.{candidate.candidate_id}")],
@@ -235,9 +256,10 @@ def test_run_meta_harness_rejects_invalid_proposals(
         )
 
 
-def test_run_meta_harness_rejects_reused_refined_identity() -> None:
+@pytest.mark.asyncio
+async def test_run_meta_harness_rejects_reused_refined_identity() -> None:
     with pytest.raises(ValueError, match="refined candidate must have a new candidate_id"):
-        run_meta_harness(
+        await run_meta_harness(
             initial=HarnessCandidate(candidate_id="candidate.initial", value=0),
             propose=lambda current, previous: (HarnessCandidate(candidate_id="candidate.proposed", value=1),),
             evaluate=lambda candidate: [_record(f"trial.{candidate.candidate_id}")],
@@ -250,9 +272,10 @@ def test_run_meta_harness_rejects_reused_refined_identity() -> None:
 
 
 @pytest.mark.parametrize("max_rounds", [0, -1])
-def test_run_meta_harness_requires_a_positive_round_bound(max_rounds: int) -> None:
+@pytest.mark.asyncio
+async def test_run_meta_harness_requires_a_positive_round_bound(max_rounds: int) -> None:
     with pytest.raises(ValueError, match="max_rounds must be positive"):
-        run_meta_harness(
+        await run_meta_harness(
             initial=HarnessCandidate(candidate_id="candidate.initial", value=0),
             propose=lambda current, previous: (),
             evaluate=lambda candidate: [_record(f"trial.{candidate.candidate_id}")],

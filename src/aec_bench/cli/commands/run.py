@@ -300,38 +300,19 @@ def _execute_manifest(
     reviewer_config: ReviewerRunConfig | None = None,
 ) -> None:
     effective_reviewer_config = reviewer_config or reviewer_config_from_manifest(manifest.reviewer)
-    morph = manifest.compute.backend == "morph"
-    modules = ("harbor", "morphcloud") if morph else ("harbor",)
-    extras = "execution,morph" if morph else "execution"
-    if effective_reviewer_config is not None and effective_reviewer_config.enabled:
-        modules = (*modules, "pydantic_ai")
-        extras += ",local-agents"
-    require_optional_extra("Experiment execution support", extras, modules)
-
     from aec_bench.cli.harbor_environment import HARBOR_RUN_BACKENDS, resolve_harbor_environment_binding
-    from aec_bench.harness.scheduler import build_trial_plan, select_manifest_tasks
+    from aec_bench.harness.scheduler import select_manifest_task_values
     from aec_bench.tasks.registry import TaskRegistry
-
-    if manifest.compute.backend not in HARBOR_RUN_BACKENDS:
-        supported = ", ".join(HARBOR_RUN_BACKENDS)
-        emit(
-            "run",
-            data=None,
-            errors=[
-                f"backend '{manifest.compute.backend}' is not supported by 'aec-bench run'; "
-                f"or choose one of: {supported}"
-            ],
-            start_time=start,
-        )
-        return
+    from aec_bench.trials import plan_trials
 
     registry = TaskRegistry(tasks_root=tasks_root)
     registry.reload()
     project_root = tasks_root.parent
-    selected_tasks = select_manifest_tasks(
+    selected_tasks = select_manifest_task_values(
         registry.all(),
         manifest,
         project_root=project_root,
+        tasks_root=tasks_root,
     )
 
     if not selected_tasks:
@@ -343,7 +324,35 @@ def _execute_manifest(
         )
         return
 
-    plan = build_trial_plan(manifest, selected_tasks)
+    plan = plan_trials(
+        manifest.experiment_id,
+        tasks=selected_tasks,
+        agents=manifest.agents,
+        compute=manifest.compute,
+        repetitions=manifest.repetitions,
+    )
+
+    from aec_bench.contracts.task_definition import TaskDefinition
+    from aec_bench.harness.world_routing import validate_world_routes
+    from aec_bench.worlds.tasks import WorldTask
+
+    world_tasks = [task for task in selected_tasks if isinstance(task, WorldTask)]
+    artifact_tasks = [task for task in selected_tasks if isinstance(task, TaskDefinition)]
+    world_trials = [trial for trial in plan if trial.task_id in {task.task_id for task in world_tasks}]
+    if world_tasks:
+        validate_world_routes(world_tasks, world_trials)
+    needs_harbor = bool(artifact_tasks) or any(trial.agent.adapter == "deepseek_harness" for trial in world_trials)
+    if needs_harbor and manifest.compute.backend not in HARBOR_RUN_BACKENDS:
+        supported = ", ".join(HARBOR_RUN_BACKENDS)
+        emit(
+            "run",
+            data=None,
+            errors=[
+                f"backend '{manifest.compute.backend}' is not supported by 'aec-bench run'; choose one of: {supported}"
+            ],
+            start_time=start,
+        )
+        return
 
     if dry_run:
         plan_data = {
@@ -383,6 +392,23 @@ def _execute_manifest(
         emit("run", plan_data, start_time=start, human_renderer=_render_dry_run)
         return
 
+    morph = manifest.compute.backend == "morph"
+    modules: tuple[str, ...] = ()
+    commands: tuple[str, ...] = ()
+    extras: list[str] = []
+    if artifact_tasks or any(trial.agent.adapter == "deepseek_harness" for trial in world_trials):
+        modules = ("harbor", "morphcloud") if morph else ("harbor",)
+        extras.append("execution,morph" if morph else "execution")
+    if world_tasks and any(trial.agent.adapter == "prime-agent" for trial in world_trials):
+        modules = (*modules, "verifiers")
+        commands = (*commands, "prime")
+        extras.append("prime")
+    if effective_reviewer_config is not None and effective_reviewer_config.enabled:
+        modules = (*modules, "pydantic_ai")
+        extras.append("local-agents")
+    if modules:
+        require_optional_extra("Experiment execution support", ",".join(extras), modules, commands)
+
     console.print(f"[bold]Running: {manifest.name}[/bold]")
     console.print(f"  {len(plan)} trials across {len(selected_tasks)} tasks")
 
@@ -395,41 +421,68 @@ def _execute_manifest(
     resolved_ledger = resolve_path("ledger_root")
     jobs_root = project_root / "jobs"
 
-    runtime = HarborExperimentRuntime(
-        workflow=SynchronousHarborWorkflow(
-            project_root=project_root,
-            repo_root=project_root,
-            tasks_root=tasks_root,
-            ledger_root=resolved_ledger,
-            jobs_root=jobs_root,
-        ),
-        manifest=manifest,
-        config_path=project_root / f".aec-bench-{manifest.experiment_id}.yaml",
-        environment_binding=resolve_harbor_environment_binding(manifest.compute.backend),
-    )
+    records = []
+    result = None
+    if artifact_tasks:
+        runtime = HarborExperimentRuntime(
+            workflow=SynchronousHarborWorkflow(
+                project_root=project_root,
+                repo_root=project_root,
+                tasks_root=tasks_root,
+                ledger_root=resolved_ledger,
+                jobs_root=jobs_root,
+            ),
+            manifest=manifest,
+            config_path=project_root / f".aec-bench-{manifest.experiment_id}.yaml",
+            environment_binding=resolve_harbor_environment_binding(manifest.compute.backend),
+        )
 
-    def _progress(snapshot: object) -> None:
-        console.print(f"  [dim]{snapshot}[/dim]")
+        def _progress(snapshot: object) -> None:
+            console.print(f"  [dim]{snapshot}[/dim]")
 
-    runtime.progress_callback = _progress
-    records = run_task_experiment(
-        runtime=runtime,
-        tasks=[resolve_instance_paths(task, tasks_root / task.task_id) for task in selected_tasks],
-        trials=plan,
-        recipe=SingleAttemptSpec(),
-        reviewer=reviewer_config,
-        verify=not manifest.disable_verification,
-    )
-    result = runtime.last_result
-    if result is None:
-        raise RuntimeError("Harbor experiment did not produce a workflow result")
+        runtime.progress_callback = _progress
+        artifact_ids = {task.task_id for task in artifact_tasks}
+        records.extend(
+            run_task_experiment(
+                runtime=runtime,
+                tasks=[resolve_instance_paths(task, tasks_root / task.task_id) for task in artifact_tasks],
+                trials=[trial for trial in plan if trial.task_id in artifact_ids],
+                recipe=SingleAttemptSpec(),
+                reviewer=reviewer_config,
+                verify=not manifest.disable_verification,
+            )
+        )
+        result = runtime.last_result
+        if result is None:
+            raise RuntimeError("Harbor experiment did not produce a workflow result")
+
+    if world_tasks:
+        import asyncio
+        from functools import partial
+
+        from aec_bench.harness.world_routing import run_selected_world
+        from aec_bench.harness.world_trials import run_world_experiment
+        from aec_bench.ledger.writer import write_trial_record
+
+        records.extend(
+            asyncio.run(
+                run_world_experiment(
+                    tasks=world_tasks,
+                    trials=world_trials,
+                    run_trial=partial(run_selected_world, work_root=jobs_root / manifest.experiment_id),
+                    persist=partial(write_trial_record, ledger_root=resolved_ledger),
+                )
+            )
+        )
+    order = {trial.trial_id: index for index, trial in enumerate(plan)}
+    records.sort(key=lambda record: order[record.trial_id])
 
     result_data = {
         "experiment_id": manifest.experiment_id,
-        "job_dir": str(result.job_dir) if result.job_dir else None,
+        "job_dir": str(result.job_dir) if result is not None and result.job_dir else None,
         "imported": len(records),
-        "duplicates": result.import_result.duplicate_trials,
-        "reviewer": _reviewer_result_data(result.reviewer_result),
+        "duplicates": 0 if result is None else result.import_result.duplicate_trials,
+        "reviewer": None if result is None else _reviewer_result_data(result.reviewer_result),
     }
 
     def _render_result(d: dict[str, Any]) -> None:
