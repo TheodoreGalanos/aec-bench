@@ -11,9 +11,9 @@ from aec_bench.contracts.trial_record import TrialRecord
 from aec_bench.evolution.application import CandidateEvaluator
 from aec_bench.evolution.snapshot import serialise_snapshot
 from aec_bench.harness.artifact_tasks import LocalTaskRuntime, run_experiment, single_attempt
-from aec_bench.harness.scheduler import build_trial_plan
 from aec_bench.tasks.instance import ResolvedTaskInstance, resolve_instance_paths
 from aec_bench.tasks.loader import load_task_definition
+from aec_bench.trials import plan_trials
 
 
 def make_stub_candidate_evaluator(records: list[TrialRecord]) -> CandidateEvaluator:
@@ -64,7 +64,13 @@ def make_local_candidate_evaluator(
             compute=ComputeConfig(backend="local", timeout_override=timeout),
             repetitions=1,
         )
-        trials = build_trial_plan(manifest, [task.task for task in selected])
+        trials = plan_trials(
+            manifest.experiment_id,
+            tasks=[task.task for task in selected],
+            agents=manifest.agents,
+            compute=manifest.compute,
+            repetitions=manifest.repetitions,
+        )
         runtime = LocalTaskRuntime(agent_files=_agent_files(workspace_root))
         call_count += 1
         return run_experiment(

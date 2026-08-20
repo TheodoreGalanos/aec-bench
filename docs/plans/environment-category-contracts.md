@@ -652,9 +652,9 @@ contracts:
 
 - `InteractiveWorldProfileRef` owns exact task profile identity;
 - `InteractiveWorldDefinition` binds one build to its supported profiles;
-- `InteractiveWorldCatalogue` registers real Worlds at the composition root;
+- `WorldCatalogue` registers real Worlds at the composition root;
   and
-- `default_interactive_world_catalogue` returns the current registrations.
+- the private catalogue construction returns the current registrations.
 
 The cutover is direct. There are no aliases, versioned replacements, or
 parallel catalogue paths. `contracts/interactive_world.py` owns the minimum

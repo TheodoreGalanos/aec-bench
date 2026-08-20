@@ -7,7 +7,11 @@ import pytest
 from pydantic import ValidationError
 
 from aec_bench.contracts.artifacts import ArtifactRef
-from aec_bench.contracts.authority_evidence import AuthorityEvidenceKind, AuthorityEvidenceRef
+from aec_bench.contracts.authority_evidence import (
+    ACTOR_INVOCATION_MANIFEST_PROTOCOL,
+    AuthorityEvidenceKind,
+    AuthorityEvidenceRef,
+)
 
 
 def _artifact_ref() -> ArtifactRef:
@@ -49,3 +53,13 @@ def test_authority_evidence_ref_names_the_authority_and_protocol() -> None:
                 "protocol": "aec-bench/actor-invocation-evidence/2",
             }
         )
+
+
+def test_actor_authority_accepts_a_multi_session_manifest() -> None:
+    reference = AuthorityEvidenceRef(
+        authority_kind=AuthorityEvidenceKind.ACTOR_INVOCATION,
+        protocol=ACTOR_INVOCATION_MANIFEST_PROTOCOL,
+        artifact=_artifact_ref(),
+    )
+
+    assert reference.protocol == "aec-bench/actor-invocation-manifest/1"

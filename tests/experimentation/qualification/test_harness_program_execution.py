@@ -126,7 +126,7 @@ class HarnessProgramHarborExecutor:
         return 0
 
 
-def test_execute_harness_program_study_runs_williams_plan_once_per_seeded_trial(tmp_path: Path) -> None:
+async def test_execute_harness_program_study_runs_williams_plan_once_per_seeded_trial(tmp_path: Path) -> None:
     registry, tasks_root, request = _factory_inputs(tmp_path)
     candidates = materialize_harness_program_candidates(request, registry=registry, tasks_root=tasks_root)
     workflow = _workflow(tmp_path, tasks_root)
@@ -141,7 +141,7 @@ def test_execute_harness_program_study_runs_williams_plan_once_per_seeded_trial(
     }
     executor = HarnessProgramHarborExecutor(rewards_by_bundle_id=rewards_by_bundle_id)
 
-    result = execute_harness_program_study(
+    result = await execute_harness_program_study(
         candidates=candidates,
         manifest=_manifest(candidates, randomization_seed=73),
         registry=registry,
@@ -223,7 +223,7 @@ def test_execute_harness_program_study_runs_williams_plan_once_per_seeded_trial(
         )
 
 
-def test_execute_harness_program_study_rejects_unverified_trial_records(tmp_path: Path) -> None:
+async def test_execute_harness_program_study_rejects_unverified_trial_records(tmp_path: Path) -> None:
     registry, tasks_root, request = _factory_inputs(tmp_path)
     candidates = materialize_harness_program_candidates(request, registry=registry, tasks_root=tasks_root)
     executor = HarnessProgramHarborExecutor(
@@ -232,7 +232,7 @@ def test_execute_harness_program_study_rejects_unverified_trial_records(tmp_path
     )
 
     with pytest.raises(ValueError, match="did not complete the required Hx verifier"):
-        execute_harness_program_study(
+        await execute_harness_program_study(
             candidates=candidates,
             manifest=_manifest(candidates, randomization_seed=73),
             registry=registry,
@@ -249,7 +249,7 @@ def test_execute_harness_program_study_rejects_unverified_trial_records(tmp_path
     assert len(executor.calls) == 1
 
 
-def test_execute_harness_program_study_preserves_verifier_completed_invalid_zero_outcomes(
+async def test_execute_harness_program_study_preserves_verifier_completed_invalid_zero_outcomes(
     tmp_path: Path,
 ) -> None:
     registry, tasks_root, request = _factory_inputs(tmp_path)
@@ -259,7 +259,7 @@ def test_execute_harness_program_study_preserves_verifier_completed_invalid_zero
         valid_output=False,
     )
 
-    result = execute_harness_program_study(
+    result = await execute_harness_program_study(
         candidates=candidates,
         manifest=_manifest(candidates, randomization_seed=73),
         registry=registry,
@@ -286,7 +286,9 @@ def test_execute_harness_program_study_preserves_verifier_completed_invalid_zero
     )
 
 
-def test_execute_harness_program_study_aggregates_multi_invocation_programs_once_per_trial(tmp_path: Path) -> None:
+async def test_execute_harness_program_study_aggregates_multi_invocation_programs_once_per_trial(
+    tmp_path: Path,
+) -> None:
     task_refs = ("civil/calculation/harness-program-alpha", "civil/calculation/harness-program-beta")
     registry, tasks_root, request = _factory_inputs(tmp_path, task_refs=task_refs)
     candidates = materialize_harness_program_candidates(request, registry=registry, tasks_root=tasks_root)
@@ -294,7 +296,7 @@ def test_execute_harness_program_study_aggregates_multi_invocation_programs_once
         rewards_by_bundle_id={candidate.bundle.run_manifest.run_id: 0.5 for candidate in candidates.candidates}
     )
 
-    result = execute_harness_program_study(
+    result = await execute_harness_program_study(
         candidates=candidates,
         manifest=_manifest(candidates, randomization_seed=73),
         registry=registry,
@@ -316,7 +318,7 @@ def test_execute_harness_program_study_aggregates_multi_invocation_programs_once
     assert len(executor.calls) == 12
 
 
-def test_execute_harness_program_study_blocks_multiple_task_sets_under_one_schedule(tmp_path: Path) -> None:
+async def test_execute_harness_program_study_blocks_multiple_task_sets_under_one_schedule(tmp_path: Path) -> None:
     registry, tasks_root, request_alpha = _factory_inputs(
         tmp_path,
         task_refs=("civil/calculation/harness-program-alpha",),
@@ -339,7 +341,7 @@ def test_execute_harness_program_study_blocks_multiple_task_sets_under_one_sched
         }
     )
 
-    result = execute_harness_program_study(
+    result = await execute_harness_program_study(
         candidates=(beta, alpha),
         manifest=_manifest(alpha, beta, randomization_seed=73),
         registry=registry,
@@ -375,7 +377,7 @@ def test_execute_harness_program_study_blocks_multiple_task_sets_under_one_sched
         ("duplicate", "alpha", "materialized harness-program task-set ids must be unique"),
     ],
 )
-def test_execute_harness_program_study_rejects_inexact_manifest_task_set_coverage_before_running(
+async def test_execute_harness_program_study_rejects_inexact_manifest_task_set_coverage_before_running(
     tmp_path: Path,
     candidate_selection: str,
     manifest_selection: str,
@@ -407,7 +409,7 @@ def test_execute_harness_program_study_rejects_inexact_manifest_task_set_coverag
     executor = HarnessProgramHarborExecutor(rewards_by_bundle_id={})
 
     with pytest.raises(ValueError, match=message):
-        execute_harness_program_study(
+        await execute_harness_program_study(
             candidates=candidate_options[candidate_selection],
             manifest=manifest_options[manifest_selection],
             registry=registry,
@@ -424,14 +426,14 @@ def test_execute_harness_program_study_rejects_inexact_manifest_task_set_coverag
     assert not executor.calls
 
 
-def test_execute_harness_program_study_rejects_manifest_schedule_mismatch_before_running(tmp_path: Path) -> None:
+async def test_execute_harness_program_study_rejects_manifest_schedule_mismatch_before_running(tmp_path: Path) -> None:
     registry, tasks_root, request = _factory_inputs(tmp_path)
     candidates = materialize_harness_program_candidates(request, registry=registry, tasks_root=tasks_root)
     manifest = _manifest(candidates, randomization_seed=73, repetitions=1)
     executor = HarnessProgramHarborExecutor(rewards_by_bundle_id={})
 
     with pytest.raises(ValueError, match="manifest repetitions must match the shared execution seed schedule"):
-        execute_harness_program_study(
+        await execute_harness_program_study(
             candidates=candidates,
             manifest=manifest,
             registry=registry,
@@ -448,7 +450,7 @@ def test_execute_harness_program_study_rejects_manifest_schedule_mismatch_before
     assert not executor.calls
 
 
-def test_execute_harness_program_study_rejects_cross_task_set_factor_semantic_drift_before_running(
+async def test_execute_harness_program_study_rejects_cross_task_set_factor_semantic_drift_before_running(
     tmp_path: Path,
 ) -> None:
     registry, tasks_root, request_alpha = _factory_inputs(
@@ -476,7 +478,7 @@ def test_execute_harness_program_study_rejects_cross_task_set_factor_semantic_dr
     executor = HarnessProgramHarborExecutor(rewards_by_bundle_id={})
 
     with pytest.raises(ValueError, match="identical four-cell factor semantics"):
-        execute_harness_program_study(
+        await execute_harness_program_study(
             candidates=(alpha, beta),
             manifest=_manifest(alpha, beta, randomization_seed=73),
             registry=registry,
@@ -493,14 +495,14 @@ def test_execute_harness_program_study_rejects_cross_task_set_factor_semantic_dr
     assert not executor.calls
 
 
-def test_execute_harness_program_study_revalidates_reference_to_bundle_mapping(tmp_path: Path) -> None:
+async def test_execute_harness_program_study_revalidates_reference_to_bundle_mapping(tmp_path: Path) -> None:
     registry, tasks_root, request = _factory_inputs(tmp_path)
     candidates = materialize_harness_program_candidates(request, registry=registry, tasks_root=tasks_root)
     swapped = candidates.candidates[0].model_copy(update={"bundle": candidates.candidates[1].bundle})
     tampered = candidates.model_copy(update={"candidates": (swapped, *candidates.candidates[1:])})
 
     with pytest.raises(ValueError, match="materialized candidate harness does not match its RunPlan"):
-        execute_harness_program_study(
+        await execute_harness_program_study(
             candidates=tampered,
             manifest=_manifest(candidates, randomization_seed=73),
             registry=registry,
@@ -537,3 +539,6 @@ def _manifest(
         repetitions=first.request.repetitions if repetitions is None else repetitions,
         candidate_sets=tuple(candidate_set.references for candidate_set in candidate_sets),
     )
+
+
+pytestmark = pytest.mark.asyncio

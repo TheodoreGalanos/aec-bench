@@ -107,8 +107,8 @@ from aec_bench.harness.program_execution import (
     OperationExecutionContext,
     OperationHandlerFailure,
 )
-from aec_bench.harness.scheduler import build_trial_plan
 from aec_bench.ledger.reader import read_trial_record
+from aec_bench.trials import plan_trials
 
 
 class RunBundleScoredAttemptError(RuntimeError):
@@ -742,7 +742,15 @@ def _reconcile_dispatch(
             config_path=inputs.config_path,
             command=["uv", "run", "harbor", "run", "-c", str(inputs.config_path)],
             selected_task_count=len(lowered.tasks),
-            planned_trial_count=len(build_trial_plan(lowered.manifest, list(lowered.tasks))),
+            planned_trial_count=len(
+                plan_trials(
+                    lowered.manifest.experiment_id,
+                    tasks=list(lowered.tasks),
+                    agents=lowered.manifest.agents,
+                    compute=lowered.manifest.compute,
+                    repetitions=lowered.manifest.repetitions,
+                )
+            ),
             exit_code=0,
         ),
         job_dir=jobs[0],

@@ -6,14 +6,18 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from aec_bench.experimentation.qualification.recipe import (
     materialize_harness_comparison_example,
     materialize_harness_comparison_recipe,
     run_harness_comparison_from_files,
 )
 
+pytestmark = pytest.mark.asyncio
 
-def test_materialize_harness_comparison_recipe_writes_scripts(tmp_path: Path) -> None:
+
+async def test_materialize_harness_comparison_recipe_writes_scripts(tmp_path: Path) -> None:
     output_dir = tmp_path / "recipe"
 
     result = materialize_harness_comparison_recipe(
@@ -40,10 +44,10 @@ def test_materialize_harness_comparison_recipe_writes_scripts(tmp_path: Path) ->
     assert "meta-harness compare" in run_script
 
 
-def test_materialize_harness_comparison_example_is_complete_and_provider_free(tmp_path: Path) -> None:
+async def test_materialize_harness_comparison_example_is_complete_and_provider_free(tmp_path: Path) -> None:
     output_dir = tmp_path / "example"
 
-    result = materialize_harness_comparison_example(
+    result = await materialize_harness_comparison_example(
         output_dir=output_dir,
         command_prefix="uv run aec-bench",
     )
@@ -60,7 +64,7 @@ def test_materialize_harness_comparison_example_is_complete_and_provider_free(tm
     assert "candidate_improved" in (output_dir / "comparison" / "comparison.md").read_text(encoding="utf-8")
 
 
-def test_run_harness_comparison_from_files_writes_json_and_markdown(tmp_path: Path) -> None:
+async def test_run_harness_comparison_from_files_writes_json_and_markdown(tmp_path: Path) -> None:
     brief = tmp_path / "brief.json"
     baseline_world = tmp_path / "baseline-world.json"
     candidate_world = tmp_path / "candidate-world.json"
@@ -73,7 +77,7 @@ def test_run_harness_comparison_from_files_writes_json_and_markdown(tmp_path: Pa
     _write_json(baseline_run, _task_run("run.baseline", reward=0.5))
     _write_json(candidate_run, _task_run("run.candidate", reward=1.0))
 
-    comparison = run_harness_comparison_from_files(
+    comparison = await run_harness_comparison_from_files(
         brief_path=brief,
         baseline_world_path=baseline_world,
         candidate_world_path=candidate_world,

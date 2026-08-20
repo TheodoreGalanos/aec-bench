@@ -37,7 +37,7 @@ from aec_bench.harness.pump_station_harbor.session import (
 from aec_bench.harness.pump_station_harbor.verifier import (
     verify_pump_station_harbor_run,
 )
-from aec_bench.worlds.catalogue import default_interactive_world_catalogue
+from aec_bench.worlds.catalogue import _catalogue
 from aec_bench.worlds.stewardship.wastewater_pump_station.actor_interface import (
     PUMP_STATION_ACTOR_ACTION_NAMES,
 )
@@ -526,7 +526,7 @@ def test_model_session_preserves_adapter_failure_status(tmp_path: Path) -> None:
 def test_registered_profile_runs_through_the_real_local_harbor_entrypoint(
     tmp_path: Path,
 ) -> None:
-    catalogue = default_interactive_world_catalogue()
+    catalogue = _catalogue()
     definition = catalogue.get(PUMP_STATION_TASK_WORLD_ID)
     assert definition is pump_station_continual_world_definition()
     profile_ref = definition.profiles[0]

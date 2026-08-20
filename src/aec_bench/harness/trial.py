@@ -1,13 +1,7 @@
 # ABOUTME: Trial planning and lifecycle primitives for the Python harness layer.
 # ABOUTME: Defines deterministic planned-trial identities and valid lifecycle transitions.
 
-from collections.abc import Mapping
-from dataclasses import dataclass, field
 from enum import StrEnum
-
-from pydantic import BaseModel
-
-from aec_bench.contracts.experiment_manifest import AgentConfig, ComputeConfig
 
 
 class TrialLifecycleState(StrEnum):
@@ -16,28 +10,6 @@ class TrialLifecycleState(StrEnum):
     COMPLETED = "completed"
     FAILED = "failed"
     DUPLICATE = "duplicate"
-
-
-@dataclass(frozen=True)
-class PlannedTrial:
-    trial_id: str
-    experiment_id: str
-    task_id: str
-    agent: AgentConfig
-    compute: ComputeConfig
-    repetition: int
-    extensions: Mapping[str, BaseModel] = field(default_factory=dict)
-
-
-def build_trial_id(
-    *,
-    experiment_id: str,
-    task_id: str,
-    agent_name: str,
-    repetition: int,
-) -> str:
-    normalized_task_id = task_id.replace("/", "-")
-    return f"{experiment_id}--{normalized_task_id}--{agent_name}--rep{repetition:02d}"
 
 
 def transition_trial_state(

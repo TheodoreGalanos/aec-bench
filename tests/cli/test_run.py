@@ -8,15 +8,51 @@ from pathlib import Path
 
 from typer.testing import CliRunner
 
+from aec_bench import worlds
 from aec_bench.cli.main import app
 from aec_bench.contracts.dataset import DatasetManifest, DatasetTaskEntry
 from aec_bench.contracts.run_bundle import PublishedRunPackage
 from aec_bench.dataset.publication import publish_dataset
 from aec_bench.ledger.artifact_repository import ArtifactRepository
 from aec_bench.ledger.run_package import publish_run_package
+from aec_bench.worlds.tasks import WorldTask
 from tests.support.adaptive_harness import build_adaptive_bundle, write_adaptive_task
 
 runner = CliRunner()
+
+
+def _write_world_task(tasks_root: Path) -> tuple[Path, WorldTask]:
+    task_dir = tasks_root / "civil" / "dam-monitoring"
+    task_dir.mkdir(parents=True)
+    task = worlds.task(
+        "dam-seepage-monitoring",
+        profile="synthetic-rising-seepage",
+        instruction="Monitor the dam.",
+        task_id="civil/dam-monitoring",
+    )
+    (task_dir / "instruction.md").write_text(task.instruction, encoding="utf-8")
+    (task_dir / "world.toml").write_text(
+        f'''[world]
+task_world_id = "{task.world.task_world_id}"
+entry_point = "{task.world.entry_point}"
+artifact_sha256 = "{task.world.artifact_sha256}"
+
+[profile]
+task_world_id = "{task.profile.task_world_id}"
+profile_id = "{task.profile.profile_id}"
+profile_content_sha256 = "{task.profile.profile_content_sha256}"
+
+[metadata]
+domain = "civil"
+category = "monitoring"
+difficulty = "medium"
+lifecycle = "active"
+visibility = "public"
+tags = ["dam", "monitoring", "seepage", "synthetic"]
+''',
+        encoding="utf-8",
+    )
+    return task_dir, task
 
 
 def _write_minimal_task(tasks_root: Path) -> Path:
@@ -175,6 +211,53 @@ compute:
     assert result.exit_code == 0, result.output
     envelope = json.loads(result.output)
     assert envelope["data"]["selected_tasks"] == 1
+
+
+def test_run_dry_run_loads_world_task_from_dataset_entry(tmp_path: Path) -> None:
+    tasks_root = tmp_path / "tasks"
+    task_dir, task = _write_world_task(tasks_root)
+    manifest = DatasetManifest(
+        dataset_id="worlds",
+        description="World benchmark tasks",
+        tasks=(
+            DatasetTaskEntry(
+                task_id=task.task_id,
+                path=task_dir.relative_to(tmp_path).as_posix(),
+                task_kind="world",
+            ),
+        ),
+    )
+    publish_dataset(
+        manifest=manifest,
+        datasets_root=tmp_path / "artefacts" / "datasets",
+        project_root=tmp_path,
+        label="public-2026",
+    )
+    config = tmp_path / "world-experiment.yaml"
+    config.write_text(
+        """experiment_id: world-dataset
+name: World dataset run
+tasks:
+  dataset: worlds@public-2026
+agents:
+  - name: prime
+    adapter: prime-agent
+    model: test-model
+compute:
+  backend: local
+""",
+        encoding="utf-8",
+    )
+
+    result = runner.invoke(
+        app,
+        ["--json", "run", "--config", str(config), "--tasks-root", str(tasks_root), "--dry-run"],
+    )
+
+    assert result.exit_code == 0, result.output
+    envelope = json.loads(result.output)
+    assert envelope["data"]["selected_tasks"] == 1
+    assert envelope["data"]["trials"][0]["task_id"] == task.task_id
 
 
 def test_run_export_and_import_transfer_one_published_package(tmp_path: Path) -> None:

@@ -3,7 +3,8 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Sequence
+import inspect
+from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
 from typing import Literal
 
@@ -60,7 +61,8 @@ class MetaHarnessResult[CandidateT, AssessmentT]:
     stop_reason: MetaHarnessStopReason
 
 
-type CandidateEvaluator[CandidateT] = Callable[[HarnessCandidate[CandidateT]], Sequence[TrialRecord]]
+type CandidateEvaluation = Sequence[TrialRecord] | Awaitable[Sequence[TrialRecord]]
+type CandidateEvaluator[CandidateT] = Callable[[HarnessCandidate[CandidateT]], CandidateEvaluation]
 type CandidateAssessor[CandidateT, AssessmentT] = Callable[
     [HarnessCandidateTrials[CandidateT], tuple[HarnessCandidateTrials[CandidateT], ...]],
     AssessmentT,
@@ -84,18 +86,19 @@ type CandidateProposer[CandidateT, AssessmentT] = Callable[
 type MetaHarnessStop[CandidateT, AssessmentT] = Callable[[MetaHarnessRound[CandidateT, AssessmentT]], bool]
 
 
-def evaluate_harness_candidate[CandidateT](
+async def evaluate_harness_candidate[CandidateT](
     candidate: HarnessCandidate[CandidateT],
     *,
     evaluate: CandidateEvaluator[CandidateT],
 ) -> HarnessCandidateTrials[CandidateT]:
     """Evaluate one candidate and retain every returned trial as assessment evidence."""
 
-    records = tuple(evaluate(candidate))
+    result = evaluate(candidate)
+    records = tuple(await result if inspect.isawaitable(result) else result)
     return HarnessCandidateTrials(candidate=candidate, records=records)
 
 
-def run_harness_study[CandidateT, AssessmentT](
+async def run_harness_study[CandidateT, AssessmentT](
     *,
     baseline: HarnessCandidate[CandidateT],
     candidates: Sequence[HarnessCandidate[CandidateT]],
@@ -106,8 +109,8 @@ def run_harness_study[CandidateT, AssessmentT](
 
     proposed = tuple(candidates)
     _validate_proposed_candidates(baseline=baseline, candidates=proposed, used_candidate_ids=set())
-    baseline_trials = evaluate_harness_candidate(baseline, evaluate=evaluate)
-    candidate_trials = tuple(evaluate_harness_candidate(candidate, evaluate=evaluate) for candidate in proposed)
+    baseline_trials = await evaluate_harness_candidate(baseline, evaluate=evaluate)
+    candidate_trials = tuple([await evaluate_harness_candidate(candidate, evaluate=evaluate) for candidate in proposed])
     assessment = assess(baseline_trials, candidate_trials)
     return HarnessStudyResult(
         baseline=baseline_trials,
@@ -116,7 +119,7 @@ def run_harness_study[CandidateT, AssessmentT](
     )
 
 
-def run_meta_harness[CandidateT, AssessmentT](
+async def run_meta_harness[CandidateT, AssessmentT](
     *,
     initial: HarnessCandidate[CandidateT],
     propose: CandidateProposer[CandidateT, AssessmentT],
@@ -132,7 +135,7 @@ def run_meta_harness[CandidateT, AssessmentT](
     if max_rounds <= 0:
         raise ValueError("max_rounds must be positive")
 
-    initial_trials = evaluate_harness_candidate(initial, evaluate=evaluate)
+    initial_trials = await evaluate_harness_candidate(initial, evaluate=evaluate)
     current_trials = initial_trials
     previous_assessment: AssessmentT | None = None
     used_candidate_ids = {initial.candidate_id}
@@ -145,7 +148,9 @@ def run_meta_harness[CandidateT, AssessmentT](
             candidates=candidates,
             used_candidate_ids=used_candidate_ids,
         )
-        candidate_trials = tuple(evaluate_harness_candidate(candidate, evaluate=evaluate) for candidate in candidates)
+        candidate_trials = tuple(
+            [await evaluate_harness_candidate(candidate, evaluate=evaluate) for candidate in candidates]
+        )
         used_candidate_ids.update(candidate.candidate_id for candidate in candidates)
         assessment = assess(current_trials, candidate_trials)
         study = HarnessStudyResult(
@@ -187,7 +192,7 @@ def run_meta_harness[CandidateT, AssessmentT](
         if refined.candidate_id in used_candidate_ids:
             raise ValueError("refined candidate must have a new candidate_id")
         used_candidate_ids.add(refined.candidate_id)
-        current_trials = evaluate_harness_candidate(refined, evaluate=evaluate)
+        current_trials = await evaluate_harness_candidate(refined, evaluate=evaluate)
         previous_assessment = assessment
 
     raise AssertionError("positive max_rounds must return from the bounded loop")

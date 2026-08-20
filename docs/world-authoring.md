@@ -103,13 +103,34 @@ evidence must never enter the actor view.
 A registered world supplies a
 [`InteractiveWorldDefinition`](../src/aec_bench/worlds/runtime/definition.py)
 with build identity, profile references, and a profile loader. Add it once to
-[`default_interactive_world_catalogue`](../src/aec_bench/worlds/catalogue.py).
+the private composition root in [`catalogue.py`](../src/aec_bench/worlds/catalogue.py).
+Supply one title, summary, domain, stable tag set, real capability set, and
+profile title, summary, selection metadata, and tags. The public
+`aec_bench.worlds` discovery facade projects these values directly.
 
 A minimum contribution normally changes only the task-owned implementation,
 its tests, and the catalogue composition root. It does not require episode,
 actor-contract, provider, recorder, rollout, or persistence changes.
 
-### 4. Prove the owning boundaries
+### 4. Add a runnable task package when a dataset needs it
+
+Create `instruction.md` and `world.toml` under the normal `tasks/` root.
+`world.toml` contains `[world]`, `[profile]`, and `[metadata]` tables with the
+exact registered references and selection values. Use
+`worlds.load_world_task()` to check that the package has the same semantics as
+`worlds.task()`. Do not copy the scenario, implementation, verifier, or Harbor
+transport package into this directory.
+
+Users can inspect the result with:
+
+```bash
+uv run aec-bench task world list
+uv run aec-bench task world show <world-id>
+uv run aec-bench task world profiles <world-id>
+uv run aec-bench task world run <world-id> --profile <profile-id> --instruction <objective> --model <model>
+```
+
+### 5. Prove the owning boundaries
 
 Use
 [`assert_world_conformance`](../tests/worlds/world_conformance.py)

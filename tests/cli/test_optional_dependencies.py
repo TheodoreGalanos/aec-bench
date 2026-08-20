@@ -8,13 +8,16 @@ import re
 import subprocess
 import sys
 import tomllib
+from importlib.util import find_spec
 from pathlib import Path
 
 import pytest
 import typer
+from typer.testing import CliRunner
 
 from aec_bench.adapters.deepseek_harness.config import DEEPSEEK_HARNESS_VERSION
 from aec_bench.cli import optional_dependencies
+from aec_bench.cli.main import app
 from aec_bench.providers import morph_cloud
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
@@ -118,6 +121,42 @@ def test_extra_check_does_not_import_an_available_module(tmp_path: Path, monkeyp
     optional_dependencies.require_optional_extra("Probe support", "probe", ("optional_probe",))
 
     assert not marker.exists()
+
+
+def test_run_dry_run_reports_missing_execution_extra_before_importing_harbor(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    tasks_root = tmp_path / "tasks"
+    task_dir = tasks_root / "electrical" / "demo"
+    (task_dir / "tests").mkdir(parents=True)
+    (task_dir / "instruction.md").write_text("Write the answer.\n", encoding="utf-8")
+    (task_dir / "task.toml").write_text(
+        '[metadata]\nvisibility = "public"\n\n[agent]\ntimeout_sec = 60\n',
+        encoding="utf-8",
+    )
+    (task_dir / "tests" / "test.sh").write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    monkeypatch.setattr(
+        optional_dependencies,
+        "find_spec",
+        lambda module: None if module == "harbor" else find_spec(module),
+    )
+
+    result = CliRunner().invoke(
+        app,
+        [
+            "run",
+            str(task_dir),
+            "--model",
+            "test-model",
+            "--tasks-root",
+            str(tasks_root),
+            "--dry-run",
+        ],
+    )
+
+    assert result.exit_code == 1
+    assert 'Install it with: pip install "aec-bench[execution]"' in result.output
 
 
 def test_installed_morph_import_failure_is_not_relabelled(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

@@ -55,7 +55,7 @@ from aec_bench.harness.harbor_workflow import SynchronousHarborWorkflow
 from aec_bench.harness.kernel_catalogue import KernelRuntimeRegistry
 
 
-def run_adaptive_cycle(
+async def run_adaptive_cycle(
     *,
     spec: AdaptiveCycleSpec,
     registry: KernelRuntimeRegistry,
@@ -65,7 +65,7 @@ def run_adaptive_cycle(
 ) -> AdaptiveCycleResult:
     """Run evidence evaluation and stop before authority-bearing motif promotion."""
 
-    return _run_adaptive_cycle(
+    return await _run_adaptive_cycle(
         spec=spec,
         registry=registry,
         workflow=workflow,
@@ -74,7 +74,7 @@ def run_adaptive_cycle(
     )
 
 
-def _run_adaptive_cycle(
+async def _run_adaptive_cycle(
     *,
     spec: AdaptiveCycleSpec,
     registry: KernelRuntimeRegistry,
@@ -107,11 +107,11 @@ def _run_adaptive_cycle(
     repaired_candidate_reference = None
     child_calibration = None
 
-    def evaluate_candidate(candidate: HarnessCandidate[tuple[str, Any]]) -> tuple[TrialRecord, ...]:
+    async def evaluate_candidate(candidate: HarnessCandidate[tuple[str, Any]]) -> tuple[TrialRecord, ...]:
         nonlocal source_stage, child_calibration
         kind, value = candidate.value
         if kind == "source":
-            source_stage = run_harness_program_study(
+            source_stage = await run_harness_program_study(
                 spec=source.source_stage,
                 registry=registry,
                 workflow=workflow,
@@ -120,7 +120,7 @@ def _run_adaptive_cycle(
             )
             return source_stage.records
         if kind == "child":
-            child_calibration = run_harness_program_study(
+            child_calibration = await run_harness_program_study(
                 spec=value,
                 registry=registry,
                 workflow=workflow,
@@ -212,7 +212,7 @@ def _run_adaptive_cycle(
             raise RuntimeError("adaptive cycle assessment has no repair result")
         return repair.result.status is RepairLoopStatus.ACCEPTED
 
-    run_meta_harness(
+    await run_meta_harness(
         initial=HarnessCandidate(
             candidate_id=f"source:{source.source_stage.content_sha256}",
             value=("source", source.source_stage),

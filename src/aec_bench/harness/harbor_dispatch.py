@@ -17,7 +17,7 @@ from aec_bench.contracts.execution_environment import HarborEnvironmentBinding
 from aec_bench.contracts.experiment_manifest import AgentConfig, ExperimentManifest
 from aec_bench.contracts.task_definition import TaskDefinition
 from aec_bench.harness.execution_payload import ExecutionBundle, build_entrypoint_execution_bundle
-from aec_bench.harness.scheduler import build_trial_plan
+from aec_bench.trials import plan_trials
 
 HARBOR_NATIVE_BACKENDS = ("modal", "e2b", "daytona", "docker")
 
@@ -142,7 +142,13 @@ class HarborExperimentDispatcher:
             task_path_overrides=task_path_overrides,
             environment_binding=environment_binding,
         )
-        planned_trials = build_trial_plan(manifest, tasks)
+        planned_trials = plan_trials(
+            manifest.experiment_id,
+            tasks=tasks,
+            agents=manifest.agents,
+            compute=manifest.compute,
+            repetitions=manifest.repetitions,
+        )
         return dispatch_harbor_config(
             config=job_config,
             config_path=config_path,

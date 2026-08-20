@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import asyncio
 import os
 import shutil
 import subprocess
@@ -66,12 +67,14 @@ def run_harness_program_study_cli(
         ledger_root=Path(arguments.ledger_root).resolve(),
         jobs_root=Path(arguments.jobs_root).resolve(),
     )
-    result = run_harness_program_study(
-        spec=spec,
-        registry=default_kernel_registry(),
-        workflow=workflow,
-        artifacts_root=Path(arguments.artifacts_root).resolve(),
-        executor=(executor if executor is not None else HarnessProgramStudySubprocessHarborExecutor()),
+    result = asyncio.run(
+        run_harness_program_study(
+            spec=spec,
+            registry=default_kernel_registry(),
+            workflow=workflow,
+            artifacts_root=Path(arguments.artifacts_root).resolve(),
+            executor=(executor if executor is not None else HarnessProgramStudySubprocessHarborExecutor()),
+        )
     )
     print(result.path)
     print(result.report.content_sha256)

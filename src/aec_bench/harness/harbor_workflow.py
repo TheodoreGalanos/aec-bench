@@ -26,8 +26,9 @@ from aec_bench.harness.model_execution.llm_reviewer import (
     run_harbor_job_reviewer,
 )
 from aec_bench.harness.progress_tracker import WorkflowProgressSnapshot, WorkflowProgressTracker
-from aec_bench.harness.scheduler import build_trial_plan, select_manifest_tasks
+from aec_bench.harness.scheduler import select_manifest_tasks
 from aec_bench.tasks.registry import TaskRegistry
+from aec_bench.trials import plan_trials
 
 
 class HarborWorkflowError(Exception):
@@ -119,7 +120,15 @@ class SynchronousHarborWorkflow:
         progress_tracker = WorkflowProgressTracker(
             experiment_id=manifest.experiment_id,
             selected_task_count=len(selected_tasks),
-            planned_trial_count=len(build_trial_plan(manifest, selected_tasks)),
+            planned_trial_count=len(
+                plan_trials(
+                    manifest.experiment_id,
+                    tasks=selected_tasks,
+                    agents=manifest.agents,
+                    compute=manifest.compute,
+                    repetitions=manifest.repetitions,
+                )
+            ),
         )
         self._emit(progress_callback, progress_tracker.import_started(job_dir=job_dir))
         import_result = import_runner.import_harbor_job(
@@ -177,7 +186,13 @@ class SynchronousHarborWorkflow:
                 != selected_tasks
             ):
                 raise HarborWorkflowError("prevalidated tasks do not satisfy the experiment manifest selector")
-        planned_trials = build_trial_plan(manifest, selected_tasks)
+        planned_trials = plan_trials(
+            manifest.experiment_id,
+            tasks=selected_tasks,
+            agents=manifest.agents,
+            compute=manifest.compute,
+            repetitions=manifest.repetitions,
+        )
         progress_tracker = WorkflowProgressTracker(
             experiment_id=manifest.experiment_id,
             selected_task_count=len(selected_tasks),

@@ -14,39 +14,24 @@ from pydantic import BaseModel, TypeAdapter
 from aec_bench.cli.optional_dependencies import require_optional_extra
 from aec_bench.cli.output import emit
 from aec_bench.contracts.continual_world import (
-    ContinualControlExecuteRequest,
-    ContinualRolloutCreateRequest,
-    ContinualRolloutGroupQuery,
+    ContinualRolloutGroupRequest,
     ContinualWorldActorRequest,
     ContinualWorldControlRequest,
 )
-from aec_bench.contracts.world_interface import WorldActorActionRequest, WorldControlRequest
-from aec_bench.ledger.reader import read_trial_record
+from aec_bench.contracts.evaluation_result import StewardshipEvaluation
 from aec_bench.ledger.writer import write_trial_record_at
-from aec_bench.worlds.catalogue import default_interactive_world_catalogue
-from aec_bench.worlds.runtime.rollout_control import ContinualRolloutControl
-from aec_bench.worlds.stewardship.wastewater_pump_station.continual_rollout_adapter import (
-    PumpStationContinualWorldBranchPort,
-)
-from aec_bench.worlds.stewardship.wastewater_pump_station.episode_runtime import PumpStationEpisodeHost
-from aec_bench.worlds.stewardship.wastewater_pump_station.evaluation import (
-    evaluate_pump_station_reference_run,
+from aec_bench.worlds.stewardship.wastewater_pump_station.application import (
+    branch_run,
+    evaluate_run,
+    invoke_actor_request,
+    invoke_control_request,
+    verify_run,
 )
 from aec_bench.worlds.stewardship.wastewater_pump_station.reference_controller import (
     PUMP_STATION_REFERENCE_SYSTEM_CONTROLLER_ID,
 )
-from aec_bench.worlds.stewardship.wastewater_pump_station.stewardship_models import (
-    PumpStationBoundControlRequest,
-)
 from aec_bench.worlds.stewardship.wastewater_pump_station.stewardship_verifier import (
     PumpStationCoupledVerificationReport,
-)
-from aec_bench.worlds.stewardship.wastewater_pump_station.world_control import PumpStationWorldControl
-from aec_bench.worlds.stewardship.wastewater_pump_station.world_run import (
-    PumpStationWorldRun,
-)
-from aec_bench.worlds.stewardship.wastewater_pump_station.world_run_repository import (
-    PumpStationWorldRunRepository,
 )
 
 app = typer.Typer(help="Run the synthetic wastewater pump-station stewardship world.")
@@ -92,32 +77,9 @@ def actor_interface_command(
 
     started = time.monotonic()
     request = ContinualWorldActorRequest.model_validate_json(request_path.read_text(encoding="utf-8"))
-    repository = PumpStationWorldRunRepository(run_dir)
-    PumpStationWorldRun.resume_reference_system(
-        repository=repository,
-        snapshot=repository.current_snapshot(),
-    )
-    host = PumpStationEpisodeHost(run_dir)
-    result: object
-    if request.operation == "capabilities":
-        result = host.capabilities()
-    elif request.operation == "observe":
-        result = host.observe()
-    else:
-        assert request.request_id is not None
-        assert request.decision_id is not None
-        assert request.action_name is not None
-        assert request.arguments is not None
-        result = host.invoke(
-            WorldActorActionRequest(
-                request_id=request.request_id,
-                decision_id=request.decision_id,
-                action_name=request.action_name,
-                arguments=request.arguments,
-            )
-        )
+    result = invoke_actor_request(run_dir, request)
     emit(
-        "task pump-station-world actor-interface",
+        "task world pump-station actor-interface",
         _model_payload(result),
         start_time=started,
     )
@@ -143,57 +105,14 @@ def control_interface_command(
     started = time.monotonic()
     request_adapter: TypeAdapter[ContinualWorldControlRequest] = TypeAdapter(ContinualWorldControlRequest)
     request = request_adapter.validate_json(request_path.read_text(encoding="utf-8"))
-    request_authority_id = (
-        request.rollout_group_request.authority_id
-        if isinstance(request, ContinualRolloutCreateRequest)
-        else request.authority_id
+    result = invoke_control_request(
+        run_dir,
+        request,
+        host_authority_id=host_authority_id,
+        rollout_dir=rollout_dir,
     )
-    if request_authority_id != host_authority_id:
-        raise ValueError("control authority differs from the host authority")
-    catalogue = default_interactive_world_catalogue()
-    repository = PumpStationWorldRunRepository(run_dir)
-    run = PumpStationWorldRun.resume_reference_system(repository=repository, snapshot=repository.current_snapshot())
-    definition = catalogue.resolve(run.world_build)
-    definition.load_profile(run.continual_profile_ref)
-    result: object
-    if request.operation in {"capabilities", "execute"}:
-        control = PumpStationWorldControl(
-            run_dir,
-            authorised_principal_ids=(host_authority_id,),
-            profile_ref=run.continual_profile_ref,
-        )
-        if request.operation == "capabilities":
-            result = control.capabilities(request_authority_id)
-        else:
-            assert isinstance(request, ContinualControlExecuteRequest)
-            parsed_control: WorldControlRequest | PumpStationBoundControlRequest = TypeAdapter(
-                WorldControlRequest | PumpStationBoundControlRequest
-            ).validate_python(request.control_request)
-            result = control.execute(parsed_control)
-    else:
-        if rollout_dir is None:
-            raise ValueError("rollout operations require --rollout-dir")
-        rollout = ContinualRolloutControl(
-            definition,
-            PumpStationContinualWorldBranchPort(),
-            parent_run_root=run_dir,
-            rollout_repository_root=rollout_dir,
-            authorised_principal_ids=(host_authority_id,),
-        )
-        if request.operation == "create_rollout_group":
-            assert isinstance(request, ContinualRolloutCreateRequest)
-            result = rollout.create_group(request.rollout_group_request)
-        else:
-            assert isinstance(request, ContinualRolloutGroupQuery) or request.operation == "rollout_child_run_ref"
-            if request.operation == "rollout_group_status":
-                result = rollout.group_status(request.group_id)
-            elif request.operation == "inspect_rollout_group":
-                result = rollout.inspect_group(request.group_id)
-            else:
-                assert request.child_id is not None
-                result = rollout.child_run_ref(request.group_id, request.child_id)
     emit(
-        "task pump-station-world control-interface",
+        "task world pump-station control-interface",
         _model_payload(result),
         start_time=started,
     )
@@ -205,17 +124,26 @@ def verify_command(
 ) -> None:
     """Reload and independently replay all committed pump-station transitions."""
     started = time.monotonic()
-    repository = PumpStationWorldRunRepository(run_dir)
-    run = PumpStationWorldRun.resume_reference_system(
-        repository=repository,
-        snapshot=repository.current_snapshot(),
-    )
-    report = run.verify()
+    report = cast(PumpStationCoupledVerificationReport, verify_run(run_dir))
     emit(
-        "task pump-station-world verify",
+        "task world pump-station verify",
         _verification_payload(report),
         start_time=started,
     )
+
+
+@app.command("branch")
+def branch_command(
+    run_dir: Path = typer.Option(..., "--run-dir", help="Existing durable parent world-run directory"),
+    rollout_dir: Path = typer.Option(..., "--rollout-dir", help="Host-private rollout repository directory"),
+    request_path: Path = typer.Option(..., "--request-path", help="Rollout group request JSON"),
+) -> None:
+    """Create verified isolated child runs without executing or selecting them."""
+
+    started = time.monotonic()
+    request = ContinualRolloutGroupRequest.model_validate_json(request_path.read_text(encoding="utf-8"))
+    result = branch_run(run_dir, rollout_dir, request)
+    emit("task world pump-station branch", _model_payload(result), start_time=started)
 
 
 @app.command("evaluate")
@@ -229,14 +157,9 @@ def evaluate_command(
     """Reload one pump-station run and report its evaluation vector."""
 
     started = time.monotonic()
-    repository = PumpStationWorldRunRepository(run_dir)
-    run = PumpStationWorldRun.resume_reference_system(
-        repository=repository,
-        snapshot=repository.current_snapshot(),
-    )
-    evaluation = evaluate_pump_station_reference_run(run)
+    evaluation = cast(StewardshipEvaluation, evaluate_run(run_dir))
     emit(
-        "task pump-station-world evaluate",
+        "task world pump-station evaluate",
         evaluation.model_dump(mode="json"),
         errors=list(evaluation.gates.errors),
         start_time=started,
@@ -273,7 +196,7 @@ def export_harbor_command(
         profile_ref=pump_station_continual_world_definition().profiles[0],
     )
     emit(
-        "task pump-station-world export-harbor",
+        "task world pump-station export-harbor",
         {
             "task_dir": str(exported.task_dir),
             "manifest_path": str(exported.manifest_path),
@@ -379,7 +302,7 @@ def run_harbor_command(
     )
     errors = [] if result.exit_code in (None, 0) else [f"local Harbor job failed with exit code {result.exit_code}"]
     emit(
-        "task pump-station-world run-harbor",
+        "task world pump-station run-harbor",
         {
             "config_path": str(result.config_path),
             "command": list(result.command),
@@ -436,37 +359,9 @@ def import_harbor_trial_command(
         evidence_loader=load_pump_station_import_evidence,
     )
     write_trial_record_at(path=record_path, record=record)
-    stewardship = record.evaluation.stewardship
+    stewardship = None if record.evaluation is None else record.evaluation.stewardship
     emit(
-        "task pump-station-world import-harbor-trial",
-        {
-            "record_path": str(record_path),
-            "trial_id": record.trial_id,
-            "episode_artifact": None if record.episode_artifact is None else record.episode_artifact.path,
-            "evaluation_valid": (None if stewardship is None else stewardship.valid),
-            "active_terminal_restrictions": (
-                None if stewardship is None else stewardship.metrics.terminal_liability.active_restriction_count
-            ),
-        },
-        start_time=started,
-    )
-
-
-@app.command("reload-trial-record")
-def reload_trial_record_command(
-    record_path: Path = typer.Option(
-        ...,
-        "--record-path",
-        help="Existing TrialRecord JSON path",
-    ),
-) -> None:
-    """Reload one imported TrialRecord through the strict contract."""
-
-    started = time.monotonic()
-    record = read_trial_record(record_path)
-    stewardship = record.evaluation.stewardship
-    emit(
-        "task pump-station-world reload-trial-record",
+        "task world pump-station import-harbor-trial",
         {
             "record_path": str(record_path),
             "trial_id": record.trial_id,

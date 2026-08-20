@@ -12,6 +12,7 @@ from aec_bench.contracts.artifacts import ArtifactRef
 from aec_bench.contracts.validators import FrozenStrictModel, NonEmptyStr
 
 ACTOR_INVOCATION_EVIDENCE_PROTOCOL = "aec-bench/actor-invocation-evidence/1"
+ACTOR_INVOCATION_MANIFEST_PROTOCOL = "aec-bench/actor-invocation-manifest/1"
 
 
 class AuthorityEvidenceKind(StrEnum):
@@ -33,12 +34,17 @@ class AuthorityEvidenceRef(FrozenStrictModel):
 
     @model_validator(mode="after")
     def validate_supported_protocol(self) -> Self:
-        if (
-            self.authority_kind is AuthorityEvidenceKind.ACTOR_INVOCATION
-            and self.protocol != ACTOR_INVOCATION_EVIDENCE_PROTOCOL
-        ):
+        if self.authority_kind is AuthorityEvidenceKind.ACTOR_INVOCATION and self.protocol not in {
+            ACTOR_INVOCATION_EVIDENCE_PROTOCOL,
+            ACTOR_INVOCATION_MANIFEST_PROTOCOL,
+        }:
             raise ValueError("actor invocation evidence protocol is not supported")
         return self
 
 
-__all__ = ("ACTOR_INVOCATION_EVIDENCE_PROTOCOL", "AuthorityEvidenceKind", "AuthorityEvidenceRef")
+__all__ = (
+    "ACTOR_INVOCATION_EVIDENCE_PROTOCOL",
+    "ACTOR_INVOCATION_MANIFEST_PROTOCOL",
+    "AuthorityEvidenceKind",
+    "AuthorityEvidenceRef",
+)

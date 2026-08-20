@@ -31,10 +31,10 @@ from aec_bench.harness.model_execution.llm_reviewer import (
     ReviewerRunConfig,
     load_reviewer_config,
 )
-from aec_bench.harness.trial import PlannedTrial, build_trial_id
 from aec_bench.prime_agent.batch import PrimeExecutableNotFoundError, resolve_prime_executable
 from aec_bench.tasks.instance import resolve_instance_paths
 from aec_bench.tasks.loader import load_task_definition
+from aec_bench.trials import PlannedTrial, build_trial_id
 
 # Output files we expect the adapter to produce
 _OUTPUT_FILES = [

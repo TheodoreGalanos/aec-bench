@@ -112,7 +112,9 @@ class HarnessProgramStudyHarborExecutor:
         return 0
 
 
-def test_harness_program_study_runs_strict_preregistered_candidate_search_and_persists_report(tmp_path: Path) -> None:
+async def test_harness_program_study_runs_strict_preregistered_candidate_search_and_persists_report(
+    tmp_path: Path,
+) -> None:
     registry, tasks_root, request = _one_repetition_factory(tmp_path)
     spec = prepare_harness_program_study_spec(
         candidate_requests=(request,),
@@ -128,7 +130,7 @@ def test_harness_program_study_runs_strict_preregistered_candidate_search_and_pe
     )
     executor = HarnessProgramStudyHarborExecutor()
 
-    result = run_harness_program_study(
+    result = await run_harness_program_study(
         spec=spec,
         registry=registry,
         workflow=_workflow(tmp_path, tasks_root),
@@ -172,7 +174,7 @@ def test_harness_program_study_runs_strict_preregistered_candidate_search_and_pe
     assert evidence.holdout_accessed_during_selection is False
 
 
-def test_harness_program_study_persists_verifier_completed_invalid_zero_outcomes(
+async def test_harness_program_study_persists_verifier_completed_invalid_zero_outcomes(
     tmp_path: Path,
 ) -> None:
     registry, tasks_root, request = _one_repetition_factory(tmp_path)
@@ -189,7 +191,7 @@ def test_harness_program_study_persists_verifier_completed_invalid_zero_outcomes
     )
     executor = HarnessProgramStudyHarborExecutor(invalid_call_indices=frozenset({1}))
 
-    result = run_harness_program_study(
+    result = await run_harness_program_study(
         spec=spec,
         registry=registry,
         workflow=_workflow(tmp_path, tasks_root),
@@ -207,7 +209,7 @@ def test_harness_program_study_persists_verifier_completed_invalid_zero_outcomes
     assert evidence.validity_rate == result.report.validity_rate
 
 
-def test_harness_program_study_rejects_changed_task_input_before_harbor_execution(tmp_path: Path) -> None:
+async def test_harness_program_study_rejects_changed_task_input_before_harbor_execution(tmp_path: Path) -> None:
     registry, tasks_root, request = _one_repetition_factory(tmp_path)
     spec = prepare_harness_program_study_spec(
         candidate_requests=(request,),
@@ -225,7 +227,7 @@ def test_harness_program_study_rejects_changed_task_input_before_harbor_executio
     executor = HarnessProgramStudyHarborExecutor()
 
     with pytest.raises(ValueError, match="applicability changed after preregistration"):
-        run_harness_program_study(
+        await run_harness_program_study(
             spec=spec,
             registry=registry,
             workflow=_workflow(tmp_path, tasks_root),
@@ -236,7 +238,7 @@ def test_harness_program_study_rejects_changed_task_input_before_harbor_executio
     assert executor.calls == 0
 
 
-def test_harness_program_study_report_loader_rejects_trial_artifact_tamper(tmp_path: Path) -> None:
+async def test_harness_program_study_report_loader_rejects_trial_artifact_tamper(tmp_path: Path) -> None:
     registry, tasks_root, request = _one_repetition_factory(tmp_path)
     spec = prepare_harness_program_study_spec(
         candidate_requests=(request,),
@@ -249,7 +251,7 @@ def test_harness_program_study_report_loader_rejects_trial_artifact_tamper(tmp_p
         split="calibration",
         bootstrap_replicates=4,
     )
-    result = run_harness_program_study(
+    result = await run_harness_program_study(
         spec=spec,
         registry=registry,
         workflow=_workflow(tmp_path, tasks_root),
@@ -267,7 +269,7 @@ def test_harness_program_study_report_loader_rejects_trial_artifact_tamper(tmp_p
     "forgery",
     ("trial-outcome", "resource-metrics", "task-set-aggregate", "harness-program-analysis"),
 )
-def test_harness_program_study_report_loader_rejects_rehashed_invented_derived_evidence(
+async def test_harness_program_study_report_loader_rejects_rehashed_invented_derived_evidence(
     tmp_path: Path,
     forgery: str,
 ) -> None:
@@ -284,7 +286,7 @@ def test_harness_program_study_report_loader_rejects_rehashed_invented_derived_e
         bootstrap_replicates=4,
         bootstrap_seed=97,
     )
-    result = run_harness_program_study(
+    result = await run_harness_program_study(
         spec=spec,
         registry=registry,
         workflow=_workflow(tmp_path, tasks_root),
@@ -326,7 +328,7 @@ def test_harness_program_study_report_loader_rejects_rehashed_invented_derived_e
         load_harness_program_study_report(forged_path)
 
 
-def test_harness_program_study_fails_closed_when_cost_evidence_is_incomplete(tmp_path: Path) -> None:
+async def test_harness_program_study_fails_closed_when_cost_evidence_is_incomplete(tmp_path: Path) -> None:
     registry, tasks_root, request = _one_repetition_factory(tmp_path)
     spec = prepare_harness_program_study_spec(
         candidate_requests=(request,),
@@ -341,7 +343,7 @@ def test_harness_program_study_fails_closed_when_cost_evidence_is_incomplete(tmp
     )
 
     with pytest.raises(ValueError, match="lacks complete cost evidence"):
-        run_harness_program_study(
+        await run_harness_program_study(
             spec=spec,
             registry=registry,
             workflow=_workflow(tmp_path, tasks_root),
@@ -378,3 +380,6 @@ def _reward(agent: dict[str, Any]) -> float:
         "h0_px": 0.5,
         "hx_px": 0.9,
     }[cell]
+
+
+pytestmark = pytest.mark.asyncio

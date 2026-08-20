@@ -17,7 +17,7 @@ from aec_bench.worlds.stewardship.wastewater_pump_station.continual_definition i
 
 
 @dataclass(frozen=True)
-class InteractiveWorldCatalogue:
+class WorldCatalogue:
     """Stable registry of task-owned Interactive World definitions."""
 
     definitions: tuple[InteractiveWorldDefinition, ...]
@@ -53,9 +53,9 @@ class InteractiveWorldCatalogue:
 
 
 @cache
-def default_interactive_world_catalogue() -> InteractiveWorldCatalogue:
+def _catalogue() -> WorldCatalogue:
     """Return the registered causal worlds."""
-    return InteractiveWorldCatalogue(
+    return WorldCatalogue(
         definitions=(
             dam_seepage_world_definition(),
             pump_station_continual_world_definition(),
