@@ -47,6 +47,8 @@ def summarize_trial_trace(record: TrialRecord) -> dict[str, int]:
 
 
 def extract_trial_trace_signals(record: TrialRecord) -> TrialTraceSignals:
+    if record.output is None:
+        return _empty_trace_summary(has_transcript=0)
     # Try trajectory first (structured format)
     trajectory_path = record.outputs.trajectory_path
     if trajectory_path is not None:

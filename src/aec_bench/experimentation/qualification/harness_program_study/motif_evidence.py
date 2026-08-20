@@ -45,7 +45,7 @@ def harness_program_study_learned_subject(report: HarnessProgramStudyReport) -> 
     verify_harness_program_study_report(report)
     subjects = {
         (
-            encode_harness_motif_template(candidate.request.learned_harness_recipe).template_sha256,
+            encode_harness_motif_template(candidate.request.learned_harness_spec).template_sha256,
             encode_program_motif_template(candidate.request.learned_program).template_sha256,
         )
         for candidate in report.candidates

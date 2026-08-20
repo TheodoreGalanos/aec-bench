@@ -90,6 +90,19 @@ def write_trial_records(*, ledger_root: Path, records: list[TrialRecord]) -> lis
     return [write_trial_record(ledger_root=ledger_root, record=record) for record in records]
 
 
+def materialize_trial_record(*, artifact_root: Path, record: TrialRecord) -> TrialRecord:
+    """Publish pending trial artifacts and return a path-independent record."""
+
+    manifest = record.run_manifest
+    _materialize_artifacts(artifact_root=artifact_root, record=record)
+    _materialize_extensions(artifact_root=artifact_root, record=record)
+    _finalize_evidence_status(record)
+    materialized = TrialRecord.model_validate(record.model_dump(mode="python"))
+    materialized.bind_run_manifest(manifest)
+    materialized.bind_artifact_root(artifact_root)
+    return materialized
+
+
 def write_run_manifest(*, ledger_root: Path, manifest: RunManifest) -> Path:
     path = run_manifest_path(ledger_root=ledger_root, experiment_id=manifest.experiment_id, run_id=manifest.run_id)
     return _write_run_manifest_path(path=path, manifest=manifest)

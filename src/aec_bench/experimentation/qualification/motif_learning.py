@@ -24,7 +24,7 @@ from aec_bench.contracts.execution_program import (
 from aec_bench.contracts.harness_instance import (
     ContextBindingConfig,
     HarnessInstanceRef,
-    HarnessRecipe,
+    HarnessSpec,
     TaskSourceBindingConfig,
     ToolBindingConfig,
 )
@@ -327,17 +327,17 @@ def attest_task_snapshots_applicability(
 
 
 def derive_motif_solution_descriptor(
-    recipe: HarnessRecipe,
+    spec: HarnessSpec,
     program: ProgramFactorTemplate,
 ) -> MotifStructuralDescriptor:
     """Derive solution coordinates from actual typed Hx/px structure, never caller labels."""
-    source_recipe = HarnessRecipe.model_validate(recipe.model_dump(mode="python"))
+    source_spec = HarnessSpec.model_validate(spec.model_dump(mode="python"))
     source_program = ProgramFactorTemplate.model_validate(program.model_dump(mode="python"))
     nodes = source_program.nodes
     has_fanout = any(isinstance(node, FanoutNode) for node in nodes)
     has_join = any(isinstance(node, JoinNode) for node in nodes)
     has_branch = any(isinstance(node, BranchNode) for node in nodes)
-    recursive = source_recipe.recursion_policy.enabled or any(
+    recursive = source_spec.recursion_policy.enabled or any(
         getattr(node, "recursion", None) is not None for node in nodes
     )
     if has_fanout and has_branch:
@@ -365,7 +365,7 @@ def derive_motif_solution_descriptor(
     operation_ids = {node.operation_id for node in nodes if isinstance(node, ActionNode | FanoutNode | VerifyNode)}
     tool_ids = {
         tool_id
-        for binding in source_recipe.bindings
+        for binding in source_spec.bindings
         if isinstance(binding.configuration, ToolBindingConfig)
         for tool_id in binding.configuration.tool_ids
     }
@@ -374,7 +374,7 @@ def derive_motif_solution_descriptor(
     maximum_parallelism = (
         min(source_program.limits.max_parallelism, max(fanout_parallelism)) if fanout_parallelism else 1
     )
-    has_context = any(isinstance(binding.configuration, ContextBindingConfig) for binding in source_recipe.bindings)
+    has_context = any(isinstance(binding.configuration, ContextBindingConfig) for binding in source_spec.bindings)
     state_mode: Literal["stateless", "ephemeral", "persistent"] = (
         "ephemeral" if has_context or recursive or has_fanout or has_join or has_branch else "stateless"
     )
@@ -637,12 +637,12 @@ def _build_motif_candidate(
         registry=registry,
     )
     program_factor = _program_factor(repaired_candidate.program_template)
-    calibrated_recipe = _calibrated_harness_recipe(child_calibration_report)
+    calibrated_spec = _calibrated_harness_spec(child_calibration_report)
     _validate_calibrated_harness_rebinding(
-        source=repaired_candidate.harness_request.recipe,
-        calibrated=calibrated_recipe,
+        source=repaired_candidate.harness_request.spec,
+        calibrated=calibrated_spec,
     )
-    hx_template = encode_harness_motif_template(calibrated_recipe)
+    hx_template = encode_harness_motif_template(calibrated_spec)
     px_template = encode_program_motif_template(program_factor)
     harness_program_evidence = harness_program_study_evidence(child_calibration_report)
     calibration_subject = (
@@ -660,7 +660,7 @@ def _build_motif_candidate(
         px_template=px_template,
         applicability=attestation.descriptor,
         descriptor=derive_motif_solution_descriptor(
-            calibrated_recipe,
+            calibrated_spec,
             program_factor,
         ),
         accepted_repair_refs=repair.references,
@@ -862,19 +862,19 @@ def _program_factor(template: RepairProgramTemplate) -> ProgramFactorTemplate:
     )
 
 
-def _calibrated_harness_recipe(
+def _calibrated_harness_spec(
     report: HarnessProgramStudyReport,
-) -> HarnessRecipe:
-    recipes = tuple(candidate.request.learned_harness_recipe for candidate in report.candidates)
-    if not recipes or any(recipe != recipes[0] for recipe in recipes[1:]):
-        raise ValueError("child calibration mixes learned harness recipes")
-    return recipes[0]
+) -> HarnessSpec:
+    specs = tuple(candidate.request.learned_harness_spec for candidate in report.candidates)
+    if not specs or any(spec != specs[0] for spec in specs[1:]):
+        raise ValueError("child calibration mixes learned harness specs")
+    return specs[0]
 
 
 def _validate_calibrated_harness_rebinding(
     *,
-    source: HarnessRecipe,
-    calibrated: HarnessRecipe,
+    source: HarnessSpec,
+    calibrated: HarnessSpec,
 ) -> None:
     calibrated_task_sources = [
         binding.configuration
@@ -893,9 +893,7 @@ def _validate_calibrated_harness_rebinding(
         rebound_bindings.append(binding.model_copy(update={"configuration": configuration}))
     if source_task_source_count != 1:
         raise ValueError("repaired harness requires exactly one task-source binding")
-    rebound = HarnessRecipe(
-        recipe_id=source.recipe_id,
-        version=source.version,
+    rebound = HarnessSpec(
         summary=source.summary,
         contracts=source.contracts,
         budget=source.budget,

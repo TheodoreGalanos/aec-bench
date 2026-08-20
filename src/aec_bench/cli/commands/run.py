@@ -206,6 +206,7 @@ def _run_from_config(
     if no_verify:
         manifest = manifest.model_copy(update={"disable_verification": True})
 
+    resolved_agents = []
     for agent in manifest.agents:
         if agent.system_prompt_file is not None:
             prompt_path = config_dir / agent.system_prompt_file
@@ -217,6 +218,14 @@ def _run_from_config(
                     start_time=start,
                 )
                 return
+            agent = agent.model_copy(
+                update={
+                    "system_prompt": prompt_path.read_text(encoding="utf-8"),
+                    "system_prompt_file": None,
+                }
+            )
+        resolved_agents.append(agent)
+    manifest = manifest.model_copy(update={"agents": resolved_agents})
 
     _execute_manifest(
         manifest,
@@ -377,35 +386,49 @@ def _execute_manifest(
     console.print(f"[bold]Running: {manifest.name}[/bold]")
     console.print(f"  {len(plan)} trials across {len(selected_tasks)} tasks")
 
+    from aec_bench.harness.artifact_tasks import SingleAttemptSpec
+    from aec_bench.harness.artifact_tasks import run_experiment as run_task_experiment
+    from aec_bench.harness.harbor_runtime import HarborExperimentRuntime
     from aec_bench.harness.harbor_workflow import SynchronousHarborWorkflow
+    from aec_bench.tasks.instance import resolve_instance_paths
 
     resolved_ledger = resolve_path("ledger_root")
     jobs_root = project_root / "jobs"
 
-    workflow = SynchronousHarborWorkflow(
-        project_root=project_root,
-        repo_root=project_root,
-        tasks_root=tasks_root,
-        ledger_root=resolved_ledger,
-        jobs_root=jobs_root,
+    runtime = HarborExperimentRuntime(
+        workflow=SynchronousHarborWorkflow(
+            project_root=project_root,
+            repo_root=project_root,
+            tasks_root=tasks_root,
+            ledger_root=resolved_ledger,
+            jobs_root=jobs_root,
+        ),
+        manifest=manifest,
+        config_path=project_root / f".aec-bench-{manifest.experiment_id}.yaml",
+        environment_binding=resolve_harbor_environment_binding(manifest.compute.backend),
     )
 
     def _progress(snapshot: object) -> None:
         console.print(f"  [dim]{snapshot}[/dim]")
 
-    result = workflow.run(
-        manifest=manifest,
-        config_path=project_root / f".aec-bench-{manifest.experiment_id}.yaml",
-        progress_callback=_progress,
-        reviewer_config=reviewer_config,
-        environment_binding=resolve_harbor_environment_binding(manifest.compute.backend),
+    runtime.progress_callback = _progress
+    records = run_task_experiment(
+        runtime=runtime,
+        tasks=[resolve_instance_paths(task, tasks_root / task.task_id) for task in selected_tasks],
+        trials=plan,
+        recipe=SingleAttemptSpec(),
+        reviewer=reviewer_config,
+        verify=not manifest.disable_verification,
     )
+    result = runtime.last_result
+    if result is None:
+        raise RuntimeError("Harbor experiment did not produce a workflow result")
 
     result_data = {
         "experiment_id": manifest.experiment_id,
         "job_dir": str(result.job_dir) if result.job_dir else None,
-        "imported": result.import_result.imported_trials if result.import_result else 0,
-        "duplicates": result.import_result.duplicate_trials if result.import_result else 0,
+        "imported": len(records),
+        "duplicates": result.import_result.duplicate_trials,
         "reviewer": _reviewer_result_data(result.reviewer_result),
     }
 

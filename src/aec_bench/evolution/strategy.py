@@ -1,5 +1,5 @@
 # ABOUTME: Selection strategy protocol and hill-climb implementation for evolution.
-# ABOUTME: Defines the interface that orchestrator delegates to for parent selection.
+# ABOUTME: Defines the interface that the evolution application uses for parent selection.
 
 from __future__ import annotations
 
@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 class SelectionStrategy(Protocol):
     """Interface for evolution parent-selection strategies.
 
-    The orchestrator calls on_cycle_end after each cycle to feed results,
+    The evolution loop calls on_cycle_end after each cycle to feed results,
     then select_parent before the next mutation to choose the starting point.
     """
 
@@ -138,7 +138,7 @@ class QDStrategy:
     """MAP-Elites archive with UCB1 selection and archive explorer agent.
 
     Wraps QDArchive (CVT-MAP-Elites), CellSelector (UCB1 bandit over cells),
-    and StrategyBandit (D-MAB over mutation strategies). The orchestrator
+    and StrategyBandit (D-MAB over mutation strategies). The evolution loop
     delegates parent selection to this strategy, which uses an archive-explorer
     agent to choose among UCB1-shortlisted candidates.
     """

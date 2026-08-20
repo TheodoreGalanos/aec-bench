@@ -33,8 +33,8 @@ from aec_bench.contracts.harness_instance import (
     HarnessContractEnforcement,
     HarnessContractKind,
     HarnessContractSpec,
-    HarnessRecipe,
     HarnessRecursionPolicy,
+    HarnessSpec,
     HarnessTopologyRole,
     ProgramOperationScope,
     ResultImportBindingConfig,
@@ -69,14 +69,14 @@ def test_harness_compiler_resolves_every_binding_into_one_execution_bearing_surf
         HarnessCompileRequest(
             request_id="compile-adaptive",
             kernel_ref=registry.manifest.ref,
-            recipe=recipe,
+            spec=recipe,
         ),
         registry=registry,
     )
 
-    operation = harness.program_surface.operation("run_batch.v1")
+    operation = harness.program_surface.operation("run_batch")
     assert operation is not None
-    batch_definition = registry.operation_definition("run_batch.v1")
+    batch_definition = registry.operation_definition("run_batch")
     assert batch_definition is not None
     assert (
         _operation_definition_for_compilation(
@@ -97,10 +97,10 @@ def test_harness_compiler_resolves_every_binding_into_one_execution_bearing_surf
     assert operation.retry_safe_error_codes == ()
     assert operation.verifier_placements[0].binding_id == "verify"
     assert harness.kernel_ref == registry.manifest.ref
-    assert harness.source_recipe_ref == recipe.ref
-    enumerate_operation = harness.program_surface.operation("enumerate_tasks.v1")
+    assert harness.source_spec == recipe
+    enumerate_operation = harness.program_surface.operation("enumerate_tasks")
     assert enumerate_operation is not None
-    enumerate_definition = registry.operation_definition("enumerate_tasks.v1")
+    enumerate_definition = registry.operation_definition("enumerate_tasks")
     assert enumerate_definition is not None
     assert (
         _operation_definition_for_compilation(
@@ -116,9 +116,9 @@ def test_harness_compiler_resolves_every_binding_into_one_execution_bearing_surf
     assert "content_sha256" not in enumerate_operation.model_dump(mode="json")
     assert enumerate_operation.binding_ids == ("tasks",)
     assert enumerate_operation.allowed_task_refs == ("civil/calculation/adaptive",)
-    run_stage = harness.program_surface.operation("run_stage.v1")
+    run_stage = harness.program_surface.operation("run_stage")
     assert run_stage is not None
-    stage_definition = registry.operation_definition("run_stage.v1")
+    stage_definition = registry.operation_definition("run_stage")
     assert stage_definition is not None
     assert (
         _operation_definition_for_compilation(
@@ -134,9 +134,9 @@ def test_harness_compiler_resolves_every_binding_into_one_execution_bearing_surf
     assert "content_sha256" not in run_stage.model_dump(mode="json")
     assert set(run_stage.binding_ids) == {"tasks", "context", "tools", "agent", "compute"}
     assert run_stage.verifier_placements == ()
-    finalize_task = harness.program_surface.operation("finalize_task.v1")
+    finalize_task = harness.program_surface.operation("finalize_task")
     assert finalize_task is not None
-    finalize_definition = registry.operation_definition("finalize_task.v1")
+    finalize_definition = registry.operation_definition("finalize_task")
     assert finalize_definition is not None
     assert (
         _operation_definition_for_compilation(
@@ -159,10 +159,10 @@ def test_harness_compiler_exports_the_fixed_sequential_k9_proposal_surface() -> 
     harness = _compiled_harness(registry)
 
     expected_capabilities = {
-        "run_proposal_session.v1": "aecbench.operation.proposal.run-session",
-        "run_semantic_subtask.v1": "aecbench.operation.proposal.run-semantic-subtask",
-        "check_subtask_contract.v1": "aecbench.operation.proposal.check-subtask-contract",
-        "finalize_proposed_plan.v1": "aecbench.operation.proposal.finalize-proposed-plan",
+        "run_proposal_session": "aecbench.operation.proposal.run-session",
+        "run_semantic_subtask": "aecbench.operation.proposal.run-semantic-subtask",
+        "check_subtask_contract": "aecbench.operation.proposal.check-subtask-contract",
+        "finalize_proposed_plan": "aecbench.operation.proposal.finalize-proposed-plan",
     }
     operations = {
         operation_id: harness.program_surface.operation(operation_id) for operation_id in expected_capabilities
@@ -181,10 +181,10 @@ def test_harness_compiler_exports_the_fixed_sequential_k9_proposal_surface() -> 
 
     all_binding_ids = {binding.binding_id for binding in harness.bindings}
     execution_binding_ids = all_binding_ids - {"verify", "import"}
-    assert set(operations["run_proposal_session.v1"].binding_ids) == all_binding_ids
-    assert set(operations["run_semantic_subtask.v1"].binding_ids) == execution_binding_ids
-    assert operations["check_subtask_contract.v1"].binding_ids == ("tasks",)
-    assert set(operations["finalize_proposed_plan.v1"].binding_ids) == all_binding_ids
+    assert set(operations["run_proposal_session"].binding_ids) == all_binding_ids
+    assert set(operations["run_semantic_subtask"].binding_ids) == execution_binding_ids
+    assert operations["check_subtask_contract"].binding_ids == ("tasks",)
+    assert set(operations["finalize_proposed_plan"].binding_ids) == all_binding_ids
     for operation_id in expected_capabilities:
         operation = operations[operation_id]
         assert operation is not None
@@ -217,14 +217,14 @@ def test_legacy_registry_without_definitions_preserves_migrated_v1_harness_abis(
     legacy_harness = _compiled_harness(legacy)
 
     for operation_id in (
-        "enumerate_tasks.v1",
-        "check_subtask_contract.v1",
-        "finalize_proposed_plan.v1",
-        "finalize_task.v1",
-        "run_batch.v1",
-        "run_proposal_session.v1",
-        "run_semantic_subtask.v1",
-        "run_stage.v1",
+        "enumerate_tasks",
+        "check_subtask_contract",
+        "finalize_proposed_plan",
+        "finalize_task",
+        "run_batch",
+        "run_proposal_session",
+        "run_semantic_subtask",
+        "run_stage",
     ):
         current_operation = current_harness.program_surface.operation(operation_id)
         legacy_operation = legacy_harness.program_surface.operation(operation_id)
@@ -250,7 +250,7 @@ def test_harness_compiler_sources_retry_taxonomy_from_the_fixed_kernel_primitive
 
     harness = _compiled_harness(registry)
 
-    operation = harness.program_surface.operation("run_batch.v1")
+    operation = harness.program_surface.operation("run_batch")
     assert operation is not None
     assert operation.supports_retry is True
     assert operation.retry_safe_error_codes == ("pre_dispatch_capacity_timeout",)
@@ -264,11 +264,11 @@ def test_program_compiler_accepts_task_enumeration_fanout_against_fixed_harness_
         version="1.0.0",
         harness_ref=harness.ref,
         nodes=(
-            ActionNode(node_id="enumerate", operation_id="enumerate_tasks.v1"),
+            ActionNode(node_id="enumerate", operation_id="enumerate_tasks"),
             FanoutNode(
                 node_id="run-each",
                 depends_on=("enumerate",),
-                operation_id="run_batch.v1",
+                operation_id="run_batch",
                 items=ProgramOutputRef(node_id="enumerate", output_port="tasks"),
                 item_argument="task_ref",
                 max_parallelism=2,
@@ -286,8 +286,8 @@ def test_program_compiler_accepts_task_enumeration_fanout_against_fixed_harness_
 
     assert compiled.topological_order == ("enumerate", "run-each", "stop")
     assert tuple(reference.operation_id for reference in compiled.operation_refs) == (
-        "enumerate_tasks.v1",
-        "run_batch.v1",
+        "enumerate_tasks",
+        "run_batch",
     )
 
 
@@ -301,12 +301,12 @@ def test_program_compiler_accepts_the_closed_internal_k9_sequence() -> None:
         nodes=(
             ActionNode(
                 node_id="analyse",
-                operation_id="run_semantic_subtask.v1",
+                operation_id="run_semantic_subtask",
             ),
             ActionNode(
                 node_id="check",
                 depends_on=("analyse",),
-                operation_id="check_subtask_contract.v1",
+                operation_id="check_subtask_contract",
                 arguments=(
                     ProgramArgument(
                         name="subject",
@@ -322,7 +322,7 @@ def test_program_compiler_accepts_the_closed_internal_k9_sequence() -> None:
             ActionNode(
                 node_id="finalize",
                 depends_on=("check",),
-                operation_id="finalize_proposed_plan.v1",
+                operation_id="finalize_proposed_plan",
                 arguments=(
                     ProgramArgument(
                         name="findings",
@@ -361,9 +361,9 @@ def test_program_compiler_accepts_the_closed_internal_k9_sequence() -> None:
         "stop",
     )
     assert tuple(reference.operation_id for reference in compiled.operation_refs) == (
-        "check_subtask_contract.v1",
-        "finalize_proposed_plan.v1",
-        "run_semantic_subtask.v1",
+        "check_subtask_contract",
+        "finalize_proposed_plan",
+        "run_semantic_subtask",
     )
 
 
@@ -377,7 +377,7 @@ def test_program_compiler_accepts_the_argument_free_k9_session_boundary() -> Non
         nodes=(
             ActionNode(
                 node_id="session",
-                operation_id="run_proposal_session.v1",
+                operation_id="run_proposal_session",
             ),
             StopNode(
                 node_id="stop",
@@ -398,14 +398,14 @@ def test_program_compiler_accepts_the_argument_free_k9_session_boundary() -> Non
     )
 
     assert compiled.topological_order == ("session", "stop")
-    assert tuple(reference.operation_id for reference in compiled.operation_refs) == ("run_proposal_session.v1",)
+    assert tuple(reference.operation_id for reference in compiled.operation_refs) == ("run_proposal_session",)
 
 
 @pytest.mark.parametrize(
     ("operation_id", "arguments"),
     (
         (
-            "run_proposal_session.v1",
+            "run_proposal_session",
             (
                 ProgramArgument(
                     name="session_plan",
@@ -414,7 +414,7 @@ def test_program_compiler_accepts_the_argument_free_k9_session_boundary() -> Non
             ),
         ),
         (
-            "run_semantic_subtask.v1",
+            "run_semantic_subtask",
             (
                 ProgramArgument(
                     name="source_scope",
@@ -422,9 +422,9 @@ def test_program_compiler_accepts_the_argument_free_k9_session_boundary() -> Non
                 ),
             ),
         ),
-        ("check_subtask_contract.v1", ()),
+        ("check_subtask_contract", ()),
         (
-            "check_subtask_contract.v1",
+            "check_subtask_contract",
             (
                 ProgramArgument(
                     name="subject",
@@ -432,9 +432,9 @@ def test_program_compiler_accepts_the_argument_free_k9_session_boundary() -> Non
                 ),
             ),
         ),
-        ("finalize_proposed_plan.v1", ()),
+        ("finalize_proposed_plan", ()),
         (
-            "finalize_proposed_plan.v1",
+            "finalize_proposed_plan",
             (
                 ProgramArgument(
                     name="findings",
@@ -528,7 +528,7 @@ def test_program_compiler_rejects_arguments_outside_finalize_task_abi(
                 operation_id=node.operation_id,
                 arguments=arguments,
             )
-            if isinstance(node, ActionNode) and node.operation_id == "finalize_task.v1"
+            if isinstance(node, ActionNode) and node.operation_id == "finalize_task"
             else node
             for node in source.nodes
         ),
@@ -545,7 +545,7 @@ def test_program_compiler_rejects_arguments_outside_finalize_task_abi(
     assert captured.value.diagnostic.code == "operation_argument_unsupported"
     assert (
         captured.value.diagnostic.message
-        == "finalize_task.v1 requires a literal task_ref and output-derived stage_receipts argument"
+        == "finalize_task requires a literal task_ref and output-derived stage_receipts argument"
     )
 
 
@@ -557,11 +557,11 @@ def test_program_compiler_rejects_verify_node_without_a_subject_verifier_operati
         version="1.0.0",
         harness_ref=harness.ref,
         nodes=(
-            ActionNode(node_id="run", operation_id="run_batch.v1"),
+            ActionNode(node_id="run", operation_id="run_batch"),
             VerifyNode(
                 node_id="verify",
                 depends_on=("run",),
-                operation_id="run_batch.v1",
+                operation_id="run_batch",
                 subject=ProgramOutputRef(node_id="run", output_port="result"),
             ),
             StopNode(node_id="stop", depends_on=("verify",), outcome=StopOutcome.SUCCEEDED),
@@ -589,9 +589,7 @@ def test_harness_compiler_rejects_unknown_or_tampered_kernel_capabilities() -> N
         }
     )
     bindings = tuple(tampered if binding.binding_id == "agent" else binding for binding in recipe.bindings)
-    invalid_recipe = HarnessRecipe(
-        recipe_id=recipe.recipe_id,
-        version=recipe.version,
+    invalid_recipe = HarnessSpec(
         summary=recipe.summary,
         budget=recipe.budget,
         bindings=bindings,
@@ -602,7 +600,7 @@ def test_harness_compiler_rejects_unknown_or_tampered_kernel_capabilities() -> N
             HarnessCompileRequest(
                 request_id="compile-tampered",
                 kernel_ref=registry.manifest.ref,
-                recipe=invalid_recipe,
+                spec=invalid_recipe,
             ),
             registry=registry,
         )
@@ -628,7 +626,7 @@ def test_harness_compiler_rejects_context_strategy_not_implemented_by_fixed_k() 
             HarnessCompileRequest(
                 request_id="compile-retrieval-context",
                 kernel_ref=registry.manifest.ref,
-                recipe=recipe,
+                spec=recipe,
             ),
             registry=registry,
         )
@@ -650,7 +648,7 @@ def test_harness_compiler_rejects_task_tools_for_adapter_without_tool_control() 
             HarnessCompileRequest(
                 request_id="compile-direct-tools",
                 kernel_ref=registry.manifest.ref,
-                recipe=recipe,
+                spec=recipe,
             ),
             registry=registry,
         )
@@ -684,7 +682,7 @@ def test_harness_compiler_accepts_context_for_rlm_with_exact_prompt_control() ->
         HarnessCompileRequest(
             request_id="compile-rlm-context",
             kernel_ref=registry.manifest.ref,
-            recipe=recipe,
+            spec=recipe,
         ),
         registry=registry,
     )
@@ -719,7 +717,7 @@ def test_harness_compiler_rejects_context_for_adapter_without_exact_prompt_contr
             HarnessCompileRequest(
                 request_id="compile-lambda-rlm-context",
                 kernel_ref=registry.manifest.ref,
-                recipe=recipe,
+                spec=recipe,
             ),
             registry=registry,
         )
@@ -743,7 +741,7 @@ def test_harness_compiler_rejects_worker_role_in_single_agent_kernel() -> None:
             HarnessCompileRequest(
                 request_id="compile-worker-role",
                 kernel_ref=registry.manifest.ref,
-                recipe=recipe,
+                spec=recipe,
             ),
             registry=registry,
         )
@@ -769,7 +767,7 @@ def test_harness_compiler_rejects_tool_access_mode_without_runtime_mapping() -> 
             HarnessCompileRequest(
                 request_id="compile-read-only-tools",
                 kernel_ref=registry.manifest.ref,
-                recipe=recipe,
+                spec=recipe,
             ),
             registry=registry,
         )
@@ -790,7 +788,7 @@ def test_harness_compiler_rejects_topology_edges_that_do_not_drive_runtime() -> 
             HarnessCompileRequest(
                 request_id="compile-unwired-verifier",
                 kernel_ref=registry.manifest.ref,
-                recipe=recipe,
+                spec=recipe,
             ),
             registry=registry,
         )
@@ -825,7 +823,7 @@ def test_harness_compiler_rejects_contract_schema_without_trusted_enforcement() 
             HarnessCompileRequest(
                 request_id="compile-untrusted-contract",
                 kernel_ref=registry.manifest.ref,
-                recipe=recipe,
+                spec=recipe,
             ),
             registry=registry,
         )
@@ -842,7 +840,7 @@ def test_program_compiler_pins_operations_and_topological_order() -> None:
         version="1.0.0",
         harness_ref=harness.ref,
         nodes=(
-            ActionNode(node_id="run", operation_id="run_batch.v1"),
+            ActionNode(node_id="run", operation_id="run_batch"),
             StopNode(
                 node_id="stop",
                 depends_on=("run",),
@@ -852,7 +850,7 @@ def test_program_compiler_pins_operations_and_topological_order() -> None:
     )
 
     compiled = compile_execution_program(source, harness=harness, registry=registry)
-    operation = harness.program_surface.operation("run_batch.v1")
+    operation = harness.program_surface.operation("run_batch")
 
     assert operation is not None
     assert compiled.topological_order == ("run", "stop")
@@ -870,7 +868,7 @@ def test_program_compiler_rejects_retry_for_run_batch_without_a_safe_error_taxon
         nodes=(
             ActionNode(
                 node_id="run",
-                operation_id="run_batch.v1",
+                operation_id="run_batch",
                 retry=RetryPolicy(
                     max_attempts=2,
                     retry_on=("pre_dispatch_capacity_timeout",),
@@ -890,7 +888,7 @@ def test_program_compiler_rejects_retry_for_run_batch_without_a_safe_error_taxon
 def test_program_compiler_rejects_a_harness_retry_taxonomy_not_attested_by_fixed_k() -> None:
     registry = default_kernel_registry()
     harness = _compiled_harness(registry)
-    operation = harness.program_surface.operation("run_batch.v1")
+    operation = harness.program_surface.operation("run_batch")
     assert operation is not None
     tampered_operation = operation.model_copy(
         update={
@@ -912,7 +910,7 @@ def test_program_compiler_rejects_a_harness_retry_taxonomy_not_attested_by_fixed
         version="1.0.0",
         harness_ref=tampered_harness.ref,
         nodes=(
-            ActionNode(node_id="run", operation_id="run_batch.v1"),
+            ActionNode(node_id="run", operation_id="run_batch"),
             StopNode(node_id="stop", depends_on=("run",), outcome=StopOutcome.SUCCEEDED),
         ),
     )
@@ -937,7 +935,7 @@ def test_program_compiler_rejects_retry_codes_outside_the_operation_safe_set() -
         nodes=(
             ActionNode(
                 node_id="run",
-                operation_id="run_batch.v1",
+                operation_id="run_batch",
                 retry=RetryPolicy(max_attempts=2, retry_on=("unknown_provider_failure",)),
             ),
             StopNode(node_id="stop", depends_on=("run",), outcome=StopOutcome.SUCCEEDED),
@@ -964,7 +962,7 @@ def test_program_compiler_accepts_retry_codes_declared_safe_by_the_operation() -
         nodes=(
             ActionNode(
                 node_id="run",
-                operation_id="run_batch.v1",
+                operation_id="run_batch",
                 retry=RetryPolicy(
                     max_attempts=2,
                     retry_on=("pre_dispatch_capacity_timeout",),
@@ -1014,7 +1012,7 @@ def test_program_compiler_rejects_run_batch_argument_outside_typed_kernel_input(
         nodes=(
             ActionNode(
                 node_id="run",
-                operation_id="run_batch.v1",
+                operation_id="run_batch",
                 arguments=(
                     ProgramArgument(
                         name="tasks",
@@ -1044,7 +1042,7 @@ def test_program_compiler_rejects_literal_stage_receipts() -> None:
         nodes=(
             ActionNode(
                 node_id="authority",
-                operation_id="run_stage.v1",
+                operation_id="run_stage",
                 arguments=(
                     ProgramArgument(name="task_ref", value=LiteralValue(value=task_id)),
                     ProgramArgument(name="stage_id", value=LiteralValue(value="authority")),
@@ -1079,7 +1077,7 @@ def test_harness_compiler_rejects_recursion_without_a_fixed_k_recursive_operatio
             HarnessCompileRequest(
                 request_id="compile-recursive-harness",
                 kernel_ref=registry.manifest.ref,
-                recipe=HarnessRecipe.model_validate(recipe_payload),
+                spec=HarnessSpec.model_validate(recipe_payload),
             ),
             registry=registry,
         )
@@ -1117,7 +1115,7 @@ def test_run_bundle_compiler_binds_real_task_package_and_infers_typed_harbor_rol
             version="1.0.0",
             harness_ref=harness.ref,
             nodes=(
-                ActionNode(node_id="run", operation_id="run_batch.v1"),
+                ActionNode(node_id="run", operation_id="run_batch"),
                 StopNode(node_id="stop", depends_on=("run",), outcome=StopOutcome.SUCCEEDED),
             ),
         ),
@@ -1294,7 +1292,7 @@ def test_run_bundle_compiler_rejects_context_larger_than_declared_bound(tmp_path
             version="1.0.0",
             harness_ref=harness.ref,
             nodes=(
-                ActionNode(node_id="run", operation_id="run_batch.v1"),
+                ActionNode(node_id="run", operation_id="run_batch"),
                 StopNode(node_id="stop", depends_on=("run",), outcome=StopOutcome.SUCCEEDED),
             ),
         ),
@@ -1327,7 +1325,7 @@ def test_run_bundle_compiler_rejects_task_tool_without_a_kernel_owned_runtime(tm
             version="1.0.0",
             harness_ref=harness.ref,
             nodes=(
-                ActionNode(node_id="run", operation_id="run_batch.v1"),
+                ActionNode(node_id="run", operation_id="run_batch"),
                 StopNode(node_id="stop", depends_on=("run",), outcome=StopOutcome.SUCCEEDED),
             ),
         ),
@@ -1360,7 +1358,7 @@ def _compiled_harness(
         HarnessCompileRequest(
             request_id=f"compile-{task_id.replace('/', '-')}",
             kernel_ref=registry.manifest.ref,
-            recipe=recipe,
+            spec=recipe,
         ),
         registry=registry,
     )
@@ -1392,11 +1390,9 @@ def _recipe(
     *,
     task_id: str,
     tool_id: str = "bash",
-) -> HarnessRecipe:
+) -> HarnessSpec:
     capability = registry.capability
-    return HarnessRecipe(
-        recipe_id="adaptive-review",
-        version="1.0.0",
+    return HarnessSpec(
         summary="Run one exact review task through the fixed Harbor kernel.",
         bindings=(
             HarnessBindingSpec(
@@ -1558,13 +1554,13 @@ def _stage_program(*, harness: CompiledHarnessInstance, task_id: str) -> Executi
         nodes=(
             ActionNode(
                 node_id="inventory",
-                operation_id="run_stage.v1",
+                operation_id="run_stage",
                 arguments=(task_argument, stage_argument("inventory")),
             ),
             ActionNode(
                 node_id="authority",
                 depends_on=("inventory",),
-                operation_id="run_stage.v1",
+                operation_id="run_stage",
                 arguments=(
                     task_argument,
                     stage_argument("authority"),
@@ -1585,7 +1581,7 @@ def _stage_program(*, harness: CompiledHarnessInstance, task_id: str) -> Executi
             ActionNode(
                 node_id="decision",
                 depends_on=("decision-inputs",),
-                operation_id="run_stage.v1",
+                operation_id="run_stage",
                 arguments=(
                     task_argument,
                     stage_argument("decision"),
@@ -1607,7 +1603,7 @@ def _stage_program(*, harness: CompiledHarnessInstance, task_id: str) -> Executi
             ActionNode(
                 node_id="finalize",
                 depends_on=("all-stages",),
-                operation_id="finalize_task.v1",
+                operation_id="finalize_task",
                 arguments=(
                     task_argument,
                     ProgramArgument(
@@ -1627,17 +1623,17 @@ def _stage_program(*, harness: CompiledHarnessInstance, task_id: str) -> Executi
 
 
 def _replace_configuration(
-    recipe: HarnessRecipe,
+    recipe: HarnessSpec,
     *,
     binding_id: str,
     configuration: ContextBindingConfig | ToolBindingConfig,
-) -> HarnessRecipe:
+) -> HarnessSpec:
     binding = recipe.binding(binding_id)
     assert binding is not None
     return _replace_binding(recipe, binding.model_copy(update={"configuration": configuration}))
 
 
-def _replace_binding(recipe: HarnessRecipe, replacement: HarnessBindingSpec) -> HarnessRecipe:
+def _replace_binding(recipe: HarnessSpec, replacement: HarnessBindingSpec) -> HarnessSpec:
     return _rebuild_recipe(
         recipe,
         bindings=tuple(
@@ -1647,14 +1643,14 @@ def _replace_binding(recipe: HarnessRecipe, replacement: HarnessBindingSpec) -> 
 
 
 def _rebuild_recipe(
-    recipe: HarnessRecipe,
+    recipe: HarnessSpec,
     *,
     contracts: tuple[HarnessContractSpec, ...] | None = None,
     bindings: tuple[HarnessBindingSpec, ...] | None = None,
-) -> HarnessRecipe:
+) -> HarnessSpec:
     payload = recipe.model_dump(mode="python")
     if contracts is not None:
         payload["contracts"] = contracts
     if bindings is not None:
         payload["bindings"] = bindings
-    return HarnessRecipe.model_validate(payload)
+    return HarnessSpec.model_validate(payload)

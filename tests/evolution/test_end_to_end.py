@@ -1,4 +1,4 @@
-# ABOUTME: End-to-end test for the evolution loop from orchestrator through engine.
+# ABOUTME: End-to-end test for the functional evolution loop through the engine.
 # ABOUTME: Proves skills appear in workspace after evolution cycles with pattern detection.
 
 from __future__ import annotations
@@ -16,8 +16,9 @@ from aec_bench.contracts.evolution import (
 )
 from aec_bench.contracts.experiment_manifest import TaskSelector
 from aec_bench.contracts.trial_record import TrialRecord
+from aec_bench.evolution.application import run_evolution
 from aec_bench.evolution.engine import AECEvolutionEngine
-from aec_bench.evolution.orchestrator import EvolutionOrchestrator
+from aec_bench.evolution.strategy import HillClimbStrategy
 from aec_bench.evolution.workspace import Workspace
 from tests.support.trial_record_factories import make_trial_record
 
@@ -155,18 +156,19 @@ def _make_engine() -> AECEvolutionEngine:
 
 
 class TestEndToEnd:
-    """End-to-end tests for the full evolution loop from orchestrator through engine."""
+    """End-to-end tests for the full functional evolution loop through the engine."""
 
     def test_full_evolution_loop(self, tmp_path: Path) -> None:
-        """Run orchestrator with 3 cycles; verify result structure, skills, and gate."""
+        """Run three cycles and verify result structure, skills, and gate."""
         root = _scaffold_workspace(tmp_path / "ws")
         ws = Workspace(root)
         ws.init_versioning()
 
-        orchestrator = EvolutionOrchestrator(
+        result = run_evolution(
             workspace=ws,
             engine=_make_engine(),
-            solve_fn=_make_solve_fn(reward=0.5),
+            evaluate=_make_solve_fn(reward=0.5),
+            strategy=HillClimbStrategy(),
             config=_make_config(
                 max_cycles=3,
                 batch_size=2,
@@ -174,8 +176,6 @@ class TestEndToEnd:
                 workspace_path=str(root),
             ),
         )
-
-        result = orchestrator.run()
 
         assert result.cycles_completed == 3
         assert len(result.score_history) == 3
@@ -195,10 +195,11 @@ class TestEndToEnd:
         ws = Workspace(root)
         ws.init_versioning()
 
-        orchestrator = EvolutionOrchestrator(
+        run_evolution(
             workspace=ws,
             engine=_make_engine(),
-            solve_fn=_make_solve_fn(reward=0.5),
+            evaluate=_make_solve_fn(reward=0.5),
+            strategy=HillClimbStrategy(),
             config=_make_config(
                 max_cycles=3,
                 batch_size=2,
@@ -206,8 +207,6 @@ class TestEndToEnd:
                 workspace_path=str(root),
             ),
         )
-
-        orchestrator.run()
 
         candidates = ws.list_candidates()
         labels = {candidate.label for candidate in candidates}
@@ -216,27 +215,23 @@ class TestEndToEnd:
         assert len(candidates) >= 2, f"Expected at least 2 candidates, got: {labels}"
 
     def test_hill_climb_evolution_loop(self, tmp_path: Path) -> None:
-        """Run orchestrator with hill_climb strategy; verify score tracking."""
+        """Run the hill-climb strategy and verify score tracking."""
         root = _scaffold_workspace(tmp_path / "ws")
         ws = Workspace(root)
         ws.init_versioning()
 
-        from aec_bench.evolution.strategy import HillClimbStrategy
-
-        orchestrator = EvolutionOrchestrator(
+        result = run_evolution(
             workspace=ws,
             engine=_make_engine(),
-            solve_fn=_make_solve_fn(reward=0.5),
+            evaluate=_make_solve_fn(reward=0.5),
+            strategy=HillClimbStrategy(),
             config=_make_config(
                 max_cycles=3,
                 batch_size=2,
                 stagnation_window=5,
                 workspace_path=str(root),
             ),
-            strategy=HillClimbStrategy(),
         )
-
-        result = orchestrator.run()
 
         assert result.cycles_completed == 3
         assert len(result.score_history) == 3
@@ -251,10 +246,11 @@ class TestEndToEnd:
         ws = Workspace(root)
         ws.init_versioning()
 
-        orchestrator = EvolutionOrchestrator(
+        result = run_evolution(
             workspace=ws,
             engine=_make_engine(),
-            solve_fn=_make_solve_fn(reward=0.95),
+            evaluate=_make_solve_fn(reward=0.95),
+            strategy=HillClimbStrategy(),
             config=_make_config(
                 max_cycles=10,
                 batch_size=2,
@@ -263,8 +259,6 @@ class TestEndToEnd:
                 workspace_path=str(root),
             ),
         )
-
-        result = orchestrator.run()
 
         assert result.converged is True
         assert result.cycles_completed < 10

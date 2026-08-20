@@ -1,5 +1,5 @@
-# ABOUTME: Creates semantic schema-2 dataset manifests from validated task definitions.
-# ABOUTME: Fails on missing selected tasks and delegates immutable persistence to dataset storage.
+# ABOUTME: Composes semantic schema-2 dataset manifests from validated task definitions.
+# ABOUTME: Keeps manifest construction separate from immutable dataset storage.
 
 from __future__ import annotations
 
@@ -13,7 +13,6 @@ from aec_bench.contracts.dataset import (
     DatasetTaskKind,
 )
 from aec_bench.contracts.task_definition import TaskDefinition
-from aec_bench.dataset.storage import write_manifest
 
 _TASK_KINDS = {"artifact", "lifecycle", "world"}
 
@@ -25,16 +24,15 @@ def _task_kind(task: TaskDefinition) -> DatasetTaskKind:
     return cast(DatasetTaskKind, raw)
 
 
-def create_dataset_from_tasks(
+def compose_dataset(
     *,
     dataset_id: str,
     tasks: list[TaskDefinition],
     tasks_root: Path,
-    datasets_root: Path,
     description: str,
     generation: DatasetGeneration | None = None,
 ) -> DatasetManifest:
-    """Create and immutably store one semantic dataset manifest."""
+    """Build one semantic dataset manifest without storing it."""
 
     project_root = tasks_root.parent.resolve()
     entries: list[DatasetTaskEntry] = []
@@ -54,14 +52,12 @@ def create_dataset_from_tasks(
             )
         )
 
-    manifest = DatasetManifest(
+    return DatasetManifest(
         dataset_id=dataset_id,
         description=description,
         tasks=tuple(entries),
         generation=generation,
     )
-    write_manifest(datasets_root, manifest)
-    return manifest
 
 
-__all__ = ("create_dataset_from_tasks",)
+__all__ = ("compose_dataset",)

@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 
 from aec_bench.contracts.dataset import DatasetManifest, DatasetTaskEntry
 from aec_bench.dataset.publication import publish_dataset
-from aec_bench.dataset.storage import write_manifest
+from aec_bench.dataset.storage import save_dataset
 from aec_bench.web.app import create_app
 
 
@@ -30,7 +30,7 @@ def _make_client_with_dataset(tmp_path: Path) -> TestClient:
             )
         ],
     )
-    write_manifest(datasets, manifest)
+    save_dataset(datasets, manifest)
     publish_dataset(
         manifest=manifest,
         datasets_root=datasets,

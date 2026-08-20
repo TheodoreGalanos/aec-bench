@@ -122,6 +122,18 @@ class HarborExperimentDispatcher:
     ) -> HarborDispatchResult:
         if not tasks:
             raise HarborDispatchError("manifest did not select any tasks for Harbor dispatch")
+        overrides = dict(task_path_overrides or {})
+        feedback_tasks = tuple(
+            task.task_id
+            for task in tasks
+            if (
+                overrides.get(task.task_id, self.project_root / "tasks" / task.task_id) / "verifier_retry_prompt.md"
+            ).is_file()
+        )
+        if feedback_tasks:
+            raise HarborDispatchError(
+                "verifier-feedback is not supported by Harbor dispatch: " + ", ".join(feedback_tasks)
+            )
 
         job_config = build_harbor_job_config(
             manifest=manifest,
@@ -245,6 +257,8 @@ ENTRYPOINT_AGENT_RUNTIME_NAME = "entrypoint"
 def _harbor_agent_config(agent: AgentConfig) -> dict[str, Any]:
     kwargs = dict(agent.parameters)
     kwargs["adapter"] = agent.adapter
+    if agent.system_prompt is not None:
+        kwargs["system_prompt"] = agent.system_prompt
     if agent.client is not None:
         kwargs["client"] = {
             "client_kind": agent.client.kind,

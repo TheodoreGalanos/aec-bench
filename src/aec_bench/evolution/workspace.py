@@ -120,7 +120,7 @@ class Workspace:
         """Replace the workspace's prompt and skills with those from a snapshot.
 
         Clears all existing skills and writes the snapshot's skills and prompt.
-        Used by the orchestrator to switch to a selected parent from the archive
+        Used by the evolution loop to switch to a selected parent from the archive
         before evolving on top of it.
         """
         # Clear existing skills

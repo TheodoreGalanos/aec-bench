@@ -61,10 +61,9 @@ def _rebind_request(
     payload = copy.deepcopy(source)
     payload.pop("content_sha256", None)
     payload["kernel_ref"] = registry.manifest.ref.model_dump(mode="json")
-    for key in ("fixed_harness_recipe", "learned_harness_recipe"):
-        recipe = payload[key]
-        recipe.pop("content_sha256", None)
-        for binding in recipe["bindings"]:
+    for key in ("fixed_harness_spec", "learned_harness_spec"):
+        spec = payload[key]
+        for binding in spec["bindings"]:
             capability_id = binding["capability_ref"]["capability_id"]
             binding["capability_ref"] = registry.capability(capability_id).ref.model_dump(mode="json")
     for key in ("fixed_program", "learned_program"):

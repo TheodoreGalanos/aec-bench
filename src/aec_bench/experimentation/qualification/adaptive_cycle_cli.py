@@ -46,10 +46,10 @@ def run_cli(
             tasks_root=tasks_root,
         )
         _preflight_harness_runtime(
-            recipes=(
-                spec.repair_parent.harness_request.recipe,
-                spec.child_calibration.instantiation.fixed_harness_recipe,
-                spec.transfer.instantiation.fixed_harness_recipe,
+            specs=(
+                spec.repair_parent.harness_request.spec,
+                spec.child_calibration.instantiation.fixed_harness_spec,
+                spec.transfer.instantiation.fixed_harness_spec,
             ),
             project_root=project_root,
             repo_root=repo_root,

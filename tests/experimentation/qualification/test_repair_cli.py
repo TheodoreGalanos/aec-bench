@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from aec_bench.contracts.harness_instance import HarnessCompileRequest, HarnessRecipe
+from aec_bench.contracts.harness_instance import HarnessCompileRequest, HarnessSpec
 from aec_bench.experimentation.qualification.repair_cli import _preflight_repair_runtime, run_cli
 from aec_bench.experimentation.qualification.repair_run import RepairRunSpec
 from aec_bench.experimentation.qualification.repair_runtime import RepairRuntime
@@ -178,10 +178,10 @@ def _with_morph_backend(spec: RepairRunSpec, fixture: RepairRuntime) -> RepairRu
     morph_ref = fixture.registry.capability("aecbench.backend.harbor.morph").ref
     bindings = tuple(
         binding.model_copy(update={"capability_ref": morph_ref}) if binding.binding_id == "compute" else binding
-        for binding in spec.parent.harness_request.recipe.bindings
+        for binding in spec.parent.harness_request.spec.bindings
     )
-    recipe = HarnessRecipe(
-        **spec.parent.harness_request.recipe.model_dump(
+    recipe = HarnessSpec(
+        **spec.parent.harness_request.spec.model_dump(
             mode="python",
             exclude={"content_sha256", "bindings"},
         ),
@@ -190,7 +190,7 @@ def _with_morph_backend(spec: RepairRunSpec, fixture: RepairRuntime) -> RepairRu
     request = HarnessCompileRequest(
         request_id=spec.parent.harness_request.request_id,
         kernel_ref=spec.parent.harness_request.kernel_ref,
-        recipe=recipe,
+        spec=recipe,
     )
     parent = spec.parent.model_copy(update={"harness_request": request})
     return RepairRunSpec(

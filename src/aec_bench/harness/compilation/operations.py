@@ -146,18 +146,18 @@ def _validate_legacy_operation_arguments(
 ) -> None:
     """Preserve the exact v1 ABI only for an explicit definition-free registry."""
     names = {argument.name for argument in node.arguments}
-    if node.operation_id == "enumerate_tasks.v1":
+    if node.operation_id == "enumerate_tasks":
         _validate_legacy_enumeration(node=node, names=names)
         return
     if node.operation_id in {
-        "run_proposal_session.v1",
-        "run_semantic_subtask.v1",
+        "run_proposal_session",
+        "run_semantic_subtask",
     }:
         _validate_legacy_argument_free_action(node=node, names=names)
         return
     if node.operation_id in {
-        "check_subtask_contract.v1",
-        "finalize_proposed_plan.v1",
+        "check_subtask_contract",
+        "finalize_proposed_plan",
     }:
         _validate_legacy_single_output_action(
             node=node,
@@ -165,21 +165,21 @@ def _validate_legacy_operation_arguments(
             profile=profile,
         )
         return
-    if node.operation_id == "run_stage.v1":
+    if node.operation_id == "run_stage":
         _validate_legacy_run_stage(
             node=node,
             names=names,
             operation=operation,
         )
         return
-    if node.operation_id == "finalize_task.v1":
+    if node.operation_id == "finalize_task":
         _validate_legacy_finalize_task(
             node=node,
             names=names,
             operation=operation,
         )
         return
-    if node.operation_id == "run_batch.v1":
+    if node.operation_id == "run_batch":
         _validate_legacy_run_batch(node=node, names=names)
 
 
@@ -192,7 +192,7 @@ def _validate_legacy_enumeration(
         _fail(
             owner=CompilationOwner.PROGRAM,
             code="operation_argument_unsupported",
-            message="enumerate_tasks.v1 accepts no arguments and cannot be a fanout target",
+            message="enumerate_tasks accepts no arguments and cannot be a fanout target",
             subject_ids=(node.node_id, *tuple(sorted(names))),
         )
 
@@ -218,14 +218,14 @@ def _validate_legacy_single_output_action(
     profile: ProgramCompilationProfile,
 ) -> None:
     if (
-        node.operation_id == "finalize_proposed_plan.v1"
+        node.operation_id == "finalize_proposed_plan"
         and profile is ProgramCompilationProfile.MONOLITHIC_INCUMBENT
         and isinstance(node, ActionNode)
         and not node.arguments
         and not node.depends_on
     ):
         return
-    argument_name = "subject" if node.operation_id == "check_subtask_contract.v1" else "findings"
+    argument_name = "subject" if node.operation_id == "check_subtask_contract" else "findings"
     argument = next(
         (candidate for candidate in node.arguments if candidate.name == argument_name),
         None,
@@ -275,7 +275,7 @@ def _validate_legacy_run_stage(
             owner=CompilationOwner.PROGRAM,
             code="operation_argument_unsupported",
             message=(
-                "run_stage.v1 requires literal task_ref/stage_id arguments and accepts only "
+                "run_stage requires literal task_ref/stage_id arguments and accepts only "
                 "an output-derived upstream_receipts argument"
             ),
             subject_ids=(node.node_id, *tuple(sorted(names))),
@@ -303,7 +303,7 @@ def _validate_legacy_finalize_task(
         _fail(
             owner=CompilationOwner.PROGRAM,
             code="operation_argument_unsupported",
-            message="finalize_task.v1 requires a literal task_ref and output-derived stage_receipts argument",
+            message="finalize_task requires a literal task_ref and output-derived stage_receipts argument",
             subject_ids=(node.node_id, *tuple(sorted(names))),
         )
 
@@ -321,9 +321,7 @@ def _validate_legacy_run_batch(
         _fail(
             owner=CompilationOwner.PROGRAM,
             code="operation_argument_unsupported",
-            message=(
-                "run_batch.v1 accepts one optional task_ref/task_refs selection; fanout must bind exactly task_ref"
-            ),
+            message=("run_batch accepts one optional task_ref/task_refs selection; fanout must bind exactly task_ref"),
             subject_ids=(node.node_id, *tuple(sorted(names))),
         )
 

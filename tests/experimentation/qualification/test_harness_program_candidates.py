@@ -27,7 +27,7 @@ from aec_bench.contracts.harness_instance import (
     HarnessContractEnforcement,
     HarnessContractKind,
     HarnessContractSpec,
-    HarnessRecipe,
+    HarnessSpec,
     HarnessTopologyRole,
     ResultImportBindingConfig,
     TaskSourceBindingConfig,
@@ -176,7 +176,7 @@ def test_materialized_set_rejects_a_valid_bundle_swapped_into_the_wrong_cell(tmp
 )
 def test_factory_request_rejects_factor_leakage(tmp_path: Path, leakage: str, message: str) -> None:
     registry, _, request = _factory_inputs(tmp_path)
-    learned_recipe = request.learned_harness_recipe
+    learned_recipe = request.learned_harness_spec
     learned_program = request.learned_program
     if leakage == "tasks":
         learned_recipe = _replace_binding_configuration(
@@ -195,7 +195,7 @@ def test_factory_request_rejects_factor_leakage(tmp_path: Path, leakage: str, me
         )
     elif leakage == "harness_budget":
         recipe_payload = learned_recipe.model_dump(mode="python")
-        learned_recipe = HarnessRecipe.model_validate(
+        learned_recipe = HarnessSpec.model_validate(
             recipe_payload | {"budget": HarnessBudget(max_total_attempts=request.harness_budget.max_total_attempts - 1)}
         )
     elif leakage == "program_budget":
@@ -207,7 +207,7 @@ def test_factory_request_rejects_factor_leakage(tmp_path: Path, leakage: str, me
         )
 
     payload = request.model_dump(mode="python") | {
-        "learned_harness_recipe": learned_recipe,
+        "learned_harness_spec": learned_recipe,
         "learned_program": learned_program,
     }
     payload.pop("content_sha256")
@@ -235,10 +235,9 @@ def test_factory_request_rejects_cosmetic_factor_differences(tmp_path: Path, fac
     _, _, request = _factory_inputs(tmp_path)
     payload = request.model_dump(mode="python", exclude={"content_sha256"})
     if factor == "harness":
-        cosmetic = request.fixed_harness_recipe.model_dump(mode="python", exclude={"content_sha256"})
-        cosmetic["recipe_id"] = "cosmetic-hx"
-        cosmetic["summary"] = "Different identity and prose with identical runtime behavior."
-        payload["learned_harness_recipe"] = HarnessRecipe.model_validate(cosmetic)
+        cosmetic = request.fixed_harness_spec.model_dump(mode="python", exclude={"content_sha256"})
+        cosmetic["summary"] = "Different prose with identical runtime behavior."
+        payload["learned_harness_spec"] = HarnessSpec.model_validate(cosmetic)
     else:
         cosmetic = request.fixed_program.model_dump(mode="python", exclude={"content_sha256"})
         cosmetic["factor_id"] = "cosmetic-px"
@@ -258,13 +257,13 @@ def test_harness_runtime_semantics_ignore_contract_identity_and_prose(tmp_path: 
         enforcement=HarnessContractEnforcement.RUNTIME,
         summary="Require a structured answer.",
     )
-    source = request.fixed_harness_recipe.model_dump(mode="python", exclude={"content_sha256"})
+    source = request.fixed_harness_spec.model_dump(mode="python", exclude={"content_sha256"})
     source["contracts"] = (contract,)
     source["bindings"] = tuple(
         binding.model_copy(update={"contract_ids": (contract.contract_id,)})
-        for binding in request.fixed_harness_recipe.bindings
+        for binding in request.fixed_harness_spec.bindings
     )
-    original = HarnessRecipe.model_validate(source)
+    original = HarnessSpec.model_validate(source)
 
     renamed_contract = HarnessContractSpec(
         contract_id="renamed-answer-contract",
@@ -278,7 +277,7 @@ def test_harness_runtime_semantics_ignore_contract_identity_and_prose(tmp_path: 
     renamed_source["bindings"] = tuple(
         binding.model_copy(update={"contract_ids": (renamed_contract.contract_id,)}) for binding in original.bindings
     )
-    renamed = HarnessRecipe.model_validate(renamed_source)
+    renamed = HarnessSpec.model_validate(renamed_source)
 
     assert harness_runtime_semantics(original) == harness_runtime_semantics(renamed)
 
@@ -341,14 +340,12 @@ def _factory_inputs(
     program_limits = ProgramLimits()
     fixed_recipe = _recipe(
         registry,
-        recipe_id="harness-program-h0",
         task_refs=task_refs,
         adapter_capability="aecbench.adapter.tool-loop",
         budget=harness_budget,
     )
     learned_recipe = _recipe(
         registry,
-        recipe_id="harness-program-hx",
         task_refs=task_refs,
         adapter_capability="aecbench.adapter.rlm",
         budget=harness_budget,
@@ -357,7 +354,7 @@ def _factory_inputs(
         factor_id="harness-program-p0",
         version="1.0.0",
         nodes=(
-            ActionNode(node_id="run", operation_id="run_batch.v1"),
+            ActionNode(node_id="run", operation_id="run_batch"),
             StopNode(node_id="stop", depends_on=("run",), outcome=StopOutcome.SUCCEEDED),
         ),
         limits=program_limits,
@@ -366,11 +363,11 @@ def _factory_inputs(
         factor_id="harness-program-px",
         version="1.0.0",
         nodes=(
-            ActionNode(node_id="enumerate", operation_id="enumerate_tasks.v1"),
+            ActionNode(node_id="enumerate", operation_id="enumerate_tasks"),
             FanoutNode(
                 node_id="run-each",
                 depends_on=("enumerate",),
-                operation_id="run_batch.v1",
+                operation_id="run_batch",
                 items=ProgramOutputRef(node_id="enumerate", output_port="tasks"),
                 item_argument="task_ref",
                 max_parallelism=2,
@@ -390,8 +387,8 @@ def _factory_inputs(
         program_limits=program_limits,
         seeds=(17, 29),
         repetitions=2,
-        fixed_harness_recipe=fixed_recipe,
-        learned_harness_recipe=learned_recipe,
+        fixed_harness_spec=fixed_recipe,
+        learned_harness_spec=learned_recipe,
         fixed_program=fixed_program,
         learned_program=learned_program,
     )
@@ -401,15 +398,12 @@ def _factory_inputs(
 def _recipe(
     registry: KernelRuntimeRegistry,
     *,
-    recipe_id: str,
     task_refs: tuple[str, ...],
     adapter_capability: str,
     budget: HarnessBudget,
-) -> HarnessRecipe:
+) -> HarnessSpec:
     capability = registry.capability
-    return HarnessRecipe(
-        recipe_id=recipe_id,
-        version="1.0.0",
+    return HarnessSpec(
         summary="Run one exact task through one explicit harness treatment.",
         budget=budget,
         bindings=(
@@ -459,9 +453,9 @@ def _recipe(
 
 
 def _replace_binding_configuration(
-    recipe: HarnessRecipe,
+    recipe: HarnessSpec,
     replacement: TaskSourceBindingConfig | AgentBindingConfig,
-) -> HarnessRecipe:
+) -> HarnessSpec:
     bindings = tuple(
         binding.model_copy(update={"configuration": replacement})
         if isinstance(binding.configuration, type(replacement))
@@ -469,4 +463,4 @@ def _replace_binding_configuration(
         for binding in recipe.bindings
     )
     payload = recipe.model_dump(mode="python")
-    return HarnessRecipe.model_validate(payload | {"bindings": bindings})
+    return HarnessSpec.model_validate(payload | {"bindings": bindings})

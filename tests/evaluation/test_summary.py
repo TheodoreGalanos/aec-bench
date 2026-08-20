@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from aec_bench.contracts.agent_output import AgentOutput, AgentOutputStatus
-from aec_bench.contracts.trial_record import OutputRecord
+from aec_bench.contracts.trial_record import EvaluationStatus, ExecutionStatus, OutputRecord
 from aec_bench.evaluation.behavioral import (
     BehavioralTrace,
     BondType,
@@ -70,6 +70,26 @@ def test_summarize_evaluation_records_computes_overall_and_grouped_metrics() -> 
     assert summary["by_adapter"]["tool_loop"]["n_trials"] == 2
     assert summary["by_task_prefix"]["electrical"]["mean_reward"] == pytest.approx(1.0)
     assert summary["by_task_prefix"]["mechanical"]["mean_reward"] == pytest.approx(0.5)
+
+
+def test_summarize_evaluation_records_keeps_unevaluated_failures_explicit() -> None:
+    evaluated = make_trial_record(trial_id="trial-evaluated")
+    failed = make_trial_record(
+        trial_id="trial-failed",
+        execution_status=ExecutionStatus.FAILED,
+        evaluation_status=EvaluationStatus.FAILED,
+        evaluation=None,
+        output=None,
+    )
+
+    summary = summarize_evaluation_records([evaluated, failed])
+
+    assert summary["n_trials"] == 2
+    assert summary["n_evaluated"] == 1
+    assert summary["n_unevaluated"] == 1
+    assert summary["mean_reward"] == pytest.approx(1.0)
+    assert summary["by_adapter"]["tool_loop"]["n_trials"] == 2
+    assert summary["by_adapter"]["tool_loop"]["n_unevaluated"] == 1
 
 
 def test_summarize_evaluation_records_includes_behavioral_block_when_classifier_is_supplied(

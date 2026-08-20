@@ -12,7 +12,6 @@ from rich.table import Table
 from aec_bench.cli.commands.generate_dockerfiles import generate_dockerfiles_command
 from aec_bench.cli.output import console, emit, print_success, print_warning
 from aec_bench.contracts.task_definition import Visibility
-from aec_bench.templates.contracts import ToolMode
 from aec_bench.templates.registry import LoadedTemplate, discover_templates, load_template, validate_template
 
 app = typer.Typer(help="Generate task instances from templates.", no_args_is_help=True)
@@ -177,85 +176,20 @@ def generate_task(
         )
         return
 
-    # Import generation modules lazily to keep startup fast
-    from aec_bench.generation.replay import (
-        GenerationInstance,
-        GenerationManifest,
-        prepare_template_source,
-        require_available_sidecar_paths,
-        write_generation_config,
-        write_generation_manifest,
-    )
-    from aec_bench.generation.sampler import sample_instance
-    from aec_bench.generation.scaffolder import scaffold_task_instance
+    from aec_bench.generation.application import generate_template_instances
 
-    resolved_output = output.resolve()
-    resolved_output.mkdir(parents=True, exist_ok=True)
-    require_available_sidecar_paths(resolved_output)
-    prepared_source = prepare_template_source((loaded_template,), resolved_output)
-    template_id = prepared_source.template_ids[loaded_template.path.resolve()]
-    effective_tool_mode = (
-        ToolMode(tool_mode)
-        if tool_mode is not None
-        else ToolMode.WITH_TOOL
-        if config.meta.tool_mode is ToolMode.BOTH
-        else config.meta.tool_mode
+    generated = generate_template_instances(
+        template=loaded_template,
+        output_root=output,
+        count=instances,
+        difficulties=tuple(difficulty_cycle),
+        seed=seed,
+        start_index=start_index,
+        tool_mode=tool_mode,
+        task_visibility=task_visibility,
     )
-    created_paths: list[Path] = []
-    replay_instances: list[GenerationInstance] = []
-
-    for i in range(instances):
-        diff = difficulty_cycle[i % len(difficulty_cycle)]
-        instance_index = start_index + i
-        instance = sample_instance(
-            template=loaded_template,
-            difficulty_name=diff,
-            seed=seed,
-            instance_index=instance_index,
-        )
-        instance_dir = scaffold_task_instance(
-            template=loaded_template,
-            instance=instance,
-            output_dir=resolved_output,
-            tool_mode_override=tool_mode,
-            task_visibility=task_visibility,
-        )
-        created_paths.append(instance_dir)
-        replay_instances.append(
-            GenerationInstance(
-                task_id=instance_dir.relative_to(resolved_output).as_posix(),
-                template_id=template_id,
-                seed=seed,
-                instance_index=instance_index,
-                difficulty=diff,
-                tool_mode=effective_tool_mode,
-                task_visibility=task_visibility,
-            )
-        )
-
-    config_ref = write_generation_config(
-        resolved_output,
-        {
-            "mode": "task",
-            "suite_id": f"{config.meta.name}-standalone",
-            "template_id": template_id,
-            "seed": seed,
-            "start_index": start_index,
-            "instances": instances,
-            "difficulties": difficulty_cycle,
-            "tool_mode": effective_tool_mode.value,
-            "task_visibility": task_visibility.value,
-        },
-    )
-    write_generation_manifest(
-        resolved_output,
-        GenerationManifest(
-            suite_id=f"{config.meta.name}-standalone",
-            source=prepared_source.source,
-            config_ref=config_ref,
-            instances=tuple(replay_instances),
-        ),
-    )
+    resolved_output = generated.output_root
+    created_paths = list(generated.task_paths)
 
     results_list = [
         {
@@ -450,10 +384,10 @@ def generate_suite(
     # Lazy imports to keep CLI startup fast
     from aec_bench.generation.dataset import (
         OutputConfig,
-        compose_dataset,
-        execute_plan,
         filter_templates,
+        generate_instances,
         load_suite_config,
+        plan_suite,
     )
     from aec_bench.templates.registry import discover_templates
 
@@ -524,7 +458,7 @@ def generate_suite(
 
     # Compose plan
     try:
-        plan = compose_dataset(suite_config, templates)
+        plan = plan_suite(suite_config, templates)
     except ValueError as exc:
         emit(
             "generate suite",
@@ -566,13 +500,13 @@ def generate_suite(
         return
 
     # Execute
-    manifest = execute_plan(plan, suite_config)
+    generated = generate_instances(plan, suite_config)
 
     out_dir = suite_config.output.dir.resolve()
     result_data: dict[str, object] = {
         "dry_run": False,
         **plan_summary,
-        "instances_generated": len(manifest.instances),
+        "instances_generated": len(generated.task_paths),
         "manifest_path": str(out_dir / "generation-manifest.json"),
     }
 

@@ -433,13 +433,13 @@ def _staged_bundle(*, tasks_root: Path, task_id: str):
             nodes=(
                 ActionNode(
                     node_id="inventory",
-                    operation_id="run_stage.v1",
+                    operation_id="run_stage",
                     arguments=(task, stage("inventory")),
                 ),
                 ActionNode(
                     node_id="authority",
                     depends_on=("inventory",),
-                    operation_id="run_stage.v1",
+                    operation_id="run_stage",
                     arguments=(
                         task,
                         stage("authority"),
@@ -465,7 +465,7 @@ def _staged_bundle(*, tasks_root: Path, task_id: str):
                 ActionNode(
                     node_id="decision",
                     depends_on=("decision-inputs",),
-                    operation_id="run_stage.v1",
+                    operation_id="run_stage",
                     arguments=(
                         task,
                         stage("decision"),
@@ -492,7 +492,7 @@ def _staged_bundle(*, tasks_root: Path, task_id: str):
                 ActionNode(
                     node_id="finalize",
                     depends_on=("all-stages",),
-                    operation_id="finalize_task.v1",
+                    operation_id="finalize_task",
                     arguments=(
                         task,
                         ProgramArgument(

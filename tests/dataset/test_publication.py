@@ -14,7 +14,7 @@ from aec_bench.dataset.storage import (
     list_publications,
     read_dataset_reference,
     reference_path,
-    write_manifest,
+    save_dataset,
 )
 
 
@@ -30,7 +30,7 @@ def _fixture(tmp_path: Path) -> tuple[Path, Path, DatasetManifest]:
         tasks=[DatasetTaskEntry(task_id="civil/task-a", path="tasks/civil/task-a", task_kind="artifact")],
     )
     datasets_root = project_root / "artefacts" / "datasets"
-    write_manifest(datasets_root, manifest)
+    save_dataset(datasets_root, manifest)
     return project_root, datasets_root, manifest
 
 

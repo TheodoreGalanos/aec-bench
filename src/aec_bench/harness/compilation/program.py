@@ -301,7 +301,7 @@ def _validate_monolithic_incumbent_profile(
         len(program.nodes) == 2
         and len(actions) == 1
         and isinstance(actions[0], ActionNode)
-        and actions[0].operation_id == "finalize_proposed_plan.v1"
+        and actions[0].operation_id == "finalize_proposed_plan"
         and not actions[0].depends_on
         and not actions[0].arguments
         and len(stops) == 1

@@ -11,17 +11,18 @@ from typing import Any
 import pytest
 from pydantic import ValidationError
 
+from aec_bench.generation.application import load_generated_tasks, read_generated_task_set
 from aec_bench.generation.dataset import (
     CompositionPlan,
     OutputConfig,
     SuiteConfig,
     allocate_budget,
-    compose_dataset,
-    execute_plan,
     filter_templates,
+    generate_instances,
     largest_remainder_round,
     load_suite_config,
     normalise_ratios,
+    plan_suite,
 )
 from aec_bench.generation.replay import GenerationManifest
 from aec_bench.templates.contracts import (
@@ -317,7 +318,7 @@ def test_allocate_budget_single_template() -> None:
     assert result == {"only": 3}
 
 
-# --- Task 5: compose_dataset ---
+# --- Task 5: plan_suite ---
 
 
 def _make_template_with_difficulty(
@@ -352,31 +353,31 @@ def _make_template_with_difficulty(
     return _loaded_template(config, Path(f"/fake/{discipline}/{name}"))
 
 
-def test_compose_dataset_basic() -> None:
-    """compose_dataset with one template should produce correct number of planned instances."""
+def test_plan_suite_basic() -> None:
+    """plan_suite with one template should produce correct number of planned instances."""
     templates = [
         _make_template_with_difficulty("t1", "ground", {"easy": VisibilityLevel.ALL_GIVEN}),
     ]
     config = _parse_suite_toml(MINIMAL_SUITE_TOML)
-    plan = compose_dataset(config, templates)
+    plan = plan_suite(config, templates)
     assert isinstance(plan, CompositionPlan)
     assert len(plan.planned_instances) == config.instances.per_task
 
 
-def test_compose_dataset_preserves_duplicate_template_names() -> None:
+def test_plan_suite_preserves_duplicate_template_names() -> None:
     """Templates with the same name in different disciplines should not collapse."""
     templates = [
         _make_template_with_difficulty("shared", "civil", {"easy": VisibilityLevel.ALL_GIVEN}),
         _make_template_with_difficulty("shared", "ground", {"easy": VisibilityLevel.ALL_GIVEN}),
     ]
     config = _parse_suite_toml(MINIMAL_SUITE_TOML)
-    plan = compose_dataset(config, templates)
+    plan = plan_suite(config, templates)
 
     assert len(plan.planned_instances) == config.instances.per_task * len(templates)
     assert plan.summary.by_discipline == {"civil": 3, "ground": 3}
 
 
-def test_compose_dataset_difficulty_distribution() -> None:
+def test_plan_suite_difficulty_distribution() -> None:
     """Instances should be distributed across difficulties per coverage ratios."""
     templates = [
         _make_template_with_difficulty(
@@ -387,13 +388,13 @@ def test_compose_dataset_difficulty_distribution() -> None:
     ]
     toml_str = MINIMAL_SUITE_TOML.replace("per_task = 3", "per_task = 10")
     config = _parse_suite_toml(toml_str)
-    plan = compose_dataset(config, templates)
+    plan = plan_suite(config, templates)
     diffs = [p.difficulty for p in plan.planned_instances]
     assert diffs.count("easy") == 5
     assert diffs.count("medium") == 5
 
 
-def test_compose_dataset_skips_undefined_difficulty() -> None:
+def test_plan_suite_skips_undefined_difficulty() -> None:
     """If template doesn't define 'hard', its share is redistributed."""
     templates = [
         _make_template_with_difficulty(
@@ -407,13 +408,13 @@ def test_compose_dataset_skips_undefined_difficulty() -> None:
         "difficulties = {easy = 0.4, medium = 0.4, hard = 0.2}",
     ).replace("per_task = 3", "per_task = 5")
     config = _parse_suite_toml(toml_str)
-    plan = compose_dataset(config, templates)
+    plan = plan_suite(config, templates)
     diffs = [p.difficulty for p in plan.planned_instances]
     assert "hard" not in diffs
     assert len(diffs) == 5
 
 
-def test_compose_dataset_tool_mode_fixed_template() -> None:
+def test_plan_suite_tool_mode_fixed_template() -> None:
     """Template with tool_mode='with-tool' should give all instances 'with-tool'."""
     templates = [
         _make_template_with_difficulty(
@@ -424,11 +425,11 @@ def test_compose_dataset_tool_mode_fixed_template() -> None:
         ),
     ]
     config = _parse_suite_toml(MINIMAL_SUITE_TOML)
-    plan = compose_dataset(config, templates)
+    plan = plan_suite(config, templates)
     assert all(p.tool_mode == "with-tool" for p in plan.planned_instances)
 
 
-def test_compose_dataset_tool_mode_both_template() -> None:
+def test_plan_suite_tool_mode_both_template() -> None:
     """Template with tool_mode='both' should distribute per mix ratios."""
     templates = [
         _make_template_with_difficulty(
@@ -443,24 +444,24 @@ def test_compose_dataset_tool_mode_both_template() -> None:
         "mix = {with_tool = 0.5, no_tool = 0.5}",
     ).replace("per_task = 3", "per_task = 4")
     config = _parse_suite_toml(toml_str)
-    plan = compose_dataset(config, templates)
+    plan = plan_suite(config, templates)
     modes = [p.tool_mode for p in plan.planned_instances]
     assert modes.count("with-tool") == 2
     assert modes.count("no-tool") == 2
 
 
-def test_compose_dataset_deterministic() -> None:
+def test_plan_suite_deterministic() -> None:
     """Same config + templates + seed should produce identical plans."""
     templates = [
         _make_template_with_difficulty("t1", "ground", {"easy": VisibilityLevel.ALL_GIVEN}),
     ]
     config = _parse_suite_toml(MINIMAL_SUITE_TOML)
-    plan_a = compose_dataset(config, templates)
-    plan_b = compose_dataset(config, templates)
+    plan_a = plan_suite(config, templates)
+    plan_b = plan_suite(config, templates)
     assert plan_a.planned_instances == plan_b.planned_instances
 
 
-def test_compose_dataset_seed_offsets_are_unique() -> None:
+def test_plan_suite_seed_offsets_are_unique() -> None:
     """Every planned instance should have a unique seed_offset."""
     templates = [
         _make_template_with_difficulty("t1", "ground", {"easy": VisibilityLevel.ALL_GIVEN}),
@@ -468,12 +469,12 @@ def test_compose_dataset_seed_offsets_are_unique() -> None:
     ]
     toml_str = MINIMAL_SUITE_TOML.replace("per_task = 3", "per_task = 5")
     config = _parse_suite_toml(toml_str)
-    plan = compose_dataset(config, templates)
+    plan = plan_suite(config, templates)
     offsets = [p.seed_offset for p in plan.planned_instances]
     assert len(offsets) == len(set(offsets))
 
 
-def test_compose_dataset_coverage_warning_for_visibility() -> None:
+def test_plan_suite_coverage_warning_for_visibility() -> None:
     """If visibility target can't be met, a warning should be emitted."""
     templates = [
         _make_template_with_difficulty(
@@ -488,23 +489,23 @@ def test_compose_dataset_coverage_warning_for_visibility() -> None:
         1,  # only replace visibility mix
     )
     config = _parse_suite_toml(toml_str)
-    plan = compose_dataset(config, templates)
+    plan = plan_suite(config, templates)
     vis_warnings = [w for w in plan.warnings if w.category == "visibility"]
     assert len(vis_warnings) > 0
 
 
-def test_compose_dataset_summary_counts() -> None:
+def test_plan_suite_summary_counts() -> None:
     """Plan summary should have correct total and breakdowns."""
     templates = [
         _make_template_with_difficulty("t1", "ground", {"easy": VisibilityLevel.ALL_GIVEN}),
     ]
     config = _parse_suite_toml(MINIMAL_SUITE_TOML)
-    plan = compose_dataset(config, templates)
+    plan = plan_suite(config, templates)
     assert plan.summary.total_instances == len(plan.planned_instances)
     assert plan.summary.by_discipline["ground"] == len(plan.planned_instances)
 
 
-# --- Task 6: execute_plan + manifest ---
+# --- Task 6: generate_instances + manifest ---
 
 
 def test_load_suite_config_from_file(tmp_path: Path) -> None:
@@ -515,8 +516,8 @@ def test_load_suite_config_from_file(tmp_path: Path) -> None:
     assert config.name == "test-suite"
 
 
-def test_execute_plan_creates_instance_dirs(tmp_path: Path) -> None:
-    """execute_plan should scaffold all instances and return a manifest."""
+def test_generate_instances_creates_instance_dirs(tmp_path: Path) -> None:
+    """generate_instances should scaffold all instances and return a manifest."""
     from aec_bench.templates.registry import discover_templates
 
     templates, diagnostics = discover_templates()
@@ -527,22 +528,26 @@ def test_execute_plan_creates_instance_dirs(tmp_path: Path) -> None:
     config = _parse_suite_toml(toml_str)
     config_with_output = config.model_copy(update={"output": OutputConfig(dir=tmp_path)})
 
-    plan = compose_dataset(config_with_output, templates)
-    manifest = execute_plan(plan, config_with_output)
+    plan = plan_suite(config_with_output, templates)
+    generated = generate_instances(plan, config_with_output)
 
-    assert isinstance(manifest, GenerationManifest)
-    assert manifest.suite_id == "test-suite"
-    assert len(manifest.instances) == plan.summary.total_instances
+    assert isinstance(generated.manifest, GenerationManifest)
+    assert generated.output_root == tmp_path
+    assert generated.manifest.suite_id == "test-suite"
+    assert len(generated.task_paths) == plan.summary.total_instances
 
     # Verify instance directories exist on disk
-    for entry in manifest.instances:
-        instance_path = tmp_path / entry.task_id
+    for instance_path in generated.task_paths:
         assert instance_path.exists(), f"Missing: {instance_path}"
         assert (instance_path / "task.toml").exists()
 
+    reloaded = read_generated_task_set(tmp_path / "generation-manifest.json")
+    tasks = load_generated_tasks(reloaded)
+    assert [task.task_id for task in tasks] == [entry.task_id for entry in generated.manifest.instances]
 
-def test_execute_plan_writes_one_generation_manifest(tmp_path: Path) -> None:
-    """execute_plan writes deterministic replay data outside task directories."""
+
+def test_generate_instances_writes_one_generation_manifest(tmp_path: Path) -> None:
+    """generate_instances writes deterministic replay data outside task directories."""
     from aec_bench.templates.registry import discover_templates
 
     templates, diagnostics = discover_templates()
@@ -551,8 +556,8 @@ def test_execute_plan_writes_one_generation_manifest(tmp_path: Path) -> None:
     config = _parse_suite_toml(toml_str)
     config_with_output = config.model_copy(update={"output": OutputConfig(dir=tmp_path)})
 
-    plan = compose_dataset(config_with_output, templates)
-    execute_plan(plan, config_with_output)
+    plan = plan_suite(config_with_output, templates)
+    generate_instances(plan, config_with_output)
 
     manifest_path = tmp_path / "generation-manifest.json"
     assert manifest_path.exists()
@@ -572,7 +577,7 @@ def test_execute_plan_writes_one_generation_manifest(tmp_path: Path) -> None:
     assert all(term not in key.lower() for key in retained_keys for term in forbidden_generation_keys)
 
 
-def test_execute_plan_writes_unique_instance_paths(tmp_path: Path) -> None:
+def test_generate_instances_writes_unique_instance_paths(tmp_path: Path) -> None:
     """Suite execution should not collapse repeated template slots onto one path."""
     from aec_bench.templates.registry import discover_templates
 
@@ -585,9 +590,9 @@ def test_execute_plan_writes_unique_instance_paths(tmp_path: Path) -> None:
     config = _parse_suite_toml(toml_str)
     config_with_output = config.model_copy(update={"output": OutputConfig(dir=tmp_path)})
 
-    plan = compose_dataset(config_with_output, templates)
-    manifest = execute_plan(plan, config_with_output)
-    paths = [entry.task_id for entry in manifest.instances]
+    plan = plan_suite(config_with_output, templates)
+    generated = generate_instances(plan, config_with_output)
+    paths = [entry.task_id for entry in generated.manifest.instances]
 
     assert len(paths) == 5
     assert len(paths) == len(set(paths))
@@ -603,10 +608,10 @@ def test_manifest_instance_entries_keep_only_replay_inputs(tmp_path: Path) -> No
     config = _parse_suite_toml(toml_str)
     config_with_output = config.model_copy(update={"output": OutputConfig(dir=tmp_path)})
 
-    plan = compose_dataset(config_with_output, templates)
-    manifest = execute_plan(plan, config_with_output)
+    plan = plan_suite(config_with_output, templates)
+    generated = generate_instances(plan, config_with_output)
 
-    for entry in manifest.instances:
+    for entry in generated.manifest.instances:
         assert set(entry.model_dump(mode="json")) == {
             "task_id",
             "task_kind",

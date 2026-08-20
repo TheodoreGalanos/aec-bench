@@ -70,7 +70,7 @@ def evolve_run(
     """Run an evolution loop from a YAML configuration file."""
     import logging
 
-    # Configure logging so engine/orchestrator/backend messages are visible
+    # Configure logging so evolution application and backend messages are visible.
     log_level = logging.DEBUG if verbose else logging.INFO
     logging.basicConfig(
         level=log_level,
@@ -105,11 +105,11 @@ def evolve_run(
     require_optional_extra("Evolution execution support", "evolution,local-agents", ("numpy", "ribs", "pydantic_ai"))
 
     from aec_bench.communication.evolution_report import write_evolution_report
+    from aec_bench.evolution import run_evolution_from_config
     from aec_bench.evolution.config_loader import (
         load_evolution_config,
         resolve_task_dirs,
     )
-    from aec_bench.evolution.runner import build_evolution_runner_from_config
 
     try:
         config = load_evolution_config(config_path)
@@ -140,12 +140,11 @@ def evolve_run(
     console.print("\u2500" * 60)
 
     try:
-        runner = build_evolution_runner_from_config(
+        result = run_evolution_from_config(
             config=config,
             tasks_root=tasks_root,
             report_writer=write_evolution_report,
         )
-        result = runner.run()
     except Exception as exc:
         emit(
             "evolve run",

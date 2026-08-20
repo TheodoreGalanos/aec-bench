@@ -23,7 +23,7 @@ from aec_bench.contracts.harness_instance import (
     AgentBindingConfig,
     HarnessBindingSpec,
     HarnessCompileRequest,
-    HarnessRecipe,
+    HarnessSpec,
 )
 from aec_bench.contracts.run_bundle import RunPlan
 from aec_bench.contracts.task_review_snapshot import ReviewSnapshot
@@ -70,7 +70,7 @@ def _patch_agent_max_turns(
     *,
     iteration: int,
 ) -> HarnessCompileRequest:
-    matches = [binding for binding in request.recipe.bindings if binding.binding_id == patch.binding_id]
+    matches = [binding for binding in request.spec.bindings if binding.binding_id == patch.binding_id]
     if len(matches) != 1:
         raise ValueError("harness turn patch must target exactly one agent binding")
     binding = matches[0]
@@ -94,21 +94,19 @@ def _patch_agent_max_turns(
             contract_ids=item.contract_ids,
             configuration=replacement if item.binding_id == patch.binding_id else item.configuration,
         )
-        for item in request.recipe.bindings
+        for item in request.spec.bindings
     )
-    recipe = HarnessRecipe(
-        recipe_id=request.recipe.recipe_id,
-        version=request.recipe.version,
-        summary=request.recipe.summary,
-        contracts=request.recipe.contracts,
-        budget=request.recipe.budget,
-        recursion_policy=request.recipe.recursion_policy,
+    spec = HarnessSpec(
+        summary=request.spec.summary,
+        contracts=request.spec.contracts,
+        budget=request.spec.budget,
+        recursion_policy=request.spec.recursion_policy,
         bindings=bindings,
     )
     return HarnessCompileRequest(
         request_id=f"{request.request_id}.repair-{iteration}",
         kernel_ref=request.kernel_ref,
-        recipe=recipe,
+        spec=spec,
     )
 
 
@@ -118,7 +116,7 @@ def _patch_agent_capability(
     *,
     iteration: int,
 ) -> HarnessCompileRequest:
-    matches = [binding for binding in request.recipe.bindings if binding.binding_id == patch.binding_id]
+    matches = [binding for binding in request.spec.bindings if binding.binding_id == patch.binding_id]
     if len(matches) != 1 or not isinstance(matches[0].configuration, AgentBindingConfig):
         raise ValueError("harness capability patch must target exactly one agent binding")
     target = matches[0]
@@ -126,15 +124,15 @@ def _patch_agent_capability(
         raise ValueError("harness capability patch expected capability does not match the target binding")
     replacement = target.model_copy(update={"capability_ref": patch.replacement_capability_ref})
     bindings = tuple(
-        replacement if binding.binding_id == patch.binding_id else binding for binding in request.recipe.bindings
+        replacement if binding.binding_id == patch.binding_id else binding for binding in request.spec.bindings
     )
-    recipe_payload = request.recipe.model_dump(mode="python", exclude={"content_sha256"})
-    recipe_payload["bindings"] = bindings
-    recipe = HarnessRecipe.model_validate(recipe_payload)
+    spec_payload = request.spec.model_dump(mode="python", exclude={"content_sha256"})
+    spec_payload["bindings"] = bindings
+    spec = HarnessSpec.model_validate(spec_payload)
     return HarnessCompileRequest(
         request_id=f"{request.request_id}.repair-{iteration}",
         kernel_ref=request.kernel_ref,
-        recipe=recipe,
+        spec=spec,
     )
 
 
@@ -207,7 +205,7 @@ def validate_program_declared_stage_graph_source(
     )
     if (
         run.depends_on
-        or run.operation_id != "run_batch.v1"
+        or run.operation_id != "run_batch"
         or run.arguments not in accepted_arguments
         or run.retry is not None
         or run.recursion is not None
@@ -318,7 +316,7 @@ def _declared_stage_materialization_nodes(
                 ActionNode(
                     node_id=stage_node_ids[stage_id],
                     depends_on=dependencies,
-                    operation_id="run_stage.v1",
+                    operation_id="run_stage",
                     arguments=tuple(arguments),
                 )
             )
@@ -344,7 +342,7 @@ def _declared_stage_materialization_nodes(
             ActionNode(
                 node_id=finalizer_id,
                 depends_on=(all_stages_join_id,),
-                operation_id="finalize_task.v1",
+                operation_id="finalize_task",
                 arguments=(
                     task_argument,
                     ProgramArgument(
@@ -398,7 +396,7 @@ def _patch_program_coalesce_task_batch(
     )
     replacement = ActionNode(
         node_id=patch.replacement_node_id,
-        operation_id="run_batch.v1",
+        operation_id="run_batch",
         arguments=(
             ProgramArgument(
                 name="task_refs",
@@ -603,7 +601,7 @@ def _is_exact_single_task_batch_action(
         return False
     return (
         node.depends_on == depends_on
-        and node.operation_id == "run_batch.v1"
+        and node.operation_id == "run_batch"
         and node.retry is None
         and node.recursion is None
         and node.arguments

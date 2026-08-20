@@ -15,7 +15,7 @@ from types import MappingProxyType
 
 from aec_bench.contracts.dataset import BundleDatasetRef, DatasetManifest
 from aec_bench.dataset.integrity import IntegrityResult
-from aec_bench.dataset.storage import manifest_path, write_dataset_reference, write_manifest
+from aec_bench.dataset.storage import manifest_path, save_dataset, write_dataset_reference
 from aec_bench.ledger.artifact_repository import ArtifactRepository, canonical_model_bytes
 
 DATASET_BUNDLE_MEDIA_TYPE = "application/vnd.aec-bench.dataset-bundle+tar+gzip"
@@ -316,7 +316,7 @@ def import_dataset(*, archive_path: Path, tasks_root: Path, datasets_root: Path)
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.move(str(source), str(target))
 
-    write_manifest(datasets_root, bundle.manifest)
+    save_dataset(datasets_root, bundle.manifest)
     return ImportedDataset(manifest=bundle.manifest, reference=reference)
 
 

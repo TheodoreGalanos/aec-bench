@@ -92,14 +92,14 @@ def prepare_proposal_node_invocation(
         _require_proposal_operation_handler(
             bundle=bundle,
             registry=resolved_registry,
-            operation_id="run_semantic_subtask.v1",
+            operation_id="run_semantic_subtask",
             expected=KernelOperationHandlerKey.RUN_SEMANTIC_SUBTASK,
         )
     else:
         _require_proposal_operation_handler(
             bundle=bundle,
             registry=resolved_registry,
-            operation_id="finalize_proposed_plan.v1",
+            operation_id="finalize_proposed_plan",
             expected=KernelOperationHandlerKey.FINALIZE_PROPOSED_PLAN,
         )
     output_contract, node_contract_sha256 = _output_contract(

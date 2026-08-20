@@ -17,7 +17,7 @@ from aec_bench.contracts.experiment_manifest import (
 )
 from aec_bench.contracts.task_definition import Difficulty
 from aec_bench.dataset.publication import publish_dataset
-from aec_bench.dataset.storage import write_manifest
+from aec_bench.dataset.storage import save_dataset
 from aec_bench.harness.scheduler import (
     batch_planned_trials,
     build_trial_plan,
@@ -94,7 +94,7 @@ def test_build_trial_plan_expands_tasks_agents_and_repetitions() -> None:
     assert len(plan) == 8
     assert plan[0].trial_id == "experiment-001--mechanical-heat-load-alpha--agent-a--rep01"
     assert plan[-1].trial_id == "experiment-001--mechanical-heat-load-beta--agent-b--rep02"
-    assert all(item.compute_backend == "modal" for item in plan)
+    assert all(item.compute == manifest.compute for item in plan)
 
 
 def test_batch_planned_trials_respects_max_concurrency() -> None:
@@ -128,7 +128,7 @@ def test_select_manifest_tasks_filters_by_dataset_when_set(tmp_path: Path) -> No
     task_directory.mkdir(parents=True)
     (task_directory / "task.toml").write_text("[metadata]\n", encoding="utf-8")
     datasets_root = project_root / "datasets"
-    write_manifest(datasets_root, dataset)
+    save_dataset(datasets_root, dataset)
     publication = publish_dataset(
         manifest=dataset,
         datasets_root=datasets_root,
@@ -164,7 +164,7 @@ def test_select_manifest_tasks_rejects_missing_registered_task(tmp_path: Path) -
     task_directory.mkdir(parents=True)
     (task_directory / "task.toml").write_text("[metadata]\n", encoding="utf-8")
     datasets_root = project_root / "datasets"
-    write_manifest(datasets_root, dataset)
+    save_dataset(datasets_root, dataset)
     publication = publish_dataset(
         manifest=dataset,
         datasets_root=datasets_root,

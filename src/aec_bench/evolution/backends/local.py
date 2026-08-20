@@ -1,385 +1,31 @@
-# ABOUTME: Local solve backend for the evolution orchestrator.
-# ABOUTME: Handles snapshot injection, artifact collection, and task execution.
+# ABOUTME: Composes local evolution fitness runs through the artifact-task application path.
+# ABOUTME: Materializes each evolved snapshot as explicit agent configuration before planning trials.
 
 from __future__ import annotations
 
-import json
-import logging
-import os
-import shutil
-import subprocess
-import sys
-from collections.abc import Callable
-from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
 
-from aec_bench.contracts.evaluation_result import EvaluationResult, ValidityCheck
 from aec_bench.contracts.evolution import WorkspaceSnapshot
-from aec_bench.contracts.task_definition import ToolSpec
-from aec_bench.contracts.trial_record import (
-    AgentConfiguration,
-    CostRecord,
-    EvaluationStatus,
-    EvidenceStatus,
-    ExecutionEnvironmentRef,
-    ExecutionStatus,
-    ProviderRoute,
-    RunManifest,
-    TimingRecord,
-    TrialInput,
-    TrialOutput,
-    TrialRecord,
-    UnresolvedSourceRef,
-)
+from aec_bench.contracts.experiment_manifest import AgentConfig, ComputeConfig, ExperimentManifest, TaskSelector
+from aec_bench.contracts.trial_record import TrialRecord
+from aec_bench.evolution.application import CandidateEvaluator
 from aec_bench.evolution.snapshot import serialise_snapshot
+from aec_bench.harness.artifact_tasks import LocalTaskRuntime, run_experiment, single_attempt
+from aec_bench.harness.scheduler import build_trial_plan
+from aec_bench.tasks.instance import ResolvedTaskInstance, resolve_instance_paths
+from aec_bench.tasks.loader import load_task_definition
 
-_log = logging.getLogger(__name__)
 
-# Type alias for the callable signature expected by EvolutionOrchestrator.
-SolveFn = Callable[[WorkspaceSnapshot, int], list[TrialRecord]]
+def make_stub_candidate_evaluator(records: list[TrialRecord]) -> CandidateEvaluator:
+    """Return fixed records for deterministic evolution tests."""
 
-
-def make_stub_solve_fn(records: list[TrialRecord]) -> SolveFn:
-    """Create a solve function that returns the same records every cycle.
-
-    Intended for testing and as a placeholder until a real local backend is
-    available. Returns at most batch_size records per call.
-    """
-
-    def solve(snapshot: WorkspaceSnapshot, batch_size: int) -> list[TrialRecord]:
+    def solve(_snapshot: WorkspaceSnapshot, batch_size: int) -> list[TrialRecord]:
         return records[:batch_size]
 
     return solve
 
 
-def inject_snapshot_into_workspace(snapshot: WorkspaceSnapshot, workspace_dir: Path) -> None:
-    """Write the serialised workspace snapshot as system_prompt.md.
-
-    Overwrites any existing file at that path. The agent reads this file to
-    obtain its system prompt and domain knowledge skills at runtime.
-    """
-    content = serialise_snapshot(snapshot)
-    (workspace_dir / "system_prompt.md").write_text(content)
-    _log.debug("Injected snapshot (candidate_id=%s) into %s", snapshot.candidate_id, workspace_dir)
-
-
-_ADAPTER_CONFIG_FILES: tuple[str, ...] = ("tool_loop.toml",)
-
-
-def copy_adapter_config(workspace_root: Path, trial_workspace: Path) -> None:
-    """Copy adapter-level config files (e.g. tool_loop.toml) into a per-trial workspace.
-
-    Local adapter builders read these files from the trial workspace to wire
-    advisor clients, tool settings, and similar concerns. Silently skips any
-    files that are not present at the workspace root.
-    """
-    for filename in _ADAPTER_CONFIG_FILES:
-        source = workspace_root / filename
-        if source.is_file():
-            shutil.copy2(source, trial_workspace / filename)
-
-
-def collect_local_trial_record(
-    *,
-    workspace_dir: Path,
-    trial_id: str,
-    experiment_id: str,
-    task_id: str,
-    model: str,
-    instruction: str,
-    adapter: str = "rlm",
-) -> TrialRecord:
-    """Build a TrialRecord from local run artifacts in workspace_dir.
-
-    Reads agent_result.json, verifier outputs, and optional conversation and
-    trajectory files. Missing verifier artifacts are handled gracefully by
-    setting reward=0.0 and verifier_completed=False.
-    """
-    # --- agent_result.json ---------------------------------------------------
-    agent_result_path = workspace_dir / "agent_result.json"
-    agent_result: dict[str, Any] | None = None
-    tokens_in: int | None = None
-    tokens_out: int | None = None
-    cache_read: int | None = None
-    cache_write: int | None = None
-    advisor_calls: int | None = None
-    advisor_input_tokens: int | None = None
-    advisor_output_tokens: int | None = None
-    model_calls: int | None = None
-
-    if agent_result_path.exists():
-        agent_result = json.loads(agent_result_path.read_text())
-        tokens_in = agent_result.get("input_tokens")
-        tokens_out = agent_result.get("output_tokens")
-        cache_read = agent_result.get("cache_read_tokens")
-        cache_write = agent_result.get("cache_write_tokens")
-        advisor_calls = agent_result.get("advisor_calls")
-        advisor_input_tokens = agent_result.get("advisor_input_tokens")
-        advisor_output_tokens = agent_result.get("advisor_output_tokens")
-        model_calls = agent_result.get("model_calls")
-
-    # --- verifier outputs ----------------------------------------------------
-    reward_path = workspace_dir / "logs" / "verifier" / "reward.json"
-    details_path = workspace_dir / "logs" / "verifier" / "details.json"
-
-    verifier_completed = reward_path.exists()
-    reward = 0.0
-    breakdown: dict[str, Any] | None = None
-
-    if verifier_completed:
-        reward_data = json.loads(reward_path.read_text())
-        reward = float(reward_data["reward"])
-        if details_path.exists():
-            breakdown = json.loads(details_path.read_text())
-
-    validity = ValidityCheck(
-        output_parseable=True,
-        schema_valid=True,
-        verifier_completed=verifier_completed,
-    )
-    evaluation = EvaluationResult(reward=reward, validity=validity, breakdown=breakdown)
-
-    # --- optional artifact paths ---------------------------------------------
-    conversation_path_val: str | None = None
-    conversation_file = workspace_dir / "conversation.jsonl"
-    if conversation_file.exists():
-        conversation_path_val = str(conversation_file)
-
-    trajectory_path_val: str | None = None
-    trajectory_file = workspace_dir / "trajectory.jsonl"
-    if trajectory_file.exists():
-        trajectory_path_val = str(trajectory_file)
-
-    # --- system prompt provenance --------------------------------------------
-    system_prompt_file = workspace_dir / "system_prompt.md"
-    system_prompt: str | None = None
-    if system_prompt_file.exists():
-        system_prompt = system_prompt_file.read_text()
-
-    # --- cost record ---------------------------------------------------------
-    cost: CostRecord | None = None
-    has_advisor_stats = (
-        advisor_calls is not None or advisor_input_tokens is not None or advisor_output_tokens is not None
-    )
-    if tokens_in is not None or tokens_out is not None or has_advisor_stats:
-        cost = CostRecord(
-            model_calls=model_calls,
-            tokens_in=tokens_in,
-            tokens_out=tokens_out,
-            cache_read_tokens=cache_read if cache_read else None,
-            cache_write_tokens=cache_write if cache_write else None,
-            advisor_calls=advisor_calls,
-            advisor_input_tokens=advisor_input_tokens,
-            advisor_output_tokens=advisor_output_tokens,
-        )
-
-    started_at = datetime.now(tz=UTC)
-    run_id = f"{experiment_id}:{adapter}:{model}:local"
-    completed = agent_result is not None and agent_result.get("status") in {"ok", "completed"}
-    output = TrialOutput(
-        agent_result=None if agent_result is None else {"status": agent_result.get("status")},
-        terminated=completed,
-    ).bind_runtime_paths(
-        raw_output_path=None,
-        conversation_path=conversation_path_val,
-        trajectory_path=trajectory_path_val,
-    )
-    record = TrialRecord(
-        trial_id=trial_id,
-        run_id=run_id,
-        task_id=task_id,
-        execution_status=ExecutionStatus.COMPLETED if completed else ExecutionStatus.FAILED,
-        evaluation_status=EvaluationStatus.COMPLETED,
-        evidence_status=EvidenceStatus.NOT_REQUIRED,
-        started_at=started_at,
-        completed_at=started_at,
-        input=TrialInput(instruction=instruction, task_revision="local", system_prompt=system_prompt),
-        output=output,
-        evaluation=evaluation,
-        timing=TimingRecord(total_seconds=0.0),
-        cost=cost,
-    )
-    for role, value in (("conversation", conversation_path_val), ("trajectory", trajectory_path_val)):
-        if value is not None:
-            record.attach_artifact(role, Path(value), media_type="application/x-ndjson")
-    return record.bind_run_manifest(
-        RunManifest(
-            run_id=run_id,
-            experiment_id=experiment_id,
-            source=UnresolvedSourceRef(reason="evolution workspace source is not retained"),
-            agent=AgentConfiguration(adapter=adapter, model=model),
-            execution_environment=ExecutionEnvironmentRef(runtime_image="local", compute_backend="local"),
-            provider_route=ProviderRoute(provider=adapter, route="local"),
-        )
-    )
-
-
-def _extract_task_id(task_dir: Path) -> str:
-    """Derive a slash-separated task ID from a task directory path.
-
-    Looks for a "tasks" component in the resolved path and returns everything
-    after it. Falls back to the last three path components when "tasks" is not
-    present.
-    """
-    parts = task_dir.resolve().parts
-    try:
-        tasks_idx = parts.index("tasks")
-        return "/".join(parts[tasks_idx + 1 :])
-    except ValueError:
-        return "/".join(parts[-3:]) if len(parts) >= 3 else task_dir.name
-
-
-def _select_task_batch(
-    task_dirs: list[Path],
-    *,
-    batch_size: int,
-    start_index: int,
-) -> list[Path]:
-    """Select a rotating batch of task directories from the full suite."""
-    if not task_dirs:
-        return []
-    count = min(batch_size, len(task_dirs))
-    return [task_dirs[(start_index + offset) % len(task_dirs)] for offset in range(count)]
-
-
-class LocalSolver:
-    """Solve function object that defers temp workspace cleanup.
-
-    Trial records store absolute paths to artifacts in temporary workspaces.
-    The evolution engine needs those files to exist when it classifies traces
-    after the solve step. Call ``cleanup()`` once the engine is done with a
-    cycle's trial records to remove the temporary directories.
-    """
-
-    def __init__(
-        self,
-        *,
-        task_dirs: list[Path],
-        model: str,
-        experiment_id: str,
-        adapter: str = "rlm",
-        timeout: int = 1800,
-        workspace_root: Path | None = None,
-    ) -> None:
-        self._task_dirs = task_dirs
-        self._model = model
-        self._experiment_id = experiment_id
-        self._adapter = adapter
-        self._timeout = timeout
-        self._workspace_root = workspace_root
-        self._call_count = 0
-        self._task_cursor = 0
-        self._pending_workspaces: list[str] = []
-
-    def __call__(self, snapshot: WorkspaceSnapshot, batch_size: int) -> list[TrialRecord]:
-        """Run tasks and return trial records. Temp dirs are kept until cleanup()."""
-        if not self._task_dirs:
-            return []
-
-        # Deferred imports — keeps the module importable without pydantic-ai
-        from aec_bench.harness.local_runtime import setup_workspace
-
-        records: list[TrialRecord] = []
-        selected_task_dirs = _select_task_batch(
-            self._task_dirs,
-            batch_size=batch_size,
-            start_index=self._task_cursor,
-        )
-        self._task_cursor = (self._task_cursor + len(selected_task_dirs)) % len(self._task_dirs)
-
-        for i, task_dir in enumerate(selected_task_dirs):
-            trial_id = f"evo-{self._experiment_id}-c{self._call_count}-t{i}"
-            self._call_count += 1
-
-            task_id = _extract_task_id(task_dir)
-            instruction_file = task_dir / "instruction.md"
-            instruction = instruction_file.read_text() if instruction_file.exists() else ""
-
-            workspace: str | None = None
-            try:
-                # 1. Setup workspace — copies task files to a temp directory.
-                workspace = setup_workspace(str(task_dir))
-                workspace_path = Path(workspace)
-
-                # 2. Inject evolved prompt and skills.
-                inject_snapshot_into_workspace(snapshot, workspace_path)
-
-                # 2b. Propagate adapter-level config (tool_loop.toml, etc.) from workspace root.
-                if self._workspace_root is not None:
-                    copy_adapter_config(self._workspace_root, workspace_path)
-
-                # 3. Patch /workspace/ paths in copied files for local execution.
-                # Must happen BEFORE the adapter runs so tool paths resolve.
-                from aec_bench.harness.local_runtime import patch_workspace_paths
-
-                patch_workspace_paths(workspace)
-
-                # 4. Run adapter in-process via the local adapter registry.
-                _run_adapter_in_workspace(
-                    adapter_kind=self._adapter,
-                    workspace=workspace,
-                    model=self._model,
-                )
-
-                # 5. Run verifier if it exists.
-                verifier = workspace_path / "tests" / "verify.py"
-                if verifier.exists():
-                    verify_env = dict(os.environ)
-                    verify_env["PYTHONPATH"] = workspace
-                    output_file = workspace_path / "output.md"
-                    reward_file = workspace_path / "logs" / "verifier" / "reward.json"
-                    subprocess.run(
-                        [
-                            sys.executable,
-                            str(verifier),
-                            "--input",
-                            str(output_file),
-                            "--output",
-                            str(reward_file),
-                        ],
-                        cwd=workspace,
-                        env=verify_env,
-                        timeout=120,
-                        capture_output=True,
-                    )
-
-                # 6. Collect TrialRecord from workspace artifacts.
-                record = collect_local_trial_record(
-                    workspace_dir=workspace_path,
-                    trial_id=trial_id,
-                    experiment_id=self._experiment_id,
-                    task_id=task_id,
-                    model=self._model,
-                    instruction=instruction,
-                    adapter=self._adapter,
-                )
-                records.append(record)
-
-                # Track for deferred cleanup — artifacts must survive until
-                # the engine finishes classifying this cycle's traces.
-                self._pending_workspaces.append(workspace)
-                workspace = None  # prevent cleanup in except/finally
-
-            except subprocess.TimeoutExpired:
-                _log.warning("Task %s timed out after %ss", task_id, self._timeout)
-            except Exception:
-                _log.exception("Task %s failed with an unexpected error", task_id)
-            finally:
-                # Only clean up on failure — successful workspaces are deferred
-                if workspace is not None:
-                    shutil.rmtree(workspace, ignore_errors=True)
-
-        return records
-
-    def cleanup(self) -> None:
-        """Remove all temporary workspaces from completed cycles."""
-        for ws in self._pending_workspaces:
-            shutil.rmtree(ws, ignore_errors=True)
-        self._pending_workspaces.clear()
-
-
-def make_local_solve_fn(
+def make_local_candidate_evaluator(
     *,
     task_dirs: list[Path],
     model: str,
@@ -387,94 +33,87 @@ def make_local_solve_fn(
     adapter: str = "rlm",
     timeout: int = 1800,
     workspace_root: Path | None = None,
-) -> LocalSolver:
-    """Create a solve function that runs tasks locally via the adapter registry.
+) -> CandidateEvaluator:
+    """Compose each evolution fitness batch through planning and run_experiment()."""
 
-    Returns a ``LocalSolver`` callable. After the evolution run completes, call
-    ``solver.cleanup()`` to remove temporary workspace directories.
+    task_cursor = 0
+    call_count = 0
+    resolved_tasks: list[ResolvedTaskInstance] | None = None
 
-    When ``workspace_root`` is provided, adapter-level config files like
-    ``tool_loop.toml`` are copied from that directory into each per-trial
-    workspace so local adapter builders can read them.
-    """
-    return LocalSolver(
-        task_dirs=task_dirs,
-        model=model,
-        experiment_id=experiment_id,
-        adapter=adapter,
-        timeout=timeout,
-        workspace_root=workspace_root,
-    )
+    def solve(snapshot: WorkspaceSnapshot, batch_size: int) -> list[TrialRecord]:
+        nonlocal call_count, resolved_tasks, task_cursor
+        if not task_dirs:
+            return []
+        if resolved_tasks is None:
+            resolved_tasks = _resolve_task_directories(task_dirs)
+        selected = _select_task_batch(resolved_tasks, batch_size=batch_size, start_index=task_cursor)
+        if not selected:
+            return []
+        task_cursor = (task_cursor + len(selected)) % len(resolved_tasks)
+        agent = AgentConfig(
+            name="evolution-agent",
+            adapter=adapter,
+            model=model,
+            system_prompt=serialise_snapshot(snapshot),
+        )
+        manifest = ExperimentManifest(
+            experiment_id=f"{experiment_id}-cycle-{call_count}",
+            name=f"Evolution fitness cycle {call_count}",
+            tasks=TaskSelector(include_patterns=[task.task.task_id for task in selected]),
+            agents=[agent],
+            compute=ComputeConfig(backend="local", timeout_override=timeout),
+            repetitions=1,
+        )
+        trials = build_trial_plan(manifest, [task.task for task in selected])
+        runtime = LocalTaskRuntime(agent_files=_agent_files(workspace_root))
+        call_count += 1
+        return run_experiment(
+            runtime=runtime,
+            tasks=selected,
+            trials=trials,
+            recipe=single_attempt(),
+        )
+
+    return solve
 
 
-def _run_adapter_in_workspace(
+def _resolve_task_directories(task_dirs: list[Path]) -> list[ResolvedTaskInstance]:
+    resolved: list[ResolvedTaskInstance] = []
+    for task_dir in task_dirs:
+        tasks_root = _find_tasks_root(task_dir)
+        task = load_task_definition(task_dir, tasks_root)
+        resolved.append(resolve_instance_paths(task, task_dir))
+    return resolved
+
+
+def _find_tasks_root(task_dir: Path) -> Path:
+    candidate = task_dir.resolve()
+    while candidate != candidate.parent:
+        if (candidate / "generation-manifest.json").is_file():
+            return candidate
+        if candidate.name == "tasks":
+            return candidate
+        candidate = candidate.parent
+    return task_dir.parent.resolve()
+
+
+def _select_task_batch(
+    tasks: list[ResolvedTaskInstance],
     *,
-    adapter_kind: str,
-    workspace: str,
-    model: str,
-) -> None:
-    """Execute a task using the current local adapter builder.
+    batch_size: int,
+    start_index: int,
+) -> list[ResolvedTaskInstance]:
+    if not tasks:
+        return []
+    count = min(batch_size, len(tasks))
+    return [tasks[(start_index + offset) % len(tasks)] for offset in range(count)]
 
-    Mirrors the logic from run_local.py's _run_adapter but without CLI
-    dependencies. Writes agent_result.json and trajectory.jsonl to the workspace.
-    """
-    from aec_bench.adapters.base import AdapterRequest
-    from aec_bench.adapters.local_registry import build_local_adapter
-    from aec_bench.harness.local_runtime import read_instruction
-    from aec_bench.trajectory.writer import TrajectoryWriter
 
-    instruction = read_instruction(workspace)
-    if not instruction:
-        _log.warning("No instruction found in workspace %s", workspace)
-        return
+def _agent_files(workspace_root: Path | None) -> dict[str, Path]:
+    if workspace_root is None:
+        return {}
+    config = workspace_root / "tool_loop.toml"
+    return {"tool_loop.toml": config} if config.is_file() else {}
 
-    # Build trajectory writer so the adapter records structured traces
-    traj_path = str(Path(workspace) / "trajectory.jsonl")
-    trajectory_writer = TrajectoryWriter(path=traj_path)
 
-    adapter = build_local_adapter(
-        adapter_kind=adapter_kind,
-        model_name=model,
-        workspace=workspace,
-        trajectory_writer=trajectory_writer,
-    )
-
-    # Declare bash tool when using tool_loop adapter so it passes the allowlist check
-    tools: list[ToolSpec] = []
-    if adapter_kind == "tool_loop":
-        tools = [
-            ToolSpec(
-                name="bash",
-                source="builtin",
-                description="Execute a bash command in the workspace",
-            )
-        ]
-
-    result = adapter.execute(AdapterRequest(instruction=instruction, tools=tools))
-
-    # Write output.md if the adapter produced text and the file doesn't exist
-    output_path = Path(workspace, "output.md")
-    if not (output_path.exists() and output_path.stat().st_size > 0):
-        if result.raw_output_text:
-            output_path.write_text(result.raw_output_text)
-
-    # Write agent_result.json (includes cache token counts and advisor stats when available)
-    agent_result_data: dict[str, int | str] = {
-        "status": result.agent_output.status.value,
-        "model": model,
-        "adapter": adapter_kind,
-        "model_calls": result.usage_model_calls or 0,
-        "input_tokens": result.usage_input_tokens or 0,
-        "output_tokens": result.usage_output_tokens or 0,
-        "cache_read_tokens": result.usage_cache_read_tokens or 0,
-        "cache_write_tokens": result.usage_cache_write_tokens or 0,
-    }
-    if result.usage_advisor_calls is not None:
-        agent_result_data["advisor_calls"] = result.usage_advisor_calls
-    if result.usage_advisor_input_tokens is not None:
-        agent_result_data["advisor_input_tokens"] = result.usage_advisor_input_tokens
-    if result.usage_advisor_output_tokens is not None:
-        agent_result_data["advisor_output_tokens"] = result.usage_advisor_output_tokens
-    Path(workspace, "agent_result.json").write_text(
-        json.dumps(agent_result_data, indent=2),
-    )
+__all__ = ("make_local_candidate_evaluator", "make_stub_candidate_evaluator")

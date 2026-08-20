@@ -24,7 +24,7 @@ from aec_bench.contracts.harness_instance import (
     HarnessBindingSpec,
     HarnessBudget,
     HarnessCompileRequest,
-    HarnessRecipe,
+    HarnessSpec,
     HarnessTopologyRole,
     ResultImportBindingConfig,
     TaskSourceBindingConfig,
@@ -62,16 +62,14 @@ def build_adaptive_harness_recipe(
     backend: HarborBackend,
     budget: HarnessBudget,
     learned: bool,
-) -> HarnessRecipe:
+) -> HarnessSpec:
     """Build a neutral direct or output-commit RLM harness for contract tests."""
 
     registry = default_kernel_registry()
     capability = registry.capability
-    recipe_kind = "output-commit-rlm" if learned else "direct"
+    harness_kind = "output-commit-rlm" if learned else "direct"
     agent_capability = "aecbench.adapter.rlm-output-commit" if learned else "aecbench.adapter.direct"
-    return HarnessRecipe(
-        recipe_id=f"adaptive-test-{recipe_kind}-{backend}",
-        version="1.0.0",
+    return HarnessSpec(
         summary="Exercise one adaptive-harness contract fixture under fixed K.",
         budget=budget,
         bindings=(
@@ -97,7 +95,7 @@ def build_adaptive_harness_recipe(
                 depends_on=("tasks", "context"),
                 topology_role=HarnessTopologyRole.ORCHESTRATOR,
                 configuration=AgentBindingConfig(
-                    agent_name=f"adaptive-test-{recipe_kind}",
+                    agent_name=f"adaptive-test-{harness_kind}",
                     model=model,
                     max_turns=32,
                     timeout_seconds=4_800,
@@ -257,9 +255,7 @@ def build_adaptive_bundle(
     resolved_task_ids = task_ids or (task_id,)
     resolved_budget = budget or HarnessBudget()
     capability = resolved_registry.capability
-    recipe = HarnessRecipe(
-        recipe_id="adaptive-review",
-        version="1.0.0",
+    recipe = HarnessSpec(
         summary="Run one exact task through the fixed Harbor kernel.",
         budget=resolved_budget,
         bindings=(
@@ -340,23 +336,23 @@ def build_adaptive_bundle(
         HarnessCompileRequest(
             request_id="compile-adaptive",
             kernel_ref=resolved_registry.manifest.ref,
-            recipe=recipe,
+            spec=recipe,
         ),
         registry=resolved_registry,
     )
     nodes: tuple[ProgramNode, ...]
     if program_kind == "monolithic":
         nodes = (
-            ActionNode(node_id="run", operation_id="run_batch.v1"),
+            ActionNode(node_id="run", operation_id="run_batch"),
             StopNode(node_id="stop", depends_on=("run",), outcome=StopOutcome.SUCCEEDED),
         )
     else:
         nodes = (
-            ActionNode(node_id="enumerate", operation_id="enumerate_tasks.v1"),
+            ActionNode(node_id="enumerate", operation_id="enumerate_tasks"),
             FanoutNode(
                 node_id="run-each",
                 depends_on=("enumerate",),
-                operation_id="run_batch.v1",
+                operation_id="run_batch",
                 items=ProgramOutputRef(node_id="enumerate", output_port="tasks"),
                 item_argument="task_ref",
                 max_parallelism=2,

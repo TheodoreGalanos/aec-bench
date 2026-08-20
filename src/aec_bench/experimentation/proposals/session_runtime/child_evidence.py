@@ -246,7 +246,7 @@ def _check_node_contract(
             node_id=prepared.node_id,
             finding_code="adapter_not_completed",
         )
-    operation_id = "check_subtask_contract.v1" if isinstance(node, SemanticSubtaskSpec) else "finalize_proposed_plan.v1"
+    operation_id = "check_subtask_contract" if isinstance(node, SemanticSubtaskSpec) else "finalize_proposed_plan"
     definition = _operation_definition_for_proposal_runtime(
         bundle=bundle,
         registry=registry,

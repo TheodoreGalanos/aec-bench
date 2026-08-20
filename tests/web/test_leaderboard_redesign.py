@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 
 from aec_bench.contracts.dataset import DatasetManifest, DatasetTaskEntry, dataset_reference_key
 from aec_bench.dataset.publication import publish_dataset
-from aec_bench.dataset.storage import write_manifest
+from aec_bench.dataset.storage import save_dataset
 from aec_bench.ledger.writer import write_trial_record
 from aec_bench.web.app import create_app
 from tests.support.trial_record_factories import make_trial_record
@@ -61,7 +61,7 @@ def _setup_env(
                 task_directory = tmp_path / task.path
                 task_directory.mkdir(parents=True)
                 (task_directory / "task.toml").write_text("[metadata]\n", encoding="utf-8")
-            write_manifest(datasets, manifest)
+            save_dataset(datasets, manifest)
             publication = publish_dataset(
                 manifest=manifest,
                 datasets_root=datasets,

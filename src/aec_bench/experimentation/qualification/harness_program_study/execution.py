@@ -279,8 +279,8 @@ def _factor_semantics(materialized: MaterializedHarnessProgramCandidateSet) -> s
             "model": request.model,
             "harness_budget": request.harness_budget.model_dump(mode="json"),
             "program_limits": request.program_limits.model_dump(mode="json"),
-            "fixed_harness": _harness_semantics(request.fixed_harness_recipe.model_dump(mode="json")),
-            "learned_harness": _harness_semantics(request.learned_harness_recipe.model_dump(mode="json")),
+            "fixed_harness": _harness_semantics(request.fixed_harness_spec.model_dump(mode="json")),
+            "learned_harness": _harness_semantics(request.learned_harness_spec.model_dump(mode="json")),
             "fixed_program": _program_semantics(request.fixed_program.model_dump(mode="json")),
             "learned_program": _program_semantics(request.learned_program.model_dump(mode="json")),
         }
@@ -289,8 +289,6 @@ def _factor_semantics(materialized: MaterializedHarnessProgramCandidateSet) -> s
 
 def _harness_semantics(payload: dict[str, Any]) -> dict[str, Any]:
     normalized = dict(payload)
-    normalized.pop("content_sha256", None)
-    normalized.pop("recipe_id", None)
     normalized.pop("summary", None)
     bindings = []
     for source_binding in normalized["bindings"]:

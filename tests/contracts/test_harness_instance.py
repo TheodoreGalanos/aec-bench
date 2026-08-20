@@ -17,8 +17,8 @@ from aec_bench.contracts.harness_instance import (
     HarnessContractEnforcement,
     HarnessContractKind,
     HarnessContractSpec,
-    HarnessRecipe,
     HarnessRecursionPolicy,
+    HarnessSpec,
     HarnessTopologyRole,
     ProgramOperationScope,
     ProgramOperationSpec,
@@ -143,21 +143,19 @@ def _binding_specs(capabilities: dict[str, KernelCapabilitySpec]) -> tuple[Harne
     )
 
 
-def test_harness_recipe_and_compile_request_are_typed_and_plain() -> None:
+def test_harness_spec_and_compile_request_are_typed_and_plain() -> None:
     kernel, capabilities = _kernel()
-    recipe = HarnessRecipe(
-        recipe_id="trace-diagnosis",
-        version="1.0.0",
+    recipe = HarnessSpec(
         summary="Run trace-diagnosis tasks with a fixed Harbor harness.",
         bindings=_binding_specs(capabilities),
     )
     request = HarnessCompileRequest(
         request_id="compile-trace-diagnosis",
         kernel_ref=kernel.ref,
-        recipe=recipe,
+        spec=recipe,
     )
 
-    assert request.recipe == recipe
+    assert request.spec == recipe
     assert request.kernel_ref == kernel.ref
     assert "content_sha256" not in request.model_dump(mode="json")
 
@@ -170,7 +168,7 @@ def test_harness_recipe_and_compile_request_are_typed_and_plain() -> None:
         )
 
 
-def test_harness_recipe_rejects_cycles_in_the_binding_graph() -> None:
+def test_harness_spec_rejects_cycles_in_the_binding_graph() -> None:
     _, capabilities = _kernel()
     first = HarnessBindingSpec(
         binding_id="first",
@@ -188,9 +186,7 @@ def test_harness_recipe_rejects_cycles_in_the_binding_graph() -> None:
     )
 
     with pytest.raises(ValidationError, match="binding graph must be acyclic"):
-        HarnessRecipe(
-            recipe_id="cyclic",
-            version="1.0.0",
+        HarnessSpec(
             summary="A cyclic recipe.",
             bindings=(first, second),
         )
@@ -228,9 +224,7 @@ def test_agent_binding_keeps_runtime_cache_policy_out_of_historical_recipe_conte
 
 def test_compiled_harness_instance_pins_bindings_and_exports_a_program_surface() -> None:
     kernel, capabilities = _kernel()
-    recipe = HarnessRecipe(
-        recipe_id="trace-diagnosis",
-        version="1.0.0",
+    recipe = HarnessSpec(
         summary="Run trace-diagnosis tasks with a fixed Harbor harness.",
         bindings=_binding_specs(capabilities),
     )
@@ -249,7 +243,7 @@ def test_compiled_harness_instance_pins_bindings_and_exports_a_program_surface()
         surface_id="trace-diagnosis-surface",
         operations=(
             ProgramOperationSpec(
-                operation_id="run_batch.v1",
+                operation_id="run_batch",
                 capability_ref=capabilities["run"].ref,
                 input_schema_ref="aecbench://run-batch-input/v1",
                 output_schema_ref="aecbench://trial-record-set/v1",
@@ -270,26 +264,26 @@ def test_compiled_harness_instance_pins_bindings_and_exports_a_program_surface()
     instance = CompiledHarnessInstance(
         instance_id="hx-trace-diagnosis",
         kernel_ref=kernel.ref,
-        source_recipe_ref=recipe.ref,
+        source_spec=recipe,
         bindings=compiled_bindings,
         program_surface=surface,
     )
 
     assert instance.ref.instance_id == instance.instance_id
     assert "content_sha256" not in instance.model_dump(mode="json")
-    assert instance.program_surface.operations[0].operation_id == "run_batch.v1"
+    assert instance.program_surface.operations[0].operation_id == "run_batch"
 
     with pytest.raises(ValidationError, match="outside the compiled task-source bindings"):
         CompiledHarnessInstance(
             instance_id="hx-invalid-surface",
             kernel_ref=kernel.ref,
-            source_recipe_ref=recipe.ref,
+            source_spec=recipe,
             bindings=compiled_bindings,
             program_surface=ProgramSurface(
                 surface_id="invalid",
                 operations=(
                     ProgramOperationSpec(
-                        operation_id="run_batch.v1",
+                        operation_id="run_batch",
                         capability_ref=capabilities["run"].ref,
                         input_schema_ref="aecbench://run-batch-input/v1",
                         output_schema_ref="aecbench://trial-record-set/v1",
@@ -304,7 +298,7 @@ def test_compiled_harness_instance_pins_bindings_and_exports_a_program_surface()
 def test_program_operation_retry_support_requires_an_explicit_safe_error_taxonomy() -> None:
     _, capabilities = _kernel()
     common = {
-        "operation_id": "run_batch.v1",
+        "operation_id": "run_batch",
         "capability_ref": capabilities["run"].ref,
         "input_schema_ref": "aecbench://run-batch-input/v1",
         "output_schema_ref": "aecbench://trial-record-set/v1",
@@ -348,7 +342,7 @@ def test_program_operation_retry_support_requires_an_explicit_safe_error_taxonom
 def test_public_program_operation_omits_default_scope_without_a_self_digest() -> None:
     _, capabilities = _kernel()
     legacy_payload = {
-        "operation_id": "run_batch.v1",
+        "operation_id": "run_batch",
         "capability_ref": capabilities["run"].ref.model_dump(mode="json"),
         "input_schema_ref": "aecbench://run-batch-input/v1",
         "output_schema_ref": "aecbench://trial-record-set/v1",
@@ -379,7 +373,7 @@ def test_public_program_operation_omits_default_scope_without_a_self_digest() ->
     )
 
 
-def test_harness_recipe_captures_budgets_contracts_topology_and_recursion() -> None:
+def test_harness_spec_captures_budgets_contracts_topology_and_recursion() -> None:
     _, capabilities = _kernel()
     output_contract = HarnessContractSpec(
         contract_id="verified-trial-record",
@@ -391,9 +385,7 @@ def test_harness_recipe_captures_budgets_contracts_topology_and_recursion() -> N
     bindings = list(_binding_specs(capabilities))
     agent_index = next(index for index, binding in enumerate(bindings) if binding.binding_id == "agent")
     bindings[agent_index] = bindings[agent_index].model_copy(update={"contract_ids": (output_contract.contract_id,)})
-    recipe = HarnessRecipe(
-        recipe_id="full-surface",
-        version="1.0.0",
+    recipe = HarnessSpec(
         summary="Represent the complete minimum adaptive harness surface.",
         contracts=(output_contract,),
         budget=HarnessBudget(
@@ -430,9 +422,7 @@ def test_harness_recipe_captures_budgets_contracts_topology_and_recursion() -> N
 
 def test_compiled_harness_rejects_unknown_operation_provenance_and_verifier_placement() -> None:
     kernel, capabilities = _kernel()
-    recipe = HarnessRecipe(
-        recipe_id="invalid-operation-provenance",
-        version="1.0.0",
+    recipe = HarnessSpec(
         summary="Exercise compiled operation provenance checks.",
         bindings=_binding_specs(capabilities),
     )
@@ -452,13 +442,13 @@ def test_compiled_harness_rejects_unknown_operation_provenance_and_verifier_plac
         CompiledHarnessInstance(
             instance_id="hx-invalid-operation-provenance",
             kernel_ref=kernel.ref,
-            source_recipe_ref=recipe.ref,
+            source_spec=recipe,
             bindings=compiled_bindings,
             program_surface=ProgramSurface(
                 surface_id="invalid-provenance",
                 operations=(
                     ProgramOperationSpec(
-                        operation_id="run_batch.v1",
+                        operation_id="run_batch",
                         capability_ref=capabilities["run"].ref,
                         input_schema_ref="aecbench://run-batch-input/v1",
                         output_schema_ref="aecbench://trial-record-set/v1",
@@ -478,13 +468,13 @@ def test_compiled_harness_rejects_unknown_operation_provenance_and_verifier_plac
         CompiledHarnessInstance(
             instance_id="hx-invalid-verifier-placement",
             kernel_ref=kernel.ref,
-            source_recipe_ref=recipe.ref,
+            source_spec=recipe,
             bindings=compiled_bindings,
             program_surface=ProgramSurface(
                 surface_id="invalid-verifier-placement",
                 operations=(
                     ProgramOperationSpec(
-                        operation_id="run_batch.v1",
+                        operation_id="run_batch",
                         capability_ref=capabilities["run"].ref,
                         input_schema_ref="aecbench://run-batch-input/v1",
                         output_schema_ref="aecbench://trial-record-set/v1",
@@ -504,13 +494,13 @@ def test_compiled_harness_rejects_unknown_operation_provenance_and_verifier_plac
         CompiledHarnessInstance(
             instance_id="hx-unwired-operation-tasks",
             kernel_ref=kernel.ref,
-            source_recipe_ref=recipe.ref,
+            source_spec=recipe,
             bindings=compiled_bindings,
             program_surface=ProgramSurface(
                 surface_id="unwired-operation-tasks",
                 operations=(
                     ProgramOperationSpec(
-                        operation_id="run_batch.v1",
+                        operation_id="run_batch",
                         capability_ref=capabilities["run"].ref,
                         input_schema_ref="aecbench://run-batch-input/v1",
                         output_schema_ref="aecbench://trial-record-set/v1",
@@ -522,13 +512,11 @@ def test_compiled_harness_rejects_unknown_operation_provenance_and_verifier_plac
         )
 
 
-def test_harness_recipe_rejects_binding_configuration_outside_its_budget() -> None:
+def test_harness_spec_rejects_binding_configuration_outside_its_budget() -> None:
     _, capabilities = _kernel()
 
     with pytest.raises(ValidationError, match="context tokens exceed harness budget"):
-        HarnessRecipe(
-            recipe_id="over-budget-context",
-            version="1.0.0",
+        HarnessSpec(
             summary="Reject context bindings larger than the Hx resource envelope.",
             budget=HarnessBudget(max_context_tokens=1_000),
             bindings=_binding_specs(capabilities),

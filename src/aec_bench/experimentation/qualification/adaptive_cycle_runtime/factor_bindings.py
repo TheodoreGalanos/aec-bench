@@ -9,7 +9,7 @@ from aec_bench.contracts.harness_instance import (
     ContextBindingConfig,
     HarnessBindingConfiguration,
     HarnessBindingSpec,
-    HarnessRecipe,
+    HarnessSpec,
     TaskSourceBindingConfig,
     ToolBindingConfig,
 )
@@ -25,13 +25,11 @@ from aec_bench.experimentation.qualification.motif_materialization import (
 )
 
 
-def task_source_refs(recipe: HarnessRecipe) -> tuple[str, ...]:
-    """Return the sole typed task-source binding from a harness recipe."""
+def task_source_refs(spec: HarnessSpec) -> tuple[str, ...]:
+    """Return the sole typed task-source binding from a harness spec."""
 
     task_sources = [
-        binding.configuration
-        for binding in recipe.bindings
-        if isinstance(binding.configuration, TaskSourceBindingConfig)
+        binding.configuration for binding in spec.bindings if isinstance(binding.configuration, TaskSourceBindingConfig)
     ]
     if len(task_sources) != 1:
         raise ValueError("adaptive cycle harness requires exactly one task-source binding")
@@ -47,7 +45,7 @@ def source_request_contains_repair_parent(
     learned_program = request.learned_program
     parent_program = parent.program_template
     return (
-        request.learned_harness_recipe == parent.harness_request.recipe
+        request.learned_harness_spec == parent.harness_request.spec
         and learned_program.factor_id == parent_program.program_id
         and learned_program.version == parent_program.version
         and learned_program.nodes == parent_program.nodes
@@ -91,16 +89,16 @@ def validate_attestation_visibility(
         raise ValueError(f"adaptive cycle {label} tasks must be {expected.value}: " + ", ".join(wrong_visibility))
 
 
-def rebind_recipe_task_sources(
-    recipe: HarnessRecipe,
+def rebind_harness_task_sources(
+    spec: HarnessSpec,
     *,
     task_refs: tuple[str, ...],
-) -> HarnessRecipe:
+) -> HarnessSpec:
     """Rebind only the typed task-source slot while preserving learned Hx structure."""
 
     task_source_count = 0
     bindings: list[HarnessBindingSpec] = []
-    for binding in recipe.bindings:
+    for binding in spec.bindings:
         configuration = binding.configuration
         if isinstance(configuration, TaskSourceBindingConfig):
             task_source_count += 1
@@ -108,21 +106,19 @@ def rebind_recipe_task_sources(
         bindings.append(binding.model_copy(update={"configuration": configuration}))
     if task_source_count != 1:
         raise ValueError("adaptive cycle harness requires exactly one task-source binding")
-    return HarnessRecipe(
-        recipe_id=recipe.recipe_id,
-        version=recipe.version,
-        summary=recipe.summary,
-        contracts=recipe.contracts,
-        budget=recipe.budget,
-        recursion_policy=recipe.recursion_policy,
+    return HarnessSpec(
+        summary=spec.summary,
+        contracts=spec.contracts,
+        budget=spec.budget,
+        recursion_policy=spec.recursion_policy,
         bindings=tuple(bindings),
     )
 
 
 def align_runtime_resource_budget(
-    fixed: HarnessRecipe,
-    learned: HarnessRecipe,
-) -> HarnessRecipe:
+    fixed: HarnessSpec,
+    learned: HarnessSpec,
+) -> HarnessSpec:
     """Match execution-resource ceilings without copying learned factor semantics."""
 
     learned_by_id = {binding.binding_id: binding for binding in learned.bindings}
@@ -137,9 +133,7 @@ def align_runtime_resource_budget(
         )
         for binding in fixed.bindings
     )
-    return HarnessRecipe(
-        recipe_id=fixed.recipe_id,
-        version=fixed.version,
+    return HarnessSpec(
         summary=fixed.summary,
         contracts=fixed.contracts,
         budget=fixed.budget,
@@ -150,7 +144,7 @@ def align_runtime_resource_budget(
 
 def align_instantiation_runtime_resource_budget(
     request: MotifHarnessProgramInstantiationRequest,
-    learned: HarnessRecipe,
+    learned: HarnessSpec,
 ) -> MotifHarnessProgramInstantiationRequest:
     """Apply matched Hx resource ceilings to a frozen transfer instantiation."""
 
@@ -165,8 +159,8 @@ def align_instantiation_runtime_resource_budget(
         program_limits=request.program_limits,
         seeds=request.seeds,
         repetitions=request.repetitions,
-        fixed_harness_recipe=align_runtime_resource_budget(
-            request.fixed_harness_recipe,
+        fixed_harness_spec=align_runtime_resource_budget(
+            request.fixed_harness_spec,
             learned,
         ),
         fixed_program=request.fixed_program,

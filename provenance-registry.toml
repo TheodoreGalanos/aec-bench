@@ -1264,27 +1264,6 @@ compatibility_behavior = "the migration command accepts schema 1 only"
 compatibility_kind = "external_schema"
 
 [[field]]
-symbol = "aec_bench.contracts.harness_instance.HarnessRecipeRef.version"
-surface = "pydantic_model"
-wire_name = "version"
-category = "compatibility"
-domain_owner = "harness"
-authority = "harness_recipe"
-authoritative = true
-exposure = "persisted"
-status = "current"
-payload_contract = "harness recipe version selected for compilation"
-canonicalization = "non-empty recipe version copied from HarnessRecipe"
-consumer = "compiled harness identity and recipe matching"
-validation_behavior = "Compiled harness records compare the complete HarnessRecipeRef value"
-mismatch_behavior = "reject_harness_identity"
-retention = "compiled_harness_lifetime"
-rationale = "A recipe identifier can have multiple incompatible declared versions."
-duplication = "unique"
-compatibility_behavior = "require the exact recipe version used for compilation"
-compatibility_kind = "protocol"
-
-[[field]]
 symbol = "aec_bench.contracts.legacy_content_address.LegacyContentAddressedModel.content_sha256"
 surface = "pydantic_model"
 wire_name = "content_sha256"

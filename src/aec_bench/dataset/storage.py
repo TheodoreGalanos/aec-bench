@@ -63,7 +63,7 @@ def _write_new(path: Path, payload: bytes, *, kind: str) -> Path:
     return path
 
 
-def write_manifest(datasets_root: Path, manifest: DatasetManifest) -> Path:
+def save_dataset(datasets_root: Path, manifest: DatasetManifest) -> Path:
     """Write one new manifest and never replace existing dataset content."""
 
     path = manifest_path(datasets_root, manifest.dataset_id)
@@ -195,6 +195,6 @@ __all__ = (
     "resolve_dataset_reference",
     "reference_path",
     "write_dataset_reference",
-    "write_manifest",
+    "save_dataset",
     "write_publication",
 )

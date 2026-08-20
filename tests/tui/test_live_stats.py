@@ -201,10 +201,10 @@ def _write_dataset_manifest(datasets_root: Path, name: str, version: str, *, tas
     """Write a minimal schema-2 dataset manifest."""
 
     from aec_bench.contracts.dataset import DatasetManifest, DatasetTaskEntry
-    from aec_bench.dataset.storage import write_manifest
+    from aec_bench.dataset.storage import save_dataset
 
     del version
-    write_manifest(
+    save_dataset(
         datasets_root,
         DatasetManifest(
             dataset_id=name,

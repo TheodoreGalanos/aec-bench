@@ -133,10 +133,10 @@ def _budget() -> HarnessBudget:
 
 def _execution_profile() -> ProposalExecutionProfile:
     operation_capabilities = {
-        "check_subtask_contract.v1": "aecbench.operation.proposal.check-subtask-contract",
-        "finalize_proposed_plan.v1": "aecbench.operation.proposal.finalize-proposed-plan",
-        "run_proposal_session.v1": "aecbench.operation.proposal.run-session",
-        "run_semantic_subtask.v1": "aecbench.operation.proposal.run-semantic-subtask",
+        "check_subtask_contract": "aecbench.operation.proposal.check-subtask-contract",
+        "finalize_proposed_plan": "aecbench.operation.proposal.finalize-proposed-plan",
+        "run_proposal_session": "aecbench.operation.proposal.run-session",
+        "run_semantic_subtask": "aecbench.operation.proposal.run-semantic-subtask",
     }
     return ProposalExecutionProfile(
         profile_id="proposal-execution.test-v1",
@@ -153,7 +153,7 @@ def _execution_profile() -> ProposalExecutionProfile:
                 ),
                 required_scope=(
                     ProgramOperationScope.PUBLIC
-                    if operation_id == "run_proposal_session.v1"
+                    if operation_id == "run_proposal_session"
                     else ProgramOperationScope.PROPOSAL_SESSION_INTERNAL
                 ),
                 max_parallelism=1,
@@ -219,10 +219,10 @@ def _view() -> DecompositionProblemView:
             ),
             harness_policy_sha256=_sha("h0-policy"),
             capability_ids=(
-                "check_subtask_contract.v1",
-                "finalize_proposed_plan.v1",
+                "check_subtask_contract",
+                "finalize_proposed_plan",
                 "join_evidence.v1",
-                "run_semantic_subtask.v1",
+                "run_semantic_subtask",
             ),
             aggregate_budget=_budget(),
         ),
@@ -532,12 +532,12 @@ def _programs(
     nodes = (
         ActionNode(
             node_id="analyse",
-            operation_id="run_semantic_subtask.v1",
+            operation_id="run_semantic_subtask",
         ),
         ActionNode(
             node_id="check.analyse",
             depends_on=("analyse",),
-            operation_id="check_subtask_contract.v1",
+            operation_id="check_subtask_contract",
             arguments=(
                 ProgramArgument(
                     name="subject",
@@ -553,12 +553,12 @@ def _programs(
         ActionNode(
             node_id="assess",
             depends_on=("check.analyse",),
-            operation_id="run_semantic_subtask.v1",
+            operation_id="run_semantic_subtask",
         ),
         ActionNode(
             node_id="check.assess",
             depends_on=("assess",),
-            operation_id="check_subtask_contract.v1",
+            operation_id="check_subtask_contract",
             arguments=(
                 ProgramArgument(
                     name="subject",
@@ -574,7 +574,7 @@ def _programs(
         ActionNode(
             node_id="finalize",
             depends_on=("check.assess",),
-            operation_id="finalize_proposed_plan.v1",
+            operation_id="finalize_proposed_plan",
             arguments=(
                 ProgramArgument(
                     name="findings",
@@ -608,9 +608,9 @@ def _programs(
     refs = tuple(
         ProgramOperationRef(operation_id=operation_id)
         for operation_id in (
-            "check_subtask_contract.v1",
-            "finalize_proposed_plan.v1",
-            "run_semantic_subtask.v1",
+            "check_subtask_contract",
+            "finalize_proposed_plan",
+            "run_semantic_subtask",
         )
     )
     compiled = CompiledExecutionProgram(

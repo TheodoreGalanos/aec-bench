@@ -387,6 +387,20 @@ def test_entrypoint_request_prediction_includes_harbor_agent_environment_default
     }
 
 
+def test_entrypoint_request_carries_explicit_agent_system_prompt() -> None:
+    agent = AgentConfig(
+        name="evolved",
+        adapter="direct",
+        model="test-model",
+        system_prompt="Use the evolved engineering method.",
+    )
+
+    bundle = build_harbor_entrypoint_execution_bundle(agent=agent, instruction="Complete the task.")
+
+    assert bundle.request.system_prompt == "Use the evolved engineering method."
+    assert "system_prompt" not in bundle.request.configuration
+
+
 def test_normal_harbor_agent_configuration_selects_the_deepseek_baseline() -> None:
     agent = AgentConfig(
         name="deepseek-baseline",
@@ -560,6 +574,32 @@ def test_dispatcher_forwards_external_task_path_to_harbor(tmp_path: Path) -> Non
 
     written = yaml.safe_load(result.config_path.read_text(encoding="utf-8"))
     assert written["tasks"] == [{"path": str(task_path.resolve())}]
+
+
+def test_dispatcher_rejects_verifier_feedback_before_harbor_execution(tmp_path: Path) -> None:
+    task = make_task_definition(task_id="civil/review/feedback")
+    task_path = tmp_path / "feedback-task"
+    task_path.mkdir()
+    (task_path / "verifier_retry_prompt.md").write_text("Repair from verifier feedback.\n", encoding="utf-8")
+    manifest = ExperimentManifest(
+        experiment_id="feedback-001",
+        name="Unsupported Harbor feedback",
+        tasks=TaskSelector(include_patterns=[task.task_id]),
+        agents=[AgentConfig(name="agent", adapter="direct", model="test-model")],
+        compute=ComputeConfig(backend="docker"),
+    )
+    executor = FakeExecutor()
+
+    with pytest.raises(HarborDispatchError, match="verifier-feedback is not supported by Harbor dispatch"):
+        HarborExperimentDispatcher(project_root=tmp_path).dispatch(
+            manifest=manifest,
+            tasks=[task],
+            config_path=tmp_path / "feedback.yaml",
+            task_path_overrides={task.task_id: task_path},
+            executor=executor,
+        )
+
+    assert executor.command is None
 
 
 def test_subprocess_executor_adds_project_root_to_pythonpath(

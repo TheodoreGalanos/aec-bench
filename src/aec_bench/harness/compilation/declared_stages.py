@@ -73,12 +73,12 @@ def _declared_stage_candidates(
     stage_candidates = tuple(
         node
         for node in program.nodes
-        if isinstance(node, ActionNode | FanoutNode | VerifyNode) and node.operation_id == "run_stage.v1"
+        if isinstance(node, ActionNode | FanoutNode | VerifyNode) and node.operation_id == "run_stage"
     )
     finalize_candidates = tuple(
         node
         for node in program.nodes
-        if isinstance(node, ActionNode | FanoutNode | VerifyNode) and node.operation_id == "finalize_task.v1"
+        if isinstance(node, ActionNode | FanoutNode | VerifyNode) and node.operation_id == "finalize_task"
     )
     return stage_candidates, finalize_candidates
 
@@ -92,7 +92,7 @@ def _validate_declared_stage_program_shape(
     run_batch_nodes = tuple(
         node.node_id
         for node in program.nodes
-        if isinstance(node, ActionNode | FanoutNode | VerifyNode) and node.operation_id == "run_batch.v1"
+        if isinstance(node, ActionNode | FanoutNode | VerifyNode) and node.operation_id == "run_batch"
     )
     if run_batch_nodes:
         _fail(
@@ -388,7 +388,7 @@ def _stage_receipt_sources(
         )
     reference = argument.value.ref
     source = nodes_by_id.get(reference.node_id)
-    if isinstance(source, ActionNode) and source.operation_id == "run_stage.v1":
+    if isinstance(source, ActionNode) and source.operation_id == "run_stage":
         coordinate = stage_coordinates_by_node.get(source.node_id)
         if reference.output_port != "stage_receipt" or coordinate is None or coordinate[0] != task_ref:
             _fail(

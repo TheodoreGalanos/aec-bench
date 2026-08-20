@@ -13,14 +13,14 @@ from aec_bench.contracts.evolution import (
 )
 from aec_bench.contracts.experiment_manifest import TaskSelector
 from aec_bench.contracts.trial_record import TrialRecord
-from aec_bench.evolution.backends.local import make_stub_solve_fn
+from aec_bench.evolution.application import run_evolution
+from aec_bench.evolution.backends.local import make_stub_candidate_evaluator
 from aec_bench.evolution.engine import AECEvolutionEngine
-from aec_bench.evolution.orchestrator import EvolutionOrchestrator
 from aec_bench.evolution.workspace import Workspace
 from tests.support.trial_record_factories import make_trial_record
 
 # ---------------------------------------------------------------------------
-# Helpers (minimal stubs mirroring test_orchestrator.py patterns)
+# Helpers
 # ---------------------------------------------------------------------------
 
 
@@ -139,8 +139,8 @@ class TestEvolutionResultArchiveSummary:
         )
         assert result.archive_summary is None
 
-    def test_orchestrator_populates_archive_summary(self, tmp_path: Path) -> None:
-        """Orchestrator.run() returns an EvolutionResult with archive_summary populated."""
+    def test_run_evolution_populates_archive_summary(self, tmp_path: Path) -> None:
+        """run_evolution() returns an EvolutionResult with archive metadata."""
         from aec_bench.evolution.strategy import QDStrategy
 
         root = _scaffold_workspace(tmp_path / "ws")
@@ -148,17 +148,15 @@ class TestEvolutionResultArchiveSummary:
         ws.init_versioning()
 
         records = [_make_record(0.75)]
-        solve_fn = make_stub_solve_fn(records)
+        solve_fn = make_stub_candidate_evaluator(records)
 
-        orchestrator = EvolutionOrchestrator(
+        result = run_evolution(
             workspace=ws,
             engine=_make_engine(),
-            solve_fn=solve_fn,
+            evaluate=solve_fn,
             config=_make_config(max_cycles=1),
             strategy=QDStrategy(evolver_model="claude-sonnet-4-6"),
         )
-
-        result = orchestrator.run()
 
         assert result.archive_summary is not None
         assert "archive_summary" in result.archive_summary
@@ -189,15 +187,13 @@ class TestEvolutionResultArchiveSummary:
             call_idx[0] += 1
             return [_make_record(reward)]
 
-        orchestrator = EvolutionOrchestrator(
+        result = run_evolution(
             workspace=ws,
             engine=_make_engine(),
-            solve_fn=vary_solve,
+            evaluate=vary_solve,
             config=_make_config(max_cycles=3),
             strategy=QDStrategy(evolver_model="claude-sonnet-4-6"),
         )
-
-        result = orchestrator.run()
 
         assert result.archive_summary is not None
         # At least one entry must have been inserted across 3 cycles.

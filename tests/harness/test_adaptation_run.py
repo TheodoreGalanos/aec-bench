@@ -4,7 +4,7 @@
 import pytest
 
 from aec_bench.contracts.adaptation import AdaptationSpec, VariationAxis
-from aec_bench.contracts.experiment_manifest import AgentConfig
+from aec_bench.contracts.experiment_manifest import AgentConfig, ComputeConfig
 from aec_bench.harness.adaptation_run import (
     AdaptationCoordinationError,
     build_adaptation_trial_plan,
@@ -71,19 +71,19 @@ def test_build_adaptation_trial_plan_resolves_metadata_variants() -> None:
         spec=spec,
         tasks=tasks,
         agents=agents,
-        compute_backend="modal",
+        compute=ComputeConfig(backend="modal"),
     )
 
-    assert [item.planned_trial.task_id for item in plan] == [
+    assert [item.task_id for item in plan] == [
         "mechanical/heat-load/au-school",
         "mechanical/heat-load/us-office",
         "mechanical/heat-load/us-school",
     ]
-    assert plan[0].adaptation.variation_key == "jurisdiction=au__building_type=school"
-    assert plan[1].adaptation.variation_key == "jurisdiction=us__building_type=office"
-    assert plan[2].adaptation.derivation_lineage[0].axis == "jurisdiction"
-    assert plan[2].adaptation.derivation_lineage[1].axis == "building_type"
-    assert plan[0].planned_trial.compute_backend == "modal"
+    assert plan[0].extensions["adaptation"].variation_key == "jurisdiction=au__building_type=school"
+    assert plan[1].extensions["adaptation"].variation_key == "jurisdiction=us__building_type=office"
+    assert plan[2].extensions["adaptation"].derivation_lineage[0].axis == "jurisdiction"
+    assert plan[2].extensions["adaptation"].derivation_lineage[1].axis == "building_type"
+    assert plan[0].compute.backend == "modal"
 
 
 def test_build_adaptation_trial_plan_supports_repetitions() -> None:
@@ -109,13 +109,13 @@ def test_build_adaptation_trial_plan_supports_repetitions() -> None:
         spec=spec,
         tasks=tasks,
         agents=agents,
-        compute_backend="modal",
+        compute=ComputeConfig(backend="modal"),
         repetitions=2,
     )
 
-    assert [item.planned_trial.repetition for item in plan] == [1, 2]
-    assert plan[0].planned_trial.trial_id.endswith("--rep01")
-    assert plan[1].planned_trial.trial_id.endswith("--rep02")
+    assert [item.repetition for item in plan] == [1, 2]
+    assert plan[0].trial_id.endswith("--rep01")
+    assert plan[1].trial_id.endswith("--rep02")
 
 
 def test_build_adaptation_trial_plan_rejects_missing_task_match() -> None:
@@ -132,7 +132,7 @@ def test_build_adaptation_trial_plan_rejects_missing_task_match() -> None:
             spec=spec,
             tasks=[],
             agents=[AgentConfig(name="tool-loop", adapter="tool_loop", model="gpt-5.4-mini")],
-            compute_backend="modal",
+            compute=ComputeConfig(backend="modal"),
         )
 
 
@@ -166,5 +166,5 @@ def test_build_adaptation_trial_plan_rejects_ambiguous_task_match() -> None:
             spec=spec,
             tasks=tasks,
             agents=[AgentConfig(name="tool-loop", adapter="tool_loop", model="gpt-5.4-mini")],
-            compute_backend="modal",
+            compute=ComputeConfig(backend="modal"),
         )
