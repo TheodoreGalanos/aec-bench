@@ -25,6 +25,8 @@ from aec_bench.experimentation.lifecycle_studies.calibration import (
     write_lifecycle_calibration_freeze,
 )
 from aec_bench.experimentation.lifecycle_studies.experiment import record_lifecycle_experiment
+from aec_bench.experimentation.process_runtime.autonomy import AutonomyConfig, run_autonomous_process
+from aec_bench.experimentation.process_runtime.problem_model_runtime import run_problem_model_process
 from aec_bench.experimentation.qualification.recipe import (
     materialize_harness_comparison_example,
     materialize_harness_comparison_recipe,
@@ -39,28 +41,26 @@ from aec_bench.harness.lifecycle_local import (
 from aec_bench.harness.model_execution.model_runner import (
     build_intake_model_run_plan,
     build_operation_model_run_plan,
+    build_problem_model_generation_run_plan,
     build_review_model_run_plan,
     build_review_request,
-    build_world_generation_model_run_plan,
     evaluate_with_review,
     load_model_endpoints,
     parse_model_endpoint,
     parse_review_response,
     run_intake_models,
     run_operation_models,
+    run_problem_model_generation_models,
     run_review_models,
-    run_world_generation_models,
 )
-from aec_bench.harness.process_runtime.autonomy import AutonomyConfig, run_autonomous_process
 from aec_bench.harness.process_runtime.harbor_task import materialize_harbor_task_package
 from aec_bench.harness.process_runtime.operation_orchestrator import run_operation_orchestrator
 from aec_bench.harness.process_runtime.operation_profile import apply_world_operation
-from aec_bench.harness.process_runtime.world_process import (
+from aec_bench.harness.process_runtime.problem_model_process import (
     apply_governance_decision,
     build_problem_brief_request,
-    build_world_generation_request,
+    build_problem_model_generation_request,
 )
-from aec_bench.harness.process_runtime.world_runtime import run_process
 from aec_bench.lifecycles.catalogue import lifecycle_operation_resolver, verify_lifecycle
 from aec_bench.lifecycles.runtime.lifecycle import (
     branch_evidence_lifecycle,
@@ -70,7 +70,7 @@ from aec_bench.lifecycles.runtime.lifecycle import (
     submit_evidence_checkpoint,
 )
 
-app = typer.Typer(help="Run meta-harness intake, world, operation, and governance processes.")
+app = typer.Typer(help="Run meta-harness studies, problem-model intake, operations, and governance.")
 
 
 @app.command("lifecycle-start")
@@ -525,7 +525,7 @@ def intake_models_command(
 @app.command("world-request")
 def world_request_command(
     brief: Path = typer.Option(..., "--brief", help="Problem-space brief JSON"),
-    source_world: Path | None = typer.Option(None, "--source-world", help="Optional source world JSON"),
+    source_problem_model: Path | None = typer.Option(None, "--source-world", help="Optional source world JSON"),
     governance_directive: Path | None = typer.Option(
         None,
         "--governance-directive",
@@ -535,9 +535,9 @@ def world_request_command(
 ) -> None:
     """Emit a world-generation request from a problem-space brief."""
     start = time.monotonic()
-    result = build_world_generation_request(
+    result = build_problem_model_generation_request(
         brief=_load_json(brief),
-        source_world=_load_optional_json(source_world),
+        source_problem_model=_load_optional_json(source_problem_model),
         governance_directive=_load_optional_json(governance_directive),
         process_id=process_id,
     )
@@ -547,7 +547,7 @@ def world_request_command(
 @app.command("world-models")
 def world_models_command(
     brief: Path = typer.Option(..., "--brief", help="Problem-space brief JSON"),
-    source_world: Path | None = typer.Option(None, "--source-world", help="Optional source world JSON"),
+    source_problem_model: Path | None = typer.Option(None, "--source-world", help="Optional source world JSON"),
     governance_directive: Path | None = typer.Option(
         None,
         "--governance-directive",
@@ -567,21 +567,21 @@ def world_models_command(
     start = time.monotonic()
     endpoints = _require_endpoints(model, models_config)
     brief_payload = _load_json(brief)
-    source_payload = _load_optional_json(source_world)
+    source_payload = _load_optional_json(source_problem_model)
     directive_payload = _load_optional_json(governance_directive)
     if emit_run_plan:
-        result = build_world_generation_model_run_plan(
+        result = build_problem_model_generation_run_plan(
             brief=brief_payload,
-            source_world=source_payload,
+            source_problem_model=source_payload,
             governance_directive=directive_payload,
             endpoints=endpoints,
             process_id=process_id,
         )
         emit("meta-harness world-models", result, start_time=start)
         return
-    result = run_world_generation_models(
+    result = run_problem_model_generation_models(
         brief=brief_payload,
-        source_world=source_payload,
+        source_problem_model=source_payload,
         governance_directive=directive_payload,
         endpoints=endpoints,
         process_id=process_id,
@@ -592,7 +592,7 @@ def world_models_command(
 @app.command("govern")
 def govern_command(
     brief: Path = typer.Option(..., "--brief", help="Problem-space brief JSON"),
-    source_world: Path = typer.Option(..., "--source-world", help="Source world JSON"),
+    source_problem_model: Path = typer.Option(..., "--source-world", help="Source world JSON"),
     proposal: Path = typer.Option(..., "--proposal", help="Operation proposal JSON"),
     decision: Path = typer.Option(..., "--decision", help="Governance decision JSON"),
     process_id: str | None = typer.Option(None, "--process-id", help="Stable process id"),
@@ -601,7 +601,7 @@ def govern_command(
     start = time.monotonic()
     result = apply_governance_decision(
         brief=_load_json(brief),
-        source_world=_load_json(source_world),
+        source_problem_model=_load_json(source_problem_model),
         proposal=_load_json(proposal),
         decision=_load_json(decision),
         process_id=process_id,
@@ -686,14 +686,14 @@ def autonomous_command(
         process_id=process_id,
         config=config,
         problem_space_brief=_load_optional_json(brief),
-        world=_load_optional_json(world),
+        problem_model=_load_optional_json(world),
         intake_endpoints=_load_stage_endpoints(intake_model, intake_models_config),
         world_generation_endpoints=_load_stage_endpoints(world_model, world_models_config),
         review_endpoints=_load_stage_endpoints(review_model, review_models_config),
         operation_endpoints=_load_stage_endpoints(operation_model, operation_models_config),
         output_dir=output,
         ledger_path=ledger,
-        world_resolver=_queue_resolver(_load_queue(world_candidate), "world candidate"),
+        problem_model_resolver=_queue_resolver(_load_queue(world_candidate), "world candidate"),
         task_run_resolver=_queue_resolver(_load_queue(task_run), "task run"),
         operation_plan_resolver=_queue_resolver(_load_queue(operation_plan), "operation plan"),
         governance_resolver=_governance_queue_resolver(proposals, decisions),
@@ -822,11 +822,11 @@ def process_command(
 ) -> None:
     """Run the pauseable meta-harness process runtime."""
     start = time.monotonic()
-    result = run_process(
+    result = run_problem_model_process(
         task_text=task_text,
         process_id=process_id,
         problem_space_brief=_load_optional_json(brief),
-        world=_load_optional_json(world),
+        problem_model=_load_optional_json(world),
         task_run=_load_optional_json(task_run),
         operation_plan=_load_optional_json(operation_plan),
         governance_proposal=_load_optional_json(governance_proposal),

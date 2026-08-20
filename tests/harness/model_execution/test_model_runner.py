@@ -12,8 +12,8 @@ from aec_bench.harness.model_execution.model_runner import (
     ModelEndpoint,
     build_intake_model_run_plan,
     build_operation_model_run_plan,
+    build_problem_model_generation_run_plan,
     build_review_model_run_plan,
-    build_world_generation_model_run_plan,
     coerce_operation_plan_output,
     coerce_problem_space_brief_output,
     coerce_world_generation_output,
@@ -71,9 +71,9 @@ def test_model_run_plans_summarize_without_full_prompts() -> None:
         endpoints=endpoints,
         process_id="process.demo",
     )
-    world_plan = build_world_generation_model_run_plan(
+    world_plan = build_problem_model_generation_run_plan(
         brief=brief,
-        source_world=world,
+        source_problem_model=world,
         governance_directive={"target": "world_schema"},
         endpoints=endpoints,
         process_id="process.demo",

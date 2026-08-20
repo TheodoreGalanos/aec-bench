@@ -111,6 +111,35 @@ generated set records the shared template source and per-instance replay inputs.
 Task loading does not read this sidecar. The replay command regenerates into a
 separate directory and compares runtime files before it reports success.
 
+### Meta-harness composition
+
+`aec_bench.experimentation.meta_harness` is the runtime-neutral public facade
+for harness candidate studies. It supplies immutable generic candidate and
+result values plus three direct functions:
+
+- `evaluate_harness_candidate()` validates one non-empty set of `TrialRecord`
+  evidence;
+- `run_harness_study()` evaluates one baseline and one or more candidates; and
+- `run_meta_harness()` performs a bounded propose, evaluate, assess, select,
+  and refine process.
+
+Callers own candidate values, assessment values, and every policy callback.
+The core does not import artifact-task, lifecycle, interactive-world, adapter,
+provider, Harbor, or Prime implementations. A runtime participates by supplying
+one evaluator that returns its normal `TrialRecord` values. Failed and invalid
+records remain assessment evidence.
+
+Specialist qualification code still owns program materialisation, Harbor study
+execution, repair diagnosis and patch creation, motif learning, promotion, and
+persisted reports. Its overlapping candidate iteration uses the common
+functional composition. Evaluation owns metric meaning.
+
+The supported prose-intake process is a higher-order composition under
+`experimentation.process_runtime`. It uses “problem model” for the generated
+representation. It is not an interactive world and does not import the
+interactive-world runtime. Low-level model execution and deterministic process
+helpers remain under `harness`.
+
 ### Interactive worlds
 
 An interactive world repeatedly exposes an actor-visible observation and

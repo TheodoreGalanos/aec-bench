@@ -24,11 +24,11 @@ from aec_bench.harness.process_runtime.operation_orchestrator import (
     run_operation_orchestrator,
     validate_operation_plan,
 )
-from aec_bench.harness.process_runtime.world_process import (
+from aec_bench.harness.process_runtime.problem_model_process import (
     build_problem_brief_request,
-    build_world_generation_request,
+    build_problem_model_generation_request,
+    validate_problem_model_generation_response,
     validate_problem_space_brief,
-    validate_world_generation_response,
 )
 
 SUPPORTED_PROVIDERS = {
@@ -355,17 +355,17 @@ def run_intake_model(
     }
 
 
-def build_world_generation_model_run_plan(
+def build_problem_model_generation_run_plan(
     *,
     brief: dict[str, Any],
-    source_world: dict[str, Any] | None = None,
+    source_problem_model: dict[str, Any] | None = None,
     governance_directive: dict[str, Any] | None = None,
     endpoints: list[ModelEndpoint],
     process_id: str | None = None,
 ) -> dict[str, Any]:
-    request = build_world_generation_request(
+    request = build_problem_model_generation_request(
         brief=brief,
-        source_world=source_world,
+        source_problem_model=source_problem_model,
         governance_directive=governance_directive,
         process_id=process_id,
     )
@@ -384,17 +384,17 @@ def build_world_generation_model_run_plan(
     }
 
 
-def run_world_generation_models(
+def run_problem_model_generation_models(
     *,
     brief: dict[str, Any],
-    source_world: dict[str, Any] | None = None,
+    source_problem_model: dict[str, Any] | None = None,
     governance_directive: dict[str, Any] | None = None,
     endpoints: list[ModelEndpoint],
     process_id: str | None = None,
 ) -> dict[str, Any]:
-    request = build_world_generation_request(
+    request = build_problem_model_generation_request(
         brief=brief,
-        source_world=source_world,
+        source_problem_model=source_problem_model,
         governance_directive=governance_directive,
         process_id=process_id,
     )
@@ -405,9 +405,9 @@ def run_world_generation_models(
         except Exception as exc:
             results.append({"endpoint": endpoint.to_public_dict(), "status": "error", "error": str(exc)})
     return {
-        "run_plan": build_world_generation_model_run_plan(
+        "run_plan": build_problem_model_generation_run_plan(
             brief=brief,
-            source_world=source_world,
+            source_problem_model=source_problem_model,
             governance_directive=governance_directive,
             endpoints=endpoints,
             process_id=request["process_id"],
@@ -570,7 +570,7 @@ def coerce_world_generation_output(output: Any) -> dict[str, Any]:
         output_type = type(output).__name__
         raise RuntimeError(f"model returned unsupported world generation type: {output_type}")
 
-    errors = validate_world_generation_response(output)
+    errors = validate_problem_model_generation_response(output)
     if errors:
         raise RuntimeError("model returned invalid world generation response: " + "; ".join(errors))
     return output

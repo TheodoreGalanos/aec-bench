@@ -1,4 +1,4 @@
-# ABOUTME: Defines the prose intake, world generation, and governance contracts.
+# ABOUTME: Defines prose intake, problem-model generation, and governance contracts.
 # ABOUTME: Routes accepted repair proposals back to generation without hidden mutation.
 
 from __future__ import annotations
@@ -36,24 +36,24 @@ def build_problem_brief_request(
         "system_prompt": _problem_brief_system_prompt(),
         "user_prompt": _problem_brief_user_prompt(payload),
         "response_schema": problem_space_brief_schema(),
-        "next_step": "submit problem_space_brief to build_world_generation_request",
+        "next_step": "submit problem_space_brief to build_problem_model_generation_request",
     }
 
 
-def build_world_generation_request(
+def build_problem_model_generation_request(
     *,
     brief: dict[str, Any],
-    source_world: dict[str, Any] | None = None,
+    source_problem_model: dict[str, Any] | None = None,
     governance_directive: dict[str, Any] | None = None,
     process_id: str | None = None,
 ) -> dict[str, Any]:
     resolved_process_id = process_id or _stable_id("process", brief.get("brief_id"), brief.get("objective"))
     payload = {
         "brief": copy.deepcopy(brief),
-        "source_world": _world_summary(source_world) if source_world else None,
+        "source_world": _problem_model_summary(source_problem_model) if source_problem_model else None,
         "governance_directive": copy.deepcopy(governance_directive),
     }
-    environment = world_generator_environment()
+    environment = problem_model_generator_environment()
     return {
         "process_id": resolved_process_id,
         "stage": "world_generation",
@@ -61,9 +61,9 @@ def build_world_generation_request(
         "request": {
             "environment": environment,
             "payload": payload,
-            "system_prompt": _world_generation_system_prompt(environment),
-            "user_prompt": _world_generation_user_prompt(payload),
-            "response_schema": world_card_response_schema(),
+            "system_prompt": _problem_model_generation_system_prompt(environment),
+            "user_prompt": _problem_model_generation_user_prompt(payload),
+            "response_schema": problem_model_response_schema(),
         },
     }
 
@@ -71,23 +71,23 @@ def build_world_generation_request(
 def build_governance_review_packet(
     *,
     brief: dict[str, Any],
-    source_world: dict[str, Any],
+    source_problem_model: dict[str, Any],
     operation_run: dict[str, Any],
     process_id: str | None = None,
 ) -> dict[str, Any]:
     return {
-        "process_id": process_id or _stable_id("process", brief.get("brief_id"), source_world.get("world_id")),
+        "process_id": process_id or _stable_id("process", brief.get("brief_id"), source_problem_model.get("world_id")),
         "stage": "governance_review",
         "status": "awaiting_governance_decision",
         "brief": copy.deepcopy(brief),
-        "source_world": _world_summary(source_world),
+        "source_world": _problem_model_summary(source_problem_model),
         "candidates": _governance_candidates(operation_run),
         "response_schema": governance_decision_schema(),
         "principles": [
             "Operation proposals are evidence, not mutations.",
-            "Only governance may route accepted repairs back to world generation.",
+            "Only governance may route accepted repairs back to problem-model generation.",
             "Run-only acceptance creates a local directive, not generator evolution.",
-            "Generator and schema changes must preserve provenance and source world refs.",
+            "Generator and schema changes must preserve provenance and source problem-model refs.",
         ],
     }
 
@@ -95,7 +95,7 @@ def build_governance_review_packet(
 def apply_governance_decision(
     *,
     brief: dict[str, Any],
-    source_world: dict[str, Any],
+    source_problem_model: dict[str, Any],
     proposal: dict[str, Any],
     decision: dict[str, Any],
     process_id: str | None = None,
@@ -106,7 +106,7 @@ def apply_governance_decision(
         return _governance_outcome(
             status="invalid_governance_decision",
             brief=brief,
-            source_world=source_world,
+            source_problem_model=source_problem_model,
             proposal=proposal,
             decision=decision,
             errors=proposal_errors + decision_errors,
@@ -117,7 +117,7 @@ def apply_governance_decision(
         return _governance_outcome(
             status="blocked",
             brief=brief,
-            source_world=source_world,
+            source_problem_model=source_problem_model,
             proposal=proposal,
             decision=decision,
             errors=["proposal requires human approval before accepted governance action"],
@@ -129,7 +129,7 @@ def apply_governance_decision(
         return _governance_outcome(
             status="rejected",
             brief=brief,
-            source_world=source_world,
+            source_problem_model=source_problem_model,
             proposal=proposal,
             decision=decision,
             process_id=process_id,
@@ -138,7 +138,7 @@ def apply_governance_decision(
         return _governance_outcome(
             status="awaiting_human_review",
             brief=brief,
-            source_world=source_world,
+            source_problem_model=source_problem_model,
             proposal=proposal,
             decision=decision,
             process_id=process_id,
@@ -148,7 +148,7 @@ def apply_governance_decision(
         return _governance_outcome(
             status="accepted_for_run",
             brief=brief,
-            source_world=source_world,
+            source_problem_model=source_problem_model,
             proposal=proposal,
             decision=decision,
             process_id=process_id,
@@ -161,16 +161,16 @@ def apply_governance_decision(
         )
 
     directive = _governance_directive(proposal, decision)
-    world_generation_request = build_world_generation_request(
+    world_generation_request = build_problem_model_generation_request(
         brief=brief,
-        source_world=source_world,
+        source_problem_model=source_problem_model,
         governance_directive=directive,
         process_id=process_id,
     )
     return _governance_outcome(
         status="accepted_for_world_generation",
         brief=brief,
-        source_world=source_world,
+        source_problem_model=source_problem_model,
         proposal=proposal,
         decision=decision,
         process_id=process_id,
@@ -210,20 +210,20 @@ def validate_problem_space_brief(brief: Any) -> list[str]:
     return errors
 
 
-def validate_world_generation_response(response: Any) -> list[str]:
+def validate_problem_model_generation_response(response: Any) -> list[str]:
     if not isinstance(response, dict):
-        return ["world generation response must be a JSON object"]
+        return ["problem-model generation response must be a JSON object"]
 
-    world = response.get("world")
-    if not isinstance(world, dict):
+    problem_model = response.get("world")
+    if not isinstance(problem_model, dict):
         return ["world must be a JSON object"]
 
     errors: list[str] = []
     for field_name in ["world_id", "task_unit"]:
-        if not _has_text(world.get(field_name)):
+        if not _has_text(problem_model.get(field_name)):
             errors.append(f"world.{field_name} must be a non-empty string")
     for field_name in ["logic_profile", "operation_profile", "operation_handles"]:
-        if not isinstance(world.get(field_name), dict):
+        if not isinstance(problem_model.get(field_name), dict):
             errors.append(f"world.{field_name} must be an object")
     return errors
 
@@ -251,23 +251,23 @@ def problem_space_brief_schema() -> dict[str, Any]:
     }
 
 
-def world_generator_environment() -> dict[str, Any]:
+def problem_model_generator_environment() -> dict[str, Any]:
     return {
         "environment_id": "world_generator",
         "name": "World Generator",
-        "role": "Generate or revise task-world cards from problem briefs and governance directives.",
+        "role": "Generate or revise problem models from problem briefs and governance directives.",
         "principles": [
-            "Generate worlds; do not execute tasks.",
-            "Preserve provenance from prose, briefs, source worlds, and governance directives.",
+            "Generate problem models; do not execute tasks.",
+            "Preserve provenance from prose, briefs, source problem models, and governance directives.",
             "Declare logic_profile, operation_profile, and operation_handles explicitly.",
-            "Do not mutate prior worlds; emit a replacement or derived world candidate.",
+            "Do not mutate prior problem models; emit a replacement or derived candidate.",
             "Treat accepted governance directives as constraints, not suggestions.",
         ],
         "tools": [
             {
                 "name": "emit_world_card",
                 "execution_owner": "agent",
-                "description": "Return a task-world JSON object matching the response schema.",
+                "description": "Return a problem-model JSON object matching the response schema.",
             },
             {
                 "name": "validate_world_profiles",
@@ -283,7 +283,7 @@ def world_generator_environment() -> dict[str, Any]:
     }
 
 
-def world_card_response_schema() -> dict[str, Any]:
+def problem_model_response_schema() -> dict[str, Any]:
     return {
         "type": "object",
         "required": ["world"],
@@ -365,7 +365,7 @@ def _governance_outcome(
     *,
     status: str,
     brief: dict[str, Any],
-    source_world: dict[str, Any],
+    source_problem_model: dict[str, Any],
     proposal: dict[str, Any],
     decision: dict[str, Any],
     errors: list[str] | None = None,
@@ -374,11 +374,11 @@ def _governance_outcome(
     world_generation_request: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     return {
-        "process_id": process_id or _stable_id("process", brief.get("brief_id"), source_world.get("world_id")),
+        "process_id": process_id or _stable_id("process", brief.get("brief_id"), source_problem_model.get("world_id")),
         "stage": "governance_application",
         "status": status,
         "brief_ref": brief.get("brief_id"),
-        "source_world_ref": source_world.get("world_id"),
+        "source_world_ref": source_problem_model.get("world_id"),
         "decision": copy.deepcopy(decision),
         "proposal": copy.deepcopy(proposal),
         "errors": errors or [],
@@ -433,19 +433,19 @@ def _problem_brief_user_prompt(payload: dict[str, Any]) -> str:
     )
 
 
-def _world_generation_system_prompt(environment: dict[str, Any]) -> str:
+def _problem_model_generation_system_prompt(environment: dict[str, Any]) -> str:
     principles = "\n".join(f"- {item}" for item in environment["principles"])
     return (
-        "You are the World Generator environment for a meta-harness. "
-        "Return a world card; do not execute the task.\n\n"
+        "You are the Problem Model Generator environment for a meta-harness. "
+        "Return a problem model; do not execute the task.\n\n"
         "Principles:\n"
         f"{principles}"
     )
 
 
-def _world_generation_user_prompt(payload: dict[str, Any]) -> str:
+def _problem_model_generation_user_prompt(payload: dict[str, Any]) -> str:
     return (
-        "Generate or revise a task world for this brief and governance context.\n"
+        "Generate or revise a problem model for this brief and governance context.\n"
         "Return only JSON matching the response schema.\n\n"
         "Payload:\n"
         "```json\n"
@@ -454,17 +454,17 @@ def _world_generation_user_prompt(payload: dict[str, Any]) -> str:
     )
 
 
-def _world_summary(world: dict[str, Any] | None) -> dict[str, Any] | None:
-    if world is None:
+def _problem_model_summary(problem_model: dict[str, Any] | None) -> dict[str, Any] | None:
+    if problem_model is None:
         return None
     return {
-        "world_id": world.get("world_id"),
-        "name": world.get("name"),
-        "task_unit": world.get("task_unit"),
-        "logic_profile": copy.deepcopy(world.get("logic_profile", {})),
-        "operation_profile": copy.deepcopy(world.get("operation_profile", {})),
-        "operation_handles": copy.deepcopy(world.get("operation_handles", {})),
-        "evidence_profile": copy.deepcopy(world.get("evidence_profile", {})),
+        "world_id": problem_model.get("world_id"),
+        "name": problem_model.get("name"),
+        "task_unit": problem_model.get("task_unit"),
+        "logic_profile": copy.deepcopy(problem_model.get("logic_profile", {})),
+        "operation_profile": copy.deepcopy(problem_model.get("operation_profile", {})),
+        "operation_handles": copy.deepcopy(problem_model.get("operation_handles", {})),
+        "evidence_profile": copy.deepcopy(problem_model.get("evidence_profile", {})),
     }
 
 

@@ -1,4 +1,4 @@
-# ABOUTME: Tests the meta-harness prose-to-world process inside AEC-Bench.
+# ABOUTME: Tests the meta-harness prose-to-problem-model process inside AEC-Bench.
 # ABOUTME: Covers intake, governance, pauseable runtime, ledger records, and autonomy gates.
 
 from __future__ import annotations
@@ -7,19 +7,19 @@ import copy
 import json
 from pathlib import Path
 
-from aec_bench.harness.process_runtime.autonomy import (
+from aec_bench.evaluation.process_result import score_process_result
+from aec_bench.experimentation.process_runtime.autonomy import (
     AutonomyConfig,
     estimate_process_cost_usd,
     run_autonomous_process,
-    score_process_result,
 )
-from aec_bench.harness.process_runtime.world_process import (
+from aec_bench.experimentation.process_runtime.problem_model_runtime import run_problem_model_process
+from aec_bench.harness.process_runtime.problem_model_process import (
     apply_governance_decision,
     build_governance_review_packet,
     build_problem_brief_request,
-    build_world_generation_request,
+    build_problem_model_generation_request,
 )
-from aec_bench.harness.process_runtime.world_runtime import run_process
 from aec_bench.ledger.process_log import read_ledger
 
 
@@ -29,9 +29,9 @@ def test_problem_brief_and_world_generation_requests_preserve_boundaries() -> No
         attachments=[{"path": "runs/demo/result.json", "kind": "run_artifact"}],
         process_id="process.demo",
     )
-    world_generation = build_world_generation_request(
+    world_generation = build_problem_model_generation_request(
         brief=_brief(),
-        source_world=_world(),
+        source_problem_model=_world(),
         process_id="process.demo",
     )
 
@@ -68,13 +68,13 @@ def test_governance_routes_accepted_schema_changes_back_to_world_generation() ->
 
     packet = build_governance_review_packet(
         brief=_brief(),
-        source_world=world,
+        source_problem_model=world,
         operation_run=operation_run,
         process_id="process.demo",
     )
     outcome = apply_governance_decision(
         brief=_brief(),
-        source_world=world,
+        source_problem_model=world,
         proposal=_proposal(),
         decision={
             "decision_id": "decision.accept-governance-axis",
@@ -96,12 +96,12 @@ def test_governance_routes_accepted_schema_changes_back_to_world_generation() ->
 def test_runtime_pauses_and_records_ledger_entries(tmp_path: Path) -> None:
     ledger_path = tmp_path / "ledger.jsonl"
 
-    intake_only = run_process(
+    intake_only = run_problem_model_process(
         task_text="Create a diagnostic task.",
         process_id="process.demo",
         ledger_path=ledger_path,
     )
-    with_brief = run_process(
+    with_brief = run_problem_model_process(
         task_text="Create a diagnostic task.",
         process_id="process.demo",
         problem_space_brief=_brief(),
@@ -119,11 +119,11 @@ def test_runtime_reaches_governed_world_generation_with_supplied_artifacts(tmp_p
     output_dir = tmp_path / "process"
     ledger_path = output_dir / "process_ledger.jsonl"
 
-    result = run_process(
+    result = run_problem_model_process(
         task_text="Create a diagnostic task.",
         process_id="process.demo",
         problem_space_brief=_brief(),
-        world=_world(),
+        problem_model=_world(),
         task_run=_task_run(),
         operation_plan=_operation_plan(),
         governance_proposal=_proposal(),
@@ -154,11 +154,11 @@ def test_runtime_reaches_governed_world_generation_with_supplied_artifacts(tmp_p
 
 def test_autonomy_scores_runs_and_human_gates_world_schema_governance() -> None:
     config = AutonomyConfig(max_iterations=3)
-    runtime_result = run_process(
+    runtime_result = run_problem_model_process(
         task_text="Create a diagnostic task.",
         process_id="process.demo",
         problem_space_brief=_brief(),
-        world=_world(),
+        problem_model=_world(),
         task_run=_task_run(),
         operation_plan=_operation_plan(),
         governance_proposal=_proposal(),
@@ -173,7 +173,7 @@ def test_autonomy_scores_runs_and_human_gates_world_schema_governance() -> None:
         process_id="process.autonomy-human-gate",
         config=config,
         problem_space_brief=_brief(),
-        world=_world(),
+        problem_model=_world(),
         task_run_resolver=lambda _runtime: copy.deepcopy(_task_run()),
         operation_plan_resolver=lambda _runtime: copy.deepcopy(_operation_plan()),
         governance_resolver=lambda _runtime: {

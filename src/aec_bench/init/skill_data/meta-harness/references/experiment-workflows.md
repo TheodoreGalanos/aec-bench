@@ -3,6 +3,12 @@
 Choose the smallest workflow that can answer the research question. Planning and
 validation are provider-free; model execution is not.
 
+For direct Python composition, use
+`aec_bench.experimentation.meta_harness`. Supply caller-owned candidate values,
+an evaluator that returns `TrialRecord` values, and the assessment, selection,
+refinement, and stop functions required by the study. Always set `max_rounds`
+for an iterative run. Do not add a generic runtime or persisted workflow file.
+
 ## 1. Candidate-versus-baseline smoke comparison
 
 Use this to verify an installation or learn the artifact shape:

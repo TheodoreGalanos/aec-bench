@@ -60,7 +60,6 @@ authority.
 | [Staged evidence and publication](protocols/staged-evidence-and-publication.md) | Protocol | Current | Lifecycle and evaluation contributors | Lifecycle runtime and task owners |
 | [Artifact task composition](plans/artifact-task-composition.md) | Plan | Proposed | Task generation, dataset, harness, evaluation, and CLI contributors | Repository maintainers |
 | [Evolution functional composition](plans/evolution-functional-composition.md) | Plan | Proposed | Evolution, harness, experiment, and CLI contributors | Repository maintainers |
-| [Meta-harness functional composition](plans/meta-harness-functional-composition.md) | Plan | Proposed | Experimentation, harness, evaluation, lifecycle, world, and CLI contributors | Repository maintainers |
 | [Environment category contract plan](plans/environment-category-contracts.md) | Plan | Historical | World, lifecycle, task, and runtime contributors | Repository maintainers |
 | [Prime and interactive-world boundary study](plans/prime-world-boundary-study.md) | Plan | Historical | Prime, harness, and task-world contributors | Repository maintainers |
 | [Repository architecture study](plans/repository-architecture-study.md) | Plan | Historical | Repository maintainers and subsystem owners | Repository maintainers |

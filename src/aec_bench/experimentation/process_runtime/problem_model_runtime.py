@@ -1,4 +1,4 @@
-# ABOUTME: Coordinates the full prose-to-world runtime with pauseable stage outputs.
+# ABOUTME: Composes the full prose-to-problem-model process from owned runtime helpers.
 # ABOUTME: Calls supplied resolvers through explicit boundaries and records every stage in an append-only ledger.
 
 from __future__ import annotations
@@ -12,27 +12,27 @@ from aec_bench.harness.model_execution.model_runner import (
     attach_review_to_run,
     run_intake_models,
     run_operation_models,
+    run_problem_model_generation_models,
     run_review_models,
-    run_world_generation_models,
 )
 from aec_bench.harness.process_runtime.harbor_task import materialize_harbor_task_package
 from aec_bench.harness.process_runtime.operation_orchestrator import run_operation_orchestrator
-from aec_bench.harness.process_runtime.world_process import (
+from aec_bench.harness.process_runtime.problem_model_process import (
     apply_governance_decision,
     build_governance_review_packet,
     build_problem_brief_request,
-    build_world_generation_request,
+    build_problem_model_generation_request,
 )
 from aec_bench.ledger.process_log import append_ledger_entry
 
 
-def run_process(
+def run_problem_model_process(
     *,
     task_text: str,
     process_id: str | None = None,
     attachments: list[dict[str, Any]] | None = None,
     problem_space_brief: dict[str, Any] | None = None,
-    world: dict[str, Any] | None = None,
+    problem_model: dict[str, Any] | None = None,
     task_run: dict[str, Any] | None = None,
     operation_plan: dict[str, Any] | None = None,
     governance_proposal: dict[str, Any] | None = None,
@@ -86,47 +86,47 @@ def run_process(
         summary={"brief_id": problem_space_brief.get("brief_id")},
     )
 
-    world_generation_request = build_world_generation_request(
+    problem_model_generation_request = build_problem_model_generation_request(
         brief=problem_space_brief,
-        source_world=world,
+        source_problem_model=problem_model,
         process_id=resolved_process_id,
     )
-    result["world_generation_request"] = world_generation_request
-    result["status"] = world_generation_request["status"]
+    result["world_generation_request"] = problem_model_generation_request
+    result["status"] = problem_model_generation_request["status"]
     _record(
         resolved_ledger_path,
         process_id=resolved_process_id,
         stage="world_generation_request",
-        status=world_generation_request["status"],
+        status=problem_model_generation_request["status"],
     )
 
-    if world is None and world_generation_endpoints:
-        world_run = run_world_generation_models(
+    if problem_model is None and world_generation_endpoints:
+        problem_model_run = run_problem_model_generation_models(
             brief=problem_space_brief,
             endpoints=world_generation_endpoints,
             process_id=resolved_process_id,
         )
-        result["world_generation_model_run"] = world_run
-        response = _first_complete(world_run, "world_generation_response")
-        world = response.get("world") if response else None
+        result["world_generation_model_run"] = problem_model_run
+        response = _first_complete(problem_model_run, "world_generation_response")
+        problem_model = response.get("world") if response else None
 
-    if world is None:
+    if problem_model is None:
         return result
 
-    result["world"] = world
+    result["world"] = problem_model
     _record(
         resolved_ledger_path,
         process_id=resolved_process_id,
         stage="world",
         status="complete",
-        summary={"world_id": world.get("world_id")},
+        summary={"world_id": problem_model.get("world_id")},
     )
 
     if output_dir is not None:
         harbor_summary = materialize_harbor_task_package(
             output_dir=output_dir / "harbor_task",
             brief=problem_space_brief,
-            worlds=[world],
+            worlds=[problem_model],
             task_id=resolved_process_id,
         )
         result["harbor_task_package"] = harbor_summary
@@ -152,14 +152,14 @@ def run_process(
     )
 
     task_run = _run_review_if_needed(
-        world=world,
+        problem_model=problem_model,
         task_run=task_run,
         review_endpoints=review_endpoints,
         result=result,
     )
     result["task_run"] = task_run
     evidence = task_run.get("evidence", task_run)
-    logic_evaluation = evaluate_logic_profile(world.get("logic_profile", {}), evidence).to_dict()
+    logic_evaluation = evaluate_logic_profile(problem_model.get("logic_profile", {}), evidence).to_dict()
     result["logic_evaluation"] = logic_evaluation
     _record(
         resolved_ledger_path,
@@ -170,7 +170,7 @@ def run_process(
 
     operation_run = _run_operation_stage(
         brief=problem_space_brief,
-        world=world,
+        problem_model=problem_model,
         operation_plan=operation_plan,
         operation_endpoints=operation_endpoints,
     )
@@ -188,7 +188,7 @@ def run_process(
 
     governance_packet = build_governance_review_packet(
         brief=problem_space_brief,
-        source_world=world,
+        source_problem_model=problem_model,
         operation_run=operation_run,
         process_id=resolved_process_id,
     )
@@ -207,7 +207,7 @@ def run_process(
 
     governance = apply_governance_decision(
         brief=problem_space_brief,
-        source_world=world,
+        source_problem_model=problem_model,
         proposal=governance_proposal,
         decision=governance_decision,
         process_id=resolved_process_id,
@@ -233,7 +233,7 @@ def _ledger_path(output_dir: Path | None, ledger_path: Path | None) -> Path | No
 
 def _run_review_if_needed(
     *,
-    world: dict[str, Any],
+    problem_model: dict[str, Any],
     task_run: dict[str, Any],
     review_endpoints: list[ModelEndpoint] | None,
     result: dict[str, Any],
@@ -242,7 +242,7 @@ def _run_review_if_needed(
     if not review_endpoints or evidence.get("agentic_review"):
         return task_run
 
-    review_run = run_review_models(world, task_run, review_endpoints)
+    review_run = run_review_models(problem_model, task_run, review_endpoints)
     result["review_model_run"] = review_run
     review = _first_complete(review_run, "review")
     if review is None:
@@ -253,20 +253,20 @@ def _run_review_if_needed(
 def _run_operation_stage(
     *,
     brief: dict[str, Any],
-    world: dict[str, Any],
+    problem_model: dict[str, Any],
     operation_plan: dict[str, Any] | None,
     operation_endpoints: list[ModelEndpoint] | None,
 ) -> dict[str, Any]:
     if operation_plan is not None:
         return run_operation_orchestrator(
             brief=brief,
-            worlds=[world],
+            worlds=[problem_model],
             operation_plan=operation_plan,
         ).to_dict()
     if operation_endpoints:
         model_run = run_operation_models(
             brief=brief,
-            worlds=[world],
+            worlds=[problem_model],
             endpoints=operation_endpoints,
         )
         operation_result = _first_complete_result(model_run)
@@ -283,7 +283,7 @@ def _run_operation_stage(
             "execution": None,
             "model_run": model_run,
         }
-    return run_operation_orchestrator(brief=brief, worlds=[world]).to_dict()
+    return run_operation_orchestrator(brief=brief, worlds=[problem_model]).to_dict()
 
 
 def _first_complete(output: dict[str, Any], key: str) -> Any | None:

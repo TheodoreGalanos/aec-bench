@@ -141,7 +141,11 @@ def run_harness_program_study(
     )
     path = _write_report(report, artifacts_root=artifacts_root)
     verify_harness_program_study_report(report)
-    return HarnessProgramStudyRunResult(report=report, path=path)
+    return HarnessProgramStudyRunResult(
+        report=report,
+        path=path,
+        records=tuple(record for trial in execution.trial_executions for record in trial.records),
+    )
 
 
 def _build_report(
@@ -232,7 +236,10 @@ def _trial_evidence(execution: object) -> HarnessProgramStudyTrialEvidence:
         for path in paths
     )
     records = execution.records
-    if any(not record.evaluation.validity.verifier_completed for record in records):
+    evaluations = tuple(record.evaluation for record in records)
+    if any(evaluation is None for evaluation in evaluations):
+        raise ValueError("harness-program-study requires evaluated TrialRecords")
+    if any(not evaluation.validity.verifier_completed for evaluation in evaluations if evaluation is not None):
         raise ValueError("harness-program-study requires complete verifier evidence")
     token_complete = all(
         record.cost is not None and record.cost.tokens_in is not None and record.cost.tokens_out is not None
@@ -249,7 +256,7 @@ def _trial_evidence(execution: object) -> HarnessProgramStudyTrialEvidence:
         trial_record_ids=tuple(record.trial_id for record in records),
         trial_records=artifacts,
         budget=execution.execution.budget,
-        mean_reward=fmean(record.evaluation.reward for record in records),
+        mean_reward=fmean(evaluation.reward for evaluation in evaluations if evaluation is not None),
         validity_rate=sum(_is_valid(record) for record in records) / len(records),
         observed_tokens=sum(
             (record.cost.tokens_in or 0) + (record.cost.tokens_out or 0) for record in records if record.cost

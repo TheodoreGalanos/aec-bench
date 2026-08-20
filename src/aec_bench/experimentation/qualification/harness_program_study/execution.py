@@ -17,6 +17,11 @@ from aec_bench.contracts.trial_record import (
     ArtifactReference,
     TrialRecord,
 )
+from aec_bench.experimentation.meta_harness import (
+    HarnessCandidate,
+    HarnessCandidateTrials,
+    run_harness_study,
+)
 from aec_bench.experimentation.qualification.harness_program_study.analysis import (
     HarnessProgramAnalysis,
     HarnessProgramOutcome,
@@ -118,14 +123,25 @@ def execute_harness_program_study(
         artifacts_root=artifacts_root,
     )
     candidates_by_reference = _candidate_map(materialized_sets, study_manifest)
-    trial_executions: list[HarnessProgramTrialExecution] = []
-    outcomes: list[HarnessProgramOutcome] = []
+    planned_candidates = tuple(
+        HarnessCandidate(
+            candidate_id=trial.trial_id,
+            value=(
+                trial,
+                candidates_by_reference[trial.candidate.reference_sha256],
+                _execution_seed(execution_seeds, trial),
+            ),
+        )
+        for trial in plan.trials
+    )
+    trial_executions: dict[str, HarnessProgramTrialExecution] = {}
 
-    for trial in plan.trials:
-        candidate = candidates_by_reference.get(trial.candidate.reference_sha256)
-        if candidate is None or candidate.reference != trial.candidate:
+    def evaluate_candidate(
+        planned: HarnessCandidate[tuple[HarnessProgramTrial, MaterializedHarnessProgramCandidate, int]],
+    ) -> tuple[TrialRecord, ...]:
+        trial, candidate, execution_seed = planned.value
+        if candidate.reference != trial.candidate:
             raise ValueError("harness-program plan candidate reference does not map to an exact RunPlan")
-        execution_seed = _execution_seed(execution_seeds, trial)
         execution = execute_run_bundle(
             bundle=candidate.bundle,
             registry=registry,
@@ -152,38 +168,68 @@ def execute_harness_program_study(
             execution_seed=execution_seed,
             plan_artifact=plan_artifact.reference,
         )
-        outcome = HarnessProgramOutcome(
-            trial_id=trial.trial_id,
-            value=fmean(record.evaluation.reward for record in records),
+        trial_executions[planned.candidate_id] = HarnessProgramTrialExecution(
+            trial=trial,
+            execution_seed=execution_seed,
+            candidate_reference=candidate.reference,
+            bundle_id=candidate.bundle.run_manifest.run_id,
+            run_plan=candidate.bundle,
+            execution=execution,
+            records=records,
         )
-        trial_executions.append(
-            HarnessProgramTrialExecution(
-                trial=trial,
-                execution_seed=execution_seed,
-                candidate_reference=candidate.reference,
-                bundle_id=candidate.bundle.run_manifest.run_id,
-                run_plan=candidate.bundle,
-                execution=execution,
-                records=records,
-            )
-        )
-        outcomes.append(outcome)
+        return records
 
-    analysis = analyse_harness_program_study(
-        plan,
-        outcomes,
-        confidence_level=confidence_level,
-        bootstrap_replicates=bootstrap_replicates,
-        bootstrap_seed=bootstrap_seed,
+    def assess_candidates(
+        baseline: HarnessCandidateTrials[tuple[HarnessProgramTrial, MaterializedHarnessProgramCandidate, int]],
+        proposed: tuple[
+            HarnessCandidateTrials[tuple[HarnessProgramTrial, MaterializedHarnessProgramCandidate, int]],
+            ...,
+        ],
+    ) -> HarnessProgramAnalysis:
+        outcomes = [
+            HarnessProgramOutcome(
+                trial_id=item.candidate.value[0].trial_id,
+                value=_mean_reward(item.records),
+            )
+            for item in (baseline, *proposed)
+        ]
+        return analyse_harness_program_study(
+            plan,
+            outcomes,
+            confidence_level=confidence_level,
+            bootstrap_replicates=bootstrap_replicates,
+            bootstrap_seed=bootstrap_seed,
+        )
+
+    study = run_harness_study(
+        baseline=planned_candidates[0],
+        candidates=planned_candidates[1:],
+        evaluate=evaluate_candidate,
+        assess=assess_candidates,
+    )
+    ordered_executions = tuple(trial_executions[trial.trial_id] for trial in plan.trials)
+    outcomes = tuple(
+        HarnessProgramOutcome(
+            trial_id=execution.trial.trial_id,
+            value=_mean_reward(execution.records),
+        )
+        for execution in ordered_executions
     )
     return HarnessProgramStudyExecution(
         manifest=study_manifest,
         plan=plan,
         plan_artifact=plan_artifact,
-        trial_executions=tuple(trial_executions),
-        outcomes=tuple(outcomes),
-        analysis=analysis,
+        trial_executions=ordered_executions,
+        outcomes=outcomes,
+        analysis=study.assessment,
     )
+
+
+def _mean_reward(records: tuple[TrialRecord, ...]) -> float:
+    evaluations = tuple(record.evaluation for record in records)
+    if any(evaluation is None for evaluation in evaluations):
+        raise ValueError("harness-program trial record is missing its evaluation")
+    return fmean(evaluation.reward for evaluation in evaluations if evaluation is not None)
 
 
 def _write_harness_program_plan_artifact(
@@ -428,10 +474,13 @@ def _validate_harness_program_record_outcomes(
             execution_seed=execution_seed,
             plan_artifact=plan_artifact,
         )
-        validity = record.evaluation.validity
+        evaluation = record.evaluation
+        if evaluation is None:
+            raise ValueError(f"unevaluated harness-program trial record: {record.trial_id}")
+        validity = evaluation.validity
         if not validity.verifier_completed:
             raise ValueError(f"unverified harness-program trial record: {record.trial_id}")
-        if not math.isfinite(record.evaluation.reward):
+        if not math.isfinite(evaluation.reward):
             raise ValueError(f"non-finite harness-program trial reward: {record.trial_id}")
 
 
