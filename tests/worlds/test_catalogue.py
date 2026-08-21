@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 from aec_bench.contracts.interactive_world import InteractiveWorldProfileRef, WorldBuildRef
-from aec_bench.worlds.catalogue import InteractiveWorldCatalogue, default_interactive_world_catalogue
+from aec_bench.worlds.catalogue import WorldCatalogue, _catalogue
 from aec_bench.worlds.monitoring.dam_seepage.definition import (
     DamSeepageProfile,
     dam_seepage_world_definition,
@@ -40,18 +40,18 @@ def test_catalogue_rejects_duplicate_world_id() -> None:
     definition = pump_station_continual_world_definition()
 
     with pytest.raises(ValueError, match="task world ids must be unique"):
-        InteractiveWorldCatalogue(definitions=(definition, definition))
+        WorldCatalogue(definitions=(definition, definition))
 
 
 def test_catalogue_resolves_exact_content_pinned_definition() -> None:
-    catalogue = default_interactive_world_catalogue()
+    catalogue = _catalogue()
     definition = catalogue.get(PUMP_STATION_TASK_WORLD_ID)
 
     assert catalogue.resolve(definition.ref) is definition
 
 
 def test_catalogue_rejects_stale_definition_reference() -> None:
-    catalogue = default_interactive_world_catalogue()
+    catalogue = _catalogue()
     definition = catalogue.get(PUMP_STATION_TASK_WORLD_ID)
     stale = WorldBuildRef(
         task_world_id=definition.ref.task_world_id,
@@ -115,7 +115,7 @@ def test_definition_rejects_profile_from_another_world() -> None:
 
 
 def test_catalogue_rejects_unknown_world_and_profile() -> None:
-    catalogue = default_interactive_world_catalogue()
+    catalogue = _catalogue()
     definition = catalogue.get(PUMP_STATION_TASK_WORLD_ID)
 
     with pytest.raises(KeyError, match="unknown Interactive World"):
@@ -143,7 +143,7 @@ def test_interactive_world_core_does_not_import_concrete_world_packages() -> Non
 
 
 def test_default_catalogue_registers_current_worlds() -> None:
-    catalogue = default_interactive_world_catalogue()
+    catalogue = _catalogue()
 
     assert tuple(reference.task_world_id for reference in catalogue.list_definition_refs()) == (
         DAM_SEEPAGE_TASK_WORLD_ID,

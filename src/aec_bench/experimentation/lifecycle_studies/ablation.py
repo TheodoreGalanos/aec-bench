@@ -291,6 +291,7 @@ def run_lifecycle_ablation(
 
     executable_trials: list[LifecycleTrial] = []
     ablation_trials_by_id = {trial.trial_id: trial for trial in remaining}
+    recovered_terminal_trials: set[str] = set()
     for trial in remaining:
         package = packages[trial.variant_id]
         run_dir = Path(trial.run_dir)
@@ -341,18 +342,32 @@ def run_lifecycle_ablation(
 
     def execute(lifecycle_trial: LifecycleTrial) -> LifecycleExecution:
         ablation_trial = ablation_trials_by_id[lifecycle_trial.planned.trial_id]
-        registry = (
-            registry_factory(ablation_trial, lifecycle_trial.package_dir, lifecycle_trial.run_dir)
-            if registry_factory is not None
-            else None
-        )
+        registry = None
+        terminal_recovery = False
+        if (lifecycle_trial.run_dir / "state.json").is_file():
+            current_state = read_lifecycle(
+                lifecycle_trial.package_dir,
+                lifecycle_trial.run_dir,
+                operation_resolver=lifecycle_operation_resolver(
+                    lifecycle_trial.package_dir,
+                    lifecycle_trial.run_dir,
+                ),
+            )
+            terminal_recovery = (
+                lifecycle_trial.execution_mode is LifecycleExecutionMode.PERSISTENT_CONTEXT
+                and current_state["status"] == "complete"
+            )
+        if terminal_recovery:
+            recovered_terminal_trials.add(lifecycle_trial.planned.trial_id)
+        elif registry_factory is not None:
+            registry = registry_factory(ablation_trial, lifecycle_trial.package_dir, lifecycle_trial.run_dir)
         return run_local_lifecycle(
             trial=lifecycle_trial,
             adapter_builder=registry.build if registry is not None else None,
         )
 
     def persist(record: TrialRecord) -> None:
-        nonlocal executed, failed
+        nonlocal executed, failed, imported_orphans
         trial = ablation_trials_by_id[record.trial_id]
         finalized = _persist_lifecycle_ablation_record(
             manifest=manifest,
@@ -362,7 +377,10 @@ def run_lifecycle_ablation(
         )
         record_paths_by_trial[trial.trial_id] = str(finalized)
         persisted = read_trial_record(finalized, ledger_root=Path(manifest.ledger_root))
-        executed += 1
+        if record.trial_id in recovered_terminal_trials:
+            imported_orphans += 1
+        else:
+            executed += 1
         failed += int(_record_execution_failed(persisted))
 
     if executable_trials:

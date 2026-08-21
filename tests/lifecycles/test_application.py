@@ -7,6 +7,8 @@ import json
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+
 from aec_bench.contracts.experiment_manifest import AgentConfig, ComputeConfig
 from aec_bench.contracts.trial_record import TrialRecord
 from aec_bench.experimentation.lifecycle_studies.meta_harness import (
@@ -112,7 +114,8 @@ def test_run_lifecycle_experiment_returns_records_in_declared_order(tmp_path: Pa
     assert [record.trial_id for record in records] == ["trial-one", "trial-two"]
 
 
-def test_lifecycle_candidate_uses_runtime_independent_meta_harness_boundary(tmp_path: Path) -> None:
+@pytest.mark.asyncio
+async def test_lifecycle_candidate_uses_runtime_independent_meta_harness_boundary(tmp_path: Path) -> None:
     candidate = HarnessCandidate(
         candidate_id="fresh-context",
         value=LifecycleHarnessCandidate(
@@ -122,6 +125,6 @@ def test_lifecycle_candidate_uses_runtime_independent_meta_harness_boundary(tmp_
         ),
     )
 
-    evaluated = evaluate_harness_candidate(candidate, evaluate=evaluate_lifecycle_candidate)
+    evaluated = await evaluate_harness_candidate(candidate, evaluate=evaluate_lifecycle_candidate)
 
     assert [record.trial_id for record in evaluated.records] == ["trial-one"]

@@ -105,7 +105,7 @@ class AutonomyConfig:
         }
 
 
-def run_autonomous_process(
+async def run_autonomous_process(
     *,
     task_text: str,
     process_id: str | None = None,
@@ -323,7 +323,7 @@ def run_autonomous_process(
         )
         return final_assessment
 
-    run_meta_harness(
+    await run_meta_harness(
         initial=HarnessCandidate(candidate_id=f"{resolved_process_id}.state.1", value=initial_state),
         propose=propose_iteration,
         evaluate=evaluate_iteration,

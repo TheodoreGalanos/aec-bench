@@ -6,18 +6,19 @@ from __future__ import annotations
 import json
 from decimal import Decimal
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
 import pytest
 
-from aec_bench.contracts.world_session import StewardshipStateSnapshotRef
+from aec_bench.contracts.agent_output import AgentOutput, AgentOutputStatus
+from aec_bench.contracts.evaluation_result import EvaluationResult, ValidityCheck
+from aec_bench.contracts.trial_record import AgentConfiguration, CostRecord, ExecutionEnvironmentRef, TrialInput
 from aec_bench.experimentation.qualification.prime_refinement import (
     DEFAULT_QUALIFICATION_PROFILES,
     PrimeRefinementTreatment,
     run_prime_refinement_qualification,
 )
 from aec_bench.harness.pump_station_prime.evidence import PumpStationPrimeJourneyLimits
-from aec_bench.harness.pump_station_prime.journey import PumpStationPrimeJourneyRun
 from aec_bench.prime_agent.acp import PrimeAcpIsolation
 from aec_bench.prime_agent.refinement import (
     PrimeRefinementCandidate,
@@ -27,7 +28,6 @@ from aec_bench.prime_agent.refinement import (
     PrimeRefinementScope,
     empty_refinement_candidate,
 )
-from aec_bench.prime_agent.session_evidence import PrimeAcpUsage
 from aec_bench.worlds.stewardship.wastewater_pump_station.evaluation import (
     evaluate_pump_station_reference_run,
 )
@@ -37,6 +37,7 @@ from aec_bench.worlds.stewardship.wastewater_pump_station.world_run import (
 from aec_bench.worlds.stewardship.wastewater_pump_station.world_run_repository import (
     PumpStationWorldRunRepository,
 )
+from tests.support.trial_record_factories import make_trial_record
 
 
 def _candidate() -> PrimeRefinementCandidate:
@@ -77,64 +78,76 @@ def _limits() -> PumpStationPrimeJourneyLimits:
 @pytest.mark.asyncio
 async def test_qualifies_one_candidate_in_clean_fixed_treatment_cells(
     tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    import aec_bench.experimentation.qualification.prime_refinement as qualification_module
-
     candidate = _candidate()
     calls: list[dict[str, Any]] = []
     selected_profiles: list[str] = []
 
-    async def fake_journey(**kwargs: Any) -> PumpStationPrimeJourneyRun:
-        calls.append(kwargs)
-        assert kwargs["refinement_mode"] is PrimeRefinementMode.CANDIDATE
-        world_directory = cast(Path, kwargs["world_run_directory"])
+    async def fake_trial(task: Any, trial: Any) -> Any:
+        calls.append(dict(trial.agent.parameters))
+        assert trial.agent.parameters["refinement_mode"] == PrimeRefinementMode.CANDIDATE.value
+        world_directory = tmp_path / "fake-worlds" / trial.trial_id
         repository = PumpStationWorldRunRepository(world_directory)
-        run = PumpStationWorldRun.resume_reference_system(
+        run = PumpStationWorldRun.create_reference_system(
             repository=repository,
-            snapshot=repository.current_snapshot(),
+            run_id=f"{trial.trial_id}-run",
+            episode_id=f"{trial.trial_id}-episode",
+            world_branch_id=f"{trial.trial_id}-branch",
+            reference_system_id=task.profile.profile_id,
         )
         selected_profiles.append(run.manifest.reference_system_id)
-        evidence_directory = cast(Path, kwargs["evidence_directory"])
-        evidence_directory.mkdir(parents=True)
-        run_file = evidence_directory / "prime-world-journey.json"
+        run_file = tmp_path / "fake-journeys" / f"{trial.trial_id}.json"
+        run_file.parent.mkdir(parents=True, exist_ok=True)
         run_file.write_text(json.dumps({"host_policy_sha256": "a" * 64}) + "\n", encoding="utf-8")
-        selected_snapshot = run.snapshot()
-        snapshot = StewardshipStateSnapshotRef(
-            run_id=selected_snapshot.run_id,
-            episode_id=selected_snapshot.episode_id,
-            world_branch_id=selected_snapshot.world_branch_id,
-            sequence=selected_snapshot.sequence,
-            state_id=selected_snapshot.state_id,
-            commit_id=selected_snapshot.commit_id,
-        )
-        return PumpStationPrimeJourneyRun(
-            segments=(),
-            host_controls=(),
-            final_snapshot=snapshot,
-            world_state="active",
-            completion="incomplete",
-            stop_reason="no-eligible-host-control",
-            verification=run.verify(),
-            evaluation=evaluate_pump_station_reference_run(run, evaluation_scope="bounded_continuation"),
-            usage=PrimeAcpUsage(
-                complete=True,
+        stewardship = evaluate_pump_station_reference_run(run, evaluation_scope="bounded_continuation")
+        return make_trial_record(
+            trial_id=trial.trial_id,
+            experiment_id=trial.experiment_id,
+            task_id=task.task_id,
+            task={"task_id": task.task_id, "task_revision": task.task_revision},
+            agent=AgentConfiguration(
+                adapter=trial.agent.adapter,
+                model=trial.agent.model,
+                configuration={},
+            ),
+            environment=ExecutionEnvironmentRef(runtime_image="test", compute_backend="local"),
+            input=TrialInput(
+                instruction=task.instruction,
+                task_revision=task.task_revision,
+                task_kind="world",
+                visibility=task.visibility,
+            ),
+            output={
+                "agent_output": AgentOutput(
+                    status=AgentOutputStatus.COMPLETED,
+                    output_path=str(run_file),
+                    output_format="json",
+                ),
+                "agent_result": {
+                    "completion": "completed",
+                    "world_state": "active",
+                    "stop_reason": "test-complete",
+                    "world_action_count": 0,
+                },
+                "terminated": True,
+                "truncated": False,
+                "final_reason": "test-complete",
+            },
+            evaluation=EvaluationResult(
+                reward=1.0,
+                validity=ValidityCheck(output_parseable=True, schema_valid=True, verifier_completed=True),
+                stewardship=stewardship,
+            ),
+            cost=CostRecord(
                 model_calls=1,
-                input_tokens=10,
-                output_tokens=5,
+                tokens_in=10,
+                tokens_out=5,
                 cache_read_tokens=0,
                 cache_write_tokens=0,
-                total_tokens=15,
-                cost_usd=Decimal("0.10"),
+                estimated_cost_usd=0.1,
             ),
-            elapsed_seconds=1.0,
-            world_action_count=0,
-            run_file=run_file,
-            benchmark_valid=True,
-            refinement_candidate=cast(PrimeRefinementCandidate, kwargs["refinement_candidate"]),
         )
 
-    monkeypatch.setattr(qualification_module, "run_pump_station_prime_journey", fake_journey)
     result = await run_prime_refinement_qualification(
         output_directory=tmp_path / "qualification",
         qualification_id="prime-refinement-study",
@@ -143,22 +156,21 @@ async def test_qualifies_one_candidate_in_clean_fixed_treatment_cells(
         model="anthropic/test",
         isolation=PrimeAcpIsolation.MACOS_SANDBOX,
         limits=_limits(),
+        run_trial=fake_trial,
     )
 
     assert selected_profiles == [
         DEFAULT_QUALIFICATION_PROFILES[0],
+        DEFAULT_QUALIFICATION_PROFILES[1],
         DEFAULT_QUALIFICATION_PROFILES[0],
         DEFAULT_QUALIFICATION_PROFILES[1],
-        DEFAULT_QUALIFICATION_PROFILES[1],
     ]
-    assert [call["refinement_candidate"] for call in calls] == [
+    assert [PrimeRefinementCandidate.model_validate(call["refinement_candidate"]) for call in calls] == [
+        empty_refinement_candidate(),
         empty_refinement_candidate(),
         candidate,
-        empty_refinement_candidate(),
         candidate,
     ]
-    assert len({call["actor_workspace"] for call in calls}) == 4
-    assert len({call["world_run_directory"] for call in calls}) == 4
     assert result.report.decision == "pending"
     assert result.report.evidence_valid
     assert [observation.treatment for observation in result.report.observations] == [

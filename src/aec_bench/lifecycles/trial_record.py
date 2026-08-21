@@ -127,6 +127,7 @@ def build_lifecycle_trial_record(
             resolved_model,
             trial.execution_mode.value,
             trial.visibility_policy.value,
+            str(variant.get("variant_id") or "default"),
         )
     )
     python_version = str(environment.get("python_version") or "unknown")

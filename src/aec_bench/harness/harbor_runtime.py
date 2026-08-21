@@ -15,10 +15,9 @@ from aec_bench.harness.harbor_dispatch import HarborCommandExecutor
 from aec_bench.harness.harbor_workflow import HarborWorkflowResult, SynchronousHarborWorkflow
 from aec_bench.harness.model_execution.llm_reviewer import ReviewerRunConfig
 from aec_bench.harness.progress_tracker import WorkflowProgressSnapshot
-from aec_bench.harness.scheduler import build_trial_plan
 from aec_bench.ledger.reader import read_trial_record
 from aec_bench.tasks.instance import ResolvedTaskInstance
-from aec_bench.trials import PlannedTrial
+from aec_bench.trials import PlannedTrial, plan_trials
 
 
 @dataclass
@@ -45,7 +44,13 @@ class HarborExperimentRuntime:
             raise ValueError(f"Harbor does not support attempt recipe: {recipe_spec.kind}")
         resolved_tasks = tuple(task.task for task in tasks)
         effective_manifest = self.manifest.model_copy(update={"disable_verification": not verify})
-        expected_trials = build_trial_plan(effective_manifest, list(resolved_tasks))
+        expected_trials = plan_trials(
+            effective_manifest.experiment_id,
+            tasks=list(resolved_tasks),
+            agents=effective_manifest.agents,
+            compute=effective_manifest.compute,
+            repetitions=effective_manifest.repetitions,
+        )
         if list(trials) != expected_trials:
             raise ValueError("planned trials do not match the Harbor experiment manifest")
         overrides = {task.task.task_id: task.instance_dir.resolve() for task in tasks}

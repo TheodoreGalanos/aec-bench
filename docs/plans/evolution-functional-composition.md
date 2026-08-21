@@ -167,7 +167,7 @@ def evaluate_candidate(
         batch_size=batch_size,
     )
     tasks = select_manifest_tasks(task_catalogue, experiment)
-    trials = build_trial_plan(experiment, tasks)
+    trials = plan_trials(experiment, tasks)
     return run_experiment(
         runtime=runtime,
         tasks=resolve_instances(tasks),

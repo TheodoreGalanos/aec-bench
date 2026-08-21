@@ -13,7 +13,12 @@ from aec_bench.contracts.continual_world import (
     ContinualWorldControlRequest,
 )
 from aec_bench.contracts.interactive_world import InteractiveWorldProfileRef, WorldBuildRef
-from aec_bench.worlds.runtime.definition import InteractiveWorldDefinition, LoadedInteractiveWorldProfile
+from aec_bench.contracts.task_definition import Difficulty, Lifecycle, Visibility
+from aec_bench.worlds.runtime.definition import (
+    InteractiveWorldDefinition,
+    InteractiveWorldProfileMetadata,
+    LoadedInteractiveWorldProfile,
+)
 
 
 def _profile(
@@ -40,7 +45,25 @@ def _build(*, task_world_id: str = "world-a", digest: str = "b" * 64) -> WorldBu
 def _definition(*profiles: InteractiveWorldProfileRef) -> InteractiveWorldDefinition:
     return InteractiveWorldDefinition(
         build=_build(),
+        title="Example world",
+        summary="Example world for contract tests.",
+        domain="test",
+        tags=("test",),
+        capabilities=frozenset({"actions"}),
         profiles=profiles,
+        profile_metadata=tuple(
+            InteractiveWorldProfileMetadata(
+                profile_id=profile.profile_id,
+                title=profile.profile_id,
+                summary="Example profile.",
+                category="test",
+                difficulty=Difficulty.EASY,
+                lifecycle=Lifecycle.ACTIVE,
+                visibility=Visibility.PUBLIC,
+                tags=("test",),
+            )
+            for profile in profiles
+        ),
         profile_loader=lambda reference: LoadedInteractiveWorldProfile(reference=reference, value=object()),
     )
 

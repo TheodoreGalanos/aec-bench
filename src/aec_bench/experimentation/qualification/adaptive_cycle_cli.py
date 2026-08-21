@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import asyncio
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -69,12 +70,14 @@ def run_cli(
         ledger_root=Path(arguments.ledger_root).resolve(),
         jobs_root=Path(arguments.jobs_root).resolve(),
     )
-    result = run_adaptive_cycle(
-        spec=spec,
-        registry=default_kernel_registry(),
-        workflow=workflow,
-        artifacts_root=Path(arguments.artifacts_root).resolve(),
-        executors=selected_executors,
+    result = asyncio.run(
+        run_adaptive_cycle(
+            spec=spec,
+            registry=default_kernel_registry(),
+            workflow=workflow,
+            artifacts_root=Path(arguments.artifacts_root).resolve(),
+            executors=selected_executors,
+        )
     )
     print(result.path)
     print(result.report.content_sha256)

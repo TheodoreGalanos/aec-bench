@@ -411,9 +411,9 @@ def _build_harbor_candidate_evaluator(
     from aec_bench.harness.artifact_tasks import SingleAttemptSpec, run_experiment
     from aec_bench.harness.harbor_runtime import HarborExperimentRuntime
     from aec_bench.harness.harbor_workflow import SynchronousHarborWorkflow
-    from aec_bench.harness.scheduler import build_trial_plan
     from aec_bench.tasks.instance import resolve_instance_paths
     from aec_bench.tasks.loader import load_task_definition
+    from aec_bench.trials import plan_trials
 
     solver = config.solver
     assert solver is not None
@@ -458,7 +458,13 @@ def _build_harbor_candidate_evaluator(
             manifest=manifest,
             config_path=artifact_root / f"harbor-{call_count}.yaml",
         )
-        trials = build_trial_plan(manifest, [task.task for task in selected])
+        trials = plan_trials(
+            manifest.experiment_id,
+            tasks=[task.task for task in selected],
+            agents=manifest.agents,
+            compute=manifest.compute,
+            repetitions=manifest.repetitions,
+        )
         call_count += 1
         return run_experiment(
             runtime=runtime,

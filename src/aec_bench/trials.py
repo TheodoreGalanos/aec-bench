@@ -1,21 +1,15 @@
-# ABOUTME: Trial planning and lifecycle primitives for the Python harness layer.
-# ABOUTME: Defines deterministic planned-trial identities and valid lifecycle transitions.
+# ABOUTME: Provides the one direct trial-planning API for all runnable task families.
+# ABOUTME: Expands task IDs, agents, compute, and repetitions into deterministic PlannedTrial values.
 
-from collections.abc import Mapping
+from __future__ import annotations
+
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
-from enum import StrEnum
+from typing import Protocol
 
 from pydantic import BaseModel
 
 from aec_bench.contracts.experiment_manifest import AgentConfig, ComputeConfig
-
-
-class TrialLifecycleState(StrEnum):
-    PLANNED = "planned"
-    RUNNING = "running"
-    COMPLETED = "completed"
-    FAILED = "failed"
-    DUPLICATE = "duplicate"
 
 
 @dataclass(frozen=True)
@@ -36,28 +30,56 @@ def build_trial_id(
     agent_name: str,
     repetition: int,
 ) -> str:
+    """Build one deterministic trial identity."""
+
     normalized_task_id = task_id.replace("/", "-")
     return f"{experiment_id}--{normalized_task_id}--{agent_name}--rep{repetition:02d}"
 
 
-def transition_trial_state(
-    current: TrialLifecycleState,
-    target: TrialLifecycleState,
-) -> TrialLifecycleState:
-    allowed = {
-        TrialLifecycleState.PLANNED: {
-            TrialLifecycleState.RUNNING,
-            TrialLifecycleState.DUPLICATE,
-            TrialLifecycleState.FAILED,
-        },
-        TrialLifecycleState.RUNNING: {
-            TrialLifecycleState.COMPLETED,
-            TrialLifecycleState.FAILED,
-        },
-        TrialLifecycleState.COMPLETED: set(),
-        TrialLifecycleState.FAILED: set(),
-        TrialLifecycleState.DUPLICATE: set(),
-    }
-    if target not in allowed[current]:
-        raise ValueError(f"invalid trial lifecycle transition: {current} -> {target}")
-    return target
+class PlannableTask(Protocol):
+    """The task identity needed by deterministic trial planning."""
+
+    @property
+    def task_id(self) -> str: ...
+
+
+def plan_trials(
+    experiment_id: str,
+    *,
+    tasks: Sequence[PlannableTask],
+    agents: Sequence[AgentConfig],
+    compute: ComputeConfig | None = None,
+    repetitions: int = 1,
+) -> list[PlannedTrial]:
+    """Expand tasks, agents, and repetitions into stable planned trials."""
+
+    if not experiment_id.strip():
+        raise ValueError("experiment_id must not be blank")
+    if not agents:
+        raise ValueError("trial planning requires at least one agent")
+    if repetitions < 1:
+        raise ValueError("repetitions must be positive")
+    selected_compute = compute or ComputeConfig(backend="local")
+    plan: list[PlannedTrial] = []
+    for task in sorted(tasks, key=lambda item: item.task_id):
+        for agent in agents:
+            for repetition in range(1, repetitions + 1):
+                plan.append(
+                    PlannedTrial(
+                        trial_id=build_trial_id(
+                            experiment_id=experiment_id,
+                            task_id=task.task_id,
+                            agent_name=agent.name,
+                            repetition=repetition,
+                        ),
+                        experiment_id=experiment_id,
+                        task_id=task.task_id,
+                        agent=agent,
+                        compute=selected_compute,
+                        repetition=repetition,
+                    )
+                )
+    return plan
+
+
+__all__ = ("PlannableTask", "PlannedTrial", "build_trial_id", "plan_trials")

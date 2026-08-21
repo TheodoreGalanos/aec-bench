@@ -1743,7 +1743,6 @@
     "mapping:aec_bench.experimentation.qualification.pump_station_prime_trajectory._report_quality.reviewed_at",
     "mapping:aec_bench.experimentation.task_ecology.baseline.baseline_row_from_record.timestamp",
     "mapping:aec_bench.experimentation.task_ecology.baseline.failed_row.timestamp",
-    "mapping:aec_bench.harness.dam_seepage_prime.session.run_dam_seepage_prime_session.world_actor_client_sha256",
     "mapping:aec_bench.harness.execution_payload._result_payload.completion_commit",
     "mapping:aec_bench.harness.execution_payload._transcript_payload.occurred_at",
     "mapping:aec_bench.harness.harbor_importing.core._output_record.completion_commit",

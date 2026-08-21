@@ -21,7 +21,7 @@ system.
 
 ## Product flow
 
-The product has two execution families. They share task selection, experiment
+The product has distinct artifact, lifecycle, and Interactive World execution families. They share task selection, experiment
 identity, agent and provider configuration, resource limits, evaluation,
 provenance, and reporting. They do not share one forced low-level lifecycle.
 
@@ -150,6 +150,10 @@ result values plus three direct functions:
 - `run_meta_harness()` performs a bounded propose, evaluate, assess, select,
   and refine process.
 
+These three functions are async. An evaluator can return records directly or
+return an awaitable. Python callers use `await`; synchronous CLI commands own
+the single event-loop entry at their command boundary.
+
 Callers own candidate values, assessment values, and every policy callback.
 The core does not import artifact-task, lifecycle, interactive-world, adapter,
 provider, Harbor, or Prime implementations. A runtime participates by supplying
@@ -188,6 +192,20 @@ The composition root registers wastewater pump-station stewardship and dam
 seepage monitoring. The task-neutral world runtime imports neither concrete
 world. See the current
 [interactive-world runtime protocol](protocols/interactive-world-runtime.md).
+
+`aec_bench.worlds` projects that registration as stable discovery values,
+creates provider-neutral `WorldTask` values, and loads exact registered
+profiles. A file-backed world task uses `instruction.md` and `world.toml`.
+`plan_trials()` expands artifact, lifecycle, or world task IDs through one
+planner. `run_world_experiment()` maps planned world trials to one supplied
+async world trial function and returns ordered `TrialRecord` values.
+
+The dam and pump trial functions share one Prime actor-session integration.
+They keep their state, journey, persistence, host controls, replay,
+verification, and evaluation with the concrete world. The pump Harbor runner
+uses the same complete-trial boundary. Dataset entries select their concrete
+loader by `task_kind`; the top-level run application routes complete trials by
+family and preserves planned order.
 
 Beneath those different orchestration paths, the world runtime owns the
 small accepted-transition and action-rejection values plus the episode shell.

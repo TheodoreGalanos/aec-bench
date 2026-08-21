@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import cast
 
 from aec_bench.contracts.dataset import (
     DatasetGeneration,
@@ -13,21 +12,21 @@ from aec_bench.contracts.dataset import (
     DatasetTaskKind,
 )
 from aec_bench.contracts.task_definition import TaskDefinition
+from aec_bench.worlds.tasks import WorldTask
 
-_TASK_KINDS = {"artifact", "lifecycle", "world"}
 
-
-def _task_kind(task: TaskDefinition) -> DatasetTaskKind:
-    raw = task.metadata.get("task_kind", "artifact")
-    if not isinstance(raw, str) or raw not in _TASK_KINDS:
-        raise ValueError(f"task {task.task_id} has unsupported task_kind: {raw!r}")
-    return cast(DatasetTaskKind, raw)
+def _task_kind(task: TaskDefinition | WorldTask) -> DatasetTaskKind:
+    if isinstance(task, WorldTask):
+        return "world"
+    if isinstance(task, TaskDefinition):
+        return "artifact"
+    raise TypeError(f"unsupported dataset task type: {type(task).__name__}")
 
 
 def compose_dataset(
     *,
     dataset_id: str,
-    tasks: list[TaskDefinition],
+    tasks: list[TaskDefinition | WorldTask],
     tasks_root: Path,
     description: str,
     generation: DatasetGeneration | None = None,

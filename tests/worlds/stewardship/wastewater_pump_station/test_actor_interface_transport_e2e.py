@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 from concurrent.futures import ThreadPoolExecutor
@@ -32,12 +33,14 @@ def _write_request(path: Path, payload: dict[str, object]) -> Path:
 
 def _run_actor(run_dir: Path, request_path: Path) -> subprocess.CompletedProcess[str]:
     executable = Path(sys.executable).parent / "aec-bench"
+    project_root = Path(__file__).resolve().parents[4]
     return subprocess.run(
         [
             str(executable),
             "--json",
             "task",
-            "pump-station-world",
+            "world",
+            "pump-station",
             "actor-interface",
             "--run-dir",
             str(run_dir),
@@ -45,6 +48,7 @@ def _run_actor(run_dir: Path, request_path: Path) -> subprocess.CompletedProcess
             str(request_path),
         ],
         cwd=request_path.parent,
+        env={**os.environ, "PYTHONPATH": str(project_root / "src")},
         capture_output=True,
         text=True,
         timeout=90,

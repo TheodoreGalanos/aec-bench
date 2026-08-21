@@ -86,7 +86,7 @@ class HarnessProgramStudyExecution:
     analysis: HarnessProgramAnalysis
 
 
-def execute_harness_program_study(
+async def execute_harness_program_study(
     *,
     candidates: MaterializedHarnessProgramCandidateSet | tuple[MaterializedHarnessProgramCandidateSet, ...],
     manifest: HarnessProgramStudyManifest,
@@ -201,7 +201,7 @@ def execute_harness_program_study(
             bootstrap_seed=bootstrap_seed,
         )
 
-    study = run_harness_study(
+    study = await run_harness_study(
         baseline=planned_candidates[0],
         candidates=planned_candidates[1:],
         evaluate=evaluate_candidate,

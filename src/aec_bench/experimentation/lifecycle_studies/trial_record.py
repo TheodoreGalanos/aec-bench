@@ -388,6 +388,7 @@ def _build_lifecycle_trial_record(
             resolved_model,
             trial.execution_mode.value,
             trial.memory_visibility_policy.value,
+            trial.variant_id,
         )
     )
     clean_git_source = (

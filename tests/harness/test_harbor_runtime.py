@@ -9,9 +9,9 @@ import pytest
 from aec_bench.contracts.experiment_manifest import AgentConfig, ComputeConfig, ExperimentManifest, TaskSelector
 from aec_bench.harness.artifact_tasks import BestOfSpec, SingleAttemptSpec, run_experiment
 from aec_bench.harness.harbor_runtime import HarborExperimentRuntime
-from aec_bench.harness.scheduler import build_trial_plan
 from aec_bench.ledger.writer import write_trial_record
 from aec_bench.tasks.instance import resolve_instance_paths
+from aec_bench.trials import plan_trials
 from tests.support.task_factories import make_task_definition
 from tests.support.trial_record_factories import make_trial_record
 
@@ -45,7 +45,13 @@ def _inputs(tmp_path: Path):  # noqa: ANN202
         agents=[AgentConfig(name="agent", adapter="direct", model="test-model")],
         compute=ComputeConfig(backend="docker"),
     )
-    trials = build_trial_plan(manifest, [task])
+    trials = plan_trials(
+        manifest.experiment_id,
+        tasks=[task],
+        agents=manifest.agents,
+        compute=manifest.compute,
+        repetitions=manifest.repetitions,
+    )
     ledger_root = tmp_path / "ledger"
     expected = make_trial_record(
         trial_id=trials[0].trial_id,

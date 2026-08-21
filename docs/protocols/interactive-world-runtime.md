@@ -18,9 +18,13 @@ content-pinned profile references, and the task-owned profile loader.
 `WorldBuildRef.artifact_sha256` identifies a stable manifest of exact source
 bytes. It is not a general application ID.
 
-`InteractiveWorldCatalogue` resolves a definition by world ID or exact build
+The private `WorldCatalogue` resolves a definition by world ID or exact build
 reference. It does not register execution, evaluation, providers, Harbor, or
 branch implementations. Those capabilities are composed by their owners.
+
+The public `aec_bench.worlds` facade lists and searches descriptive world and
+profile values, creates `WorldTask` values, and loads exact profiles. It does
+not expose the private catalogue or its loaders.
 
 | Owner | Owns |
 | --- | --- |
@@ -312,8 +316,8 @@ cost. Public reports select fields from these authorities rather than exposing
 state, verifier paths, provider configuration, or recovery data.
 
 The actor authority result exposes `AuthorityEvidenceRef` for the final
-semantic stream. The current `TrialRecord` does not yet have a dedicated field
-for this reference; its versioned migration owns that persisted change.
+semantic stream. `TrialRecord.authority_evidence` retains that reference beside
+the separate world and provider evidence authorities.
 
 `prime-world-journey.json` records the policy digest, journey safeguards,
 ordered session evidence, exact session-to-control-to-snapshot lineage, totals,
@@ -332,14 +336,18 @@ change a task, skill package, world, verifier, or evaluator.
 
 | Entry point | Behaviour |
 | --- | --- |
-| Python catalogue | Resolve current build and profile registration. |
+| `aec_bench.worlds` | Discover worlds and profiles, create `WorldTask`, and load an exact profile. |
+| `plan_trials()` | Create `PlannedTrial` values for direct or configured callers. |
+| `run_world_experiment()` | Apply one supplied complete world trial function in planned order. |
+| Dam and pump Prime trial functions | Return evaluated world `TrialRecord` values through the shared Prime actor session. |
+| Pump Harbor trial function | Export, dispatch, verify, import, and return the same world trial contract. |
 | `actor-interface` | Invoke the pump episode host with current actor JSON. |
 | `control-interface` | Invoke pump controls or explicit rollout composition. |
 | Harbor agent and import | Use the concrete pump transport and evaluator. |
 | Prime ACP Python entry | Run one Open, Guided, or Planned Prime session against one scoped pump actor host. |
 | Prime dam Python entry | Run one Open or Planned Prime session against one scoped dam episode. |
 | Prime pump journey Python entry | Compose bounded Prime sessions with exact task-owned host continuation until the pump world completes or cannot advance. |
-| Prime refinement qualification Python entry | Compare one fixed candidate with an empty harness on independent RS1 and RS2 journeys without automatic promotion. |
+| Prime refinement qualification Python entry | Compare normal pump world `TrialRecord` values through async meta-harness composition without automatic promotion. |
 
 The boundary fails closed for unknown build or profile identity, stale
 decisions, unavailable actions, unauthorized controls, invalid rollout
@@ -358,7 +366,7 @@ successful transition or evaluation.
 - [versioned world actor endpoint and staged client](../../tests/harness/world_actor/test_endpoint.py)
 - [Prime pump session composition](../../tests/harness/pump_station_prime/test_session.py)
 - [dam episode actor semantics](../../tests/worlds/monitoring/dam_seepage/test_episode_runtime.py)
-- [Prime dam session composition](../../tests/harness/dam_seepage_prime/test_session.py)
+- [complete dam and pump trial composition](../../tests/harness/test_world_trials.py)
 - [Prime pump journey composition](../../tests/harness/pump_station_prime/test_journey.py)
 - [pump host continuation policy](../../tests/worlds/stewardship/wastewater_pump_station/test_host_continuation.py)
 - [Prime ACP lifecycle and isolation](../../tests/prime_agent/test_acp.py)

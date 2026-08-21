@@ -298,7 +298,7 @@ model-quality or cost comparison against direct, tool-loop, or RLM treatments.
 Run the registered pump-station world through DeepSeek Harness and Harbor:
 
 ```bash
-uv run aec-bench task pump-station-world run-harbor \
+uv run aec-bench task world pump-station run-harbor \
   --task-dir /path/to/exported-pump-task \
   --project-root . \
   --jobs-dir jobs/pump-deepseek \
@@ -357,20 +357,40 @@ pip install "aec-bench[prime-agent]"
 # Install upstream Prime Agent separately so prime-agent is on PATH.
 ```
 
-The maintained async Python entries are:
+Use the public discovery and complete-trial API:
 
-- `aec_bench.harness.pump_station_prime.session.run_pump_station_prime_session`;
-  and
-- `aec_bench.harness.dam_seepage_prime.session.run_dam_seepage_prime_session`.
+```python
+from functools import partial
 
-Each entry launches one Prime ACP process and supplies the task objective in the
-initial prompt. By default, it installs only the generic `aec-world` skill.
+from aec_bench import worlds
+from aec_bench.harness.dam_seepage_trial import run_dam_seepage_trial
+from aec_bench.harness.prime_world_actor import run_prime_world_actor_session
+from aec_bench.harness.world_trials import run_world_experiment
+from aec_bench.trials import plan_trials
+
+task = worlds.task(
+    "dam-seepage-monitoring",
+    profile="synthetic-rising-seepage",
+    instruction="Monitor the dam and respond as conditions evolve.",
+)
+trials = plan_trials("dam-study", tasks=[task], agents=[prime_agent])
+records = await run_world_experiment(
+    tasks=[task],
+    trials=trials,
+    run_trial=partial(run_dam_seepage_trial, actor=run_prime_world_actor_session),
+)
+```
+
+`WorldTask` contains the objective and exact registered world and profile.
+`PlannedTrial` contains the agent, model, compute, limits, and repetition. The
+trial function returns one evaluated `TrialRecord`; a world action or Prime
+session is not a trial. The shared Prime actor function launches one ACP
+process and installs the generic `aec-world` skill by default.
 This is the Open treatment: Prime receives the objective, actor-visible
 starting material, and generic actor capability, with no task-family method or
 external plan.
 
-The pump entry receives a host-selected `WorldSessionRequest`. The dam entry
-receives one exact registered `InteractiveWorldProfileRef`. The dam task is one
+The pump runner owns its persistent journey and host continuation. The dam task is one
 bounded episode. It has no host control, journey, branch, or durable world
 repository. After Prime closes, the host replays the accepted typed actions and
 runs the existing dam evaluation outside the actor endpoint.

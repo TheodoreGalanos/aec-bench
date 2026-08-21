@@ -10,6 +10,28 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from aec_bench.contracts.interactive_world import InteractiveWorldProfileRef, WorldBuildRef
+from aec_bench.contracts.task_definition import Difficulty, Lifecycle, Visibility
+
+
+@dataclass(frozen=True, slots=True)
+class InteractiveWorldProfileMetadata:
+    """Discovery and task-selection metadata for one registered profile."""
+
+    profile_id: str
+    title: str
+    summary: str
+    category: str
+    difficulty: Difficulty
+    lifecycle: Lifecycle
+    visibility: Visibility
+    tags: tuple[str, ...]
+
+    def __post_init__(self) -> None:
+        values = (self.profile_id, self.title, self.summary, self.category)
+        if any(not value.strip() for value in values):
+            raise ValueError("Interactive World profile metadata values must be non-empty")
+        if len(self.tags) != len(set(self.tags)) or any(not tag.strip() for tag in self.tags):
+            raise ValueError("Interactive World profile tags must be distinct and non-empty")
 
 
 @dataclass(frozen=True)
@@ -25,12 +47,24 @@ class InteractiveWorldDefinition:
     """One registered executable build and its current supported profiles."""
 
     build: WorldBuildRef
+    title: str
+    summary: str
+    domain: str
+    tags: tuple[str, ...]
+    capabilities: frozenset[str]
     profiles: tuple[InteractiveWorldProfileRef, ...]
+    profile_metadata: tuple[InteractiveWorldProfileMetadata, ...]
     profile_loader: Callable[[InteractiveWorldProfileRef], LoadedInteractiveWorldProfile]
 
     def __post_init__(self) -> None:
         if not self.profiles:
             raise ValueError("Interactive World definition requires at least one profile")
+        if any(not value.strip() for value in (self.title, self.summary, self.domain)):
+            raise ValueError("Interactive World discovery metadata values must be non-empty")
+        if len(self.tags) != len(set(self.tags)) or any(not tag.strip() for tag in self.tags):
+            raise ValueError("Interactive World tags must be distinct and non-empty")
+        if any(not capability.strip() for capability in self.capabilities):
+            raise ValueError("Interactive World capabilities must be non-empty")
         if any(profile.task_world_id != self.build.task_world_id for profile in self.profiles):
             raise ValueError("Interactive World profiles must belong to the same task world")
         profile_ids = tuple(profile.profile_id for profile in self.profiles)
@@ -38,6 +72,9 @@ class InteractiveWorldDefinition:
             raise ValueError("Interactive World profile identities must be distinct")
         if profile_ids != tuple(sorted(profile_ids)):
             raise ValueError("Interactive World profiles must use stable order")
+        metadata_ids = tuple(item.profile_id for item in self.profile_metadata)
+        if metadata_ids != profile_ids:
+            raise ValueError("Interactive World profile metadata must match profiles in stable order")
 
     @property
     def ref(self) -> WorldBuildRef:
@@ -51,6 +88,14 @@ class InteractiveWorldDefinition:
         for profile in self.profiles:
             if profile.profile_id == profile_id:
                 return profile
+        raise KeyError(f"unknown Interactive World profile: {profile_id}")
+
+    def metadata_for(self, profile_id: str) -> InteractiveWorldProfileMetadata:
+        """Return discovery and selection metadata for one supported profile."""
+
+        for metadata in self.profile_metadata:
+            if metadata.profile_id == profile_id:
+                return metadata
         raise KeyError(f"unknown Interactive World profile: {profile_id}")
 
     def load_profile(self, reference: InteractiveWorldProfileRef) -> LoadedInteractiveWorldProfile:

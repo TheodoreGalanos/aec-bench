@@ -10,9 +10,10 @@ from aec_bench.contracts.task_definition import TaskDefinition
 from aec_bench.contracts.trial_record import TrialRecord
 from aec_bench.harness.harbor_importing.core import import_harbor_job
 from aec_bench.harness.progress_tracker import ImportProgressTracker
-from aec_bench.harness.scheduler import build_trial_plan, select_manifest_tasks
+from aec_bench.harness.scheduler import select_manifest_tasks
 from aec_bench.ledger.writer import DuplicateTrialRecordError, write_trial_record
 from aec_bench.tasks.registry import TaskRegistry
+from aec_bench.trials import plan_trials
 
 
 class ExperimentImportMismatchError(Exception):
@@ -51,7 +52,13 @@ class HarborImportExperimentRunner:
     ) -> ExperimentImportResult:
         selected_tasks = list(resolved_tasks) if resolved_tasks is not None else self._selected_tasks(manifest)
         selected_task_ids = {task.task_id for task in selected_tasks}
-        planned_trials = build_trial_plan(manifest, selected_tasks)
+        planned_trials = plan_trials(
+            manifest.experiment_id,
+            tasks=selected_tasks,
+            agents=manifest.agents,
+            compute=manifest.compute,
+            repetitions=manifest.repetitions,
+        )
         tracker = ImportProgressTracker(
             experiment_id=manifest.experiment_id,
             selected_task_count=len(selected_task_ids),

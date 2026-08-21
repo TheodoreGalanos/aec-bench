@@ -5,29 +5,26 @@ from __future__ import annotations
 
 import json
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from decimal import Decimal
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 from aec_bench.contracts.authority_evidence import AuthorityEvidenceRef
+from aec_bench.contracts.experiment_manifest import AgentConfig, ComputeConfig
 from aec_bench.contracts.world_session import WorldSessionRequest, WorldSessionResult
-from aec_bench.harness.world_actor import (
-    ActorInvocationAuthority,
-    ActorInvocationAuthorityConfig,
-    WorldActorEndpoint,
-    install_world_actor_client,
-)
-from aec_bench.prime_agent.acp import PrimeAcpIsolation, PrimeAcpRun, run_prime_acp_session
+from aec_bench.harness.prime_world_actor import run_prime_world_actor_session
+from aec_bench.harness.world_trials import WorldActorSessionRunner
+from aec_bench.prime_agent.acp import PrimeAcpIsolation, PrimeAcpRun
 from aec_bench.prime_agent.refinement import PrimeRefinementCandidate, PrimeRefinementMode
 from aec_bench.prime_agent.session_evidence import PrimeAcpLimits
 from aec_bench.prime_agent.skills import (
     ACTOR_LEDGER_PLAN_INSTRUCTION,
     install_actor_ledger_plan_skills,
-    install_aec_world_skill,
     install_prime_refine_skill,
     install_prime_skill,
 )
+from aec_bench.trials import PlannedTrial
 from aec_bench.worlds.stewardship.wastewater_pump_station.episode_runtime import PumpStationEpisodeHost
 from aec_bench.worlds.stewardship.wastewater_pump_station.evaluation import (
     evaluate_pump_station_reference_run,
@@ -124,6 +121,8 @@ async def run_pump_station_prime_session(
     refinement_candidate: PrimeRefinementCandidate | None = None,
     executable: str = "prime-agent",
     environment: Mapping[str, str] | None = None,
+    planned_trial: PlannedTrial | None = None,
+    actor: WorldActorSessionRunner = run_prime_world_actor_session,
 ) -> PumpStationPrimeSessionRun:
     """Run Prime against one scoped pump actor without changing the world runtime."""
     if pump_station_guidance and actor_ledger_plan:
@@ -134,9 +133,7 @@ async def run_pump_station_prime_session(
     if _paths_overlap(actor_workspace, world_run_directory) or _paths_overlap(actor_workspace, evidence_directory):
         raise PumpStationPrimeSessionError("actor workspace must be separate from host world and evidence paths")
     actor_workspace.mkdir(parents=True, exist_ok=True)
-    evidence_directory.mkdir(parents=True, exist_ok=False)
-    installed_client = install_world_actor_client(actor_workspace)
-    skill_directories = [install_aec_world_skill(actor_workspace)]
+    skill_directories: list[Path] = []
     if refinement_mode is PrimeRefinementMode.DISCOVER:
         skill_directories.append(install_prime_refine_skill(actor_workspace))
     prime_instruction = instruction
@@ -146,46 +143,71 @@ async def run_pump_station_prime_session(
     elif actor_ledger_plan:
         skill_directories.extend(install_actor_ledger_plan_skills(actor_workspace, executable=executable))
         prime_instruction = instruction.rstrip() + "\n\n" + ACTOR_LEDGER_PLAN_INSTRUCTION + "\n"
-    actor_transport_file = evidence_directory / "world-actor-transport.jsonl"
-    actor_authority_file = evidence_directory / "world-actor-authority.jsonl"
     host = PumpStationEpisodeHost(world_run_directory)
     world_session = host.open(session_request)
-    authority = ActorInvocationAuthority(
-        host=host,
-        config=ActorInvocationAuthorityConfig(
-            actor_principal_id="actor.prime-process-composite",
-            max_world_actions=limits.max_world_actions,
-            evidence_path=actor_authority_file,
-        ),
-    )
-    endpoint = WorldActorEndpoint(
-        authority=authority,
-        socket_directory=actor_workspace / ".actor",
-        evidence_file=actor_transport_file,
-    )
-    with endpoint:
-        prime = await run_prime_acp_session(
-            actor_workspace=actor_workspace,
-            evidence_directory=evidence_directory,
-            skill_directories=tuple(skill_directories),
-            instruction=prime_instruction,
+    session_trial = planned_trial or PlannedTrial(
+        trial_id="pump-station-prime-session",
+        experiment_id="pump-station-prime-session",
+        task_id=session_request.task_world_id,
+        agent=AgentConfig(
+            name="prime-agent",
+            adapter="prime-agent",
             model=model,
-            actor_environment=endpoint.connection_environment(),
-            scoped_socket=endpoint.socket_path,
-            isolation=isolation,
-            limits=limits.acp_limits(),
-            runtime_directory=prime_runtime_directory,
-            private_paths=(world_run_directory, evidence_directory, *additional_private_paths),
-            refinement_mode=refinement_mode,
-            refinement_candidate=refinement_candidate,
-            executable=executable,
-            environment=environment,
+            parameters={
+                "isolation": isolation.value,
+                "max_world_actions": limits.max_world_actions,
+                "max_model_calls": limits.max_model_calls,
+                "max_tokens": limits.max_tokens,
+                "max_cost_usd": str(limits.max_cost_usd),
+                "max_wall_seconds": limits.max_wall_seconds,
+                "prime_runtime_directory": prime_runtime_directory,
+                "refinement_mode": refinement_mode.value,
+                "refinement_candidate": refinement_candidate,
+                "executable": executable,
+                "environment": environment,
+            },
+        ),
+        compute=ComputeConfig(backend="local"),
+        repetition=1,
+    )
+    if session_trial.agent.model != model or session_trial.agent.adapter != "prime-agent":
+        raise ValueError("planned Prime world trial differs from the pump session configuration")
+    if planned_trial is not None:
+        session_trial = replace(
+            planned_trial,
+            agent=planned_trial.agent.model_copy(
+                update={
+                    "parameters": {
+                        **planned_trial.agent.parameters,
+                        "isolation": isolation.value,
+                        "max_world_actions": limits.max_world_actions,
+                        "max_model_calls": limits.max_model_calls,
+                        "max_tokens": limits.max_tokens,
+                        "max_cost_usd": str(limits.max_cost_usd),
+                        "max_wall_seconds": limits.max_wall_seconds,
+                        "prime_runtime_directory": prime_runtime_directory,
+                        "refinement_mode": refinement_mode.value,
+                        "refinement_candidate": refinement_candidate,
+                        "executable": executable,
+                        "environment": environment,
+                    }
+                }
+            ),
         )
-        last_action = endpoint.last_action_result
-        world_action_count = endpoint.world_action_count
-        world_action_limit_reached = endpoint.world_action_limit_reached
-    close_report = endpoint.close()
-    actor_authority_evidence = close_report.authority.evidence_ref
+    session = await actor(
+        host=host,
+        trial=session_trial,
+        instruction=prime_instruction,
+        actor_workspace=actor_workspace,
+        evidence_directory=evidence_directory,
+        skills=skill_directories,
+        private_paths=(world_run_directory, evidence_directory, *additional_private_paths),
+    )
+    prime = session.prime
+    last_action = session.last_action_result
+    world_action_count = session.world_action_count
+    world_action_limit_reached = session.world_action_limit_reached
+    actor_authority_evidence = session.actor_authority_evidence
 
     repository = PumpStationWorldRunRepository(world_run_directory)
     run = PumpStationWorldRun.resume_reference_system(
@@ -214,7 +236,7 @@ async def run_pump_station_prime_session(
         completion = "truncated"
     else:
         completion = "incomplete"
-    benchmark_valid = prime.benchmark_valid and verification.valid and close_report.complete
+    benchmark_valid = prime.benchmark_valid and verification.valid and session.close_complete
     run_file = evidence_directory / "prime-world-run.json"
     run_file.write_text(
         json.dumps(
@@ -227,10 +249,10 @@ async def run_pump_station_prime_session(
                     "max_cost_usd": str(limits.max_cost_usd),
                     "max_wall_seconds": limits.max_wall_seconds,
                 },
-                "world_actor_client_sha256": installed_client.content_sha256,
+                "world_actor_client_sha256": session.world_actor_client_sha256,
                 "world_action_count": world_action_count,
                 "world_action_limit_reached": world_action_limit_reached,
-                "world_actor_close_complete": close_report.complete,
+                "world_actor_close_complete": session.close_complete,
                 "actor_authority_evidence": (
                     None if actor_authority_evidence is None else actor_authority_evidence.model_dump(mode="json")
                 ),
@@ -255,11 +277,11 @@ async def run_pump_station_prime_session(
         completion=completion,
         verification=verification,
         evaluation=evaluation,
-        actor_transport_file=actor_transport_file,
-        actor_authority_file=actor_authority_file,
+        actor_transport_file=session.actor_transport_file,
+        actor_authority_file=session.actor_authority_file,
         actor_authority_evidence=actor_authority_evidence,
         run_file=run_file,
-        world_actor_client_sha256=installed_client.content_sha256,
+        world_actor_client_sha256=session.world_actor_client_sha256,
         world_action_count=world_action_count,
         world_action_limit_reached=world_action_limit_reached,
         benchmark_valid=benchmark_valid,

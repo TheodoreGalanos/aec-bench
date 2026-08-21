@@ -4,7 +4,8 @@
 import pytest
 
 from aec_bench.contracts.experiment_manifest import AgentConfig, ComputeConfig
-from aec_bench.trials import PlannedTrial, TrialLifecycleState, transition_trial_state
+from aec_bench.harness.trial import TrialLifecycleState, transition_trial_state
+from aec_bench.trials import PlannedTrial
 
 
 def test_planned_trial_id_is_deterministic() -> None:

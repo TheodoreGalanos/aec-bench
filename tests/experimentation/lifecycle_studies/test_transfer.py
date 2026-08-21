@@ -56,6 +56,7 @@ from aec_bench.experimentation.lifecycle_studies.transfer import (
     LifecycleTransferStudyDesign,
     build_lifecycle_transfer_evaluation,
 )
+from aec_bench.ledger.artifact_repository import ArtifactRepository
 from aec_bench.ledger.reader import read_trial_record
 from aec_bench.ledger.writer import write_trial_record
 from aec_bench.lifecycles.catalogue import (
@@ -458,8 +459,8 @@ def test_tampered_record_or_snapshot_artifact_is_not_evaluable(tmp_path: Path, t
         target.record_path.write_bytes(target.record_path.read_bytes() + b"\n")
         expected_reason = "record_sha256_mismatch"
     else:
-        target.snapshot_path.write_text("tampered", encoding="utf-8")
-        expected_reason = "artifact_sha256_mismatch"
+        _published_artifact_path(target, "lifecycle_verification").write_text("tampered", encoding="utf-8")
+        expected_reason = "record_invalid"
 
     result = build_lifecycle_transfer_evaluation(
         _spec(condition=condition, calibration=(calibration.reference,), targets=(target.reference,))
@@ -876,8 +877,8 @@ def test_transfer_evaluator_binds_operation_visibility_to_validated_package_vari
     )
 
     assert result.target_results[0].reasons == (
-        "source_not_reconstructive",
         "snapshot_contract_invalid",
+        "source_not_reconstructive",
     )
     assert result.status == "not_evaluable"
 
@@ -1029,14 +1030,16 @@ def test_repointed_verification_artifact_must_match_the_invocation_manifest(tmp_
     forged_payload = json.loads(target.snapshot_path.read_text(encoding="utf-8"))
     forged_payload["reward"] = 0.25
     forged_verification.write_text(json.dumps(forged_payload), encoding="utf-8")
+    forged_reference = ArtifactRepository(target.record_path.parents[1] / "_artifacts").publish_bytes(
+        data=forged_verification.read_bytes(),
+        media_type="application/json",
+    )
     payload = json.loads(target.record_path.read_text(encoding="utf-8"))
     payload["evaluation"]["reward"] = 0.25
-    payload["outputs"]["artifacts"][0] = {
-        "kind": "lifecycle_verification",
-        "path": forged_verification.relative_to(target.record_path.parents[1]).as_posix(),
-        "sha256": _sha256(forged_verification),
-        "media_type": "application/json",
-    }
+    verification_artifact = next(
+        item for item in payload["output"]["artifacts"] if item["role"] == "lifecycle_verification"
+    )
+    verification_artifact["artifact"] = forged_reference.model_dump(mode="json")
     target.record_path.write_text(json.dumps(payload), encoding="utf-8")
     reference = target.reference.model_copy(update={"sha256": _sha256(target.record_path)})
 
@@ -1074,18 +1077,19 @@ def test_missing_or_escaping_snapshot_artifact_is_not_evaluable(
     )
     reference = target.reference
     if integrity_failure == "missing":
-        target.snapshot_path.unlink()
-        expected_reason = "artifact_missing"
+        _published_artifact_path(target, "lifecycle_verification").unlink()
+        expected_reason = "record_invalid"
     else:
         payload = json.loads(target.record_path.read_text(encoding="utf-8"))
-        payload["outputs"]["artifacts"][0]["path"] = (
+        verification_artifact = next(
+            item for item in payload["output"]["artifacts"] if item["role"] == "lifecycle_verification"
+        )
+        verification_artifact["logical_path"] = (
             "../outside.json" if integrity_failure == "path_escape" else "invalid\0artifact.json"
         )
         target.record_path.write_text(json.dumps(payload), encoding="utf-8")
         reference = reference.model_copy(update={"sha256": _sha256(target.record_path)})
-        expected_reason = (
-            "artifact_path_escapes_ledger" if integrity_failure == "path_escape" else "artifact_unresolvable"
-        )
+        expected_reason = "record_invalid"
 
     result = build_lifecycle_transfer_evaluation(
         _spec(condition=condition, calibration=(calibration.reference,), targets=(reference,))
@@ -1440,6 +1444,13 @@ class _WrittenRecord:
         self.reference = reference
         self.record_path = record_path
         self.snapshot_path = snapshot_path
+
+
+def _published_artifact_path(written: _WrittenRecord, kind: str) -> Path:
+    ledger_root = written.record_path.parents[1]
+    record = read_trial_record(written.record_path, ledger_root=ledger_root)
+    artifact = next(item.artifact for item in record.outputs.artifacts if item.role == kind)
+    return ledger_root / "_artifacts" / artifact.artifact_id
 
 
 def _write_record(

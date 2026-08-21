@@ -45,7 +45,27 @@ def run_lifecycle_trial(
         raise ValueError("lifecycle executor result does not match canonical run state")
     agent_status = execution.agent.get("status")
     if state.get("status") == "complete" and agent_status == "completed":
-        verification = validate_lifecycle_verification(verify(trial.package_dir, trial.run_dir))
+        try:
+            verification = validate_lifecycle_verification(verify(trial.package_dir, trial.run_dir))
+        except Exception as exc:
+            lifecycle_id = state.get("lifecycle_id")
+            if not isinstance(lifecycle_id, str) or not lifecycle_id:
+                raise ValueError("lifecycle state identity is missing") from exc
+            verification = validate_lifecycle_verification(
+                {
+                    "lifecycle_id": lifecycle_id,
+                    "overall": "incomplete",
+                    "passed": False,
+                    "reward": 0.0,
+                    "gates": {
+                        "lifecycle_verifier": {
+                            "passed": False,
+                            "score": 0.0,
+                            "failures": [f"verifier_exception:{type(exc).__name__}:{exc}"],
+                        }
+                    },
+                }
+            )
     else:
         lifecycle_id = state.get("lifecycle_id")
         if not isinstance(lifecycle_id, str) or not lifecycle_id:

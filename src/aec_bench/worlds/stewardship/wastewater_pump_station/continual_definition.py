@@ -9,8 +9,10 @@ from functools import cache
 from pathlib import Path
 
 from aec_bench.contracts.interactive_world import InteractiveWorldProfileRef, WorldBuildRef
+from aec_bench.contracts.task_definition import Difficulty, Lifecycle, Visibility
 from aec_bench.worlds.runtime.definition import (
     InteractiveWorldDefinition,
+    InteractiveWorldProfileMetadata,
     LoadedInteractiveWorldProfile,
     source_tree_world_build,
 )
@@ -133,6 +135,24 @@ def pump_station_continual_world_definition() -> InteractiveWorldDefinition:
     profiles = tuple(_profile_ref(reference_system_id) for reference_system_id in list_reference_system_ids())
     return InteractiveWorldDefinition(
         build=_pump_station_world_build(),
+        title="Wastewater pump-station stewardship",
+        summary="Operate a persistent pump station safely across changing conditions.",
+        domain="civil",
+        tags=("operations", "pump-station", "stewardship", "wastewater"),
+        capabilities=frozenset({"branching", "host-controls", "persistence"}),
         profiles=profiles,
+        profile_metadata=tuple(
+            InteractiveWorldProfileMetadata(
+                profile_id=profile.profile_id,
+                title=profile.profile_id.replace("-", " ").title(),
+                summary=f"Persistent pump-station stewardship profile {profile.profile_id}.",
+                category="stewardship",
+                difficulty=Difficulty.HARD,
+                lifecycle=Lifecycle.ACTIVE,
+                visibility=Visibility.PUBLIC,
+                tags=("operations", "pump-station", "stewardship", "wastewater"),
+            )
+            for profile in profiles
+        ),
         profile_loader=_load_pump_station_profile,
     )
