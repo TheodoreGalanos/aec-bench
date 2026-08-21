@@ -19,8 +19,8 @@ from aec_bench.lifecycles.catalogue import (
 from aec_bench.lifecycles.runtime.lifecycle import (
     execute_lifecycle_operation,
     open_checkpoint_attempt,
-    prepare_evidence_checkpoint,
-    submit_evidence_checkpoint,
+    release_checkpoint,
+    submit_checkpoint,
 )
 from aec_bench.lifecycles.runtime.request_protocol import EvidenceLifecycleError
 from tests.support.lifecycle_operations import resolve_operation_runtime
@@ -189,7 +189,7 @@ def _write_and_submit(package: Path, run: Path, checkpoint_id: str, submission: 
     path = run / "workspace" / "submissions" / f"{checkpoint_id}.json"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(submission, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    submit_evidence_checkpoint(package, run, operation_resolver=resolve_operation_runtime(package, run))
+    submit_checkpoint(package, run, operation_resolver=resolve_operation_runtime(package, run))
 
 
 def _complete_lifecycle(
@@ -205,7 +205,7 @@ def _complete_lifecycle(
         variant_id=variant_id,
     )
     run = tmp_path / "run"
-    prepare_evidence_checkpoint(package, run, operation_resolver=resolve_operation_runtime(package, run))
+    release_checkpoint(package, run, operation_resolver=resolve_operation_runtime(package, run))
     open_checkpoint_attempt(
         package,
         run,
@@ -234,7 +234,7 @@ def _complete_lifecycle(
         mutate_submission("baseline_analysis", baseline_submission)
     _write_and_submit(package, run, "baseline_analysis", baseline_submission)
 
-    prepare_evidence_checkpoint(package, run, operation_resolver=resolve_operation_runtime(package, run))
+    release_checkpoint(package, run, operation_resolver=resolve_operation_runtime(package, run))
     open_checkpoint_attempt(
         package,
         run,
@@ -312,7 +312,7 @@ def _complete_lifecycle(
     revision_visible_sha = str(revision_submission["visible_source_state_sha256"])
     readiness = str(revision_submission["readiness_decision"])
 
-    prepare_evidence_checkpoint(package, run, operation_resolver=resolve_operation_runtime(package, run))
+    release_checkpoint(package, run, operation_resolver=resolve_operation_runtime(package, run))
     open_checkpoint_attempt(
         package,
         run,

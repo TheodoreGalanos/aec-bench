@@ -170,7 +170,7 @@ def evidence_lifecycle_package_identity(package_dir: Path) -> dict[str, str]:
     }
 
 
-def prepare_evidence_checkpoint(
+def release_checkpoint(
     package_dir: Path,
     run_dir: Path,
     *,
@@ -181,7 +181,7 @@ def prepare_evidence_checkpoint(
     package = Path(package_dir)
     run = Path(run_dir)
     with _lifecycle_state_lock(run):
-        return _prepare_evidence_checkpoint_locked(
+        return _release_checkpoint_locked(
             package,
             run,
             operation_resolver=operation_resolver,
@@ -189,7 +189,7 @@ def prepare_evidence_checkpoint(
         )
 
 
-def _prepare_evidence_checkpoint_locked(
+def _release_checkpoint_locked(
     package: Path,
     run: Path,
     *,
@@ -274,7 +274,7 @@ def _prepare_evidence_checkpoint_locked(
     return _checkpoint_context(run, checkpoint, state)
 
 
-def request_evidence_checkpoint(
+def request_checkpoint_evidence(
     package_dir: Path,
     run_dir: Path,
     *,
@@ -290,7 +290,7 @@ def request_evidence_checkpoint(
     package = Path(package_dir)
     run = Path(run_dir)
     with _lifecycle_state_lock(run):
-        return _request_evidence_checkpoint_locked(
+        return _request_checkpoint_evidence_locked(
             package,
             run,
             operation_resolver=operation_resolver,
@@ -301,7 +301,7 @@ def request_evidence_checkpoint(
         )
 
 
-def _request_evidence_checkpoint_locked(
+def _request_checkpoint_evidence_locked(
     package: Path,
     run: Path,
     *,
@@ -475,7 +475,7 @@ def execute_lifecycle_operation(
         )
 
 
-def submit_evidence_checkpoint(
+def submit_checkpoint(
     package_dir: Path,
     run_dir: Path,
     *,
@@ -486,7 +486,7 @@ def submit_evidence_checkpoint(
     package = Path(package_dir)
     run = Path(run_dir)
     with _lifecycle_state_lock(run):
-        return _submit_evidence_checkpoint_locked(
+        return _submit_checkpoint_locked(
             package,
             run,
             operation_resolver=operation_resolver,
@@ -494,7 +494,7 @@ def submit_evidence_checkpoint(
         )
 
 
-def _submit_evidence_checkpoint_locked(
+def _submit_checkpoint_locked(
     package: Path,
     run: Path,
     *,
@@ -560,7 +560,7 @@ def _submit_evidence_checkpoint_locked(
     return _result_context(run, state)
 
 
-def branch_evidence_lifecycle(
+def branch_lifecycle(
     package_dir: Path,
     parent_run_dir: Path,
     branch_run_dir: Path,
@@ -578,7 +578,7 @@ def branch_evidence_lifecycle(
     parent_run = Path(parent_run_dir)
     branch_run = Path(branch_run_dir)
     with _lifecycle_state_lock(parent_run):
-        return _branch_evidence_lifecycle_locked(
+        return _branch_lifecycle_locked(
             package,
             parent_run,
             branch_run,
@@ -592,7 +592,7 @@ def branch_evidence_lifecycle(
         )
 
 
-def _branch_evidence_lifecycle_locked(
+def _branch_lifecycle_locked(
     package: Path,
     parent_run: Path,
     branch_run: Path,
@@ -967,7 +967,7 @@ def _fail_checkpoint_attempt_locked(
     return _attempt_context(attempt)
 
 
-def revisit_evidence_checkpoint(
+def revisit_checkpoint(
     package_dir: Path,
     run_dir: Path,
     *,
@@ -979,7 +979,7 @@ def revisit_evidence_checkpoint(
     package = Path(package_dir)
     run = Path(run_dir)
     with _lifecycle_state_lock(run):
-        return _revisit_evidence_checkpoint_locked(
+        return _revisit_checkpoint_locked(
             package,
             run,
             operation_resolver=operation_resolver,
@@ -988,7 +988,7 @@ def revisit_evidence_checkpoint(
         )
 
 
-def _revisit_evidence_checkpoint_locked(
+def _revisit_checkpoint_locked(
     package: Path,
     run: Path,
     *,
@@ -1041,7 +1041,7 @@ def _revisit_evidence_checkpoint_locked(
     }
 
 
-def run_evidence_lifecycle(
+def run_lifecycle(
     package_dir: Path,
     run_dir: Path,
     *,
@@ -1054,7 +1054,7 @@ def run_evidence_lifecycle(
     if execution_mode is not LifecycleExecutionMode.FRESH_CONTEXT:
         raise ValueError("checkpoint lifecycle runner requires fresh_context episode execution")
     while True:
-        raw_context = prepare_evidence_checkpoint(
+        raw_context = release_checkpoint(
             package_dir,
             run_dir,
             operation_resolver=operation_resolver,
@@ -1069,7 +1069,7 @@ def run_evidence_lifecycle(
         _recover_host_episode_attempt(context, episode_environment)
         episode_environment.recover(context)
         context = LifecycleEpisodeContext.from_runtime_context(
-            prepare_evidence_checkpoint(
+            release_checkpoint(
                 package_dir,
                 run_dir,
                 operation_resolver=operation_resolver,
@@ -1319,7 +1319,7 @@ def run_evidence_lifecycle(
             _annotate_reconciliation_errors(error, reconciliation_errors)
             raise error
         try:
-            result = submit_evidence_checkpoint(
+            result = submit_checkpoint(
                 package_dir,
                 run_dir,
                 operation_resolver=operation_resolver,
@@ -1687,7 +1687,7 @@ def _fail_episode_attempt_if_active(
     return True
 
 
-def read_evidence_lifecycle_state(
+def read_lifecycle(
     package_dir: Path,
     run_dir: Path,
     *,

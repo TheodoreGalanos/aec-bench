@@ -13,12 +13,12 @@ import pytest
 from aec_bench.lifecycles.catalogue import materialize_lifecycle
 from aec_bench.lifecycles.runtime.lifecycle import (
     EvidenceLifecycleError,
-    branch_evidence_lifecycle,
+    branch_lifecycle,
     execute_lifecycle_operation,
     load_evidence_lifecycle_spec,
     open_checkpoint_attempt,
-    prepare_evidence_checkpoint,
-    submit_evidence_checkpoint,
+    release_checkpoint,
+    submit_checkpoint,
 )
 from aec_bench.lifecycles.runtime.operation_snapshot import validate_lifecycle_operation_snapshot
 from aec_bench.lifecycles.runtime.state import EvidenceLifecycleRunState
@@ -46,7 +46,7 @@ def _materialize(tmp_path: Path) -> tuple[Path, Path]:
 
 
 def _open(package: Path, run: Path, session_id: str) -> None:
-    prepare_evidence_checkpoint(package, run, operation_resolver=resolve_operation_runtime(package, run))
+    release_checkpoint(package, run, operation_resolver=resolve_operation_runtime(package, run))
     open_checkpoint_attempt(
         package,
         run,
@@ -79,7 +79,7 @@ def _submit_active(package: Path, run: Path) -> None:
     payload: dict[str, object] = {field: [] for field in checkpoint.required_submission_fields}
     payload["checkpoint_id"] = checkpoint_id
     _write_json(run / "workspace" / checkpoint.submission_path, payload)
-    submit_evidence_checkpoint(package, run, operation_resolver=resolve_operation_runtime(package, run))
+    submit_checkpoint(package, run, operation_resolver=resolve_operation_runtime(package, run))
 
 
 def _parent_through_revision(tmp_path: Path) -> tuple[Path, Path]:
@@ -98,7 +98,7 @@ def test_branch_preserves_operation_budgets_actions_transactions_and_source(tmp_
     branch_run = tmp_path / "branch"
     parent_source = _read_json(parent / "workspace" / "operations" / "current-source.json")
 
-    branch = branch_evidence_lifecycle(
+    branch = branch_lifecycle(
         package,
         parent,
         branch_run,
@@ -161,7 +161,7 @@ def test_branch_rejects_tampered_historical_operation_catalogue(tmp_path: Path) 
     branch_run = tmp_path / "branch"
 
     with pytest.raises(ValueError, match="operation catalogue does not match"):
-        branch_evidence_lifecycle(
+        branch_lifecycle(
             package,
             parent,
             branch_run,
@@ -177,7 +177,7 @@ def test_branch_rejects_tampered_historical_operation_catalogue(tmp_path: Path) 
 def test_branch_origin_hash_binds_inherited_operation_history(tmp_path: Path) -> None:
     package, parent = _parent_through_revision(tmp_path)
     branch_run = tmp_path / "branch"
-    branch_evidence_lifecycle(
+    branch_lifecycle(
         package,
         parent,
         branch_run,

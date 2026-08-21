@@ -17,7 +17,7 @@ from aec_bench.lifecycles.catalogue import (
     verify_lifecycle,
 )
 from aec_bench.lifecycles.runtime.episode import LifecycleEpisodeEnvironment
-from aec_bench.lifecycles.runtime.lifecycle import read_evidence_lifecycle_state, run_evidence_lifecycle
+from aec_bench.lifecycles.runtime.lifecycle import read_lifecycle, run_lifecycle
 from tests.support.lifecycle_episode import deterministic_episode_environment
 
 
@@ -59,13 +59,13 @@ def test_registered_lifecycle_completes_and_verifies_through_shared_progression(
     run_dir = tmp_path / "run"
     operation_resolver = lifecycle_operation_resolver(package_dir, run_dir)
 
-    result = run_evidence_lifecycle(
+    result = run_lifecycle(
         package_dir,
         run_dir,
         episode_environment=_conformance_environment(template_id, package_dir),
         operation_resolver=operation_resolver,
     )
-    state = read_evidence_lifecycle_state(
+    state = read_lifecycle(
         package_dir,
         run_dir,
         operation_resolver=operation_resolver,

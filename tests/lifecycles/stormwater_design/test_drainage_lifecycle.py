@@ -10,16 +10,16 @@ from types import SimpleNamespace
 
 import pytest
 
-from aec_bench.experimentation.lifecycle_studies.experiment import record_lifecycle_experiment
-from aec_bench.harness.lifecycle_local import run_local_evidence_lifecycle_session
+from aec_bench.harness.lifecycle_local import _run_local_lifecycle_persistent_session
 from aec_bench.harness.lifecycle_task_run import build_evidence_lifecycle_task_run_resolver
 from aec_bench.lifecycles.catalogue import lifecycle_definition, lifecycle_template_ids
+from aec_bench.lifecycles.recording import record_lifecycle_experiment
 from aec_bench.lifecycles.runtime.lifecycle import (
     EvidenceLifecycleError,
-    branch_evidence_lifecycle,
-    prepare_evidence_checkpoint,
-    run_evidence_lifecycle,
-    submit_evidence_checkpoint,
+    branch_lifecycle,
+    release_checkpoint,
+    run_lifecycle,
+    submit_checkpoint,
 )
 from aec_bench.lifecycles.stormwater_design.drainage_model import (
     materialize_drainage_model_lifecycle,
@@ -507,7 +507,7 @@ def test_verifier_rejects_unsafe_claim_boundary_statement(tmp_path: Path) -> Non
         _write_json(Path(context["submission_path"]), payload)
         return {"status": "completed"}
 
-    run_evidence_lifecycle(
+    run_lifecycle(
         package,
         run_dir,
         episode_environment=deterministic_episode_environment(resolve),
@@ -531,7 +531,7 @@ def test_verifier_rejects_disclaimer_followed_by_positive_readiness_claim(tmp_pa
         _write_json(Path(context["submission_path"]), payload)
         return {"status": "completed"}
 
-    run_evidence_lifecycle(
+    run_lifecycle(
         package,
         run_dir,
         episode_environment=deterministic_episode_environment(resolve),
@@ -564,7 +564,7 @@ def test_three_episode_runner_preserves_only_released_evidence(tmp_path: Path) -
         _write_json(Path(context["submission_path"]), gold[context["checkpoint_id"]])
         return {"status": "completed"}
 
-    result = run_evidence_lifecycle(
+    result = run_lifecycle(
         package,
         run_dir,
         episode_environment=deterministic_episode_environment(resolve),
@@ -583,7 +583,7 @@ def test_persistent_session_runner_closes_actual_three_checkpoint_contract(tmp_p
     run_dir = tmp_path / "run"
     registry = _GoldSessionRegistry(package=package, run_dir=run_dir)
 
-    task_run = run_local_evidence_lifecycle_session(
+    task_run = _run_local_lifecycle_persistent_session(
         package_dir=package,
         run_dir=run_dir,
         model="test-model",
@@ -615,7 +615,7 @@ def test_branch_from_response_can_complete_and_verify_independently(tmp_path: Pa
     branch_run = tmp_path / "branch"
     gold = _load_json(package / "hidden" / "gold-submissions.json")
 
-    branch_evidence_lifecycle(
+    branch_lifecycle(
         package,
         parent_run,
         branch_run,
@@ -623,10 +623,10 @@ def test_branch_from_response_can_complete_and_verify_independently(tmp_path: Pa
         branch_id="branch.response-recheck",
         reason="Recheck response closure before accepting closeout.",
     )
-    submit_evidence_checkpoint(package, branch_run)
-    closeout = prepare_evidence_checkpoint(package, branch_run)
+    submit_checkpoint(package, branch_run)
+    closeout = release_checkpoint(package, branch_run)
     _write_json(Path(closeout["submission_path"]), gold["closeout_review"])
-    submit_evidence_checkpoint(package, branch_run)
+    submit_checkpoint(package, branch_run)
 
     result = verify_drainage_model_lifecycle(package, branch_run)
 
@@ -643,7 +643,7 @@ def _run_gold(tmp_path: Path) -> tuple[Path, Path]:
         _write_json(Path(context["submission_path"]), gold[context["checkpoint_id"]])
         return {"status": "completed"}
 
-    run_evidence_lifecycle(
+    run_lifecycle(
         package,
         run_dir,
         episode_environment=deterministic_episode_environment(resolve),
@@ -667,7 +667,7 @@ def _run_with_mutation(
         _write_json(Path(context["submission_path"]), payload)
         return {"status": "completed"}
 
-    run_evidence_lifecycle(
+    run_lifecycle(
         package,
         run_dir,
         episode_environment=deterministic_episode_environment(resolve),
@@ -680,7 +680,7 @@ def _run_payloads(package: Path, run_dir: Path, payloads: dict[str, dict]) -> No
         _write_json(Path(context["submission_path"]), payloads[context["checkpoint_id"]])
         return {"status": "completed"}
 
-    run_evidence_lifecycle(
+    run_lifecycle(
         package,
         run_dir,
         episode_environment=deterministic_episode_environment(resolve),

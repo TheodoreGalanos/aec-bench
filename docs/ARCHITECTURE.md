@@ -78,6 +78,33 @@ The current path is:
 budgets. It does not control attempt branching or selection. Interactive-world
 and lifecycle runtimes do not use this artifact-task attempt path.
 
+### Finite lifecycle composition
+
+Finite staged lifecycles use one checkpoint coordinator and one functional
+application surface. `release_checkpoint()`, `submit_checkpoint()`,
+`read_lifecycle()`, `revisit_checkpoint()`, `branch_lifecycle()`, and
+`run_lifecycle()` control canonical state. A branch can start only from a
+submitted checkpoint. It receives the accepted prefix through that checkpoint
+and continues through the same coordinator.
+
+`LifecycleTrial` binds a `PlannedTrial` to one materialized lifecycle package,
+one run location, one execution mode, and one visibility policy.
+`run_local_lifecycle()` dispatches to separate fresh-session and
+persistent-session implementations because their memory and recovery rules are
+different. Both return `LifecycleExecution`, which contains canonical state and
+the agent and tool evidence needed for trial construction.
+
+`run_lifecycle_trial()` executes, verifies, constructs one normal
+`TrialRecord`, optionally persists it, and returns it.
+`run_lifecycle_experiment()` applies that operation to planned lifecycle trials
+and returns the records in declared order. Lifecycle studies call these
+functions and keep only their study design, immutable snapshot, recovery, and
+selection policy under `experimentation.lifecycle_studies`.
+
+The lifecycle API does not implement meta-harness. A lifecycle evaluator can
+return these `TrialRecord` values to the separate runtime-independent
+meta-harness API.
+
 ### Agent evolution
 
 Evolution uses the same functional application shape as artifact-task

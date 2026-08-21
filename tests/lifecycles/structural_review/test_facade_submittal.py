@@ -18,8 +18,8 @@ from aec_bench.lifecycles.compiled import compile_lifecycle
 from aec_bench.lifecycles.runtime.episode import LifecycleEpisodeEnvironment
 from aec_bench.lifecycles.runtime.lifecycle import (
     load_validated_lifecycle_submissions,
-    read_evidence_lifecycle_state,
-    run_evidence_lifecycle,
+    read_lifecycle,
+    run_lifecycle,
 )
 from aec_bench.lifecycles.structural_review.facade_submittal import (
     LIFECYCLE,
@@ -99,12 +99,12 @@ def test_facade_submittal_lifecycle_completes_while_reporting_open_gaps(tmp_path
     package = materialize_lifecycle(TEMPLATE_ID, tmp_path / "package")
     run = tmp_path / "run"
 
-    result = run_evidence_lifecycle(
+    result = run_lifecycle(
         package,
         run,
         episode_environment=_gold_environment(package),
     )
-    state = read_evidence_lifecycle_state(package, run)
+    state = read_lifecycle(package, run)
     submissions = load_validated_lifecycle_submissions(package, run)
     verification = verify_lifecycle(package, run)
 
@@ -125,7 +125,7 @@ def test_facade_submittal_verifier_rejects_a_false_closeout_claim(tmp_path: Path
         if checkpoint_id == "response_review":
             submission["readiness"] = "review_in_progress"
 
-    result = run_evidence_lifecycle(
+    result = run_lifecycle(
         package,
         run,
         episode_environment=_gold_environment(package, mutate=change_closeout),

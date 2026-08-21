@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from unittest.mock import MagicMock
 
 import yaml
 from typer.testing import CliRunner
@@ -21,7 +20,14 @@ runner = CliRunner()
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
-def test_meta_harness_lifecycle_ablation_dry_run_is_exact_and_write_free(tmp_path: Path) -> None:
+def test_meta_harness_has_no_lifecycle_routes() -> None:
+    result = runner.invoke(app, ["meta-harness", "--help"])
+
+    assert result.exit_code == 0
+    assert "lifecycle-" not in result.output
+
+
+def test_task_lifecycle_study_ablation_dry_run_is_exact_and_write_free(tmp_path: Path) -> None:
     config_path = tmp_path / "ablation.yaml"
     config_path.write_text(
         yaml.safe_dump(
@@ -59,8 +65,10 @@ def test_meta_harness_lifecycle_ablation_dry_run_is_exact_and_write_free(tmp_pat
         app,
         [
             "--json",
-            "meta-harness",
-            "lifecycle-ablation",
+            "task",
+            "lifecycle",
+            "study",
+            "ablation",
             "--config",
             str(config_path),
             "--dry-run",
@@ -84,7 +92,7 @@ def test_meta_harness_lifecycle_ablation_dry_run_is_exact_and_write_free(tmp_pat
     assert not (tmp_path / "ledger").exists()
 
 
-def test_meta_harness_lifecycle_ablation_rejects_ignored_agent_parameter(tmp_path: Path) -> None:
+def test_task_lifecycle_study_ablation_rejects_ignored_agent_parameter(tmp_path: Path) -> None:
     config_path = tmp_path / "invalid-ablation.yaml"
     config_path.write_text(
         yaml.safe_dump(
@@ -112,8 +120,10 @@ def test_meta_harness_lifecycle_ablation_rejects_ignored_agent_parameter(tmp_pat
         app,
         [
             "--json",
-            "meta-harness",
-            "lifecycle-ablation",
+            "task",
+            "lifecycle",
+            "study",
+            "ablation",
             "--config",
             str(config_path),
             "--dry-run",
@@ -126,7 +136,7 @@ def test_meta_harness_lifecycle_ablation_rejects_ignored_agent_parameter(tmp_pat
     assert "unsupported lifecycle agent parameters: seed" in envelope["errors"][0]
 
 
-def test_meta_harness_lifecycle_commands_prepare_submit_and_report_state(tmp_path: Path) -> None:
+def test_task_lifecycle_commands_prepare_submit_and_report_state(tmp_path: Path) -> None:
     package = materialize_drainage_model_lifecycle(tmp_path / "package")
     run_dir = tmp_path / "run"
     gold = json.loads((package / "hidden" / "gold-submissions.json").read_text(encoding="utf-8"))
@@ -135,8 +145,9 @@ def test_meta_harness_lifecycle_commands_prepare_submit_and_report_state(tmp_pat
         app,
         [
             "--json",
-            "meta-harness",
-            "lifecycle-start",
+            "task",
+            "lifecycle",
+            "start",
             "--package",
             str(package),
             "--run-dir",
@@ -153,8 +164,9 @@ def test_meta_harness_lifecycle_commands_prepare_submit_and_report_state(tmp_pat
         app,
         [
             "--json",
-            "meta-harness",
-            "lifecycle-submit",
+            "task",
+            "lifecycle",
+            "submit",
             "--package",
             str(package),
             "--run-dir",
@@ -165,8 +177,9 @@ def test_meta_harness_lifecycle_commands_prepare_submit_and_report_state(tmp_pat
         app,
         [
             "--json",
-            "meta-harness",
-            "lifecycle-status",
+            "task",
+            "lifecycle",
+            "status",
             "--package",
             str(package),
             "--run-dir",
@@ -177,8 +190,9 @@ def test_meta_harness_lifecycle_commands_prepare_submit_and_report_state(tmp_pat
         app,
         [
             "--json",
-            "meta-harness",
-            "lifecycle-revisit",
+            "task",
+            "lifecycle",
+            "revisit",
             "--package",
             str(package),
             "--run-dir",
@@ -200,7 +214,7 @@ def test_meta_harness_lifecycle_commands_prepare_submit_and_report_state(tmp_pat
     assert not (run_dir / "workspace" / "inbox" / "response_review").exists()
 
 
-def test_meta_harness_lifecycle_branch_creates_isolated_derived_run(tmp_path: Path) -> None:
+def test_task_lifecycle_branch_creates_isolated_derived_run(tmp_path: Path) -> None:
     package = materialize_drainage_model_lifecycle(tmp_path / "package")
     parent_run = tmp_path / "parent-run"
     branch_run = tmp_path / "branch-run"
@@ -210,8 +224,9 @@ def test_meta_harness_lifecycle_branch_creates_isolated_derived_run(tmp_path: Pa
         app,
         [
             "--json",
-            "meta-harness",
-            "lifecycle-start",
+            "task",
+            "lifecycle",
+            "start",
             "--package",
             str(package),
             "--run-dir",
@@ -226,8 +241,9 @@ def test_meta_harness_lifecycle_branch_creates_isolated_derived_run(tmp_path: Pa
         app,
         [
             "--json",
-            "meta-harness",
-            "lifecycle-submit",
+            "task",
+            "lifecycle",
+            "submit",
             "--package",
             str(package),
             "--run-dir",
@@ -240,8 +256,9 @@ def test_meta_harness_lifecycle_branch_creates_isolated_derived_run(tmp_path: Pa
         app,
         [
             "--json",
-            "meta-harness",
-            "lifecycle-branch",
+            "task",
+            "lifecycle",
+            "branch",
             "--package",
             str(package),
             "--parent-run-dir",
@@ -267,125 +284,6 @@ def test_meta_harness_lifecycle_branch_creates_isolated_derived_run(tmp_path: Pa
     assert data["branch"]["reason"] == "Reconsider the initial provenance finding."
     assert (branch_run / "workspace" / "branch_origin" / "initial_review.json").is_file()
     assert not (branch_run / "workspace" / "inbox" / "response_review").exists()
-
-
-def test_meta_harness_lifecycle_run_local_defaults_to_persistent_session(tmp_path: Path, monkeypatch) -> None:
-    package = materialize_drainage_model_lifecycle(tmp_path / "package")
-    captured: dict[str, object] = {}
-
-    def fake_session(**kwargs):
-        captured.update(kwargs)
-        return {"run_id": "process.lifecycle.demo", "evidence": {"score": {"reward": 0.5}}}
-
-    fresh_runner = MagicMock(side_effect=AssertionError("fresh-context runner should not be called"))
-    monkeypatch.setattr(
-        "aec_bench.cli.commands.meta_harness.run_local_evidence_lifecycle_session",
-        fake_session,
-    )
-    monkeypatch.setattr(
-        "aec_bench.cli.commands.meta_harness.run_local_evidence_lifecycle_fresh_context",
-        fresh_runner,
-    )
-
-    result = runner.invoke(
-        app,
-        [
-            "--json",
-            "meta-harness",
-            "lifecycle-run-local",
-            "--package",
-            str(package),
-            "--run-dir",
-            str(tmp_path / "run"),
-            "--model",
-            "test-model",
-        ],
-    )
-
-    assert result.exit_code == 0, result.output
-    assert captured["model"] == "test-model"
-    assert captured["max_turns"] == 60
-    assert fresh_runner.call_count == 0
-
-
-def test_meta_harness_lifecycle_run_local_forwards_deepseek_limits(tmp_path: Path, monkeypatch) -> None:
-    package = materialize_drainage_model_lifecycle(tmp_path / "package")
-    captured: dict[str, object] = {}
-
-    def fake_session(**kwargs):
-        captured.update(kwargs)
-        return {"run_id": "process.lifecycle.demo", "evidence": {"score": {"reward": 0.5}}}
-
-    monkeypatch.setattr(
-        "aec_bench.cli.commands.meta_harness.run_local_evidence_lifecycle_session",
-        fake_session,
-    )
-
-    result = runner.invoke(
-        app,
-        [
-            "--json",
-            "meta-harness",
-            "lifecycle-run-local",
-            "--package",
-            str(package),
-            "--run-dir",
-            str(tmp_path / "run"),
-            "--model",
-            "azure:deepseek-v4-flash",
-            "--adapter",
-            "deepseek_harness",
-            "--max-tokens",
-            "4096",
-            "--timeout-sec",
-            "120",
-        ],
-    )
-
-    assert result.exit_code == 0, result.output
-    assert captured["max_tokens"] == 4096
-    assert captured["timeout_sec"] == 120
-
-
-def test_meta_harness_lifecycle_run_local_uses_normalized_fresh_context_runner(
-    tmp_path: Path,
-    monkeypatch,
-) -> None:
-    package = materialize_drainage_model_lifecycle(tmp_path / "package")
-    captured: dict[str, object] = {}
-
-    def fake_fresh_context(**kwargs):
-        captured.update(kwargs)
-        return {"run_id": "process.lifecycle.demo", "evidence": {"score": {"reward": 0.5}}}
-
-    monkeypatch.setattr(
-        "aec_bench.cli.commands.meta_harness.run_local_evidence_lifecycle_fresh_context",
-        fake_fresh_context,
-    )
-
-    result = runner.invoke(
-        app,
-        [
-            "--json",
-            "meta-harness",
-            "lifecycle-run-local",
-            "--package",
-            str(package),
-            "--run-dir",
-            str(tmp_path / "run"),
-            "--model",
-            "test-model",
-            "--mode",
-            "fresh-context",
-            "--visibility-policy",
-            "raw_evidence_only",
-        ],
-    )
-
-    assert result.exit_code == 0, result.output
-    assert captured["model"] == "test-model"
-    assert captured["max_turns"] == 60
-    assert str(captured["visibility_policy"]) == "raw_evidence_only"
 
 
 def test_meta_harness_process_command_runs_supplied_artifacts(tmp_path: Path) -> None:

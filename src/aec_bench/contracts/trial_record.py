@@ -208,6 +208,8 @@ class TrialArtifactRef(FrozenStrictModel):
             return None
         if "\\" in value:
             raise ValueError("artifact logical_path must use forward slashes")
+        if "\0" in value:
+            raise ValueError("artifact logical_path must not contain a null byte")
         path = PurePosixPath(value)
         if path.is_absolute() or any(part in {"", ".", ".."} for part in path.parts):
             raise ValueError("artifact logical_path must be a portable relative path")

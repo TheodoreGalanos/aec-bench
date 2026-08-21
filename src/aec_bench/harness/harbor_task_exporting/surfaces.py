@@ -12,7 +12,7 @@ from typing import cast
 from aec_bench.contracts.evidence_lifecycle import EvidenceLifecycleSpec, LifecycleTaskMetadata
 from aec_bench.lifecycles.catalogue import lifecycle_operation_resolver
 from aec_bench.lifecycles.compiled import CompiledLifecycleEnvelope
-from aec_bench.lifecycles.runtime.lifecycle import prepare_evidence_checkpoint
+from aec_bench.lifecycles.runtime.lifecycle import release_checkpoint
 
 from .constants import (
     BASE_IMAGE,
@@ -26,7 +26,7 @@ from .stable_io import RegularFileSnapshot, directory_sha256, snapshot_text
 def stage_initial_context(package_dir: Path, destination: Path) -> None:
     with tempfile.TemporaryDirectory(prefix="aec-bench-harbor-initial-") as raw_run:
         run_dir = Path(raw_run) / "run"
-        initial = prepare_evidence_checkpoint(
+        initial = release_checkpoint(
             Path(package_dir),
             run_dir,
             operation_resolver=lifecycle_operation_resolver(Path(package_dir), run_dir),

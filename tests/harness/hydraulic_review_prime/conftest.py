@@ -15,7 +15,7 @@ from aec_bench.lifecycles.runtime.episode import (
     LifecycleExecutionMode,
     LifecycleVisibilityPolicy,
 )
-from aec_bench.lifecycles.runtime.lifecycle import open_checkpoint_attempt, prepare_evidence_checkpoint
+from aec_bench.lifecycles.runtime.lifecycle import open_checkpoint_attempt, release_checkpoint
 from aec_bench.lifecycles.runtime.operation_protocol import LifecycleOperationResolver
 from aec_bench.lifecycles.stormwater_design.hydraulic_review import (
     build_hydraulic_operation_resolver,
@@ -38,7 +38,7 @@ def active_checkpoint(tmp_path: Path) -> ActiveCheckpoint:
     package = materialize_hydraulic_review_lifecycle(tmp_path / "package")
     run = tmp_path / "run"
     resolver = build_hydraulic_operation_resolver(package, run)
-    raw = prepare_evidence_checkpoint(package, run, operation_resolver=resolver)
+    raw = release_checkpoint(package, run, operation_resolver=resolver)
     context = LifecycleEpisodeContext.from_runtime_context(
         raw,
         visibility_policy=LifecycleVisibilityPolicy.ARTIFACT_MEMORY,

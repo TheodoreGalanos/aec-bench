@@ -10,11 +10,11 @@ from aec_bench.experimentation.lifecycle_studies.ablation_plan import (
     LifecycleAblationManifest,
     LifecycleAblationStudyDesign,
 )
-from aec_bench.lifecycles.catalogue import materialize_lifecycle
+from aec_bench.lifecycles.catalogue import lifecycle_operation_resolver, materialize_lifecycle
 from aec_bench.lifecycles.runtime.lifecycle import (
     open_checkpoint_attempt,
-    prepare_evidence_checkpoint,
-    read_evidence_lifecycle_state,
+    read_lifecycle,
+    release_checkpoint,
 )
 from aec_bench.lifecycles.stormwater_design.hydraulic_review_smoke import (
     write_hydraulic_review_smoke_submission,
@@ -28,11 +28,13 @@ def test_hydraulic_smoke_helper_writes_without_submitting(tmp_path: Path) -> Non
         variant_id="tailwater_revision",
     )
     run_dir = tmp_path / "run"
-    prepared = prepare_evidence_checkpoint(package, run_dir)
+    operation_resolver = lifecycle_operation_resolver(package, run_dir)
+    prepared = release_checkpoint(package, run_dir, operation_resolver=operation_resolver)
     session_id = "smoke.session-001"
     open_checkpoint_attempt(
         package,
         run_dir,
+        operation_resolver=operation_resolver,
         session_id=session_id,
         execution_mode="fresh_context",
     )
@@ -45,7 +47,7 @@ def test_hydraulic_smoke_helper_writes_without_submitting(tmp_path: Path) -> Non
         Path(prepared["submission_path"]),
     )
 
-    state = read_evidence_lifecycle_state(package, run_dir)
+    state = read_lifecycle(package, run_dir, operation_resolver=operation_resolver)
     assert Path(prepared["submission_path"]).is_file()
     assert state["status"] == "awaiting_checkpoint_submission"
     assert state["active_checkpoint_id"] == "baseline_analysis"

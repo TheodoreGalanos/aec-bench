@@ -9,6 +9,10 @@ from_prefix = "aec_bench.contracts.evaluation_plane."
 to_prefix = "aec_bench.evaluation.legacy_regime."
 
 [[legacy_relocation]]
+from_prefix = "aec_bench.experimentation.lifecycle_studies.experiment."
+to_prefix = "aec_bench.lifecycles.recording."
+
+[[legacy_relocation]]
 from_prefix = "aec_bench.prime_lab.lifecycle_exporter.PrimeLifecycleExportManifest."
 to_prefix = "aec_bench.prime_lab.lifecycle_exporter.LegacyPrimeLifecycleExportManifest."
 
@@ -35,6 +39,10 @@ to_prefix = "mapping:aec_bench.harness.process_runtime.problem_model_process.bui
 [[legacy_relocation]]
 from_prefix = "mapping:aec_bench.harness.process_runtime.world_process.build_world_generation_request."
 to_prefix = "mapping:aec_bench.harness.process_runtime.problem_model_process.build_problem_model_generation_request."
+
+[[legacy_relocation]]
+from_prefix = "mapping:aec_bench.experimentation.lifecycle_studies.experiment."
+to_prefix = "mapping:aec_bench.lifecycles.recording."
 
 [[manifest]]
 contract = "aec-bench/actor-invocation-evidence/1"
@@ -2113,6 +2121,25 @@ algorithm = "sha256"
 fail_closed = true
 artifact_boundary = "one immutable regular file below the descriptor-confined byte-store root"
 read_verification = "ImmutableByteStore re-reads and rehashes the confined file and raises ImmutableArtifactIntegrityError on mismatch"
+
+[[field]]
+symbol = "aec_bench.lifecycles.values.LifecycleExecution.tool_schema"
+surface = "dataclass"
+wire_name = "tool_schema"
+category = "domain_identity"
+domain_owner = "lifecycle_execution"
+authority = "local_lifecycle_executor"
+authoritative = false
+exposure = "application_memory"
+status = "current"
+payload_contract = "tool definitions exposed during one local lifecycle execution"
+canonicalization = "ordered tuple of exact tool-definition mappings returned by the local lifecycle executor"
+consumer = "lifecycle trial finalization and lifecycle experiment recording"
+validation_behavior = "the lifecycle recorder validates the operation tool contract when the execution declares lifecycle operations"
+mismatch_behavior = "the resulting TrialRecord would describe a different agent tool surface"
+retention = "lifecycle_execution_value_lifetime"
+rationale = "Trial finalization needs the exact tool surface that produced the lifecycle evidence."
+duplication = "projection"
 
 [[field]]
 symbol = "aec_bench.prime_lab.lifecycle_exporter.LegacyPrimeLifecycleExportManifest.schema_version"

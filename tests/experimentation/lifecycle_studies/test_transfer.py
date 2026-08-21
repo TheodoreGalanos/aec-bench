@@ -12,7 +12,7 @@ from typing import Literal
 import pytest
 from pydantic import ValidationError
 
-import aec_bench.experimentation.lifecycle_studies.experiment as experiment_runtime
+import aec_bench.lifecycles.recording as experiment_runtime
 from aec_bench.contracts.authority_evidence import AuthorityEvidenceKind
 from aec_bench.contracts.evaluation_result import EvaluationResult, ValidityCheck
 from aec_bench.contracts.evidence_lifecycle import EvidenceCheckpointSpec, EvidenceLifecycleSpec
@@ -49,7 +49,6 @@ from aec_bench.experimentation.lifecycle_studies.ablation_plan import (
     LifecycleRuntimeProvenance,
     build_lifecycle_ablation_plan,
 )
-from aec_bench.experimentation.lifecycle_studies.experiment import LifecycleExperimentMetrics
 from aec_bench.experimentation.lifecycle_studies.transfer import (
     LifecycleTransferCondition,
     LifecycleTransferEvaluationSpec,
@@ -57,6 +56,7 @@ from aec_bench.experimentation.lifecycle_studies.transfer import (
     LifecycleTransferStudyDesign,
     build_lifecycle_transfer_evaluation,
 )
+from aec_bench.ledger.artifact_repository import ArtifactRepository
 from aec_bench.ledger.reader import read_trial_record
 from aec_bench.ledger.writer import write_trial_record
 from aec_bench.lifecycles.catalogue import (
@@ -64,6 +64,7 @@ from aec_bench.lifecycles.catalogue import (
     lifecycle_package_variant,
     materialize_lifecycle,
 )
+from aec_bench.lifecycles.recording import LifecycleExperimentMetrics
 from aec_bench.lifecycles.runtime.episode import (
     LifecycleExecutionMode,
     LifecycleVisibilityPolicy,
@@ -71,8 +72,8 @@ from aec_bench.lifecycles.runtime.episode import (
 from aec_bench.lifecycles.runtime.lifecycle import (
     execute_lifecycle_operation,
     open_checkpoint_attempt,
-    prepare_evidence_checkpoint,
-    submit_evidence_checkpoint,
+    release_checkpoint,
+    submit_checkpoint,
 )
 from aec_bench.lifecycles.runtime.operation_protocol import (
     lifecycle_operation_protocol_identity,
@@ -458,8 +459,8 @@ def test_tampered_record_or_snapshot_artifact_is_not_evaluable(tmp_path: Path, t
         target.record_path.write_bytes(target.record_path.read_bytes() + b"\n")
         expected_reason = "record_sha256_mismatch"
     else:
-        target.snapshot_path.write_text("tampered", encoding="utf-8")
-        expected_reason = "artifact_sha256_mismatch"
+        _published_artifact_path(target, "lifecycle_verification").write_text("tampered", encoding="utf-8")
+        expected_reason = "record_invalid"
 
     result = build_lifecycle_transfer_evaluation(
         _spec(condition=condition, calibration=(calibration.reference,), targets=(target.reference,))
@@ -876,8 +877,8 @@ def test_transfer_evaluator_binds_operation_visibility_to_validated_package_vari
     )
 
     assert result.target_results[0].reasons == (
-        "source_not_reconstructive",
         "snapshot_contract_invalid",
+        "source_not_reconstructive",
     )
     assert result.status == "not_evaluable"
 
@@ -1029,14 +1030,16 @@ def test_repointed_verification_artifact_must_match_the_invocation_manifest(tmp_
     forged_payload = json.loads(target.snapshot_path.read_text(encoding="utf-8"))
     forged_payload["reward"] = 0.25
     forged_verification.write_text(json.dumps(forged_payload), encoding="utf-8")
+    forged_reference = ArtifactRepository(target.record_path.parents[1] / "_artifacts").publish_bytes(
+        data=forged_verification.read_bytes(),
+        media_type="application/json",
+    )
     payload = json.loads(target.record_path.read_text(encoding="utf-8"))
     payload["evaluation"]["reward"] = 0.25
-    payload["outputs"]["artifacts"][0] = {
-        "kind": "lifecycle_verification",
-        "path": forged_verification.relative_to(target.record_path.parents[1]).as_posix(),
-        "sha256": _sha256(forged_verification),
-        "media_type": "application/json",
-    }
+    verification_artifact = next(
+        item for item in payload["output"]["artifacts"] if item["role"] == "lifecycle_verification"
+    )
+    verification_artifact["artifact"] = forged_reference.model_dump(mode="json")
     target.record_path.write_text(json.dumps(payload), encoding="utf-8")
     reference = target.reference.model_copy(update={"sha256": _sha256(target.record_path)})
 
@@ -1074,18 +1077,19 @@ def test_missing_or_escaping_snapshot_artifact_is_not_evaluable(
     )
     reference = target.reference
     if integrity_failure == "missing":
-        target.snapshot_path.unlink()
-        expected_reason = "artifact_missing"
+        _published_artifact_path(target, "lifecycle_verification").unlink()
+        expected_reason = "record_invalid"
     else:
         payload = json.loads(target.record_path.read_text(encoding="utf-8"))
-        payload["outputs"]["artifacts"][0]["path"] = (
+        verification_artifact = next(
+            item for item in payload["output"]["artifacts"] if item["role"] == "lifecycle_verification"
+        )
+        verification_artifact["logical_path"] = (
             "../outside.json" if integrity_failure == "path_escape" else "invalid\0artifact.json"
         )
         target.record_path.write_text(json.dumps(payload), encoding="utf-8")
         reference = reference.model_copy(update={"sha256": _sha256(target.record_path)})
-        expected_reason = (
-            "artifact_path_escapes_ledger" if integrity_failure == "path_escape" else "artifact_unresolvable"
-        )
+        expected_reason = "record_invalid"
 
     result = build_lifecycle_transfer_evaluation(
         _spec(condition=condition, calibration=(calibration.reference,), targets=(reference,))
@@ -1104,7 +1108,7 @@ def test_evidence_request_state_contract_rejects_unknown_checkpoint_id(tmp_path:
     run_dir = tmp_path / "run"
     operation_resolver = lifecycle_operation_resolver(package, run_dir)
     assert operation_resolver is not None
-    prepare_evidence_checkpoint(package, run_dir, operation_resolver=operation_resolver)
+    release_checkpoint(package, run_dir, operation_resolver=operation_resolver)
     state = EvidenceLifecycleRunState.model_validate_json((run_dir / "state.json").read_bytes())
     state.checkpoint_runs[0].checkpoint_id = "unknown-checkpoint"
     spec = EvidenceLifecycleSpec.model_validate_json((package / "lifecycle.json").read_bytes())
@@ -1440,6 +1444,13 @@ class _WrittenRecord:
         self.reference = reference
         self.record_path = record_path
         self.snapshot_path = snapshot_path
+
+
+def _published_artifact_path(written: _WrittenRecord, kind: str) -> Path:
+    ledger_root = written.record_path.parents[1]
+    record = read_trial_record(written.record_path, ledger_root=ledger_root)
+    artifact = next(item.artifact for item in record.outputs.artifacts if item.role == kind)
+    return ledger_root / "_artifacts" / artifact.artifact_id
 
 
 def _write_record(
@@ -1852,7 +1863,7 @@ def _upgrade_to_operation_snapshot(
     operation_resolver = lifecycle_operation_resolver(package_root, run_root)
     assert operation_resolver is not None
     for checkpoint_number, checkpoint in enumerate(validated_spec.checkpoints, start=1):
-        prepare_evidence_checkpoint(package_root, run_root, operation_resolver=operation_resolver)
+        release_checkpoint(package_root, run_root, operation_resolver=operation_resolver)
         open_checkpoint_attempt(
             package_root,
             run_root,
@@ -1879,7 +1890,7 @@ def _upgrade_to_operation_snapshot(
         submission_path = run_root / "workspace" / checkpoint.submission_path
         submission_path.parent.mkdir(parents=True, exist_ok=True)
         submission_path.write_text(json.dumps(submission, sort_keys=True), encoding="utf-8")
-        submit_evidence_checkpoint(package_root, run_root, operation_resolver=operation_resolver)
+        submit_checkpoint(package_root, run_root, operation_resolver=operation_resolver)
 
     state_path = run_root / "state.json"
     state = json.loads(state_path.read_text(encoding="utf-8"))

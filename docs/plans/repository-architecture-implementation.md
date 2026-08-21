@@ -561,7 +561,7 @@ surface can be exposed without host paths, verifier data, hidden evidence, or
 a new world protocol.
 
 The selected seam is the existing fresh-context `LifecycleEpisodeEnvironment`.
-`run_evidence_lifecycle` remains the only checkpoint coordinator. Each active
+`run_lifecycle` remains the only checkpoint coordinator. Each active
 checkpoint gets one fresh Prime ACP session and one lifecycle-specific scoped
 endpoint under `harness/hydraulic_review_prime`. Do not add an SSC-03 journey.
 

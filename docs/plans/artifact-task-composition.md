@@ -444,7 +444,7 @@ The missing handoffs are concrete:
   through CLI path loading instead of a typed application handoff.
 - The run workflow returns import counts and paths. Evaluation reads the ledger
   again instead of consuming the records that the run produced.
-- [`PlannedTrial`](../../src/aec_bench/harness/trial.py) keeps only the compute
+- [`PlannedTrial`](../../src/aec_bench/trials.py) keeps only the compute
   backend name and loses the rest of `ComputeConfig` before execution.
 - [`AdaptationPlannedTrial`](../../src/aec_bench/harness/adaptation_run.py) wraps
   `PlannedTrial` only to carry provenance that the current trial-record builder

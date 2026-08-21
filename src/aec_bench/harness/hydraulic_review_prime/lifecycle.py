@@ -31,7 +31,7 @@ from aec_bench.lifecycles.runtime.episode import (
 )
 from aec_bench.lifecycles.runtime.lifecycle import (
     load_evidence_lifecycle_spec,
-    run_evidence_lifecycle,
+    run_lifecycle,
     validate_evidence_checkpoint_submission,
 )
 from aec_bench.lifecycles.runtime.operation_protocol import LifecycleOperationResolver
@@ -594,7 +594,7 @@ def run_hydraulic_review_prime_lifecycle(
         prime_session_runner=prime_session_runner,
     )
     try:
-        lifecycle = run_evidence_lifecycle(
+        lifecycle = run_lifecycle(
             package,
             run,
             episode_environment=episode_environment,

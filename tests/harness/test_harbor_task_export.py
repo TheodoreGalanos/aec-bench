@@ -37,7 +37,7 @@ from aec_bench.lifecycles.compiled import (
     CompiledLifecycleEnvelope,
     compile_lifecycle,
 )
-from aec_bench.lifecycles.runtime.lifecycle import run_evidence_lifecycle
+from aec_bench.lifecycles.runtime.lifecycle import run_lifecycle
 from aec_bench.tasks.registry import TaskRegistry
 from aec_bench.tasks.validator import validate_task
 
@@ -435,7 +435,7 @@ def test_independent_verifier_uses_hidden_package_only_after_agent_phase(tmp_pat
     run_dir = tmp_path / "reference-run"
     environment = lifecycle_smoke_environment(TEMPLATE_ID, verifier_package)
     assert environment is not None
-    run_evidence_lifecycle(
+    run_lifecycle(
         verifier_package,
         run_dir,
         episode_environment=environment,
@@ -472,7 +472,7 @@ def test_independent_verifier_rejects_missing_or_drifted_bridge_attestation(tmp_
     run_dir = tmp_path / "reference-run"
     environment = lifecycle_smoke_environment(TEMPLATE_ID, verifier_package)
     assert environment is not None
-    run_evidence_lifecycle(
+    run_lifecycle(
         verifier_package,
         run_dir,
         episode_environment=environment,

@@ -105,7 +105,8 @@ def test_copy_skills_creates_skill_dirs(tmp_path: Path) -> None:
         assert {path.name for path in skills_dir.iterdir() if path.is_dir()} == set(_PACKAGED_SKILLS)
         assert all((skills_dir / skill_name / "SKILL.md").is_file() for skill_name in _PACKAGED_SKILLS)
         assert (skills_dir / "meta-harness" / "references" / "experiment-workflows.md").exists()
-        assert (skills_dir / "meta-harness" / "examples" / "lifecycle-ablation.yaml").exists()
+        assert (skills_dir / "lifecycle" / "references" / "studies.md").exists()
+        assert (skills_dir / "lifecycle" / "examples" / "lifecycle-ablation.yaml").exists()
         installed_trees.append(_packaged_skill_tree(skills_dir))
     assert installed_trees == [expected_tree, expected_tree]
 

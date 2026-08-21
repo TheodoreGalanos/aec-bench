@@ -8,7 +8,7 @@ import json
 from pathlib import Path
 from typing import Any, cast
 
-from aec_bench.lifecycles.runtime.lifecycle import execute_lifecycle_operation, read_evidence_lifecycle_state
+from aec_bench.lifecycles.runtime.lifecycle import execute_lifecycle_operation, read_lifecycle
 from aec_bench.lifecycles.runtime.operation_protocol import LifecycleOperationResolver
 from aec_bench.lifecycles.stormwater_design.hydraulic_evidence import SCENARIO_IDS, ClaimBoundary
 
@@ -119,7 +119,7 @@ def run_references(
 ) -> tuple[dict[str, dict[str, str]], dict[str, dict[str, str]]]:
     actions_by_id = {
         str(action["action_id"]): action
-        for checkpoint in read_evidence_lifecycle_state(
+        for checkpoint in read_lifecycle(
             package,
             run,
             operation_resolver=operation_resolver,

@@ -10,21 +10,21 @@ from typing import Any
 
 import pytest
 
-from aec_bench.experimentation.lifecycle_studies.experiment import record_lifecycle_experiment
 from aec_bench.harness.lifecycle_local import (
     EvidenceLifecycleControlTool,
     EvidenceLifecycleWorkspaceTool,
     _lifecycle_tool_schema,
-    run_local_evidence_lifecycle_fresh_context,
-    run_local_evidence_lifecycle_session,
+    _run_local_lifecycle_fresh_session,
+    _run_local_lifecycle_persistent_session,
 )
 from aec_bench.lifecycles.catalogue import materialize_lifecycle
+from aec_bench.lifecycles.recording import record_lifecycle_experiment
 from aec_bench.lifecycles.runtime.episode import LifecycleVisibilityPolicy
 from aec_bench.lifecycles.runtime.lifecycle import (
     load_evidence_lifecycle_spec,
     open_checkpoint_attempt,
-    prepare_evidence_checkpoint,
-    read_evidence_lifecycle_state,
+    read_lifecycle,
+    release_checkpoint,
 )
 from tests.support.lifecycle_operations import resolve_operation_runtime
 
@@ -40,9 +40,7 @@ def _interaction_package(path: Path) -> Path:
 
 
 def _completed_runtime_verification(package: Path, run_dir: Path) -> dict[str, Any]:
-    lifecycle = read_evidence_lifecycle_state(
-        package, run_dir, operation_resolver=resolve_operation_runtime(package, run_dir)
-    )
+    lifecycle = read_lifecycle(package, run_dir, operation_resolver=resolve_operation_runtime(package, run_dir))
     complete = lifecycle["status"] == "complete"
     return {
         "lifecycle_id": lifecycle["lifecycle_id"],
@@ -64,7 +62,7 @@ def test_control_tool_executes_one_source_bound_operation_without_host_identity_
 ) -> None:
     package = _interaction_package(tmp_path / "package")
     run_dir = tmp_path / "run"
-    prepare_evidence_checkpoint(package, run_dir, operation_resolver=resolve_operation_runtime(package, run_dir))
+    release_checkpoint(package, run_dir, operation_resolver=resolve_operation_runtime(package, run_dir))
     open_checkpoint_attempt(
         package,
         run_dir,
@@ -117,7 +115,7 @@ def test_control_tool_executes_one_source_bound_operation_without_host_identity_
         "error": "operation arguments must not be blank",
     }
     assert (
-        read_evidence_lifecycle_state(package, run_dir, operation_resolver=resolve_operation_runtime(package, run_dir))[
+        read_lifecycle(package, run_dir, operation_resolver=resolve_operation_runtime(package, run_dir))[
             "checkpoint_runs"
         ][0]["operation_actions"]
         == []
@@ -209,7 +207,7 @@ def test_control_tool_executes_one_source_bound_operation_without_host_identity_
 def test_workspace_tool_rejects_undeclared_hydraulic_submission_fields(tmp_path: Path) -> None:
     package = _interaction_package(tmp_path / "package")
     run_dir = tmp_path / "run"
-    prepare_evidence_checkpoint(package, run_dir, operation_resolver=resolve_operation_runtime(package, run_dir))
+    release_checkpoint(package, run_dir, operation_resolver=resolve_operation_runtime(package, run_dir))
     workspace = EvidenceLifecycleWorkspaceTool(
         package_dir=package,
         run_dir=run_dir,
@@ -288,9 +286,9 @@ def test_local_runner_assemblies_expose_and_execute_operation_tool(
     }
 
     if execution_mode == "persistent_context":
-        result = run_local_evidence_lifecycle_session(**common)
+        result = _run_local_lifecycle_persistent_session(**common)
     else:
-        result = run_local_evidence_lifecycle_fresh_context(**common)
+        result = _run_local_lifecycle_fresh_session(**common)
 
     assert result["evidence"]["lifecycle"]["status"] == "complete"
     assert registry.operation_response is not None
@@ -325,7 +323,7 @@ class _OperationExercisingRegistry:
                 registry.request_tool_names.append([tool.name for tool in request.tools])
                 checkpoint_id = Path(request.output_path).stem
                 if checkpoint_id == "output":
-                    lifecycle = read_evidence_lifecycle_state(
+                    lifecycle = read_lifecycle(
                         registry.package,
                         registry.run_dir,
                         operation_resolver=resolve_operation_runtime(registry.package, registry.run_dir),

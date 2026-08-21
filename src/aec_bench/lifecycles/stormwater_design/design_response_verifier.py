@@ -11,7 +11,7 @@ from pydantic import ValidationError
 from aec_bench.contracts.validators import NonEmptyStr, StrictModel
 from aec_bench.lifecycles.runtime.lifecycle import (
     load_validated_lifecycle_submissions,
-    read_evidence_lifecycle_state,
+    read_lifecycle,
 )
 from aec_bench.lifecycles.runtime.state import (
     LifecycleOperationActionRecord,
@@ -127,7 +127,7 @@ def verify_hydraulic_intervention_lifecycle(package_dir: Path, run_dir: Path) ->
     except (KeyError, ValidationError) as exc:
         return _invalid_contract_result(str(exc))
 
-    state = read_evidence_lifecycle_state(package, run, operation_resolver=operation_resolver)
+    state = read_lifecycle(package, run, operation_resolver=operation_resolver)
     actions = {
         action.action_id: action
         for checkpoint in state["checkpoint_runs"]

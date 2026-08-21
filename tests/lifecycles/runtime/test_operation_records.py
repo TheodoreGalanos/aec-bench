@@ -9,22 +9,22 @@ from pathlib import Path
 
 import pytest
 
-import aec_bench.experimentation.lifecycle_studies.experiment as experiment_runtime
 import aec_bench.experimentation.lifecycle_studies.trial_record as trial_record_runtime
-from aec_bench.experimentation.lifecycle_studies.experiment import (
-    LifecycleExperimentMetrics,
-    lifecycle_experiment_metrics_payload,
-    record_lifecycle_experiment,
-)
+import aec_bench.lifecycles.recording as experiment_runtime
 from aec_bench.lifecycles.catalogue import (
     lifecycle_verifier,
     materialize_lifecycle,
 )
+from aec_bench.lifecycles.recording import (
+    LifecycleExperimentMetrics,
+    lifecycle_experiment_metrics_payload,
+    record_lifecycle_experiment,
+)
 from aec_bench.lifecycles.runtime.lifecycle import (
     execute_lifecycle_operation,
     open_checkpoint_attempt,
-    prepare_evidence_checkpoint,
-    submit_evidence_checkpoint,
+    release_checkpoint,
+    submit_checkpoint,
 )
 from aec_bench.lifecycles.runtime.operation_protocol import lifecycle_operation_protocol_identity
 from aec_bench.lifecycles.runtime.request_protocol import EvidenceLifecycleError
@@ -337,8 +337,8 @@ def test_completed_operation_snapshot_preserves_each_checkpoint_source_identity(
             "claim_boundary": {},
         },
     )
-    submit_evidence_checkpoint(package, run_dir, operation_resolver=resolve_operation_runtime(package, run_dir))
-    prepare_evidence_checkpoint(package, run_dir, operation_resolver=resolve_operation_runtime(package, run_dir))
+    submit_checkpoint(package, run_dir, operation_resolver=resolve_operation_runtime(package, run_dir))
+    release_checkpoint(package, run_dir, operation_resolver=resolve_operation_runtime(package, run_dir))
     open_checkpoint_attempt(
         package,
         run_dir,
@@ -384,8 +384,8 @@ def test_completed_operation_snapshot_preserves_each_checkpoint_source_identity(
             "claim_boundary": {},
         },
     )
-    submit_evidence_checkpoint(package, run_dir, operation_resolver=resolve_operation_runtime(package, run_dir))
-    prepare_evidence_checkpoint(package, run_dir, operation_resolver=resolve_operation_runtime(package, run_dir))
+    submit_checkpoint(package, run_dir, operation_resolver=resolve_operation_runtime(package, run_dir))
+    release_checkpoint(package, run_dir, operation_resolver=resolve_operation_runtime(package, run_dir))
     open_checkpoint_attempt(
         package,
         run_dir,
@@ -409,7 +409,7 @@ def test_completed_operation_snapshot_preserves_each_checkpoint_source_identity(
             "claim_boundary": {},
         },
     )
-    submit_evidence_checkpoint(package, run_dir, operation_resolver=resolve_operation_runtime(package, run_dir))
+    submit_checkpoint(package, run_dir, operation_resolver=resolve_operation_runtime(package, run_dir))
 
     from aec_bench.experimentation.lifecycle_studies.trial_record import _validate_snapshotted_lifecycle_state
 
@@ -436,8 +436,8 @@ def test_snapshotted_operation_state_rejects_current_source_from_a_different_pac
             "claim_boundary": {},
         },
     )
-    submit_evidence_checkpoint(package, run_dir, operation_resolver=resolve_operation_runtime(package, run_dir))
-    prepare_evidence_checkpoint(package, run_dir, operation_resolver=resolve_operation_runtime(package, run_dir))
+    submit_checkpoint(package, run_dir, operation_resolver=resolve_operation_runtime(package, run_dir))
+    release_checkpoint(package, run_dir, operation_resolver=resolve_operation_runtime(package, run_dir))
     open_checkpoint_attempt(
         package,
         run_dir,
@@ -555,7 +555,7 @@ def _operation_run(tmp_path: Path) -> tuple[Path, Path, dict[str, object]]:
         variant_id="tailwater_revision",
     )
     run_dir = tmp_path / "run"
-    prepare_evidence_checkpoint(package, run_dir, operation_resolver=resolve_operation_runtime(package, run_dir))
+    release_checkpoint(package, run_dir, operation_resolver=resolve_operation_runtime(package, run_dir))
     open_checkpoint_attempt(
         package,
         run_dir,

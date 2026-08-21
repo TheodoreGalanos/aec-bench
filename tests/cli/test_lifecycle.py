@@ -97,3 +97,28 @@ def test_obsolete_composite_template_command_is_not_installed() -> None:
 
     assert result.exit_code != 0
     assert "No such command 'composite-template'" in result.output
+
+
+def test_task_lifecycle_contains_complete_command_hierarchy() -> None:
+    lifecycle_help = runner.invoke(app, ["task", "lifecycle", "--help"])
+    study_help = runner.invoke(app, ["task", "lifecycle", "study", "--help"])
+
+    assert lifecycle_help.exit_code == 0
+    assert study_help.exit_code == 0
+    for command in (
+        "list",
+        "list-variants",
+        "materialize",
+        "start",
+        "submit",
+        "status",
+        "revisit",
+        "branch",
+        "run",
+        "verify",
+        "run-smoke",
+        "study",
+    ):
+        assert command in lifecycle_help.output
+    assert "ablation" in study_help.output
+    assert "calibration-freeze" in study_help.output

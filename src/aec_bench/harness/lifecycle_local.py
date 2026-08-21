@@ -41,12 +41,12 @@ from aec_bench.lifecycles.runtime.lifecycle import (
     fail_checkpoint_attempt,
     load_evidence_lifecycle_spec,
     open_checkpoint_attempt,
-    prepare_evidence_checkpoint,
-    read_evidence_lifecycle_state,
-    request_evidence_checkpoint,
-    revisit_evidence_checkpoint,
-    run_evidence_lifecycle,
-    submit_evidence_checkpoint,
+    read_lifecycle,
+    release_checkpoint,
+    request_checkpoint_evidence,
+    revisit_checkpoint,
+    run_lifecycle,
+    submit_checkpoint,
     validate_evidence_checkpoint_submission,
     validate_lifecycle_verification,
 )
@@ -54,6 +54,7 @@ from aec_bench.lifecycles.runtime.operation_protocol import (
     CURRENT_SOURCE_WORKSPACE_PATH,
     LifecycleOperationResolver,
 )
+from aec_bench.lifecycles.values import LifecycleExecution, LifecycleTrial
 from aec_bench.trajectory.writer import TrajectoryWriter
 
 if TYPE_CHECKING:
@@ -95,7 +96,7 @@ class EvidenceLifecycleControlTool:
                     "error": "evidence request arguments must not be blank",
                 }
             )
-        result = request_evidence_checkpoint(
+        result = request_checkpoint_evidence(
             self.package_dir,
             self.run_dir,
             operation_resolver=self.operation_resolver,
@@ -160,7 +161,7 @@ class EvidenceLifecycleControlTool:
         calling this tool. A valid submission is archived immutably. If another
         checkpoint remains, the response contains its instruction and paths.
         """
-        state = read_evidence_lifecycle_state(
+        state = read_lifecycle(
             self.package_dir,
             self.run_dir,
             operation_resolver=self.operation_resolver,
@@ -174,14 +175,14 @@ class EvidenceLifecycleControlTool:
                 }
             )
         try:
-            result = submit_evidence_checkpoint(
+            result = submit_checkpoint(
                 self.package_dir,
                 self.run_dir,
                 operation_resolver=self.operation_resolver,
                 episode_result={"mode": "persistent_session"},
             )
             if result["status"] != "complete":
-                result = prepare_evidence_checkpoint(
+                result = release_checkpoint(
                     self.package_dir,
                     self.run_dir,
                     operation_resolver=self.operation_resolver,
@@ -200,7 +201,7 @@ class EvidenceLifecycleControlTool:
     def revisit_checkpoint(self, checkpoint_id: str, reason: str) -> str:
         """Inspect and log an immutable prior checkpoint without rewinding state."""
         try:
-            result = revisit_evidence_checkpoint(
+            result = revisit_checkpoint(
                 self.package_dir,
                 self.run_dir,
                 operation_resolver=self.operation_resolver,
@@ -250,7 +251,7 @@ class EvidenceLifecycleWorkspaceTool:
     def write_checkpoint_submission(self, checkpoint_id: str, content: str) -> str:
         """Write JSON only to the active checkpoint's declared submission path."""
         try:
-            state = read_evidence_lifecycle_state(
+            state = read_lifecycle(
                 self.package_dir,
                 self.run_dir,
                 operation_resolver=self.operation_resolver,
@@ -312,7 +313,7 @@ class EvidenceLifecycleWorkspaceTool:
             return False
         if len(parts) == 1:
             return True
-        state = read_evidence_lifecycle_state(
+        state = read_lifecycle(
             self.package_dir,
             self.run_dir,
             operation_resolver=self.operation_resolver,
@@ -431,7 +432,123 @@ def _tool_parameters(
     }
 
 
-def run_local_evidence_lifecycle_session(
+def run_local_lifecycle(
+    trial: LifecycleTrial,
+    *,
+    adapter_builder: Callable[..., Any] | None = None,
+) -> LifecycleExecution:
+    """Run one local lifecycle treatment and return execution evidence without verification."""
+    from aec_bench.lifecycles.catalogue import lifecycle_operation_resolver
+
+    agent = trial.planned.agent
+    parameters = agent.parameters
+    default_turns = 60 if trial.execution_mode is LifecycleExecutionMode.PERSISTENT_CONTEXT else 20
+    max_turns = int(parameters.get("max_turns_per_session", parameters.get("max_turns", default_turns)))
+    if max_turns < 1:
+        raise ValueError("lifecycle agent max_turns_per_session must be a positive integer")
+    limits = trial.planned.compute.resource_limits
+    max_tokens_value = limits.get("max_tokens", parameters.get("max_tokens"))
+    timeout_value = trial.planned.compute.timeout_override or limits.get("timeout_sec") or parameters.get("timeout_sec")
+    max_tokens = int(max_tokens_value) if max_tokens_value is not None else None
+    timeout_sec = int(timeout_value) if timeout_value is not None else None
+    resolver = lifecycle_operation_resolver(trial.package_dir, trial.run_dir)
+    process_id = f"process.lifecycle.{trial.planned.trial_id}"
+    common = {
+        "package_dir": trial.package_dir,
+        "run_dir": trial.run_dir,
+        "model": agent.model,
+        "verifier": None,
+        "adapter_kind": agent.adapter,
+        "max_turns": max_turns,
+        "process_id": process_id,
+        "visibility_policy": trial.visibility_policy,
+        "operation_resolver": resolver,
+    }
+    try:
+        result = _execute_local_lifecycle_mode(
+            trial=trial,
+            common=common,
+            adapter_builder=adapter_builder,
+            max_tokens=max_tokens,
+            timeout_sec=timeout_sec,
+            resolver=resolver,
+        )
+    except Exception:
+        if not (trial.run_dir / "state.json").is_file():
+            raise
+        lifecycle = read_lifecycle(trial.package_dir, trial.run_dir, operation_resolver=resolver)
+        sessions = (
+            _persistent_context_sessions(trial.run_dir)
+            if trial.execution_mode is LifecycleExecutionMode.PERSISTENT_CONTEXT
+            else _fresh_context_sessions(trial.run_dir)
+        )
+        if not sessions:
+            raise
+        state = cast(dict[str, object], lifecycle)
+        agent_evidence = cast(
+            dict[str, object],
+            _normalized_agent_evidence(
+                model=agent.model,
+                adapter_kind=agent.adapter,
+                execution_mode=trial.execution_mode.value,
+                memory_visibility_policy=trial.visibility_policy.value,
+                max_turns=max_turns,
+                sessions=sessions,
+                lifecycle=lifecycle,
+            ),
+        )
+    else:
+        evidence = cast(dict[str, Any], result["evidence"])
+        state = cast(dict[str, object], evidence["lifecycle"])
+        agent_evidence = cast(dict[str, object], evidence["agent"])
+    return LifecycleExecution(
+        state=state,
+        agent=agent_evidence,
+        tool_schema=tuple(
+            build_lifecycle_tool_schema(
+                execution_mode=trial.execution_mode.value,
+                supports_evidence_requests=_supports_evidence_requests(trial.package_dir),
+                supports_lifecycle_operations=_supports_lifecycle_operations(trial.package_dir),
+            )
+        ),
+    )
+
+
+def _execute_local_lifecycle_mode(
+    *,
+    trial: LifecycleTrial,
+    common: dict[str, Any],
+    adapter_builder: Callable[..., Any] | None,
+    max_tokens: int | None,
+    timeout_sec: int | None,
+    resolver: LifecycleOperationResolver | None,
+) -> dict[str, Any]:
+    if trial.execution_mode is LifecycleExecutionMode.PERSISTENT_CONTEXT:
+        if (trial.run_dir / "state.json").is_file():
+            state = read_lifecycle(trial.package_dir, trial.run_dir, operation_resolver=resolver)
+            if state["status"] == "complete":
+                return recover_completed_persistent_lifecycle_session(
+                    **common,
+                    max_tokens=max_tokens,
+                    timeout_sec=timeout_sec,
+                )
+        return _run_local_lifecycle_persistent_session(
+            **common,
+            max_tokens=max_tokens,
+            timeout_sec=timeout_sec,
+            adapter_builder=adapter_builder,
+            require_adapter_identity_match=True,
+        )
+    if trial.planned.agent.adapter == "deepseek_harness":
+        raise ValueError("deepseek_harness lifecycle execution requires persistent_context mode")
+    return _run_local_lifecycle_fresh_session(
+        **common,
+        adapter_builder=adapter_builder,
+        require_adapter_identity_match=True,
+    )
+
+
+def _run_local_lifecycle_persistent_session(
     *,
     package_dir: Path,
     run_dir: Path,
@@ -463,7 +580,7 @@ def run_local_evidence_lifecycle_session(
     )
     package = Path(package_dir)
     run = Path(run_dir)
-    initial = prepare_evidence_checkpoint(
+    initial = release_checkpoint(
         package,
         run,
         operation_resolver=operation_resolver,
@@ -620,7 +737,7 @@ def run_local_evidence_lifecycle_session(
             adapter_kind=adapter_kind,
             request_configuration=request_configuration,
         )
-        lifecycle = read_evidence_lifecycle_state(package, run, operation_resolver=operation_resolver)
+        lifecycle = read_lifecycle(package, run, operation_resolver=operation_resolver)
         failed_agent_result["checkpoint_ids"] = _session_checkpoint_ids(lifecycle, session_id)
         _write_json(session_dir / "agent_result.json", failed_agent_result)
         agent_evidence = _normalized_agent_evidence(
@@ -663,7 +780,7 @@ def run_local_evidence_lifecycle_session(
         adapter_kind=adapter_kind,
         request_configuration=request_configuration,
     )
-    lifecycle = read_evidence_lifecycle_state(package, run, operation_resolver=operation_resolver)
+    lifecycle = read_lifecycle(package, run, operation_resolver=operation_resolver)
     returned_failure = (
         "adapter_identity_mismatch"
         if require_adapter_identity_match and agent_result["adapter_name"] != adapter_kind
@@ -687,7 +804,7 @@ def run_local_evidence_lifecycle_session(
             session_id=session_id,
             failure_kind=returned_failure,
         )
-        lifecycle = read_evidence_lifecycle_state(package, run, operation_resolver=operation_resolver)
+        lifecycle = read_lifecycle(package, run, operation_resolver=operation_resolver)
     if returned_failure is None and lifecycle["status"] != "complete":
         returned_failure = "lifecycle_incomplete"
         agent_result["status"] = "failed"
@@ -699,7 +816,7 @@ def run_local_evidence_lifecycle_session(
             session_id=session_id,
             failure_kind=returned_failure,
         )
-        lifecycle = read_evidence_lifecycle_state(package, run, operation_resolver=operation_resolver)
+        lifecycle = read_lifecycle(package, run, operation_resolver=operation_resolver)
     agent_result["checkpoint_ids"] = _session_checkpoint_ids(lifecycle, session_id)
     _write_json(session_dir / "agent_result.json", agent_result)
     _write_conversation(session_dir / "conversation.jsonl", result.transcript)
@@ -738,7 +855,7 @@ def validate_completed_persistent_lifecycle_recovery(
     operation_resolver: LifecycleOperationResolver | None = None,
 ) -> dict[str, Any]:
     """Validate durable evidence needed to seal a terminal persistent-session crash."""
-    lifecycle = read_evidence_lifecycle_state(
+    lifecycle = read_lifecycle(
         Path(package_dir),
         Path(run_dir),
         operation_resolver=operation_resolver,
@@ -802,7 +919,7 @@ def seal_interrupted_lifecycle_session_results(
     operation_resolver: LifecycleOperationResolver | None = None,
 ) -> dict[str, Any]:
     """Seal missing interrupted session results for one frozen mode without invoking an adapter."""
-    lifecycle = read_evidence_lifecycle_state(
+    lifecycle = read_lifecycle(
         Path(package_dir),
         Path(run_dir),
         operation_resolver=operation_resolver,
@@ -889,7 +1006,7 @@ def recover_completed_persistent_lifecycle_session(
     )
 
 
-def run_local_evidence_lifecycle_fresh_context(
+def _run_local_lifecycle_fresh_session(
     *,
     package_dir: Path,
     run_dir: Path,
@@ -921,7 +1038,7 @@ def run_local_evidence_lifecycle_fresh_context(
         require_adapter_identity_match=require_adapter_identity_match,
     )
     try:
-        lifecycle = run_evidence_lifecycle(
+        lifecycle = run_lifecycle(
             package,
             run,
             episode_environment=episode_environment,
@@ -929,9 +1046,9 @@ def run_local_evidence_lifecycle_fresh_context(
             run_authorization_sha256=run_authorization_sha256,
         )
     except LifecycleEpisodeExecutionError:
-        lifecycle = read_evidence_lifecycle_state(package, run, operation_resolver=operation_resolver)
+        lifecycle = read_lifecycle(package, run, operation_resolver=operation_resolver)
     except Exception:
-        lifecycle = read_evidence_lifecycle_state(package, run, operation_resolver=operation_resolver)
+        lifecycle = read_lifecycle(package, run, operation_resolver=operation_resolver)
         sessions = _fresh_context_sessions(run)
         _build_local_task_run(
             package=package,

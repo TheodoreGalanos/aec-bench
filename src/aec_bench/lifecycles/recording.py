@@ -44,12 +44,13 @@ from aec_bench.lifecycles.catalogue import (
 )
 from aec_bench.lifecycles.runtime.lifecycle import (
     evidence_request_protocol_identity,
-    read_evidence_lifecycle_state,
+    read_lifecycle,
 )
 from aec_bench.lifecycles.runtime.operation_protocol import (
     lifecycle_operation_protocol_identity,
     validate_lifecycle_operation_tool_schema,
 )
+from aec_bench.model_routing import resolve_pydantic_provider
 
 
 class LifecycleExperimentMetrics(StrictModel):
@@ -202,10 +203,12 @@ def record_lifecycle_experiment(
     manifest_path = run / "experiment-manifest.json"
     selected_index = index_path or run.parent / "experiment-index.jsonl"
     variant = _package_variant(package)
-    lifecycle_state = read_evidence_lifecycle_state(
+    lifecycle_state = read_lifecycle(
         package,
         run,
-        operation_resolver=lifecycle_operation_resolver(package, run),
+        operation_resolver=(
+            lifecycle_operation_resolver(package, run) if (package / "template.json").is_file() else None
+        ),
     )
     operation_tool_declared = any(tool.get("name") == "execute_operation" for tool in tool_schema)
     if lifecycle_state.get("schema_version") == "7" or operation_tool_declared:
@@ -598,8 +601,6 @@ def _resolve_runtime_provider(adapter_kind: str, model_name: str) -> str:
         if provider not in {"azure", "deepseek"}:
             raise ValueError(f"unsupported DeepSeek lifecycle provider: {provider or model_name}")
         return provider
-    from aec_bench.adapters.rlm.providers import resolve_pydantic_provider
-
     provider = resolve_pydantic_provider(model_name)
     if provider == "auto" and ":" in model_name:
         provider = model_name.split(":", maxsplit=1)[0]

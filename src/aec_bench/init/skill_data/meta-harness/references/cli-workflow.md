@@ -90,5 +90,5 @@ aec-bench meta-harness compare \
   --output comparison
 ```
 
-For lifecycle ablations and fixed-K adaptive experiments, read
-`experiment-workflows.md`.
+For fixed-K adaptive experiments, read `experiment-workflows.md`. Use the
+installed `lifecycle` skill for lifecycle host controls and lifecycle studies.

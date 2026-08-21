@@ -31,6 +31,7 @@ from aec_bench.contracts.execution_environment import (
     PYDANTIC_RUNTIME_VERSION,
     RUNTIME_PYTHON_PACKAGES,
 )
+from aec_bench.contracts.experiment_manifest import AgentConfig, ComputeConfig
 from aec_bench.contracts.harness_instance import AgentBindingConfig
 from aec_bench.contracts.proposal_execution.session import ProposalSessionExecutionRef, ProposalSessionReceipt
 from aec_bench.contracts.proposal_execution_profile import (
@@ -58,7 +59,7 @@ from aec_bench.harness.harbor_task_export import (
 )
 from aec_bench.harness.lifecycle_local import (
     DEFAULT_DEEPSEEK_LIFECYCLE_MAX_TOKENS,
-    run_local_evidence_lifecycle_session,
+    run_local_lifecycle,
 )
 from aec_bench.harness.pump_station_harbor.export import (
     PUMP_STATION_HARBOR_BRIDGE_MODE,
@@ -76,8 +77,9 @@ from aec_bench.harness.pump_station_harbor.session import (
     run_pump_station_model_session,
     run_pump_station_reference_session,
 )
-from aec_bench.lifecycles.catalogue import lifecycle_operation_resolver
-from aec_bench.lifecycles.runtime.episode import LifecycleVisibilityPolicy
+from aec_bench.lifecycles.application import LifecycleTrial
+from aec_bench.lifecycles.runtime.episode import LifecycleExecutionMode, LifecycleVisibilityPolicy
+from aec_bench.trials import PlannedTrial
 from aec_bench.worlds.stewardship.wastewater_pump_station.reference_controller import (
     PUMP_STATION_REFERENCE_SYSTEM_CONTROLLER_ID,
 )
@@ -647,21 +649,35 @@ class EntrypointAgent(BaseAgent):
         with tempfile.TemporaryDirectory(prefix="aec-bench-harbor-lifecycle-") as raw_run:
             run_dir = Path(raw_run) / "lifecycle-run"
             try:
+                planned = PlannedTrial(
+                    trial_id="harbor-lifecycle",
+                    experiment_id="harbor-lifecycle",
+                    task_id=current_bridge.envelope.template_id,
+                    agent=AgentConfig(
+                        name="harbor-lifecycle-agent",
+                        adapter=adapter_kind,
+                        model=model,
+                        parameters={"max_turns_per_session": max_turns},
+                    ),
+                    compute=ComputeConfig(
+                        backend="harbor",
+                        resource_limits={
+                            **({"max_tokens": max_tokens} if max_tokens is not None else {}),
+                            **({"timeout_sec": timeout_sec} if timeout_sec is not None else {}),
+                        },
+                    ),
+                    repetition=1,
+                )
                 result = await asyncio.to_thread(
-                    run_local_evidence_lifecycle_session,
-                    package_dir=current_bridge.package_dir,
-                    run_dir=run_dir,
-                    model=model,
-                    verifier=None,
-                    adapter_kind=adapter_kind,
-                    max_turns=max_turns,
-                    max_tokens=max_tokens,
-                    timeout_sec=timeout_sec,
-                    process_id="harbor.lifecycle",
+                    run_local_lifecycle,
+                    trial=LifecycleTrial(
+                        planned=planned,
+                        package_dir=current_bridge.package_dir,
+                        run_dir=run_dir,
+                        execution_mode=LifecycleExecutionMode.PERSISTENT_CONTEXT,
+                        visibility_policy=LifecycleVisibilityPolicy.PERSISTENT_CONTEXT,
+                    ),
                     adapter_builder=self._lifecycle_adapter_builder(),
-                    visibility_policy=LifecycleVisibilityPolicy.PERSISTENT_CONTEXT,
-                    operation_resolver=lifecycle_operation_resolver(current_bridge.package_dir, run_dir),
-                    require_adapter_identity_match=True,
                 )
             except Exception as exc:
                 if run_dir.is_dir():
@@ -680,15 +696,33 @@ class EntrypointAgent(BaseAgent):
             _redact_lifecycle_run(run_dir, provider_environment)
             write_harbor_lifecycle_attestation(run_dir, current_bridge)
             await environment.upload_dir(str(run_dir), current_bridge.output_path)
-            agent_evidence = cast(dict[str, Any], result["evidence"]["agent"])
+            agent_evidence = cast(dict[str, Any], result.agent)
             usage = cast(dict[str, Any], agent_evidence.get("usage", {}))
             context.n_input_tokens = int(usage.get("input_tokens") or 0)
             context.n_output_tokens = int(usage.get("output_tokens") or 0)
+            if agent_evidence.get("status") != "completed":
+                sessions = cast(list[dict[str, Any]], agent_evidence.get("sessions", []))
+                failure = next(
+                    (
+                        str(session["provider_error"])
+                        for session in sessions
+                        if session.get("provider_error") is not None
+                    ),
+                    str(agent_evidence.get("failure_kind") or "lifecycle execution failed"),
+                )
+                context.metadata = {
+                    "adapter_name": agent_evidence.get("adapter_name", adapter_kind),
+                    "bridge_mode": HARBOR_LIFECYCLE_BRIDGE_MODE,
+                    "bridge_manifest_sha256": current_bridge.manifest_sha256,
+                    "error": _redact_environment_values(failure, provider_environment),
+                    "reward_owner": "harbor_verifier",
+                }
+                return
             context.metadata = {
                 "adapter_name": agent_evidence.get("adapter_name", adapter_kind),
                 "bridge_mode": HARBOR_LIFECYCLE_BRIDGE_MODE,
                 "bridge_manifest_sha256": current_bridge.manifest_sha256,
-                "lifecycle_status": result["evidence"]["lifecycle"]["status"],
+                "lifecycle_status": result.state["status"],
                 "reward_owner": "harbor_verifier",
             }
 

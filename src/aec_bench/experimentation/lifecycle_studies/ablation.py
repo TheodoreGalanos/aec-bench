@@ -6,13 +6,13 @@ from __future__ import annotations
 import json
 import tempfile
 from collections.abc import Callable
-from functools import partial
 from pathlib import Path
 from typing import Any, cast
 
 import yaml
 
 from aec_bench.adapters.rlm.providers import preflight_pydantic_model_configuration
+from aec_bench.contracts.experiment_manifest import ComputeConfig
 from aec_bench.contracts.trial_record import TrialRecord
 from aec_bench.experimentation.lifecycle_studies.ablation_plan import (
     LifecycleAblationCondition,
@@ -25,17 +25,12 @@ from aec_bench.experimentation.lifecycle_studies.ablation_plan import (
     LifecycleCalibrationSelectionPolicy,
     build_lifecycle_ablation_plan,
 )
-from aec_bench.experimentation.lifecycle_studies.experiment import (
-    LifecycleExperimentSweepContext,
-    record_lifecycle_experiment,
-)
 from aec_bench.harness.lifecycle_local import (
-    recover_completed_persistent_lifecycle_session,
-    run_local_evidence_lifecycle_fresh_context,
-    run_local_evidence_lifecycle_session,
+    run_local_lifecycle,
     validate_completed_persistent_lifecycle_recovery,
 )
 from aec_bench.ledger.reader import read_trial_record
+from aec_bench.lifecycles.application import LifecycleExecution, LifecycleTrial, run_lifecycle_experiment
 from aec_bench.lifecycles.catalogue import (
     lifecycle_operation_resolver,
     lifecycle_package_variant,
@@ -43,6 +38,7 @@ from aec_bench.lifecycles.catalogue import (
     materialize_lifecycle,
     verify_lifecycle,
 )
+from aec_bench.lifecycles.recording import LifecycleExperimentSweepContext
 from aec_bench.lifecycles.runtime.episode import (
     InProcessLifecycleEpisodeEnvironment,
     LifecycleEpisodeRequest,
@@ -52,9 +48,10 @@ from aec_bench.lifecycles.runtime.episode import (
 )
 from aec_bench.lifecycles.runtime.lifecycle import (
     evidence_lifecycle_package_identity,
-    read_evidence_lifecycle_state,
-    run_evidence_lifecycle,
+    read_lifecycle,
+    run_lifecycle,
 )
+from aec_bench.trials import PlannedTrial
 
 __all__ = [
     "LifecycleAblationCondition",
@@ -178,7 +175,7 @@ def inspect_lifecycle_ablation_plan(manifest: LifecycleAblationManifest) -> dict
                 try:
                     _validate_ablation_runtime_state(package, run_dir, trial)
                     operation_resolver = lifecycle_operation_resolver(package, run_dir)
-                    state = read_evidence_lifecycle_state(
+                    state = read_lifecycle(
                         package,
                         run_dir,
                         operation_resolver=operation_resolver,
@@ -230,8 +227,8 @@ def run_lifecycle_ablation(
     *,
     registry_factory: LifecycleRegistryFactory | None = None,
 ) -> LifecycleAblationRunResult:
-    """Execute or resume a sequential sweep and finalize each invocation once."""
-    from aec_bench.experimentation.lifecycle_studies.trial_record import finalize_lifecycle_trial_record
+    """Execute or resume a sequential sweep through the shared lifecycle experiment API."""
+    from aec_bench.experimentation.lifecycle_studies.trial_record import _persist_lifecycle_ablation_record
 
     if manifest.selection_policy is not None and registry_factory is not None:
         raise ValueError("selectable calibration campaigns must use the default provider registry")
@@ -256,7 +253,7 @@ def run_lifecycle_ablation(
             continue
         artifact_dir = Path(manifest.ledger_root) / manifest.experiment_id / "_artifacts" / trial.trial_id
         if artifact_dir.is_dir():
-            finalized = finalize_lifecycle_trial_record(
+            finalized = _persist_lifecycle_ablation_record(
                 manifest=manifest,
                 trial=trial,
                 package_dir=Path(trial.package_dir),
@@ -292,6 +289,9 @@ def run_lifecycle_ablation(
     if packages:
         _smoke_lifecycle_packages(packages)
 
+    executable_trials: list[LifecycleTrial] = []
+    ablation_trials_by_id = {trial.trial_id: trial for trial in remaining}
+    recovered_terminal_trials: set[str] = set()
     for trial in remaining:
         package = packages[trial.variant_id]
         run_dir = Path(trial.run_dir)
@@ -299,7 +299,7 @@ def run_lifecycle_ablation(
             _validate_ablation_runtime_state(package, run_dir, trial)
 
         if _trial_has_finalizable_state(manifest, trial):
-            finalized = finalize_lifecycle_trial_record(
+            finalized = _persist_lifecycle_ablation_record(
                 manifest=manifest,
                 trial=trial,
                 package_dir=package,
@@ -318,93 +318,78 @@ def run_lifecycle_ablation(
             condition_id=f"{trial.execution_mode.value}__{trial.memory_visibility_policy.value}",
             repetition=trial.repetition,
         )
-        run_recorder = partial(
-            record_lifecycle_experiment,
-            sweep_context=sweep_context,
-            repository_dir=Path(__file__).resolve().parent,
-        )
-        max_turns = trial.max_turns_per_session
-        operation_resolver = lifecycle_operation_resolver(package, run_dir)
-        state = (
-            read_evidence_lifecycle_state(package, run_dir, operation_resolver=operation_resolver)
-            if (run_dir / "state.json").is_file()
-            else None
-        )
-        if (
-            state is not None
-            and state["status"] == "complete"
-            and trial.execution_mode is LifecycleExecutionMode.PERSISTENT_CONTEXT
-        ):
-            recover_completed_persistent_lifecycle_session(
+        executable_trials.append(
+            LifecycleTrial(
+                planned=PlannedTrial(
+                    trial_id=trial.trial_id,
+                    experiment_id=manifest.experiment_id,
+                    task_id=manifest.lifecycle_template_id,
+                    agent=trial.agent,
+                    compute=ComputeConfig(backend="local"),
+                    repetition=trial.repetition,
+                    extensions={
+                        "lifecycle_sweep_context": sweep_context,
+                        "lifecycle_ablation_manifest": manifest,
+                        "lifecycle_ablation_trial": trial,
+                    },
+                ),
                 package_dir=package,
                 run_dir=run_dir,
-                model=trial.agent.model,
-                verifier=verify_lifecycle,
-                adapter_kind=trial.agent.adapter,
-                max_turns=max_turns,
-                process_id=f"process.lifecycle.{trial.trial_id}",
+                execution_mode=trial.execution_mode,
                 visibility_policy=trial.memory_visibility_policy,
-                operation_resolver=operation_resolver,
-                run_recorder=run_recorder,
             )
-            finalized = finalize_lifecycle_trial_record(
-                manifest=manifest,
-                trial=trial,
-                package_dir=package,
-                run_dir=run_dir,
-            )
-            imported_orphans += 1
-            record_paths_by_trial[trial.trial_id] = str(finalized)
-            record = read_trial_record(finalized, ledger_root=Path(manifest.ledger_root))
-            failed += int(_record_execution_failed(record))
-            continue
+        )
 
-        registry = registry_factory(trial, package, run_dir) if registry_factory is not None else None
-        adapter_builder = registry.build if registry is not None else None
-        try:
-            if trial.execution_mode is LifecycleExecutionMode.PERSISTENT_CONTEXT:
-                run_local_evidence_lifecycle_session(
-                    package_dir=package,
-                    run_dir=run_dir,
-                    model=trial.agent.model,
-                    verifier=verify_lifecycle,
-                    adapter_kind=trial.agent.adapter,
-                    max_turns=max_turns,
-                    process_id=f"process.lifecycle.{trial.trial_id}",
-                    adapter_builder=adapter_builder,
-                    visibility_policy=trial.memory_visibility_policy,
-                    operation_resolver=operation_resolver,
-                    run_recorder=run_recorder,
-                    require_adapter_identity_match=True,
-                )
-            else:
-                run_local_evidence_lifecycle_fresh_context(
-                    package_dir=package,
-                    run_dir=run_dir,
-                    model=trial.agent.model,
-                    verifier=verify_lifecycle,
-                    adapter_kind=trial.agent.adapter,
-                    max_turns=max_turns,
-                    process_id=f"process.lifecycle.{trial.trial_id}",
-                    adapter_builder=adapter_builder,
-                    visibility_policy=trial.memory_visibility_policy,
-                    operation_resolver=operation_resolver,
-                    run_recorder=run_recorder,
-                    require_adapter_identity_match=True,
-                )
-        except Exception:
-            if not (run_dir / "experiment-manifest.json").is_file():
-                raise
-        executed += 1
-        finalized = finalize_lifecycle_trial_record(
+    def execute(lifecycle_trial: LifecycleTrial) -> LifecycleExecution:
+        ablation_trial = ablation_trials_by_id[lifecycle_trial.planned.trial_id]
+        registry = None
+        terminal_recovery = False
+        if (lifecycle_trial.run_dir / "state.json").is_file():
+            current_state = read_lifecycle(
+                lifecycle_trial.package_dir,
+                lifecycle_trial.run_dir,
+                operation_resolver=lifecycle_operation_resolver(
+                    lifecycle_trial.package_dir,
+                    lifecycle_trial.run_dir,
+                ),
+            )
+            terminal_recovery = (
+                lifecycle_trial.execution_mode is LifecycleExecutionMode.PERSISTENT_CONTEXT
+                and current_state["status"] == "complete"
+            )
+        if terminal_recovery:
+            recovered_terminal_trials.add(lifecycle_trial.planned.trial_id)
+        elif registry_factory is not None:
+            registry = registry_factory(ablation_trial, lifecycle_trial.package_dir, lifecycle_trial.run_dir)
+        return run_local_lifecycle(
+            trial=lifecycle_trial,
+            adapter_builder=registry.build if registry is not None else None,
+        )
+
+    def persist(record: TrialRecord) -> None:
+        nonlocal executed, failed, imported_orphans
+        trial = ablation_trials_by_id[record.trial_id]
+        finalized = _persist_lifecycle_ablation_record(
             manifest=manifest,
             trial=trial,
-            package_dir=package,
-            run_dir=run_dir,
+            package_dir=Path(trial.package_dir),
+            run_dir=Path(trial.run_dir),
         )
         record_paths_by_trial[trial.trial_id] = str(finalized)
-        record = read_trial_record(finalized, ledger_root=Path(manifest.ledger_root))
-        failed += int(_record_execution_failed(record))
+        persisted = read_trial_record(finalized, ledger_root=Path(manifest.ledger_root))
+        if record.trial_id in recovered_terminal_trials:
+            imported_orphans += 1
+        else:
+            executed += 1
+        failed += int(_record_execution_failed(persisted))
+
+    if executable_trials:
+        run_lifecycle_experiment(
+            trials=executable_trials,
+            execute=execute,
+            verify=verify_lifecycle,
+            persist=persist,
+        )
 
     from aec_bench.experimentation.lifecycle_studies.evaluation import write_lifecycle_ablation_evaluation
 
@@ -489,7 +474,7 @@ def _smoke_lifecycle_packages(packages: dict[str, Path]) -> None:
                 episode_environment = _gold_smoke_environment(_read_json(gold_path))
 
             run_dir = smoke_root / variant_id
-            run_evidence_lifecycle(
+            run_lifecycle(
                 package,
                 run_dir,
                 episode_environment=episode_environment,
@@ -530,7 +515,7 @@ def _validate_ablation_runtime_state(
     run_dir: Path,
     trial: LifecycleAblationTrial,
 ) -> None:
-    state = read_evidence_lifecycle_state(
+    state = read_lifecycle(
         package,
         run_dir,
         operation_resolver=lifecycle_operation_resolver(package, run_dir),
@@ -704,6 +689,7 @@ def _record_execution_failed(record: TrialRecord) -> bool:
     return (
         record.lifecycle_execution is None
         or record.lifecycle_execution.status != "completed"
+        or record.evaluation is None
         or not record.evaluation.validity.verifier_completed
     )
 
