@@ -1,0 +1,23 @@
+[metadata]
+domain = "civil"
+category = "pipe-hydraulics"
+difficulty = "easy"
+visibility = "public"
+tags = ["civil", "pipe-hydraulics", "head-loss", "hazen-williams", "deterministic", "with-tool"]
+
+[agent]
+timeout_sec = 600.0
+
+[verifier]
+timeout_sec = 120.0
+
+[environment]
+extensions = []
+build_timeout_sec = 600.0
+cpus = 1
+memory_mb = 2048
+storage_mb = 5120
+network_mode = "public"
+
+[tools]
+scripts = ["hazen-williams-headloss_calc.py"]

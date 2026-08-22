@@ -1,0 +1,337 @@
+study_id = "a04-artifact-composition"
+title = "Artifact composition: pipe head loss into stormwater pump power"
+research_question = "Does separate acquisition of pipe head-loss and pump-power components improve their novel coordination in one stormwater pump-station artifact task?"
+claim_mode = "controlled"
+relation_ids = ["headloss-plus-power-to-stormwater-pump-package"]
+
+[[experiences]]
+experience_id = "headloss-acquisition"
+family_member_id = "hazen-williams-acquisition"
+role = "acquisition"
+
+[[experiences]]
+experience_id = "pump-power-acquisition"
+family_member_id = "pump-power-acquisition"
+role = "acquisition"
+
+[[experiences]]
+experience_id = "stormwater-composition-probe"
+family_member_id = "stormwater-pump-composition-probe"
+role = "probe"
+
+[[measurements]]
+measurement_id = "ab-composition-gain"
+kind = "composition_gain"
+projection_id = "composition-outcome"
+direction = "higher"
+target_experience_id = "stormwater-composition-probe"
+focal_arm_id = "headloss-then-power"
+comparator_arm_id = "cold-composition"
+acquisition_experience_ids = ["headloss-acquisition", "pump-power-acquisition"]
+
+[[measurements]]
+measurement_id = "ba-composition-gain"
+kind = "composition_gain"
+projection_id = "composition-outcome"
+direction = "higher"
+target_experience_id = "stormwater-composition-probe"
+focal_arm_id = "power-then-headloss"
+comparator_arm_id = "cold-composition"
+acquisition_experience_ids = ["headloss-acquisition", "pump-power-acquisition"]
+
+[[measurements]]
+measurement_id = "ab-over-headloss-only"
+kind = "composition_gain"
+projection_id = "composition-outcome"
+direction = "higher"
+target_experience_id = "stormwater-composition-probe"
+focal_arm_id = "headloss-then-power"
+comparator_arm_id = "headloss-only"
+acquisition_experience_ids = ["headloss-acquisition", "pump-power-acquisition"]
+
+[[measurements]]
+measurement_id = "ab-over-power-only"
+kind = "composition_gain"
+projection_id = "composition-outcome"
+direction = "higher"
+target_experience_id = "stormwater-composition-probe"
+focal_arm_id = "headloss-then-power"
+comparator_arm_id = "power-only"
+acquisition_experience_ids = ["headloss-acquisition", "pump-power-acquisition"]
+
+[[measurements]]
+measurement_id = "ba-over-headloss-only"
+kind = "composition_gain"
+projection_id = "composition-outcome"
+direction = "higher"
+target_experience_id = "stormwater-composition-probe"
+focal_arm_id = "power-then-headloss"
+comparator_arm_id = "headloss-only"
+acquisition_experience_ids = ["headloss-acquisition", "pump-power-acquisition"]
+
+[[measurements]]
+measurement_id = "ba-over-power-only"
+kind = "composition_gain"
+projection_id = "composition-outcome"
+direction = "higher"
+target_experience_id = "stormwater-composition-probe"
+focal_arm_id = "power-then-headloss"
+comparator_arm_id = "power-only"
+acquisition_experience_ids = ["headloss-acquisition", "pump-power-acquisition"]
+
+[[measurements]]
+measurement_id = "composition-order-effect"
+kind = "composition_gain"
+projection_id = "composition-outcome"
+direction = "higher"
+target_experience_id = "stormwater-composition-probe"
+focal_arm_id = "headloss-then-power"
+comparator_arm_id = "power-then-headloss"
+acquisition_experience_ids = ["headloss-acquisition", "pump-power-acquisition"]
+
+[[measurements]]
+measurement_id = "headloss-only-component-a-gain"
+kind = "composition_gain"
+projection_id = "component-a-correct"
+direction = "higher"
+target_experience_id = "stormwater-composition-probe"
+focal_arm_id = "headloss-only"
+comparator_arm_id = "cold-composition"
+acquisition_experience_ids = ["headloss-acquisition"]
+
+[[measurements]]
+measurement_id = "headloss-only-component-b-gain"
+kind = "composition_gain"
+projection_id = "component-b-correct"
+direction = "higher"
+target_experience_id = "stormwater-composition-probe"
+focal_arm_id = "headloss-only"
+comparator_arm_id = "cold-composition"
+acquisition_experience_ids = ["headloss-acquisition"]
+
+[[measurements]]
+measurement_id = "power-only-component-a-gain"
+kind = "composition_gain"
+projection_id = "component-a-correct"
+direction = "higher"
+target_experience_id = "stormwater-composition-probe"
+focal_arm_id = "power-only"
+comparator_arm_id = "cold-composition"
+acquisition_experience_ids = ["pump-power-acquisition"]
+
+[[measurements]]
+measurement_id = "power-only-component-b-gain"
+kind = "composition_gain"
+projection_id = "component-b-correct"
+direction = "higher"
+target_experience_id = "stormwater-composition-probe"
+focal_arm_id = "power-only"
+comparator_arm_id = "cold-composition"
+acquisition_experience_ids = ["pump-power-acquisition"]
+
+[[measurements]]
+measurement_id = "ab-integration-gain"
+kind = "composition_gain"
+projection_id = "integration-correct"
+direction = "higher"
+target_experience_id = "stormwater-composition-probe"
+focal_arm_id = "headloss-then-power"
+comparator_arm_id = "cold-composition"
+acquisition_experience_ids = ["headloss-acquisition", "pump-power-acquisition"]
+
+[[measurements]]
+measurement_id = "ba-integration-gain"
+kind = "composition_gain"
+projection_id = "integration-correct"
+direction = "higher"
+target_experience_id = "stormwater-composition-probe"
+focal_arm_id = "power-then-headloss"
+comparator_arm_id = "cold-composition"
+acquisition_experience_ids = ["headloss-acquisition", "pump-power-acquisition"]
+
+[[measurements]]
+measurement_id = "component-a-order-effect"
+kind = "composition_gain"
+projection_id = "component-a-correct"
+direction = "higher"
+target_experience_id = "stormwater-composition-probe"
+focal_arm_id = "headloss-then-power"
+comparator_arm_id = "power-then-headloss"
+acquisition_experience_ids = ["headloss-acquisition", "pump-power-acquisition"]
+
+[[measurements]]
+measurement_id = "component-b-order-effect"
+kind = "composition_gain"
+projection_id = "component-b-correct"
+direction = "higher"
+target_experience_id = "stormwater-composition-probe"
+focal_arm_id = "headloss-then-power"
+comparator_arm_id = "power-then-headloss"
+acquisition_experience_ids = ["headloss-acquisition", "pump-power-acquisition"]
+
+[[measurements]]
+measurement_id = "integration-order-effect"
+kind = "composition_gain"
+projection_id = "integration-correct"
+direction = "higher"
+target_experience_id = "stormwater-composition-probe"
+focal_arm_id = "headloss-then-power"
+comparator_arm_id = "power-then-headloss"
+acquisition_experience_ids = ["headloss-acquisition", "pump-power-acquisition"]
+
+[[arms]]
+arm_id = "cold-composition"
+role = "control"
+treatment_id = "reset"
+
+[[arms.steps]]
+kind = "run_experience"
+step_id = "cold-probe"
+experience_id = "stormwater-composition-probe"
+commit_post_state = false
+
+[[arms]]
+arm_id = "headloss-only"
+role = "exposure"
+treatment_id = "structured-memory"
+
+[[arms.steps]]
+kind = "run_experience"
+step_id = "headloss-only-acquisition"
+experience_id = "headloss-acquisition"
+
+[[arms.steps]]
+kind = "release_feedback"
+step_id = "headloss-only-feedback"
+source_experience_id = "headloss-acquisition"
+feedback_view_id = "pump-component-public-episode"
+
+[[arms.steps]]
+kind = "consolidate"
+step_id = "headloss-only-consolidation"
+feedback_step_ids = ["headloss-only-feedback"]
+operation_id = "update-pump-component-memory"
+
+[[arms.steps]]
+kind = "run_experience"
+step_id = "headloss-only-probe"
+experience_id = "stormwater-composition-probe"
+commit_post_state = false
+
+[[arms]]
+arm_id = "power-only"
+role = "exposure"
+treatment_id = "structured-memory"
+
+[[arms.steps]]
+kind = "run_experience"
+step_id = "power-only-acquisition"
+experience_id = "pump-power-acquisition"
+
+[[arms.steps]]
+kind = "release_feedback"
+step_id = "power-only-feedback"
+source_experience_id = "pump-power-acquisition"
+feedback_view_id = "pump-component-public-episode"
+
+[[arms.steps]]
+kind = "consolidate"
+step_id = "power-only-consolidation"
+feedback_step_ids = ["power-only-feedback"]
+operation_id = "update-pump-component-memory"
+
+[[arms.steps]]
+kind = "run_experience"
+step_id = "power-only-probe"
+experience_id = "stormwater-composition-probe"
+commit_post_state = false
+
+[[arms]]
+arm_id = "headloss-then-power"
+role = "exposure"
+treatment_id = "structured-memory"
+
+[[arms.steps]]
+kind = "run_experience"
+step_id = "ab-headloss-acquisition"
+experience_id = "headloss-acquisition"
+
+[[arms.steps]]
+kind = "release_feedback"
+step_id = "ab-headloss-feedback"
+source_experience_id = "headloss-acquisition"
+feedback_view_id = "pump-component-public-episode"
+
+[[arms.steps]]
+kind = "consolidate"
+step_id = "ab-headloss-consolidation"
+feedback_step_ids = ["ab-headloss-feedback"]
+operation_id = "update-pump-component-memory"
+
+[[arms.steps]]
+kind = "run_experience"
+step_id = "ab-power-acquisition"
+experience_id = "pump-power-acquisition"
+
+[[arms.steps]]
+kind = "release_feedback"
+step_id = "ab-power-feedback"
+source_experience_id = "pump-power-acquisition"
+feedback_view_id = "pump-component-public-episode"
+
+[[arms.steps]]
+kind = "consolidate"
+step_id = "ab-power-consolidation"
+feedback_step_ids = ["ab-power-feedback"]
+operation_id = "update-pump-component-memory"
+
+[[arms.steps]]
+kind = "run_experience"
+step_id = "ab-probe"
+experience_id = "stormwater-composition-probe"
+commit_post_state = false
+
+[[arms]]
+arm_id = "power-then-headloss"
+role = "exposure"
+treatment_id = "structured-memory"
+
+[[arms.steps]]
+kind = "run_experience"
+step_id = "ba-power-acquisition"
+experience_id = "pump-power-acquisition"
+
+[[arms.steps]]
+kind = "release_feedback"
+step_id = "ba-power-feedback"
+source_experience_id = "pump-power-acquisition"
+feedback_view_id = "pump-component-public-episode"
+
+[[arms.steps]]
+kind = "consolidate"
+step_id = "ba-power-consolidation"
+feedback_step_ids = ["ba-power-feedback"]
+operation_id = "update-pump-component-memory"
+
+[[arms.steps]]
+kind = "run_experience"
+step_id = "ba-headloss-acquisition"
+experience_id = "headloss-acquisition"
+
+[[arms.steps]]
+kind = "release_feedback"
+step_id = "ba-headloss-feedback"
+source_experience_id = "headloss-acquisition"
+feedback_view_id = "pump-component-public-episode"
+
+[[arms.steps]]
+kind = "consolidate"
+step_id = "ba-headloss-consolidation"
+feedback_step_ids = ["ba-headloss-feedback"]
+operation_id = "update-pump-component-memory"
+
+[[arms.steps]]
+kind = "run_experience"
+step_id = "ba-probe"
+experience_id = "stormwater-composition-probe"
+commit_post_state = false

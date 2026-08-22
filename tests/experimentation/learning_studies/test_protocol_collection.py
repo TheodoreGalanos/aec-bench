@@ -32,6 +32,7 @@ def _resolve_task(task_id: str):  # noqa: ANN202
         ("a01-artifact-structural-transfer", 2, 1, 2),
         ("a02-artifact-applicability-boundary", 2, 1, 4),
         ("a03-artifact-retention-interference", 5, 3, 6),
+        ("a04-artifact-composition", 3, 1, 5),
     ),
 )
 def test_builtin_protocols_load_and_compile_to_ordinary_trials(

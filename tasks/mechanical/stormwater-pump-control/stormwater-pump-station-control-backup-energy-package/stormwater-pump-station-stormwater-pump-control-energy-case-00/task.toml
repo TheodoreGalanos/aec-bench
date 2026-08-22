@@ -1,0 +1,23 @@
+[metadata]
+domain = "mechanical"
+category = "stormwater-pump-control"
+difficulty = "easy"
+visibility = "public"
+tags = ["mechanical", "stormwater", "pump-station", "rising-main", "backup-energy", "deterministic", "with-tool"]
+
+[agent]
+timeout_sec = 600.0
+
+[verifier]
+timeout_sec = 120.0
+
+[environment]
+extensions = []
+build_timeout_sec = 600.0
+cpus = 1
+memory_mb = 2048
+storage_mb = 5120
+network_mode = "public"
+
+[tools]
+scripts = ["stormwater-pump-station-control-backup-energy-package_calc.py"]

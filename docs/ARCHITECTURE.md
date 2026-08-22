@@ -235,11 +235,13 @@ The A01 Stage 1 protocol proves the structural-transfer path. The A02 Stage 1
 protocol adds matched cold, reset-after-acquisition, raw-history, and
 structured-memory paths for an authored drainage applicability boundary. The
 A03 Stage 1 protocol adds non-committing immediate and delayed probes, a neutral
-intervening task, and an explicitly released conflicting public episode. Their
-deterministic integration runs use real artifact tasks and verifiers but a
-model-boundary test double. They prove the learning-study plumbing and do not
-make model-learning claims. The programme charter and the remainder of Release
-A stay maintained as
+intervening task, and an explicitly released conflicting public episode. The
+A04 Stage 1 protocol adds separate component controls, both component orders,
+and a composite target with task-owned component and integration projections.
+These deterministic integration runs use real artifact tasks and verifiers but
+a model-boundary test double. They prove the learning-study plumbing and do not
+make model-learning claims. The programme charter and remaining programme
+material stay maintained as
 [Learning Studies research](research/learning-studies/programme.md).
 
 The supported prose-intake process is a higher-order composition under

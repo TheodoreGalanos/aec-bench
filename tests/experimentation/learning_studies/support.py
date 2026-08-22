@@ -193,6 +193,94 @@ class RetentionInterferenceStudyAdapter:
         return "fixed-test-model"
 
 
+class CompositionStudyAdapter:
+    def __init__(
+        self,
+        workspace: Path,
+        *,
+        headloss_output: str,
+        power_output: str,
+        composition_output: str,
+        observations: list[dict[str, object]],
+    ) -> None:
+        self.workspace = workspace
+        self._headloss_output = headloss_output
+        self._power_output = power_output
+        self._composition_output = composition_output
+        self._observations = observations
+
+    def execute(self, request: AdapterRequest) -> AdapterResult:
+        instruction = (self.workspace / "instruction.md").read_text(encoding="utf-8")
+        memory_path = self.workspace / ".aec-bench-learning" / "memory" / "components.json"
+        memory = json.loads(memory_path.read_text(encoding="utf-8")) if memory_path.is_file() else {}
+        component_entries = memory.get("components", {}) if isinstance(memory, dict) else {}
+        components = tuple(sorted(component_entries)) if isinstance(component_entries, dict) else ()
+        feedback_root = self.workspace / ".aec-bench-learning" / "feedback"
+        feedback_count = sum(path.is_file() for path in feedback_root.rglob("*")) if feedback_root.is_dir() else 0
+
+        if "friction head loss in a pressurised pipe" in instruction:
+            task = "headloss"
+            content = self._headloss_output
+        elif "hydraulic pump power and shaft power" in instruction:
+            task = "power"
+            content = self._power_output
+        elif "stormwater pump-station engineer" in instruction:
+            task = "composition"
+            content = selective_composition_output(self._composition_output, set(components))
+        else:
+            raise ValueError("unsupported A04 test task")
+
+        self._observations.append(
+            {
+                "task": task,
+                "components": components,
+                "feedback_count": feedback_count,
+                "has_verifier": (self.workspace / "tests").exists(),
+            }
+        )
+        (self.workspace / "output.md").write_text(content, encoding="utf-8")
+        return AdapterResult(
+            adapter_name="direct",
+            resolved_model="fixed-test-model",
+            configuration_record={},
+            agent_output=AgentOutput(
+                status=AgentOutputStatus.COMPLETED,
+                output_path=request.output_path,
+                output_format=request.output_format,
+            ),
+            transcript=[],
+            usage_model_calls=1,
+            usage_input_tokens=35,
+            usage_output_tokens=18,
+        )
+
+    def adapter_name(self) -> str:
+        return "direct"
+
+    def resolved_model(self) -> str:
+        return "fixed-test-model"
+
+
+def selective_composition_output(golden_output: str, components: set[str]) -> str:
+    """Return a target response whose correct fields reflect the available component memory."""
+
+    matches = re.findall(r"```json\s*\n(.*?)\n\s*```", golden_output, re.DOTALL)
+    if not matches:
+        raise ValueError("composition fixture has no final JSON output")
+    payload = json.loads(matches[-1])
+    if "headloss" not in components:
+        payload["hazen_williams_loss_m"] = 0.0
+        payload["rising_main_velocity_m_s"] = 0.0
+    if "power" not in components:
+        payload["hydraulic_power_kw"] = 0.0
+        payload["motor_input_power_kw"] = 0.0
+    if components != {"headloss", "power"}:
+        payload["total_dynamic_head_m"] = 0.0
+        payload["overall_pass_score"] = 0.0
+    prefix = golden_output[: golden_output.rfind("```json")]
+    return f"{prefix}```json\n{json.dumps(payload, indent=2, sort_keys=True)}\n```\n"
+
+
 def upstream_invalidation_output(probe_output: str) -> str:
     """Return a parseable probe response that repeats the acquisition transition pattern."""
 
