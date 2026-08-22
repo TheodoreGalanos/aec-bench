@@ -1,16 +1,6 @@
 family_id = "heat-load-retention-interference"
 title = "Single-room heat-load retention and ventilation-rule interference"
 description = "Tests retention of the occupied-space heat-load method and possible interference from the server-room minimum-area ventilation rule. Domain review remains required before a claim-bearing run."
-source_task_paths = [
-  "tasks/mechanical/heat-load/single-room-office-L3/brisbane-office-85m2/instruction.md",
-  "tasks/mechanical/heat-load/single-room-office-L3/brisbane-office-85m2/task.toml",
-  "tasks/mechanical/heat-load/single-room-office-L3/sydney-classroom-120m2/instruction.md",
-  "tasks/mechanical/heat-load/single-room-office-L3/sydney-classroom-120m2/task.toml",
-  "tasks/mechanical/heat-load/single-room-office-L3/adelaide-library-150m2/instruction.md",
-  "tasks/mechanical/heat-load/single-room-office-L3/adelaide-library-150m2/task.toml",
-  "tasks/mechanical/heat-load/single-room-office-L3/cairns-server-60m2/instruction.md",
-  "tasks/mechanical/heat-load/single-room-office-L3/cairns-server-60m2/task.toml",
-]
 
 [[dimensions]]
 dimension_id = "task_form"
@@ -95,7 +85,7 @@ rationale = "The immediate probe changes the occupied room type, standards row, 
 
 [[relations]]
 relation_id = "brisbane-office-to-adelaide-library-retention"
-purpose = "retention"
+purpose = "transfer"
 source_member_ids = ["brisbane-office-acquisition"]
 target_member_id = "adelaide-library-delayed-probe"
 invariant_dimensions = ["task_form", "heat_load_summation", "ventilation_regime"]
@@ -108,7 +98,7 @@ rationale = "The delayed probe provides a second occupied-space task after an in
 
 [[relations]]
 relation_id = "cairns-server-to-adelaide-library-interference"
-purpose = "interference"
+purpose = "boundary"
 source_member_ids = ["cairns-server-interference"]
 target_member_id = "adelaide-library-delayed-probe"
 invariant_dimensions = ["task_form", "heat_load_summation"]

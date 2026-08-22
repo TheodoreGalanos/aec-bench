@@ -18,9 +18,12 @@ from aec_bench.contracts.learning_study import (
     ReleaseFeedbackStep,
     RunExperienceStep,
     StudyArmRole,
-    StudyClaimMode,
 )
-from aec_bench.experimentation.learning_studies.planning import CompiledLearningStudy, compile_learning_study
+from aec_bench.experimentation.learning_studies.planning import (
+    CompiledLearningStudy,
+    PlannedArmRun,
+    compile_learning_study,
+)
 from aec_bench.experimentation.learning_studies.runtime import (
     ArmRunStatus,
     ConsolidationRequest,
@@ -28,7 +31,6 @@ from aec_bench.experimentation.learning_studies.runtime import (
     ExperienceExecutionResult,
     FeedbackHandle,
     FeedbackReleaseResult,
-    InitialiseLearnerRequest,
     LearnerStateHandle,
     LearnerTransitionResult,
     LearningStudyOperations,
@@ -49,7 +51,6 @@ def _plan() -> CompiledLearningStudy:
         study_id="runtime-study",
         title="Runtime study",
         research_question="Does state remain isolated?",
-        claim_mode=StudyClaimMode.CONTROLLED,
         agent=AgentConfig(name="agent", adapter="direct", model="fixed"),
         compute=ComputeConfig(backend="local"),
         experiences=(
@@ -97,10 +98,10 @@ async def test_runtime_commits_acquisition_and_discards_probe_state() -> None:
         counters["state"] += 1
         return LearnerStateHandle(state_id=f"state-{counters['state']}", value=value)
 
-    def initialise(request: InitialiseLearnerRequest) -> LearnerStateHandle[str]:
+    def initialise(request: PlannedArmRun) -> LearnerStateHandle[str]:
         return state(f"initial:{request.arm_run_id}")
 
-    async def execute(request: ExecuteExperienceRequest[str, str]) -> ExperienceExecutionResult[str]:
+    async def execute(request: ExecuteExperienceRequest[str]) -> ExperienceExecutionResult[str]:
         requests.append((request.arm_run.arm_id, request.state.state_id))
         return ExperienceExecutionResult(
             trial_record=make_trial_record(
@@ -109,7 +110,6 @@ async def test_runtime_commits_acquisition_and_discards_probe_state() -> None:
                 task_id=request.step.trial.task_id,
             ),
             candidate_state=state(f"after:{request.step.experience_id}"),
-            changed_channels=("memory",),
         )
 
     def release(request: ReleaseFeedbackRequest[str]) -> FeedbackReleaseResult[str, str]:
@@ -122,12 +122,11 @@ async def test_runtime_commits_acquisition_and_discards_probe_state() -> None:
                 view_id=request.step.feedback_view_id,
                 value="safe",
             ),
-            changed_channels=("feedback",),
         )
 
     def consolidate(request: ConsolidationRequest[str, str]) -> LearnerTransitionResult[str]:
         assert [item.value for item in request.feedback] == ["safe"]
-        return LearnerTransitionResult(candidate_state=state("memory-updated"), changed_channels=("memory",))
+        return LearnerTransitionResult(candidate_state=state("memory-updated"))
 
     operations = LearningStudyOperations(
         initialise_learner=initialise,
@@ -135,7 +134,6 @@ async def test_runtime_commits_acquisition_and_discards_probe_state() -> None:
         release_feedback=release,
         consolidate=consolidate,
         discard_state=lambda handle: discarded.append(handle.state_id),
-        close_state=lambda _handle: None,
     )
 
     result = await run_learning_study(plan=_plan(), operations=operations)
@@ -167,11 +165,11 @@ async def test_runtime_runs_sync_operations_outside_the_event_loop_thread() -> N
     def record_thread() -> None:
         callback_threads.append(threading.get_ident())
 
-    def initialise(request: InitialiseLearnerRequest) -> LearnerStateHandle[str]:
+    def initialise(request: PlannedArmRun) -> LearnerStateHandle[str]:
         record_thread()
         return state(f"initial:{request.arm_id}")
 
-    def execute(request: ExecuteExperienceRequest[str, str]) -> ExperienceExecutionResult[str]:
+    def execute(request: ExecuteExperienceRequest[str]) -> ExperienceExecutionResult[str]:
         record_thread()
         return ExperienceExecutionResult(
             trial_record=make_trial_record(
@@ -198,7 +196,7 @@ async def test_runtime_runs_sync_operations_outside_the_event_loop_thread() -> N
 
     def consolidate(_request: ConsolidationRequest[str, str]) -> LearnerTransitionResult[str]:
         record_thread()
-        return LearnerTransitionResult(candidate_state=state("memory"), changed_channels=("memory",))
+        return LearnerTransitionResult(candidate_state=state("memory"))
 
     def finish_state(_handle: LearnerStateHandle[str]) -> None:
         record_thread()
@@ -209,7 +207,6 @@ async def test_runtime_runs_sync_operations_outside_the_event_loop_thread() -> N
         release_feedback=release,
         consolidate=consolidate,
         discard_state=finish_state,
-        close_state=finish_state,
     )
 
     result = await run_learning_study(plan=_plan(), operations=operations)
@@ -221,10 +218,10 @@ async def test_runtime_runs_sync_operations_outside_the_event_loop_thread() -> N
 
 @pytest.mark.asyncio
 async def test_runtime_rejects_cross_arm_state_identity_and_continues() -> None:
-    def initialise(_request: InitialiseLearnerRequest) -> LearnerStateHandle[str]:
+    def initialise(_request: PlannedArmRun) -> LearnerStateHandle[str]:
         return LearnerStateHandle(state_id="shared-state", value="mutable-root")
 
-    def execute(request: ExecuteExperienceRequest[str, str]) -> ExperienceExecutionResult[str]:
+    def execute(request: ExecuteExperienceRequest[str]) -> ExperienceExecutionResult[str]:
         return ExperienceExecutionResult(
             trial_record=make_trial_record(
                 trial_id=request.step.trial.trial_id,
@@ -240,7 +237,6 @@ async def test_runtime_rejects_cross_arm_state_identity_and_continues() -> None:
         release_feedback=lambda _request: pytest.fail("not reached"),
         consolidate=lambda _request: pytest.fail("not reached"),
         discard_state=lambda _handle: None,
-        close_state=lambda _handle: None,
     )
 
     result = await run_learning_study(plan=_plan(), operations=operations)
@@ -256,12 +252,12 @@ async def test_runtime_rejects_cross_arm_state_identity_and_continues() -> None:
 async def test_runtime_failure_keeps_previous_state_and_does_not_stop_later_arm() -> None:
     state_count = 0
 
-    def initialise(request: InitialiseLearnerRequest) -> LearnerStateHandle[str]:
+    def initialise(request: PlannedArmRun) -> LearnerStateHandle[str]:
         nonlocal state_count
         state_count += 1
         return LearnerStateHandle(state_id=f"initial-{state_count}", value=request.arm_id)
 
-    def execute(request: ExecuteExperienceRequest[str, str]) -> ExperienceExecutionResult[str]:
+    def execute(request: ExecuteExperienceRequest[str]) -> ExperienceExecutionResult[str]:
         if request.arm_run.arm_id == "cold":
             raise RuntimeError("adapter stopped before a TrialRecord")
         return ExperienceExecutionResult(
@@ -290,10 +286,8 @@ async def test_runtime_failure_keeps_previous_state_and_does_not_stop_later_arm(
         ),
         consolidate=lambda _request: LearnerTransitionResult(
             candidate_state=LearnerStateHandle(state_id="exposed-consolidated", value="memory"),
-            changed_channels=("memory",),
         ),
         discard_state=lambda _handle: None,
-        close_state=lambda _handle: None,
     )
 
     result = await run_learning_study(plan=_plan(), operations=operations)

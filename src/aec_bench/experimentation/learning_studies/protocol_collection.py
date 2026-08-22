@@ -16,7 +16,6 @@ from aec_bench.contracts.learning_study import (
     LearningExperienceSpec,
     LearningStudyProtocolSpec,
     LearningStudySpec,
-    StudyClaimMode,
 )
 from aec_bench.experimentation.learning_studies.families import load_learning_family
 
@@ -55,7 +54,6 @@ def load_learning_study_protocol(
         study_id=protocol.study_id,
         title=protocol.title,
         research_question=protocol.research_question,
-        claim_mode=protocol.claim_mode,
         agent=agent,
         compute=compute,
         repetitions=repetitions,
@@ -106,7 +104,6 @@ def _compose_experiences(
                 experience_id=declaration.experience_id,
                 task_id=task_id,
                 role=declaration.role,
-                description=declaration.description,
             )
         )
     return tuple(experiences), member_experiences
@@ -149,13 +146,15 @@ def _validate_controlled_relation_coverage(
     experiences: tuple[LearningExperienceSpec, ...],
     relations: tuple[ExperienceRelationSpec, ...],
 ) -> None:
-    if protocol.claim_mode is not StudyClaimMode.CONTROLLED:
-        return
-    probe_ids = {item.experience_id for item in experiences if item.role is ExperienceRole.PROBE}
+    probe_ids = {
+        measurement.target_experience_id
+        for measurement in protocol.measurements
+        if measurement.comparator_arm_id is not None
+    }
     uncovered = probe_ids - {item.target_experience_id for item in relations}
     if uncovered:
         raise ValueError(
-            f"controlled protocol {protocol.study_id} has probes without selected family relations: {sorted(uncovered)}"
+            f"compared protocol {protocol.study_id} has probes without selected family relations: {sorted(uncovered)}"
         )
 
 

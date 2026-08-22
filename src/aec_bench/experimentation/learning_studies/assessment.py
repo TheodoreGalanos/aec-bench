@@ -4,16 +4,15 @@
 from __future__ import annotations
 
 import math
-import random
 import statistics
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 
 from aec_bench.contracts.learning_study import (
     ImprovementDirection,
-    LearningMeasurementKind,
     LearningMeasurementSpec,
     LearningStudySpec,
+    StudyArmRole,
 )
 from aec_bench.contracts.learning_study_assessment import (
     ExcludedPair,
@@ -24,7 +23,6 @@ from aec_bench.contracts.learning_study_assessment import (
 )
 from aec_bench.contracts.trial_record import TrialRecord
 from aec_bench.experimentation.learning_studies.planning import (
-    CompiledConsolidationStep,
     CompiledExperienceStep,
     CompiledLearningStudy,
     PlannedArmRun,
@@ -77,15 +75,13 @@ def project_trial_reward(record: TrialRecord) -> ProjectionResult:
 
 @dataclass(frozen=True)
 class AssessmentArmEvidence:
-    arm_run_id: str
     adapter_id: str
     initial_state_equivalence_id: str
-    arm_isolated: bool = True
-    lineage_complete: bool = True
-    probe_feedback_hidden: bool = True
-    probe_state_discarded: bool = True
-    hidden_evaluation_leaked: bool = False
-    family_reviewed: bool = True
+    arm_isolated: bool
+    lineage_complete: bool
+    probe_feedback_hidden: bool
+    probe_state_discarded: bool
+    hidden_evaluation_leaked: bool
 
 
 def assess_learning_study(
@@ -95,21 +91,21 @@ def assess_learning_study(
     execution: LearningStudyExecution[object],
     projections: Mapping[str, OutcomeProjection],
     arm_evidence: Mapping[str, AssessmentArmEvidence],
+    relations_reviewed: bool,
 ) -> LearningStudyAssessment:
     """Return deterministic pair-level measurements without interpreting task payloads."""
 
     if spec != plan.spec or execution.study_run_id != plan.study_run_id:
         raise ValueError("assessment inputs do not identify the same compiled study")
     execution_by_id = {item.arm_run_id: item for item in execution.arm_runs}
-    plan_by_id = {item.arm_run_id: item for item in plan.arm_runs}
     measurements = tuple(
         _assess_measurement(
             measurement=measurement,
             plan=plan,
-            plan_by_id=plan_by_id,
             execution_by_id=execution_by_id,
             projection=projections.get(measurement.projection_id),
             arm_evidence=arm_evidence,
+            relations_reviewed=relations_reviewed,
         )
         for measurement in spec.measurements
     )
@@ -120,10 +116,10 @@ def _assess_measurement(
     *,
     measurement: LearningMeasurementSpec,
     plan: CompiledLearningStudy,
-    plan_by_id: Mapping[str, PlannedArmRun],
     execution_by_id: Mapping[str, ArmRunExecutionResult[object]],
     projection: OutcomeProjection | None,
     arm_evidence: Mapping[str, AssessmentArmEvidence],
+    relations_reviewed: bool,
 ) -> LearningMeasurementResult:
     if projection is None:
         return _empty_result(
@@ -195,14 +191,6 @@ def _assess_measurement(
             comparator=comparator_value,
             direction=measurement.direction,
         )
-        if measurement.kind is LearningMeasurementKind.LEARNING_EFFICIENCY:
-            denominator = _completed_learning_steps(focal_plan, focal_execution, measurement)
-            if denominator == 0:
-                excluded.append(
-                    ExcludedPair(repetition=repetition, reasons=("learning-efficiency denominator is zero",))
-                )
-                continue
-            effect /= denominator
         included.append(
             PairedMeasurementValue(
                 repetition=repetition,
@@ -221,6 +209,7 @@ def _assess_measurement(
             comparator_record=comparator_record,
             evidence=arm_evidence,
             require_matching_task=measurement.reference_experience_id is None,
+            relations_reviewed=relations_reviewed,
         )
         diagnostics.update(pair_diagnostics)
         validity = _least_valid(validity, pair_validity)
@@ -237,7 +226,6 @@ def _assess_measurement(
     comparator_values = [item.comparator_value for item in included if item.comparator_value is not None]
     return LearningMeasurementResult(
         measurement_id=measurement.measurement_id,
-        kind=measurement.kind,
         validity=validity,
         projection_id=measurement.projection_id,
         included_pairs=tuple(included),
@@ -245,9 +233,6 @@ def _assess_measurement(
         focal_mean=_mean_or_none(focal_values),
         comparator_mean=_mean_or_none(comparator_values),
         mean_effect=_mean_or_none(effects),
-        median_effect=None if not effects else statistics.median(effects),
-        effect_range=None if len(effects) < 2 else (min(effects), max(effects)),
-        confidence_interval_95=_paired_bootstrap_interval(effects),
         diagnostics=tuple(sorted(diagnostics)),
     )
 
@@ -288,33 +273,45 @@ def _pair_validity(
     comparator_record: TrialRecord | None,
     evidence: Mapping[str, AssessmentArmEvidence],
     require_matching_task: bool,
+    relations_reviewed: bool,
 ) -> tuple[LearningComparisonValidity, tuple[str, ...]]:
     focal_evidence = evidence.get(focal_plan.arm_run_id)
     comparator_evidence = None if comparator_plan is None else evidence.get(comparator_plan.arm_run_id)
-    required = (focal_evidence,) if comparator_plan is None else (focal_evidence, comparator_evidence)
-    if any(item is None for item in required):
+    required = (
+        ((focal_plan.arm_run_id, focal_evidence),)
+        if comparator_plan is None
+        else (
+            (focal_plan.arm_run_id, focal_evidence),
+            (comparator_plan.arm_run_id, comparator_evidence),
+        )
+    )
+    if any(item is None for _, item in required):
         return LearningComparisonValidity.INVALID, ("arm validity evidence is missing",)
-    selected = tuple(item for item in required if item is not None)
     invalid: list[str] = []
     descriptive: list[str] = []
-    for item in selected:
+    for arm_run_id, item in required:
+        assert item is not None
         if not item.arm_isolated:
-            invalid.append(f"arm isolation failed: {item.arm_run_id}")
+            invalid.append(f"arm isolation failed: {arm_run_id}")
         if not item.lineage_complete:
-            invalid.append(f"learner-state lineage is incomplete: {item.arm_run_id}")
+            invalid.append(f"learner-state lineage is incomplete: {arm_run_id}")
         if not item.probe_feedback_hidden:
-            invalid.append(f"probe feedback was visible before scoring: {item.arm_run_id}")
+            invalid.append(f"probe feedback was visible before scoring: {arm_run_id}")
         if not item.probe_state_discarded:
-            invalid.append(f"probe-generated learner state was committed: {item.arm_run_id}")
+            invalid.append(f"probe-generated learner state was committed: {arm_run_id}")
         if item.hidden_evaluation_leaked:
-            invalid.append(f"hidden evaluation data entered learner state: {item.arm_run_id}")
-        if not item.family_reviewed:
-            descriptive.append(f"learning-family relation is not reviewed: {item.arm_run_id}")
+            invalid.append(f"hidden evaluation data entered learner state: {arm_run_id}")
+    if not relations_reviewed:
+        descriptive.append("learning-family relations are not reviewed")
     if comparator_evidence is not None and focal_evidence is not None:
         if focal_evidence.adapter_id != comparator_evidence.adapter_id:
             descriptive.append("execution adapter differs between matched arms")
         if focal_evidence.initial_state_equivalence_id != comparator_evidence.initial_state_equivalence_id:
             descriptive.append("initial learner states are not independently equivalent")
+    if comparator_plan is not None and (
+        focal_plan.arm_role is not StudyArmRole.EXPOSURE or comparator_plan.arm_role is not StudyArmRole.CONTROL
+    ):
+        descriptive.append("between-arm comparison is not exposure versus matched cold control")
     records = (focal_record,) if comparator_record is None else (focal_record, comparator_record)
     for record in records:
         if record.agent.model != plan.spec.agent.model or record.agent.adapter != plan.spec.agent.adapter:
@@ -334,25 +331,6 @@ def _normalised_effect(*, focal: float, comparator: float | None, direction: Imp
     if comparator is None:
         return focal
     return focal - comparator if direction is ImprovementDirection.HIGHER else comparator - focal
-
-
-def _completed_learning_steps(
-    plan: PlannedArmRun,
-    execution: ArmRunExecutionResult[object] | None,
-    measurement: LearningMeasurementSpec,
-) -> int:
-    if execution is None:
-        return 0
-    acquisition_ids = set(measurement.acquisition_experience_ids)
-    count = 0
-    for step, result in zip(plan.steps, execution.completed_steps, strict=False):
-        if result.status is not StepExecutionStatus.COMPLETED:
-            continue
-        if isinstance(step, CompiledConsolidationStep):
-            count += 1
-        elif isinstance(step, CompiledExperienceStep) and step.experience_id in acquisition_ids:
-            count += 1
-    return count
 
 
 def _bound_diagnostics(
@@ -388,14 +366,6 @@ def _mean_or_none(values: list[float]) -> float | None:
     return None if not values else statistics.fmean(values)
 
 
-def _paired_bootstrap_interval(effects: list[float]) -> tuple[float, float] | None:
-    if len(effects) < 5:
-        return None
-    generator = random.Random(42)
-    samples = sorted(statistics.fmean(generator.choice(effects) for _ in effects) for _ in range(2_000))
-    return samples[int(0.025 * (len(samples) - 1))], samples[int(0.975 * (len(samples) - 1))]
-
-
 def _empty_result(
     measurement: LearningMeasurementSpec,
     validity: LearningComparisonValidity,
@@ -403,7 +373,6 @@ def _empty_result(
 ) -> LearningMeasurementResult:
     return LearningMeasurementResult(
         measurement_id=measurement.measurement_id,
-        kind=measurement.kind,
         validity=validity,
         projection_id=measurement.projection_id,
         included_pairs=(),
@@ -411,9 +380,6 @@ def _empty_result(
         focal_mean=None,
         comparator_mean=None,
         mean_effect=None,
-        median_effect=None,
-        effect_range=None,
-        confidence_interval_95=None,
         diagnostics=diagnostics,
     )
 

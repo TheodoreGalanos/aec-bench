@@ -8,7 +8,6 @@ from enum import StrEnum
 
 from pydantic import NonNegativeInt, field_validator, model_validator
 
-from aec_bench.contracts.learning_study import LearningMeasurementKind
 from aec_bench.contracts.validators import FrozenStrictModel, NonEmptyStr
 
 
@@ -48,7 +47,6 @@ class ExcludedPair(FrozenStrictModel):
 
 class LearningMeasurementResult(FrozenStrictModel):
     measurement_id: NonEmptyStr
-    kind: LearningMeasurementKind
     validity: LearningComparisonValidity
     projection_id: NonEmptyStr
     included_pairs: tuple[PairedMeasurementValue, ...]
@@ -56,9 +54,6 @@ class LearningMeasurementResult(FrozenStrictModel):
     focal_mean: float | None
     comparator_mean: float | None
     mean_effect: float | None
-    median_effect: float | None
-    effect_range: tuple[float, float] | None
-    confidence_interval_95: tuple[float, float] | None
     diagnostics: tuple[str, ...]
 
     @model_validator(mode="after")
@@ -67,9 +62,6 @@ class LearningMeasurementResult(FrozenStrictModel):
             self.focal_mean,
             self.comparator_mean,
             self.mean_effect,
-            self.median_effect,
-            *(self.effect_range or ()),
-            *(self.confidence_interval_95 or ()),
         )
         if any(value is not None and not math.isfinite(value) for value in aggregate_values):
             raise ValueError("measurement aggregates must be finite")

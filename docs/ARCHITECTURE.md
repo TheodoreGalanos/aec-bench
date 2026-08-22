@@ -178,6 +178,11 @@ comparison. It does not own task meaning, execution, verification, evaluation,
 or model-weight training. An experience is one existing trial in a study; it is
 not another task or runtime type.
 
+Measurements use one named paired-difference shape. The assessor derives
+validity from explicit evidence. It reports `controlled` only for an exposure
+arm against a matched cold-control arm on the same probe. Within-arm and
+treatment-to-treatment comparisons remain descriptive.
+
 Generalisation measures one fixed learner on changed holdout material. Learning
 transfer compares a learner that received a declared prior experience with a
 matched cold learner on the same probe. A sequence without the required control
@@ -192,9 +197,8 @@ execution APIs. Execution and task owners do not import Learning Studies policy.
 Artifact learning-family files are caller-selected TOML overlays. They name
 exact existing task IDs, declare dimension values, and state directed authored
 claims. They do not change task definitions, `VariationAxis`, generation, or a
-global task catalogue. The current task-authority references are
-`instruction.md` and `task.toml`; a family file remains host-held and is not
-staged for the learner.
+global task catalogue. The exact `task_id` resolves through normal task loading;
+a family file remains host-held and is not staged for the learner.
 
 Repository-maintained studies form a task-like collection under
 `learning_studies/protocols/`. Each study directory contains one `study.toml`
@@ -214,6 +218,9 @@ files below `.aec-bench-learning/` can enter a later experience. Raw history is
 appended only after an explicit public feedback release. Structured memory is
 read-only during a task and can change only during consolidation. Model and
 adapter identity continue to come from the immutable planned trial.
+
+The [Gate A decision](adr/learning-studies-gate-a.md) records the field-level
+extraction review and the concepts that remain adapter-owned.
 
 `run_trial()` has one execution-owner seam that can atomically export the exact
 selected actor snapshot before verification. The harness does not interpret

@@ -1,9 +1,9 @@
 # ABOUTME: Tests controlled Learning Study matching through named task-owned projections.
-# ABOUTME: Keeps pair exclusions, descriptive downgrades, invalid evidence, and uncertainty visible.
+# ABOUTME: Keeps pair exclusions, descriptive downgrades, and invalid evidence visible.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 import pytest
 
@@ -13,12 +13,10 @@ from aec_bench.contracts.learning_study import (
     ImprovementDirection,
     LearningArmSpec,
     LearningExperienceSpec,
-    LearningMeasurementKind,
     LearningMeasurementSpec,
     LearningStudySpec,
     RunExperienceStep,
     StudyArmRole,
-    StudyClaimMode,
 )
 from aec_bench.contracts.learning_study_assessment import LearningComparisonValidity
 from aec_bench.contracts.trial_record import TrialRecord
@@ -54,7 +52,6 @@ def _plan(
         study_id="assessment-study",
         title="Assessment study",
         research_question="Does exposure change the matched probe?",
-        claim_mode=StudyClaimMode.CONTROLLED,
         agent=AgentConfig(name="agent", adapter="direct", model="fixed"),
         compute=ComputeConfig(backend="local"),
         repetitions=repetitions,
@@ -65,13 +62,11 @@ def _plan(
         measurements=(
             LearningMeasurementSpec(
                 measurement_id="transfer",
-                kind=LearningMeasurementKind.TRANSFER_GAIN,
                 projection_id="task-outcome",
                 direction=direction,
                 target_experience_id="probe",
                 focal_arm_id="exposed",
                 comparator_arm_id="cold",
-                acquisition_experience_ids=("acquire",),
             ),
         ),
         arms=(
@@ -166,17 +161,18 @@ def _evidence(
     *,
     isolated: bool = True,
     equivalent: bool = True,
-    family_reviewed: bool = True,
 ) -> dict[str, AssessmentArmEvidence]:
     result = {}
     for arm_run in plan.arm_runs:
         equivalence = f"initial-r{arm_run.repetition}" if equivalent or arm_run.arm_id == "cold" else "different"
         result[arm_run.arm_run_id] = AssessmentArmEvidence(
-            arm_run_id=arm_run.arm_run_id,
             adapter_id="artifact-local",
             initial_state_equivalence_id=equivalence,
             arm_isolated=isolated,
-            family_reviewed=family_reviewed,
+            lineage_complete=True,
+            probe_feedback_hidden=True,
+            probe_state_discarded=True,
+            hidden_evaluation_leaked=False,
         )
     return result
 
@@ -206,6 +202,7 @@ def test_assessment_retains_controlled_pairs_and_absolute_values() -> None:
         execution=execution,
         projections={"task-outcome": _reward_projection},
         arm_evidence=_evidence(plan),
+        relations_reviewed=True,
     ).measurements[0]
 
     assert result.validity is LearningComparisonValidity.CONTROLLED
@@ -213,19 +210,19 @@ def test_assessment_retains_controlled_pairs_and_absolute_values() -> None:
     assert result.focal_mean == pytest.approx(0.5)
     assert result.comparator_mean == pytest.approx(0.3)
     assert result.mean_effect == pytest.approx(0.2)
-    assert result.effect_range == pytest.approx((-0.1, 0.5))
 
 
 @pytest.mark.parametrize(
-    ("evidence", "expected", "diagnostic"),
+    ("evidence", "relations_reviewed", "expected", "diagnostic"),
     [
-        ({"isolated": False}, LearningComparisonValidity.INVALID, "arm isolation failed"),
-        ({"equivalent": False}, LearningComparisonValidity.DESCRIPTIVE_ONLY, "not independently equivalent"),
-        ({"family_reviewed": False}, LearningComparisonValidity.DESCRIPTIVE_ONLY, "not reviewed"),
+        ({"isolated": False}, True, LearningComparisonValidity.INVALID, "arm isolation failed"),
+        ({"equivalent": False}, True, LearningComparisonValidity.DESCRIPTIVE_ONLY, "not independently equivalent"),
+        ({}, False, LearningComparisonValidity.DESCRIPTIVE_ONLY, "not reviewed"),
     ],
 )
 def test_assessment_downgrades_or_invalidates_control_failures(
     evidence: dict[str, bool],
+    relations_reviewed: bool,
     expected: LearningComparisonValidity,
     diagnostic: str,
 ) -> None:
@@ -238,6 +235,7 @@ def test_assessment_downgrades_or_invalidates_control_failures(
         execution=execution,
         projections={"task-outcome": _reward_projection},
         arm_evidence=_evidence(plan, **evidence),
+        relations_reviewed=relations_reviewed,
     ).measurements[0]
 
     assert result.validity is expected
@@ -264,6 +262,7 @@ def test_assessment_excludes_ineligible_pairs_without_rematching() -> None:
         execution=execution,
         projections={"task-outcome": exclude_one},
         arm_evidence=_evidence(plan),
+        relations_reviewed=True,
     ).measurements[0]
 
     assert [pair.repetition for pair in result.included_pairs] == [1]
@@ -271,7 +270,7 @@ def test_assessment_excludes_ineligible_pairs_without_rematching() -> None:
     assert "task-owned outcome unavailable" in result.excluded_repetitions[0].reasons[0]
 
 
-def test_assessment_honours_lower_is_better_and_has_deterministic_bootstrap() -> None:
+def test_assessment_honours_lower_is_better() -> None:
     plan = _plan(repetitions=5, direction=ImprovementDirection.LOWER)
     rewards = {
         (arm_id, repetition): value for repetition in range(1, 6) for arm_id, value in (("cold", 0.6), ("exposed", 0.4))
@@ -284,15 +283,28 @@ def test_assessment_honours_lower_is_better_and_has_deterministic_bootstrap() ->
         execution=execution,
         projections={"task-outcome": _reward_projection},
         arm_evidence=_evidence(plan),
-    ).measurements[0]
-    second = assess_learning_study(
-        spec=plan.spec,
-        plan=plan,
-        execution=execution,
-        projections={"task-outcome": _reward_projection},
-        arm_evidence=_evidence(plan),
+        relations_reviewed=True,
     ).measurements[0]
 
     assert first.mean_effect == pytest.approx(0.2)
-    assert first.confidence_interval_95 == pytest.approx((0.2, 0.2))
-    assert first.confidence_interval_95 == second.confidence_interval_95
+
+
+def test_assessment_downgrades_exposure_to_exposure_comparison() -> None:
+    plan = _plan(repetitions=1)
+    compared_plan = replace(
+        plan,
+        arm_runs=(replace(plan.arm_runs[0], arm_role=StudyArmRole.EXPOSURE), plan.arm_runs[1]),
+    )
+    execution = _execution(compared_plan, {("cold", 1): 0.2, ("exposed", 1): 0.7})
+
+    result = assess_learning_study(
+        spec=compared_plan.spec,
+        plan=compared_plan,
+        execution=execution,
+        projections={"task-outcome": _reward_projection},
+        arm_evidence=_evidence(compared_plan),
+        relations_reviewed=True,
+    ).measurements[0]
+
+    assert result.validity is LearningComparisonValidity.DESCRIPTIVE_ONLY
+    assert "not exposure versus matched cold control" in " ".join(result.diagnostics)

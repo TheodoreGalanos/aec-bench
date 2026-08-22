@@ -22,11 +22,7 @@ from aec_bench.experimentation.learning_studies.assessment import (
     ProjectionResult,
     assess_learning_study,
 )
-from aec_bench.experimentation.learning_studies.families import (
-    load_learning_family,
-    resolve_learning_family,
-    resolve_learning_relation,
-)
+from aec_bench.experimentation.learning_studies.families import load_learning_family
 from aec_bench.experimentation.learning_studies.planning import compile_learning_study
 from aec_bench.experimentation.learning_studies.protocol_collection import (
     BUILTIN_LEARNING_STUDY_PROTOCOLS,
@@ -105,16 +101,21 @@ def _state_files(root: Path) -> dict[str, bytes]:
 
 def test_a04_real_artifact_tasks_measure_component_selectivity_and_composition(tmp_path: Path) -> None:
     spec = load_learning_study_protocol(_PROTOCOL_PATH, agent=_AGENT, compute=_COMPUTE)
-    family = resolve_learning_family(load_learning_family(_PROTOCOL_PATH / "family.toml"), _resolve_task_instance)
-    relation = resolve_learning_relation(family, "headloss-plus-power-to-stormwater-pump-package")
-    assert [item.task.task.task_id for item in relation.sources] == [_HEADLOSS_TASK_ID, _POWER_TASK_ID]
-    assert relation.target.task.task.task_id == _COMPOSITION_TASK_ID
-    assert relation.target.task.task.difficulty == "easy"
-    assert all(item.task.task.timeout_seconds == 600 for item in (*relation.sources, relation.target))
-    assert "Hazen-Williams" in relation.sources[0].task.task.instruction
-    assert "shaft power" in relation.sources[1].task.task.instruction
-    assert "SSC-03-LH-03" in relation.target.task.task.instruction
-    assert all("SSC-03-LH-03" not in item.task.task.instruction for item in relation.sources)
+    family = load_learning_family(_PROTOCOL_PATH / "family.toml")
+    relation = next(
+        item for item in family.relations if item.relation_id == "headloss-plus-power-to-stormwater-pump-package"
+    )
+    members = {item.member_id: item for item in family.members}
+    sources = tuple(_resolve_task_instance(members[item].task_id) for item in relation.source_member_ids)
+    target = _resolve_task_instance(members[relation.target_member_id].task_id)
+    assert [item.task.task_id for item in sources] == [_HEADLOSS_TASK_ID, _POWER_TASK_ID]
+    assert target.task.task_id == _COMPOSITION_TASK_ID
+    assert target.task.difficulty == "easy"
+    assert all(item.task.timeout_seconds == 600 for item in (*sources, target))
+    assert "Hazen-Williams" in sources[0].task.instruction
+    assert "shaft power" in sources[1].task.instruction
+    assert "SSC-03-LH-03" in target.task.instruction
+    assert all("SSC-03-LH-03" not in item.task.instruction for item in sources)
 
     plan = compile_learning_study(study_run_id="a04-stage-1", spec=spec, resolve_task=_resolve_task)
     observations: list[dict[str, object]] = []
@@ -192,9 +193,7 @@ def test_a04_real_artifact_tasks_measure_component_selectivity_and_composition(t
         snapshot_state=binding.snapshot_state,
         feedback_artifacts=binding.feedback_artifacts,
     )
-    execution = asyncio.run(
-        run_learning_study(plan=plan, operations=binding.operations, working_root=run_root, observer=recorder)
-    )
+    execution = asyncio.run(run_learning_study(plan=plan, operations=binding.operations, observer=recorder))
 
     assert all(arm.status is ArmRunStatus.COMPLETED for arm in execution.arm_runs), execution
     assert [len(arm.trial_records) for arm in execution.arm_runs] == [1, 2, 2, 3, 3]
@@ -270,10 +269,13 @@ def test_a04_real_artifact_tasks_measure_component_selectivity_and_composition(t
 
     evidence = {
         arm.arm_run_id: AssessmentArmEvidence(
-            arm_run_id=arm.arm_run_id,
             adapter_id="local-artifact-single-attempt",
             initial_state_equivalence_id="a04-empty-fixed-agent-state-r01",
-            family_reviewed=False,
+            arm_isolated=True,
+            lineage_complete=True,
+            probe_feedback_hidden=True,
+            probe_state_discarded=True,
+            hidden_evaluation_leaked=False,
         )
         for arm in plan.arm_runs
     }
@@ -288,6 +290,7 @@ def test_a04_real_artifact_tasks_measure_component_selectivity_and_composition(t
             "composition-outcome": _project_composition_outcome,
         },
         arm_evidence=evidence,
+        relations_reviewed=False,
     )
     results = {item.measurement_id: item for item in assessment.measurements}
     assert all(item.validity is LearningComparisonValidity.DESCRIPTIVE_ONLY for item in results.values())

@@ -3,13 +3,10 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
-
 import pytest
 from pydantic import ValidationError
 
 from aec_bench.contracts.artifacts import ArtifactRef
-from aec_bench.contracts.learning_study import LearningMeasurementKind
 from aec_bench.contracts.learning_study_assessment import (
     LearningComparisonValidity,
     LearningMeasurementResult,
@@ -43,7 +40,6 @@ def test_evidence_contracts_round_trip() -> None:
     )
     event = StudyEvent(
         sequence=0,
-        timestamp=datetime(2026, 8, 22, tzinfo=UTC),
         study_run_id="run",
         kind=StudyEventKind.LEARNER_INITIALISED,
         arm_run_id=state.arm_run_id,
@@ -80,7 +76,6 @@ def test_evidence_contracts_reject_inconsistent_state_and_discard() -> None:
 def test_assessment_contract_retains_pair_values() -> None:
     result = LearningMeasurementResult(
         measurement_id="transfer",
-        kind=LearningMeasurementKind.TRANSFER_GAIN,
         validity=LearningComparisonValidity.CONTROLLED,
         projection_id="canonical-reward",
         included_pairs=(
@@ -97,9 +92,6 @@ def test_assessment_contract_retains_pair_values() -> None:
         focal_mean=0.8,
         comparator_mean=0.3,
         mean_effect=0.5,
-        median_effect=0.5,
-        effect_range=None,
-        confidence_interval_95=None,
         diagnostics=(),
     )
 

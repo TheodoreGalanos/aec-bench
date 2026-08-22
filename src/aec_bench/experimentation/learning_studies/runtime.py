@@ -9,10 +9,8 @@ from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
 from enum import StrEnum
 from functools import partial
-from pathlib import Path
 from typing import Generic, TypeVar
 
-from aec_bench.contracts.experiment_manifest import AgentConfig, ComputeConfig
 from aec_bench.contracts.trial_record import TrialRecord
 from aec_bench.experimentation.learning_studies.errors import LearningStudyPersistenceError
 from aec_bench.experimentation.learning_studies.planning import (
@@ -57,24 +55,10 @@ class FeedbackHandle(Generic[FeedbackT]):
 
 
 @dataclass(frozen=True)
-class InitialiseLearnerRequest:
-    study_run_id: str
-    arm_run_id: str
-    arm_id: str
-    treatment_id: str
-    repetition: int
-    agent: AgentConfig
-    compute: ComputeConfig
-    working_root: Path | None
-
-
-@dataclass(frozen=True)
-class ExecuteExperienceRequest(Generic[StateT, FeedbackT]):
+class ExecuteExperienceRequest(Generic[StateT]):
     arm_run: PlannedArmRun
     step: CompiledExperienceStep
     state: LearnerStateHandle[StateT]
-    completed_trial_records: tuple[TrialRecord, ...]
-    released_feedback: tuple[FeedbackHandle[FeedbackT], ...]
 
 
 @dataclass(frozen=True)
@@ -97,23 +81,17 @@ class ConsolidationRequest(Generic[StateT, FeedbackT]):
 class ExperienceExecutionResult(Generic[StateT]):
     trial_record: TrialRecord
     candidate_state: LearnerStateHandle[StateT]
-    changed_channels: tuple[str, ...] = ()
-    diagnostics: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
 class FeedbackReleaseResult(Generic[StateT, FeedbackT]):
     candidate_state: LearnerStateHandle[StateT]
     feedback: FeedbackHandle[FeedbackT]
-    changed_channels: tuple[str, ...] = ()
-    diagnostics: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
 class LearnerTransitionResult(Generic[StateT]):
     candidate_state: LearnerStateHandle[StateT]
-    changed_channels: tuple[str, ...]
-    diagnostics: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -134,10 +112,8 @@ class StepExecutionResult(Generic[FeedbackT]):
     candidate_state_id: str | None
     committed_state_id: str | None
     state_committed: bool | None
-    changed_channels: tuple[str, ...] = ()
     trial_record: TrialRecord | None = None
     feedback: FeedbackHandle[FeedbackT] | None = None
-    diagnostics: tuple[str, ...] = ()
     failure: StudyStepFailure | None = None
 
 
@@ -228,11 +204,11 @@ class LearningStudyObserver(Generic[StateT, FeedbackT]):
 @dataclass(frozen=True)
 class LearningStudyOperations(Generic[StateT, FeedbackT]):
     initialise_learner: Callable[
-        [InitialiseLearnerRequest],
+        [PlannedArmRun],
         LearnerStateHandle[StateT] | Awaitable[LearnerStateHandle[StateT]],
     ]
     execute_experience: Callable[
-        [ExecuteExperienceRequest[StateT, FeedbackT]],
+        [ExecuteExperienceRequest[StateT]],
         ExperienceExecutionResult[StateT] | Awaitable[ExperienceExecutionResult[StateT]],
     ]
     release_feedback: Callable[
@@ -244,14 +220,12 @@ class LearningStudyOperations(Generic[StateT, FeedbackT]):
         LearnerTransitionResult[StateT] | Awaitable[LearnerTransitionResult[StateT]],
     ]
     discard_state: Callable[[LearnerStateHandle[StateT]], None | Awaitable[None]]
-    close_state: Callable[[LearnerStateHandle[StateT]], None | Awaitable[None]]
 
 
 async def run_learning_study(
     *,
     plan: CompiledLearningStudy,
     operations: LearningStudyOperations[StateT, FeedbackT],
-    working_root: Path | None = None,
     observer: LearningStudyObserver[StateT, FeedbackT] | None = None,
     resume: LearningStudyResume[StateT, FeedbackT] | None = None,
 ) -> LearningStudyExecution[FeedbackT]:
@@ -268,10 +242,8 @@ async def run_learning_study(
                 continue
             results.append(
                 await _run_arm_run(
-                    plan=plan,
                     arm_run=arm_run,
                     operations=operations,
-                    working_root=working_root,
                     seen_state_ids=seen_state_ids,
                     seen_feedback_ids=seen_feedback_ids,
                     observer=observer,
@@ -290,16 +262,13 @@ async def run_learning_study(
 
 async def _run_arm_run(
     *,
-    plan: CompiledLearningStudy,
     arm_run: PlannedArmRun,
     operations: LearningStudyOperations[StateT, FeedbackT],
-    working_root: Path | None,
     seen_state_ids: set[str],
     seen_feedback_ids: set[str],
     observer: LearningStudyObserver[StateT, FeedbackT] | None,
     resume_state: ArmRunResumeState[StateT, FeedbackT] | None,
 ) -> ArmRunExecutionResult[FeedbackT]:
-    states_to_close: list[LearnerStateHandle[StateT]] = []
     completed_steps: list[StepExecutionResult[FeedbackT]] = []
     trial_records: list[TrialRecord] = []
     trials_by_experience: dict[str, TrialRecord] = {}
@@ -308,256 +277,223 @@ async def _run_arm_run(
     initial_state_id: str | None = None
     failure: StudyStepFailure | None = None
     step_start_index = 0
-    try:
-        if resume_state is None:
+    if resume_state is None:
+        if observer is not None:
+            await _notify(partial(observer.arm_started, arm_run))
+        try:
+            initialised_state = await _call_operation(
+                operations.initialise_learner,
+                arm_run,
+            )
+            _validate_new_identity(initialised_state.state_id, seen_state_ids, "learner state")
+            seen_state_ids.add(initialised_state.state_id)
+            state = initialised_state
+            initial_state_id = initialised_state.state_id
             if observer is not None:
-                await _notify(partial(observer.arm_started, arm_run))
-            try:
-                initialised_state = await _call_operation(
-                    operations.initialise_learner,
-                    InitialiseLearnerRequest(
-                        study_run_id=plan.study_run_id,
-                        arm_run_id=arm_run.arm_run_id,
-                        arm_id=arm_run.arm_id,
-                        treatment_id=arm_run.treatment_id,
-                        repetition=arm_run.repetition,
-                        agent=plan.spec.agent,
-                        compute=plan.spec.compute,
-                        working_root=working_root,
+                await _notify(partial(observer.learner_initialised, arm_run, initialised_state))
+        except asyncio.CancelledError:
+            raise
+        except LearningStudyPersistenceError:
+            raise
+        except Exception as error:
+            failure = StudyStepFailure(
+                category="learner-initialisation-failed",
+                message=str(error),
+                arm_run_id=arm_run.arm_run_id,
+                step_id=None,
+            )
+            arm_result: ArmRunExecutionResult[FeedbackT] = ArmRunExecutionResult(
+                arm_run_id=arm_run.arm_run_id,
+                status=ArmRunStatus.FAILED,
+                initial_state_id=None,
+                completed_steps=(),
+                trial_records=(),
+                final_state_id=None,
+                failure=failure,
+            )
+            if observer is not None:
+                await _notify(partial(observer.arm_finished, arm_result))
+            return arm_result
+    else:
+        _validate_resume_prefix(arm_run, resume_state)
+        state = resume_state.current_state
+        initial_state_id = resume_state.initial_state_id
+        completed_steps.extend(resume_state.completed_steps)
+        trial_records.extend(resume_state.trial_records)
+        feedback_by_step.update(resume_state.feedback_by_step)
+        for completed_step in resume_state.completed_steps:
+            if completed_step.trial_record is None:
+                continue
+            planned_step = arm_run.steps[completed_step.step_index]
+            if not isinstance(planned_step, CompiledExperienceStep):
+                raise LearningStudyPersistenceError("resumed trial does not match an experience step")
+            trials_by_experience[planned_step.experience_id] = completed_step.trial_record
+        step_start_index = len(resume_state.completed_steps)
+
+    for step_index, step in enumerate(arm_run.steps[step_start_index:], start=step_start_index):
+        assert state is not None
+        state_before = state
+        try:
+            if observer is not None:
+                await _notify(partial(observer.step_started, arm_run, step, step_index))
+            if isinstance(step, CompiledExperienceStep):
+                experience_result = await _call_operation(
+                    operations.execute_experience,
+                    ExecuteExperienceRequest(
+                        arm_run=arm_run,
+                        step=step,
+                        state=state_before,
                     ),
                 )
-                _validate_new_identity(initialised_state.state_id, seen_state_ids, "learner state")
-                seen_state_ids.add(initialised_state.state_id)
-                states_to_close.append(initialised_state)
-                state = initialised_state
-                initial_state_id = initialised_state.state_id
-                if observer is not None:
-                    await _notify(partial(observer.learner_initialised, arm_run, initialised_state))
-            except asyncio.CancelledError:
-                raise
-            except LearningStudyPersistenceError:
-                raise
-            except Exception as error:
-                failure = StudyStepFailure(
-                    category="learner-initialisation-failed",
-                    message=str(error),
-                    arm_run_id=arm_run.arm_run_id,
-                    step_id=None,
-                )
-                arm_result: ArmRunExecutionResult[FeedbackT] = ArmRunExecutionResult(
-                    arm_run_id=arm_run.arm_run_id,
-                    status=ArmRunStatus.FAILED,
-                    initial_state_id=None,
-                    completed_steps=(),
-                    trial_records=(),
-                    final_state_id=None,
-                    failure=failure,
-                )
-                if observer is not None:
-                    await _notify(partial(observer.arm_finished, arm_result))
-                return arm_result
-        else:
-            _validate_resume_prefix(arm_run, resume_state)
-            state = resume_state.current_state
-            initial_state_id = resume_state.initial_state_id
-            completed_steps.extend(resume_state.completed_steps)
-            trial_records.extend(resume_state.trial_records)
-            feedback_by_step.update(resume_state.feedback_by_step)
-            for completed_step in resume_state.completed_steps:
-                if completed_step.trial_record is None:
-                    continue
-                planned_step = arm_run.steps[completed_step.step_index]
-                if not isinstance(planned_step, CompiledExperienceStep):
-                    raise LearningStudyPersistenceError("resumed trial does not match an experience step")
-                trials_by_experience[planned_step.experience_id] = completed_step.trial_record
-            step_start_index = len(resume_state.completed_steps)
-            states_to_close.append(state)
-
-        for step_index, step in enumerate(arm_run.steps[step_start_index:], start=step_start_index):
-            assert state is not None
-            state_before = state
-            try:
-                if observer is not None:
-                    await _notify(partial(observer.step_started, arm_run, step, step_index))
-                if isinstance(step, CompiledExperienceStep):
-                    experience_result = await _call_operation(
-                        operations.execute_experience,
-                        ExecuteExperienceRequest(
-                            arm_run=arm_run,
-                            step=step,
-                            state=state_before,
-                            completed_trial_records=tuple(trial_records),
-                            released_feedback=tuple(feedback_by_step.values()),
-                        ),
-                    )
-                    _validate_trial_identity(experience_result.trial_record, step)
-                    _validate_candidate(experience_result.candidate_state, state_before, seen_state_ids)
-                    seen_state_ids.add(experience_result.candidate_state.state_id)
-                    states_to_close.append(experience_result.candidate_state)
-                    trial_records.append(experience_result.trial_record)
-                    trials_by_experience[step.experience_id] = experience_result.trial_record
-                    if step.commit_post_state:
-                        state = experience_result.candidate_state
-                    else:
-                        await _call_operation(operations.discard_state, experience_result.candidate_state)
-                        state = state_before
-                    step_result: StepExecutionResult[FeedbackT] = StepExecutionResult(
-                        step_id=step.step_id,
-                        step_index=step_index,
-                        kind="run_experience",
-                        status=StepExecutionStatus.COMPLETED,
-                        state_before_id=state_before.state_id,
-                        candidate_state_id=experience_result.candidate_state.state_id,
-                        committed_state_id=state.state_id,
-                        state_committed=step.commit_post_state,
-                        changed_channels=experience_result.changed_channels,
-                        trial_record=experience_result.trial_record,
-                        diagnostics=experience_result.diagnostics,
-                    )
-                    candidate_state = experience_result.candidate_state
-                elif isinstance(step, CompiledFeedbackStep):
-                    source = trials_by_experience.get(step.source_experience_id)
-                    if source is None:
-                        raise _StepFailure("feedback-source-missing", "feedback source did not complete in this arm")
-                    feedback_result = await _call_operation(
-                        operations.release_feedback,
-                        ReleaseFeedbackRequest(
-                            arm_run=arm_run,
-                            step=step,
-                            state=state_before,
-                            source_trial_record=source,
-                        ),
-                    )
-                    _validate_candidate(feedback_result.candidate_state, state_before, seen_state_ids)
-                    _validate_new_identity(feedback_result.feedback.feedback_id, seen_feedback_ids, "feedback")
-                    if feedback_result.feedback.source_experience_id != step.source_experience_id:
-                        raise _StepFailure(
-                            "feedback-release-failed", "feedback source identity does not match the plan"
-                        )
-                    if feedback_result.feedback.view_id != step.feedback_view_id:
-                        raise _StepFailure("feedback-release-failed", "feedback view identity does not match the plan")
-                    seen_state_ids.add(feedback_result.candidate_state.state_id)
-                    seen_feedback_ids.add(feedback_result.feedback.feedback_id)
-                    states_to_close.append(feedback_result.candidate_state)
-                    state = feedback_result.candidate_state
-                    feedback_by_step[step.step_id] = feedback_result.feedback
-                    step_result = StepExecutionResult(
-                        step_id=step.step_id,
-                        step_index=step_index,
-                        kind="release_feedback",
-                        status=StepExecutionStatus.COMPLETED,
-                        state_before_id=state_before.state_id,
-                        candidate_state_id=state.state_id,
-                        committed_state_id=state.state_id,
-                        state_committed=True,
-                        changed_channels=feedback_result.changed_channels,
-                        feedback=feedback_result.feedback,
-                        diagnostics=feedback_result.diagnostics,
-                    )
-                    candidate_state = feedback_result.candidate_state
-                elif isinstance(step, CompiledConsolidationStep):
-                    selected_feedback = tuple(feedback_by_step[item] for item in step.feedback_step_ids)
-                    transition_result = await _call_operation(
-                        operations.consolidate,
-                        ConsolidationRequest(
-                            arm_run=arm_run,
-                            step=step,
-                            state=state_before,
-                            feedback=selected_feedback,
-                        ),
-                    )
-                    _validate_candidate(transition_result.candidate_state, state_before, seen_state_ids)
-                    seen_state_ids.add(transition_result.candidate_state.state_id)
-                    states_to_close.append(transition_result.candidate_state)
-                    state = transition_result.candidate_state
-                    step_result = StepExecutionResult(
-                        step_id=step.step_id,
-                        step_index=step_index,
-                        kind="consolidate",
-                        status=StepExecutionStatus.COMPLETED,
-                        state_before_id=state_before.state_id,
-                        candidate_state_id=state.state_id,
-                        committed_state_id=state.state_id,
-                        state_committed=True,
-                        changed_channels=transition_result.changed_channels,
-                        diagnostics=transition_result.diagnostics,
-                    )
-                    candidate_state = transition_result.candidate_state
-                else:  # pragma: no cover - compiled union is closed.
-                    raise _StepFailure("unsupported-step", f"unsupported step: {type(step).__name__}")
-                if observer is not None:
-                    await _notify(
-                        partial(
-                            observer.step_committed,
-                            arm_run,
-                            step,
-                            step_result,
-                            state_before,
-                            candidate_state,
-                            state,
-                        )
-                    )
-                completed_steps.append(step_result)
-            except asyncio.CancelledError:
-                raise
-            except LearningStudyPersistenceError:
-                raise
-            except Exception as error:
-                category = error.category if isinstance(error, _StepFailure) else _failure_category(step, error)
-                failure = StudyStepFailure(
-                    category=category,
-                    message=str(error),
-                    arm_run_id=arm_run.arm_run_id,
-                    step_id=step.step_id,
-                )
-                failed_step: StepExecutionResult[FeedbackT] = StepExecutionResult(
+                _validate_trial_identity(experience_result.trial_record, step)
+                _validate_candidate(experience_result.candidate_state, state_before, seen_state_ids)
+                seen_state_ids.add(experience_result.candidate_state.state_id)
+                trial_records.append(experience_result.trial_record)
+                trials_by_experience[step.experience_id] = experience_result.trial_record
+                if step.commit_post_state:
+                    state = experience_result.candidate_state
+                else:
+                    await _call_operation(operations.discard_state, experience_result.candidate_state)
+                    state = state_before
+                step_result: StepExecutionResult[FeedbackT] = StepExecutionResult(
                     step_id=step.step_id,
                     step_index=step_index,
-                    kind=_step_kind(step),
-                    status=StepExecutionStatus.FAILED,
+                    kind="run_experience",
+                    status=StepExecutionStatus.COMPLETED,
                     state_before_id=state_before.state_id,
-                    candidate_state_id=None,
-                    committed_state_id=state_before.state_id,
-                    state_committed=False,
-                    failure=failure,
+                    candidate_state_id=experience_result.candidate_state.state_id,
+                    committed_state_id=state.state_id,
+                    state_committed=step.commit_post_state,
+                    trial_record=experience_result.trial_record,
                 )
-                if observer is not None:
-                    await _notify(partial(observer.step_failed, arm_run, step, failed_step))
-                completed_steps.append(failed_step)
-                for skipped_index, skipped in enumerate(arm_run.steps[step_index + 1 :], start=step_index + 1):
-                    completed_steps.append(
-                        StepExecutionResult(
-                            step_id=skipped.step_id,
-                            step_index=skipped_index,
-                            kind=_step_kind(skipped),
-                            status=StepExecutionStatus.SKIPPED,
-                            state_before_id=state_before.state_id,
-                            candidate_state_id=None,
-                            committed_state_id=state_before.state_id,
-                            state_committed=None,
-                        )
+                candidate_state = experience_result.candidate_state
+            elif isinstance(step, CompiledFeedbackStep):
+                source = trials_by_experience.get(step.source_experience_id)
+                if source is None:
+                    raise _StepFailure("feedback-source-missing", "feedback source did not complete in this arm")
+                feedback_result = await _call_operation(
+                    operations.release_feedback,
+                    ReleaseFeedbackRequest(
+                        arm_run=arm_run,
+                        step=step,
+                        state=state_before,
+                        source_trial_record=source,
+                    ),
+                )
+                _validate_candidate(feedback_result.candidate_state, state_before, seen_state_ids)
+                _validate_new_identity(feedback_result.feedback.feedback_id, seen_feedback_ids, "feedback")
+                if feedback_result.feedback.source_experience_id != step.source_experience_id:
+                    raise _StepFailure("feedback-release-failed", "feedback source identity does not match the plan")
+                if feedback_result.feedback.view_id != step.feedback_view_id:
+                    raise _StepFailure("feedback-release-failed", "feedback view identity does not match the plan")
+                seen_state_ids.add(feedback_result.candidate_state.state_id)
+                seen_feedback_ids.add(feedback_result.feedback.feedback_id)
+                state = feedback_result.candidate_state
+                feedback_by_step[step.step_id] = feedback_result.feedback
+                step_result = StepExecutionResult(
+                    step_id=step.step_id,
+                    step_index=step_index,
+                    kind="release_feedback",
+                    status=StepExecutionStatus.COMPLETED,
+                    state_before_id=state_before.state_id,
+                    candidate_state_id=state.state_id,
+                    committed_state_id=state.state_id,
+                    state_committed=True,
+                    feedback=feedback_result.feedback,
+                )
+                candidate_state = feedback_result.candidate_state
+            elif isinstance(step, CompiledConsolidationStep):
+                selected_feedback = tuple(feedback_by_step[item] for item in step.feedback_step_ids)
+                transition_result = await _call_operation(
+                    operations.consolidate,
+                    ConsolidationRequest(
+                        arm_run=arm_run,
+                        step=step,
+                        state=state_before,
+                        feedback=selected_feedback,
+                    ),
+                )
+                _validate_candidate(transition_result.candidate_state, state_before, seen_state_ids)
+                seen_state_ids.add(transition_result.candidate_state.state_id)
+                state = transition_result.candidate_state
+                step_result = StepExecutionResult(
+                    step_id=step.step_id,
+                    step_index=step_index,
+                    kind="consolidate",
+                    status=StepExecutionStatus.COMPLETED,
+                    state_before_id=state_before.state_id,
+                    candidate_state_id=state.state_id,
+                    committed_state_id=state.state_id,
+                    state_committed=True,
+                )
+                candidate_state = transition_result.candidate_state
+            else:  # pragma: no cover - compiled union is closed.
+                raise _StepFailure("unsupported-step", f"unsupported step: {type(step).__name__}")
+            if observer is not None:
+                await _notify(
+                    partial(
+                        observer.step_committed,
+                        arm_run,
+                        step,
+                        step_result,
+                        state_before,
+                        candidate_state,
+                        state,
                     )
-                break
-        arm_result = ArmRunExecutionResult[FeedbackT](
-            arm_run_id=arm_run.arm_run_id,
-            status=ArmRunStatus.COMPLETED if failure is None else ArmRunStatus.FAILED,
-            initial_state_id=initial_state_id,
-            completed_steps=tuple(completed_steps),
-            trial_records=tuple(trial_records),
-            final_state_id=None if state is None else state.state_id,
-            failure=failure,
-        )
-        if observer is not None:
-            await _notify(partial(observer.arm_finished, arm_result))
-        return arm_result
-    finally:
-        for handle in reversed(states_to_close):
-            try:
-                await _call_operation(operations.close_state, handle)
-            except asyncio.CancelledError:
-                raise
-            except Exception:
-                pass
+                )
+            completed_steps.append(step_result)
+        except asyncio.CancelledError:
+            raise
+        except LearningStudyPersistenceError:
+            raise
+        except Exception as error:
+            category = error.category if isinstance(error, _StepFailure) else _failure_category(step, error)
+            failure = StudyStepFailure(
+                category=category,
+                message=str(error),
+                arm_run_id=arm_run.arm_run_id,
+                step_id=step.step_id,
+            )
+            failed_step: StepExecutionResult[FeedbackT] = StepExecutionResult(
+                step_id=step.step_id,
+                step_index=step_index,
+                kind=_step_kind(step),
+                status=StepExecutionStatus.FAILED,
+                state_before_id=state_before.state_id,
+                candidate_state_id=None,
+                committed_state_id=state_before.state_id,
+                state_committed=False,
+                failure=failure,
+            )
+            if observer is not None:
+                await _notify(partial(observer.step_failed, arm_run, step, failed_step))
+            completed_steps.append(failed_step)
+            for skipped_index, skipped in enumerate(arm_run.steps[step_index + 1 :], start=step_index + 1):
+                completed_steps.append(
+                    StepExecutionResult(
+                        step_id=skipped.step_id,
+                        step_index=skipped_index,
+                        kind=_step_kind(skipped),
+                        status=StepExecutionStatus.SKIPPED,
+                        state_before_id=state_before.state_id,
+                        candidate_state_id=None,
+                        committed_state_id=state_before.state_id,
+                        state_committed=None,
+                    )
+                )
+            break
+    arm_result = ArmRunExecutionResult[FeedbackT](
+        arm_run_id=arm_run.arm_run_id,
+        status=ArmRunStatus.COMPLETED if failure is None else ArmRunStatus.FAILED,
+        initial_state_id=initial_state_id,
+        completed_steps=tuple(completed_steps),
+        trial_records=tuple(trial_records),
+        final_state_id=None if state is None else state.state_id,
+        failure=failure,
+    )
+    if observer is not None:
+        await _notify(partial(observer.arm_finished, arm_result))
+    return arm_result
 
 
 def _validate_resume_prefix(
@@ -658,7 +594,6 @@ __all__ = (
     "ExperienceExecutionResult",
     "FeedbackHandle",
     "FeedbackReleaseResult",
-    "InitialiseLearnerRequest",
     "LearnerStateHandle",
     "LearnerTransitionResult",
     "LearningStudyExecution",

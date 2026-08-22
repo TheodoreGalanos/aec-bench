@@ -1,5 +1,5 @@
 # ABOUTME: Tests deterministic Learning Study compilation into ordinary planned trials.
-# ABOUTME: Rejects unresolved references and invalid controlled-probe ordering before execution.
+# ABOUTME: Rejects unresolved references and invalid measured-probe ordering before execution.
 
 from __future__ import annotations
 
@@ -15,13 +15,11 @@ from aec_bench.contracts.learning_study import (
     ImprovementDirection,
     LearningArmSpec,
     LearningExperienceSpec,
-    LearningMeasurementKind,
     LearningMeasurementSpec,
     LearningStudySpec,
     ReleaseFeedbackStep,
     RunExperienceStep,
     StudyArmRole,
-    StudyClaimMode,
 )
 from aec_bench.experimentation.learning_studies.errors import (
     LearningStudyOrderInvalid,
@@ -46,13 +44,22 @@ def _spec(*, probe_commit: bool | None = None, repetitions: int = 2) -> Learning
         study_id="study",
         title="Study",
         research_question="Question?",
-        claim_mode=StudyClaimMode.CONTROLLED,
         agent=AgentConfig(name="agent", adapter="direct", model="fixed"),
         compute=ComputeConfig(backend="local"),
         repetitions=repetitions,
         experiences=(
             LearningExperienceSpec(experience_id="acquire", task_id="task/acquire", role=ExperienceRole.ACQUISITION),
             LearningExperienceSpec(experience_id="probe", task_id="task/probe", role=ExperienceRole.PROBE),
+        ),
+        measurements=(
+            LearningMeasurementSpec(
+                measurement_id="probe-gain",
+                projection_id="reward",
+                direction=ImprovementDirection.HIGHER,
+                target_experience_id="probe",
+                focal_arm_id="exposed",
+                comparator_arm_id="cold",
+            ),
         ),
         arms=(
             LearningArmSpec(
@@ -151,13 +158,11 @@ def test_compilation_accepts_retention_decay_between_two_probes_in_one_exposed_a
     )
     measurement = LearningMeasurementSpec(
         measurement_id="decay",
-        kind=LearningMeasurementKind.RETENTION_DECAY,
         projection_id="reward",
         direction=ImprovementDirection.LOWER,
         target_experience_id="delayed",
         focal_arm_id="exposed",
         reference_experience_id="probe",
-        acquisition_experience_ids=("acquire",),
     )
 
     compiled = compile_learning_study(
@@ -175,18 +180,32 @@ def test_compilation_accepts_retention_decay_between_two_probes_in_one_exposed_a
     assert compiled.spec.measurements == (measurement,)
 
 
+def test_compilation_accepts_descriptive_comparison_between_exposure_arms() -> None:
+    spec = _spec(repetitions=1)
+    first = spec.arms[1].model_copy(update={"arm_id": "first"})
+    second = spec.arms[1].model_copy(update={"arm_id": "second"})
+    measurement = spec.measurements[0].model_copy(update={"focal_arm_id": "first", "comparator_arm_id": "second"})
+
+    compiled = compile_learning_study(
+        study_run_id="run-1",
+        spec=spec.model_copy(update={"arms": (first, second), "measurements": (measurement,)}),
+        resolve_task=lambda task_id: _Task(task_id),
+    )
+
+    assert {arm_run.arm_role for arm_run in compiled.arm_runs} == {StudyArmRole.EXPOSURE}
+
+
 def test_compilation_rejects_ambiguous_or_unexecuted_retention_references() -> None:
     spec = _spec(repetitions=1)
     base = LearningMeasurementSpec(
         measurement_id="decay",
-        kind=LearningMeasurementKind.RETENTION_DECAY,
         projection_id="reward",
         direction=ImprovementDirection.LOWER,
         target_experience_id="probe",
         focal_arm_id="exposed",
         reference_experience_id="acquire",
     )
-    with pytest.raises(LearningStudySpecInvalid, match="cannot use both"):
+    with pytest.raises(LearningStudySpecInvalid, match="requires exactly one"):
         compile_learning_study(
             study_run_id="run-1",
             spec=spec.model_copy(update={"measurements": (base.model_copy(update={"comparator_arm_id": "cold"}),)}),
@@ -206,7 +225,7 @@ def test_compilation_rejects_ambiguous_or_unexecuted_retention_references() -> N
             resolve_task=lambda task_id: _Task(task_id),
         )
 
-    with pytest.raises(LearningStudySpecInvalid, match="requires a reference experience"):
+    with pytest.raises(LearningStudySpecInvalid, match="requires exactly one"):
         compile_learning_study(
             study_run_id="run-1",
             spec=spec.model_copy(update={"measurements": (base.model_copy(update={"reference_experience_id": None}),)}),
@@ -233,7 +252,7 @@ def test_compilation_rejects_feedback_before_source_and_probe_commit() -> None:
             spec=invalid_order,
             resolve_task=lambda task_id: _Task(task_id),
         )
-    with pytest.raises(LearningStudyOrderInvalid, match="controlled probe cannot commit"):
+    with pytest.raises(LearningStudyOrderInvalid, match="measured between-arm probe cannot commit"):
         compile_learning_study(
             study_run_id="run-1",
             spec=_spec(probe_commit=True),

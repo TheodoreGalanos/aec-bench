@@ -1,7 +1,7 @@
 # AEC-Bench Learning Studies — Release A PRD Tranche
 
 **Class:** Research
-**Status:** Proposed implementation tranche
+**Status:** Historical — implemented and simplified at Gate A on 22 August 2026
 **Baseline reviewed:** `main` as inspected on 22 August 2026
 **Parent reference:** `docs/research/learning-studies/programme.md`
 **Scope:** Common learning-study substrate, artifact-task integration, first controlled studies, and Gate A
@@ -20,6 +20,10 @@ The programme charter remains the source of truth for:
 - the long-term coverage map across artifact tasks, lifecycles, bounded worlds, and persistent worlds.
 
 The documents here define only **Release A**. They should be read as a coordinated tranche rather than as independent feature requests.
+
+The current implementation and the
+[Gate A decision](../../../adr/learning-studies-gate-a.md) supersede provisional
+field and enum details in these PRDs.
 
 ## Required reading order
 

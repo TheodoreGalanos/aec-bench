@@ -1,7 +1,6 @@
 study_id = "a04-artifact-composition"
 title = "Artifact composition: pipe head loss into stormwater pump power"
 research_question = "Does separate acquisition of pipe head-loss and pump-power components improve their novel coordination in one stormwater pump-station artifact task?"
-claim_mode = "controlled"
 relation_ids = ["headloss-plus-power-to-stormwater-pump-package"]
 
 [[experiences]]
@@ -21,163 +20,131 @@ role = "probe"
 
 [[measurements]]
 measurement_id = "ab-composition-gain"
-kind = "composition_gain"
 projection_id = "composition-outcome"
 direction = "higher"
 target_experience_id = "stormwater-composition-probe"
 focal_arm_id = "headloss-then-power"
 comparator_arm_id = "cold-composition"
-acquisition_experience_ids = ["headloss-acquisition", "pump-power-acquisition"]
 
 [[measurements]]
 measurement_id = "ba-composition-gain"
-kind = "composition_gain"
 projection_id = "composition-outcome"
 direction = "higher"
 target_experience_id = "stormwater-composition-probe"
 focal_arm_id = "power-then-headloss"
 comparator_arm_id = "cold-composition"
-acquisition_experience_ids = ["headloss-acquisition", "pump-power-acquisition"]
 
 [[measurements]]
 measurement_id = "ab-over-headloss-only"
-kind = "composition_gain"
 projection_id = "composition-outcome"
 direction = "higher"
 target_experience_id = "stormwater-composition-probe"
 focal_arm_id = "headloss-then-power"
 comparator_arm_id = "headloss-only"
-acquisition_experience_ids = ["headloss-acquisition", "pump-power-acquisition"]
 
 [[measurements]]
 measurement_id = "ab-over-power-only"
-kind = "composition_gain"
 projection_id = "composition-outcome"
 direction = "higher"
 target_experience_id = "stormwater-composition-probe"
 focal_arm_id = "headloss-then-power"
 comparator_arm_id = "power-only"
-acquisition_experience_ids = ["headloss-acquisition", "pump-power-acquisition"]
 
 [[measurements]]
 measurement_id = "ba-over-headloss-only"
-kind = "composition_gain"
 projection_id = "composition-outcome"
 direction = "higher"
 target_experience_id = "stormwater-composition-probe"
 focal_arm_id = "power-then-headloss"
 comparator_arm_id = "headloss-only"
-acquisition_experience_ids = ["headloss-acquisition", "pump-power-acquisition"]
 
 [[measurements]]
 measurement_id = "ba-over-power-only"
-kind = "composition_gain"
 projection_id = "composition-outcome"
 direction = "higher"
 target_experience_id = "stormwater-composition-probe"
 focal_arm_id = "power-then-headloss"
 comparator_arm_id = "power-only"
-acquisition_experience_ids = ["headloss-acquisition", "pump-power-acquisition"]
 
 [[measurements]]
 measurement_id = "composition-order-effect"
-kind = "composition_gain"
 projection_id = "composition-outcome"
 direction = "higher"
 target_experience_id = "stormwater-composition-probe"
 focal_arm_id = "headloss-then-power"
 comparator_arm_id = "power-then-headloss"
-acquisition_experience_ids = ["headloss-acquisition", "pump-power-acquisition"]
 
 [[measurements]]
 measurement_id = "headloss-only-component-a-gain"
-kind = "composition_gain"
 projection_id = "component-a-correct"
 direction = "higher"
 target_experience_id = "stormwater-composition-probe"
 focal_arm_id = "headloss-only"
 comparator_arm_id = "cold-composition"
-acquisition_experience_ids = ["headloss-acquisition"]
 
 [[measurements]]
 measurement_id = "headloss-only-component-b-gain"
-kind = "composition_gain"
 projection_id = "component-b-correct"
 direction = "higher"
 target_experience_id = "stormwater-composition-probe"
 focal_arm_id = "headloss-only"
 comparator_arm_id = "cold-composition"
-acquisition_experience_ids = ["headloss-acquisition"]
 
 [[measurements]]
 measurement_id = "power-only-component-a-gain"
-kind = "composition_gain"
 projection_id = "component-a-correct"
 direction = "higher"
 target_experience_id = "stormwater-composition-probe"
 focal_arm_id = "power-only"
 comparator_arm_id = "cold-composition"
-acquisition_experience_ids = ["pump-power-acquisition"]
 
 [[measurements]]
 measurement_id = "power-only-component-b-gain"
-kind = "composition_gain"
 projection_id = "component-b-correct"
 direction = "higher"
 target_experience_id = "stormwater-composition-probe"
 focal_arm_id = "power-only"
 comparator_arm_id = "cold-composition"
-acquisition_experience_ids = ["pump-power-acquisition"]
 
 [[measurements]]
 measurement_id = "ab-integration-gain"
-kind = "composition_gain"
 projection_id = "integration-correct"
 direction = "higher"
 target_experience_id = "stormwater-composition-probe"
 focal_arm_id = "headloss-then-power"
 comparator_arm_id = "cold-composition"
-acquisition_experience_ids = ["headloss-acquisition", "pump-power-acquisition"]
 
 [[measurements]]
 measurement_id = "ba-integration-gain"
-kind = "composition_gain"
 projection_id = "integration-correct"
 direction = "higher"
 target_experience_id = "stormwater-composition-probe"
 focal_arm_id = "power-then-headloss"
 comparator_arm_id = "cold-composition"
-acquisition_experience_ids = ["headloss-acquisition", "pump-power-acquisition"]
 
 [[measurements]]
 measurement_id = "component-a-order-effect"
-kind = "composition_gain"
 projection_id = "component-a-correct"
 direction = "higher"
 target_experience_id = "stormwater-composition-probe"
 focal_arm_id = "headloss-then-power"
 comparator_arm_id = "power-then-headloss"
-acquisition_experience_ids = ["headloss-acquisition", "pump-power-acquisition"]
 
 [[measurements]]
 measurement_id = "component-b-order-effect"
-kind = "composition_gain"
 projection_id = "component-b-correct"
 direction = "higher"
 target_experience_id = "stormwater-composition-probe"
 focal_arm_id = "headloss-then-power"
 comparator_arm_id = "power-then-headloss"
-acquisition_experience_ids = ["headloss-acquisition", "pump-power-acquisition"]
 
 [[measurements]]
 measurement_id = "integration-order-effect"
-kind = "composition_gain"
 projection_id = "integration-correct"
 direction = "higher"
 target_experience_id = "stormwater-composition-probe"
 focal_arm_id = "headloss-then-power"
 comparator_arm_id = "power-then-headloss"
-acquisition_experience_ids = ["headloss-acquisition", "pump-power-acquisition"]
 
 [[arms]]
 arm_id = "cold-composition"

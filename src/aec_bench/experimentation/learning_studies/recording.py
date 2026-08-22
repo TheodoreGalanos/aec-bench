@@ -10,7 +10,6 @@ import re
 import tarfile
 import uuid
 from collections.abc import Callable
-from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Generic, Literal, TypeVar
 
@@ -77,7 +76,6 @@ class StudyRunRecorder(LearningStudyObserver[StateT, FeedbackT], Generic[StateT,
         self._feedback_artifacts = feedback_artifacts or (lambda _feedback: ())
         self._fault_injector = fault_injector
         self._repository = ArtifactRepository(self.root / "_artifacts")
-        self._started_at: dict[tuple[str, str], datetime] = {}
         self._trial_by_experience: dict[tuple[str, str], str] = {}
         self._feedback_by_step: dict[tuple[str, str], str] = {}
         mkdir_durable(self.root)
@@ -98,7 +96,6 @@ class StudyRunRecorder(LearningStudyObserver[StateT, FeedbackT], Generic[StateT,
             state=state,
             parent_state_id=None,
             created_after_step_id=None,
-            changed_channels=(),
         )
         transition = LearnerTransitionReceipt(
             transition_id=f"{arm_run.arm_run_id}:transition:init",
@@ -119,7 +116,6 @@ class StudyRunRecorder(LearningStudyObserver[StateT, FeedbackT], Generic[StateT,
         )
 
     def step_started(self, arm_run: PlannedArmRun, step: CompiledStudyStep, step_index: int) -> None:
-        self._started_at[(arm_run.arm_run_id, step.step_id)] = _now()
         mkdir_durable(self._stage_path(arm_run, step, step_index))
         self._append_event(
             StudyEventKind.STEP_STARTED,
@@ -136,7 +132,6 @@ class StudyRunRecorder(LearningStudyObserver[StateT, FeedbackT], Generic[StateT,
         candidate_state: LearnerStateHandle[StateT],
         committed_state: LearnerStateHandle[StateT],
     ) -> None:
-        started_at = self._started_at.pop((arm_run.arm_run_id, step.step_id), _now())
         state_ref = None
         if result.state_committed:
             state_ref = self._publish_state(
@@ -144,7 +139,6 @@ class StudyRunRecorder(LearningStudyObserver[StateT, FeedbackT], Generic[StateT,
                 state=committed_state,
                 parent_state_id=state_before.state_id,
                 created_after_step_id=step.step_id,
-                changed_channels=result.changed_channels,
             )
         feedback_record = self._feedback_record(arm_run, step, result, state_before, committed_state)
         transition = self._transition_receipt(arm_run, step, result, state_before, candidate_state, committed_state)
@@ -169,8 +163,6 @@ class StudyRunRecorder(LearningStudyObserver[StateT, FeedbackT], Generic[StateT,
             trial_id=None if materialized_trial is None else materialized_trial.trial_id,
             feedback_id=None if feedback_record is None else feedback_record.feedback_id,
             transition_id=transition.transition_id,
-            started_at=started_at,
-            completed_at=_now(),
         )
         pending = {
             "state": None if state_ref is None else state_ref.model_dump(mode="json", round_trip=True),
@@ -200,8 +192,6 @@ class StudyRunRecorder(LearningStudyObserver[StateT, FeedbackT], Generic[StateT,
             step_index=result.step_index,
             step_kind=_receipt_step_kind(step),
             status=StudyStepStatus.FAILED,
-            started_at=self._started_at.pop((arm_run.arm_run_id, step.step_id), _now()),
-            completed_at=_now(),
             failure=StudyStepFailureRecord(category=result.failure.category, message=result.failure.message),
         )
         path = self._step_path(receipt.arm_run_id, receipt.step_index, receipt.step_id)
@@ -354,7 +344,6 @@ class StudyRunRecorder(LearningStudyObserver[StateT, FeedbackT], Generic[StateT,
         state: LearnerStateHandle[StateT],
         parent_state_id: str | None,
         created_after_step_id: str | None,
-        changed_channels: tuple[str, ...],
     ) -> LearnerStateRef:
         _component(state.state_id, "state")
         archive = _portable_state_archive(self._snapshot_state(state))
@@ -366,7 +355,6 @@ class StudyRunRecorder(LearningStudyObserver[StateT, FeedbackT], Generic[StateT,
             parent_state_id=parent_state_id,
             created_after_step_id=created_after_step_id,
             artifact=artifact,
-            changed_channels=changed_channels,
         )
 
     def _feedback_record(
@@ -441,8 +429,6 @@ class StudyRunRecorder(LearningStudyObserver[StateT, FeedbackT], Generic[StateT,
             committed_state_id=committed_state.state_id,
             committed=bool(result.state_committed),
             feedback_ids=feedback_ids,
-            changed_channels=result.changed_channels,
-            diagnostics=result.diagnostics,
         )
 
     def _write_trial_once(self, trial: TrialRecord) -> None:
@@ -478,7 +464,6 @@ class StudyRunRecorder(LearningStudyObserver[StateT, FeedbackT], Generic[StateT,
     ) -> None:
         event = StudyEvent(
             sequence=self._next_sequence,
-            timestamp=_now(),
             study_run_id=self.plan.study_run_id,
             kind=kind,
             arm_run_id=arm_run_id,
@@ -677,10 +662,6 @@ def _component(value: str, label: str) -> str:
 
 def _relative(root: Path, path: Path) -> str:
     return path.relative_to(root).as_posix()
-
-
-def _now() -> datetime:
-    return datetime.now(UTC)
 
 
 __all__ = ("StudyRunRecorder", "create_study_run")

@@ -12,11 +12,6 @@ from aec_bench.contracts.experiment_manifest import AgentConfig, ComputeConfig
 from aec_bench.contracts.validators import FrozenStrictModel, NonEmptyStr
 
 
-class StudyClaimMode(StrEnum):
-    DESCRIPTIVE = "descriptive"
-    CONTROLLED = "controlled"
-
-
 class ExperienceRole(StrEnum):
     ACQUISITION = "acquisition"
     PRACTICE = "practice"
@@ -33,18 +28,6 @@ class ExperienceRelationPurpose(StrEnum):
     TRANSFER = "transfer"
     BOUNDARY = "boundary"
     COMPOSITION = "composition"
-    RETENTION = "retention"
-    INTERFERENCE = "interference"
-
-
-class LearningMeasurementKind(StrEnum):
-    TRANSFER_GAIN = "transfer_gain"
-    BOUNDARY_GAIN = "boundary_gain"
-    COMPOSITION_GAIN = "composition_gain"
-    RETAINED_GAIN = "retained_gain"
-    RETENTION_DECAY = "retention_decay"
-    INTERFERENCE_EFFECT = "interference_effect"
-    LEARNING_EFFICIENCY = "learning_efficiency"
 
 
 class ImprovementDirection(StrEnum):
@@ -54,22 +37,24 @@ class ImprovementDirection(StrEnum):
 
 class LearningMeasurementSpec(FrozenStrictModel):
     measurement_id: NonEmptyStr
-    kind: LearningMeasurementKind
     projection_id: NonEmptyStr
     direction: ImprovementDirection
     target_experience_id: NonEmptyStr
     focal_arm_id: NonEmptyStr
     comparator_arm_id: str | None = None
     reference_experience_id: str | None = None
-    acquisition_experience_ids: tuple[NonEmptyStr, ...] = ()
-    efficiency_denominator_id: str | None = None
+
+    @model_validator(mode="after")
+    def validate_comparator(self) -> LearningMeasurementSpec:
+        if (self.comparator_arm_id is None) == (self.reference_experience_id is None):
+            raise ValueError("learning measurement requires exactly one comparator arm or reference experience")
+        return self
 
 
 class LearningExperienceSpec(FrozenStrictModel):
     experience_id: NonEmptyStr
     task_id: NonEmptyStr
     role: ExperienceRole
-    description: str | None = None
 
 
 class LearningProtocolExperienceSpec(FrozenStrictModel):
@@ -77,7 +62,6 @@ class LearningProtocolExperienceSpec(FrozenStrictModel):
     role: ExperienceRole
     family_member_id: NonEmptyStr | None = None
     task_id: NonEmptyStr | None = None
-    description: str | None = None
 
     @model_validator(mode="after")
     def validate_task_source(self) -> LearningProtocolExperienceSpec:
@@ -176,7 +160,6 @@ class LearningStudySpec(FrozenStrictModel):
     study_id: NonEmptyStr
     title: NonEmptyStr
     research_question: NonEmptyStr
-    claim_mode: StudyClaimMode
     agent: AgentConfig
     compute: ComputeConfig
     repetitions: PositiveInt = 1
@@ -202,7 +185,6 @@ class LearningStudyProtocolSpec(FrozenStrictModel):
     study_id: NonEmptyStr
     title: NonEmptyStr
     research_question: NonEmptyStr
-    claim_mode: StudyClaimMode
     experiences: tuple[LearningProtocolExperienceSpec, ...]
     relation_ids: tuple[NonEmptyStr, ...] = ()
     measurements: tuple[LearningMeasurementSpec, ...] = ()
@@ -238,7 +220,6 @@ __all__ = (
     "LearningArmSpec",
     "LearningExperienceSpec",
     "LearningProtocolExperienceSpec",
-    "LearningMeasurementKind",
     "LearningMeasurementSpec",
     "LearningStudySpec",
     "LearningStudyProtocolSpec",
@@ -246,6 +227,5 @@ __all__ = (
     "ReleaseFeedbackStep",
     "RunExperienceStep",
     "StudyArmRole",
-    "StudyClaimMode",
     "ImprovementDirection",
 )

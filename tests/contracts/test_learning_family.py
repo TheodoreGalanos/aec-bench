@@ -14,7 +14,6 @@ def _family_data() -> dict[str, object]:
         "family_id": "calculation-family",
         "title": "Calculation family",
         "description": "A small valid family",
-        "source_task_paths": ("tasks/example/a/instruction.md",),
         "dimensions": (
             {"dimension_id": "method", "kind": "causal", "description": "Governing method"},
             {"dimension_id": "value_band", "kind": "parameter", "description": "Input band"},

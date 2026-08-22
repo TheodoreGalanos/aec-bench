@@ -10,12 +10,10 @@ from dataclasses import dataclass
 from aec_bench.contracts.learning_study import (
     ConsolidateStep,
     ExperienceRole,
-    LearningMeasurementKind,
     LearningStudySpec,
     ReleaseFeedbackStep,
     RunExperienceStep,
     StudyArmRole,
-    StudyClaimMode,
 )
 from aec_bench.experimentation.learning_studies.errors import (
     LearningStudyOrderInvalid,
@@ -83,7 +81,6 @@ def compile_learning_study(
     _validate_safe_id("study run", study_run_id, context=f"study {spec.study_id}")
     _validate_references(spec)
     _validate_measurements(spec)
-    _validate_controlled_shape(spec)
     resolved: dict[str, PlannableTask] = {}
     for experience in spec.experiences:
         try:
@@ -101,6 +98,11 @@ def compile_learning_study(
         resolved[experience.experience_id] = task
 
     experiences = {item.experience_id: item for item in spec.experiences}
+    measured_between_arm_probe_ids = {
+        measurement.target_experience_id
+        for measurement in spec.measurements
+        if measurement.comparator_arm_id is not None
+    }
     arm_runs: list[PlannedArmRun] = []
     trial_ids: set[str] = set()
     arm_run_ids: set[str] = set()
@@ -129,14 +131,10 @@ def compile_learning_study(
                         if step.commit_post_state is not None
                         else experience.role is not ExperienceRole.PROBE
                     )
-                    if (
-                        spec.claim_mode is StudyClaimMode.CONTROLLED
-                        and experience.role is ExperienceRole.PROBE
-                        and commit_post_state
-                    ):
+                    if experience.experience_id in measured_between_arm_probe_ids and commit_post_state:
                         raise LearningStudyOrderInvalid(
                             f"study {spec.study_id} arm {arm.arm_id} step {step.step_id}: "
-                            "a controlled probe cannot commit post-state"
+                            "a measured between-arm probe cannot commit post-state"
                         )
                     compiled_steps.append(
                         CompiledExperienceStep(
@@ -301,38 +299,9 @@ def _validate_references(spec: LearningStudySpec) -> None:
                     )
 
 
-def _validate_controlled_shape(spec: LearningStudySpec) -> None:
-    if spec.claim_mode is not StudyClaimMode.CONTROLLED:
-        return
-    roles = {arm.role for arm in spec.arms}
-    if not {StudyArmRole.CONTROL, StudyArmRole.EXPOSURE}.issubset(roles):
-        raise LearningStudySpecInvalid(
-            f"study {spec.study_id}: controlled learning study requires control and exposure arms"
-        )
-    arm_probe_ids: dict[StudyArmRole, set[str]] = {StudyArmRole.CONTROL: set(), StudyArmRole.EXPOSURE: set()}
-    experience_roles = {item.experience_id: item.role for item in spec.experiences}
-    for arm in spec.arms:
-        arm_probe_ids[arm.role].update(
-            step.experience_id
-            for step in arm.steps
-            if isinstance(step, RunExperienceStep) and experience_roles.get(step.experience_id) is ExperienceRole.PROBE
-        )
-    if not arm_probe_ids[StudyArmRole.CONTROL].intersection(arm_probe_ids[StudyArmRole.EXPOSURE]):
-        raise LearningStudySpecInvalid(
-            f"study {spec.study_id}: controlled learning study requires a matched probe in control and exposure arms"
-        )
-
-
 def _validate_measurements(spec: LearningStudySpec) -> None:
     experiences = {item.experience_id: item for item in spec.experiences}
     arms = {item.arm_id: item for item in spec.arms}
-    between_arm_kinds = {
-        LearningMeasurementKind.TRANSFER_GAIN,
-        LearningMeasurementKind.BOUNDARY_GAIN,
-        LearningMeasurementKind.COMPOSITION_GAIN,
-        LearningMeasurementKind.RETAINED_GAIN,
-        LearningMeasurementKind.INTERFERENCE_EFFECT,
-    }
     for measurement in spec.measurements:
         _validate_safe_id("measurement", measurement.measurement_id, context=f"study {spec.study_id}")
         target = experiences.get(measurement.target_experience_id)
@@ -346,22 +315,14 @@ def _validate_measurements(spec: LearningStudySpec) -> None:
             raise LearningStudyReferenceInvalid(
                 f"study {spec.study_id} measurement {measurement.measurement_id} references an unknown arm"
             )
-        if measurement.kind in between_arm_kinds and comparator is None:
+        if (measurement.comparator_arm_id is None) == (measurement.reference_experience_id is None):
             raise LearningStudySpecInvalid(
-                f"study {spec.study_id} measurement {measurement.measurement_id} requires a comparator arm"
+                f"study {spec.study_id} measurement {measurement.measurement_id} requires exactly one "
+                "comparator arm or reference experience"
             )
         if comparator is not None and comparator.arm_id == focal.arm_id:
             raise LearningStudySpecInvalid(
                 f"study {spec.study_id} measurement {measurement.measurement_id} comparator must differ from focal"
-            )
-        if measurement.reference_experience_id is not None and comparator is not None:
-            raise LearningStudySpecInvalid(
-                f"study {spec.study_id} measurement {measurement.measurement_id} cannot use both a comparator arm "
-                "and a reference experience"
-            )
-        if measurement.kind is LearningMeasurementKind.RETENTION_DECAY and measurement.reference_experience_id is None:
-            raise LearningStudySpecInvalid(
-                f"study {spec.study_id} measurement {measurement.measurement_id} requires a reference experience"
             )
         for arm in (focal, comparator):
             if arm is None:
@@ -374,10 +335,9 @@ def _validate_measurements(spec: LearningStudySpec) -> None:
                     f"study {spec.study_id} measurement {measurement.measurement_id} arm {arm.arm_id} "
                     "does not run its target probe"
                 )
-        referenced_experiences = {
-            *measurement.acquisition_experience_ids,
-            *(() if measurement.reference_experience_id is None else (measurement.reference_experience_id,)),
-        }
+        referenced_experiences = set(
+            () if measurement.reference_experience_id is None else (measurement.reference_experience_id,)
+        )
         missing = referenced_experiences - set(experiences)
         if missing:
             raise LearningStudyReferenceInvalid(
@@ -392,12 +352,6 @@ def _validate_measurements(spec: LearningStudySpec) -> None:
             raise LearningStudyReferenceInvalid(
                 f"study {spec.study_id} measurement {measurement.measurement_id} focal arm does not run "
                 f"reference experience {measurement.reference_experience_id}"
-            )
-        missing_acquisition = set(measurement.acquisition_experience_ids) - focal_experience_ids
-        if missing_acquisition:
-            raise LearningStudyReferenceInvalid(
-                f"study {spec.study_id} measurement {measurement.measurement_id} focal arm does not run "
-                f"declared acquisition experiences: {sorted(missing_acquisition)}"
             )
 
 

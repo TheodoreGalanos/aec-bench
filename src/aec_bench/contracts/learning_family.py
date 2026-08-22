@@ -16,9 +16,6 @@ class LearningDimensionKind(StrEnum):
     PARAMETER = "parameter"
     CAUSAL = "causal"
     APPLICABILITY = "applicability"
-    OBSERVABILITY = "observability"
-    AUTHORITY_OR_RESOURCE = "authority_or_resource"
-    REGIME = "regime"
     COMPONENT = "component"
 
 
@@ -63,15 +60,12 @@ class LearningFamilySpec(FrozenStrictModel):
     family_id: NonEmptyStr
     title: NonEmptyStr
     description: NonEmptyStr
-    source_task_paths: tuple[NonEmptyStr, ...]
     dimensions: tuple[LearningDimensionSpec, ...]
     members: tuple[LearningFamilyMember, ...]
     relations: tuple[LearningFamilyRelation, ...]
 
     @model_validator(mode="after")
     def validate_family(self) -> LearningFamilySpec:
-        if not self.source_task_paths:
-            raise ValueError("learning family requires at least one task-authority path")
         if len(self.members) < 2:
             raise ValueError("learning family requires at least two members")
         if not self.dimensions:
