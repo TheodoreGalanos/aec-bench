@@ -27,6 +27,8 @@ from aec_bench.experimentation.learning_studies.planning import (
 StateT = TypeVar("StateT")
 FeedbackT = TypeVar("FeedbackT")
 MaybeAwaitable = TypeVar("MaybeAwaitable")
+OperationRequestT = TypeVar("OperationRequestT")
+OperationResultT = TypeVar("OperationResultT")
 
 
 class ArmRunStatus(StrEnum):
@@ -311,19 +313,18 @@ async def _run_arm_run(
             if observer is not None:
                 await _notify(partial(observer.arm_started, arm_run))
             try:
-                initialised_state = await _maybe_await(
-                    operations.initialise_learner(
-                        InitialiseLearnerRequest(
-                            study_run_id=plan.study_run_id,
-                            arm_run_id=arm_run.arm_run_id,
-                            arm_id=arm_run.arm_id,
-                            treatment_id=arm_run.treatment_id,
-                            repetition=arm_run.repetition,
-                            agent=plan.spec.agent,
-                            compute=plan.spec.compute,
-                            working_root=working_root,
-                        )
-                    )
+                initialised_state = await _call_operation(
+                    operations.initialise_learner,
+                    InitialiseLearnerRequest(
+                        study_run_id=plan.study_run_id,
+                        arm_run_id=arm_run.arm_run_id,
+                        arm_id=arm_run.arm_id,
+                        treatment_id=arm_run.treatment_id,
+                        repetition=arm_run.repetition,
+                        agent=plan.spec.agent,
+                        compute=plan.spec.compute,
+                        working_root=working_root,
+                    ),
                 )
                 _validate_new_identity(initialised_state.state_id, seen_state_ids, "learner state")
                 seen_state_ids.add(initialised_state.state_id)
@@ -379,16 +380,15 @@ async def _run_arm_run(
                 if observer is not None:
                     await _notify(partial(observer.step_started, arm_run, step, step_index))
                 if isinstance(step, CompiledExperienceStep):
-                    experience_result = await _maybe_await(
-                        operations.execute_experience(
-                            ExecuteExperienceRequest(
-                                arm_run=arm_run,
-                                step=step,
-                                state=state_before,
-                                completed_trial_records=tuple(trial_records),
-                                released_feedback=tuple(feedback_by_step.values()),
-                            )
-                        )
+                    experience_result = await _call_operation(
+                        operations.execute_experience,
+                        ExecuteExperienceRequest(
+                            arm_run=arm_run,
+                            step=step,
+                            state=state_before,
+                            completed_trial_records=tuple(trial_records),
+                            released_feedback=tuple(feedback_by_step.values()),
+                        ),
                     )
                     _validate_trial_identity(experience_result.trial_record, step)
                     _validate_candidate(experience_result.candidate_state, state_before, seen_state_ids)
@@ -399,7 +399,7 @@ async def _run_arm_run(
                     if step.commit_post_state:
                         state = experience_result.candidate_state
                     else:
-                        await _maybe_await(operations.discard_state(experience_result.candidate_state))
+                        await _call_operation(operations.discard_state, experience_result.candidate_state)
                         state = state_before
                     step_result: StepExecutionResult[FeedbackT] = StepExecutionResult(
                         step_id=step.step_id,
@@ -419,15 +419,14 @@ async def _run_arm_run(
                     source = trials_by_experience.get(step.source_experience_id)
                     if source is None:
                         raise _StepFailure("feedback-source-missing", "feedback source did not complete in this arm")
-                    feedback_result = await _maybe_await(
-                        operations.release_feedback(
-                            ReleaseFeedbackRequest(
-                                arm_run=arm_run,
-                                step=step,
-                                state=state_before,
-                                source_trial_record=source,
-                            )
-                        )
+                    feedback_result = await _call_operation(
+                        operations.release_feedback,
+                        ReleaseFeedbackRequest(
+                            arm_run=arm_run,
+                            step=step,
+                            state=state_before,
+                            source_trial_record=source,
+                        ),
                     )
                     _validate_candidate(feedback_result.candidate_state, state_before, seen_state_ids)
                     _validate_new_identity(feedback_result.feedback.feedback_id, seen_feedback_ids, "feedback")
@@ -458,15 +457,14 @@ async def _run_arm_run(
                     candidate_state = feedback_result.candidate_state
                 elif isinstance(step, CompiledConsolidationStep):
                     selected_feedback = tuple(feedback_by_step[item] for item in step.feedback_step_ids)
-                    transition_result = await _maybe_await(
-                        operations.consolidate(
-                            ConsolidationRequest(
-                                arm_run=arm_run,
-                                step=step,
-                                state=state_before,
-                                feedback=selected_feedback,
-                            )
-                        )
+                    transition_result = await _call_operation(
+                        operations.consolidate,
+                        ConsolidationRequest(
+                            arm_run=arm_run,
+                            step=step,
+                            state=state_before,
+                            feedback=selected_feedback,
+                        ),
                     )
                     _validate_candidate(transition_result.candidate_state, state_before, seen_state_ids)
                     seen_state_ids.add(transition_result.candidate_state.state_id)
@@ -555,7 +553,7 @@ async def _run_arm_run(
     finally:
         for handle in reversed(states_to_close):
             try:
-                await _maybe_await(operations.close_state(handle))
+                await _call_operation(operations.close_state, handle)
             except asyncio.CancelledError:
                 raise
             except Exception:
@@ -635,6 +633,14 @@ async def _notify(callback: Callable[[], None | Awaitable[None]]) -> None:
 
 async def _maybe_await(value: MaybeAwaitable | Awaitable[MaybeAwaitable]) -> MaybeAwaitable:
     return await value if inspect.isawaitable(value) else value
+
+
+async def _call_operation(
+    callback: Callable[[OperationRequestT], OperationResultT | Awaitable[OperationResultT]],
+    request: OperationRequestT,
+) -> OperationResultT:
+    result = await asyncio.to_thread(callback, request)
+    return await result if inspect.isawaitable(result) else result
 
 
 class _StepFailure(Exception):

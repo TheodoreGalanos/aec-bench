@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import threading
 from dataclasses import dataclass
 
 import pytest
@@ -149,6 +150,73 @@ async def test_runtime_commits_acquisition_and_discards_probe_state() -> None:
     assert exposed_probe.committed_state_id != exposed_probe.candidate_state_id
     assert requests[0][0] == "cold"
     assert requests[-1][0] == "exposed"
+
+
+@pytest.mark.asyncio
+async def test_runtime_runs_sync_operations_outside_the_event_loop_thread() -> None:
+    event_loop_thread = threading.get_ident()
+    callback_threads: list[int] = []
+    state_count = 0
+    feedback_count = 0
+
+    def state(value: str) -> LearnerStateHandle[str]:
+        nonlocal state_count
+        state_count += 1
+        return LearnerStateHandle(state_id=f"worker-state-{state_count}", value=value)
+
+    def record_thread() -> None:
+        callback_threads.append(threading.get_ident())
+
+    def initialise(request: InitialiseLearnerRequest) -> LearnerStateHandle[str]:
+        record_thread()
+        return state(f"initial:{request.arm_id}")
+
+    def execute(request: ExecuteExperienceRequest[str, str]) -> ExperienceExecutionResult[str]:
+        record_thread()
+        return ExperienceExecutionResult(
+            trial_record=make_trial_record(
+                trial_id=request.step.trial.trial_id,
+                experiment_id=request.step.trial.experiment_id,
+                task_id=request.step.trial.task_id,
+            ),
+            candidate_state=state(f"after:{request.step.step_id}"),
+        )
+
+    def release(request: ReleaseFeedbackRequest[str]) -> FeedbackReleaseResult[str, str]:
+        nonlocal feedback_count
+        record_thread()
+        feedback_count += 1
+        return FeedbackReleaseResult(
+            candidate_state=state("feedback"),
+            feedback=FeedbackHandle(
+                feedback_id=f"worker-feedback-{feedback_count}",
+                source_experience_id=request.step.source_experience_id,
+                view_id=request.step.feedback_view_id,
+                value="safe",
+            ),
+        )
+
+    def consolidate(_request: ConsolidationRequest[str, str]) -> LearnerTransitionResult[str]:
+        record_thread()
+        return LearnerTransitionResult(candidate_state=state("memory"), changed_channels=("memory",))
+
+    def finish_state(_handle: LearnerStateHandle[str]) -> None:
+        record_thread()
+
+    operations = LearningStudyOperations(
+        initialise_learner=initialise,
+        execute_experience=execute,
+        release_feedback=release,
+        consolidate=consolidate,
+        discard_state=finish_state,
+        close_state=finish_state,
+    )
+
+    result = await run_learning_study(plan=_plan(), operations=operations)
+
+    assert all(arm.status is ArmRunStatus.COMPLETED for arm in result.arm_runs)
+    assert callback_threads
+    assert all(thread_id != event_loop_thread for thread_id in callback_threads)
 
 
 @pytest.mark.asyncio
