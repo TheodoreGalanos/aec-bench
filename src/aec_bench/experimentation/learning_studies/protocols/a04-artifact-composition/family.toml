@@ -1,0 +1,89 @@
+family_id = "stormwater-pump-method-composition"
+title = "Pipe head-loss and pump-power composition"
+description = "Tests whether separately acquired head-loss and pump-power components can be coordinated in a stormwater pump-station task. Domain review remains required before a claim-bearing run."
+source_task_paths = [
+  "tasks/civil/pipe-hydraulics/hazen-williams-headloss/sydney-greenfield-new-pvc-00/instruction.md",
+  "tasks/civil/pipe-hydraulics/hazen-williams-headloss/sydney-greenfield-new-pvc-00/task.toml",
+  "tasks/mechanical/pump-sizing/pump-power-calculation/water-pump-station-water-pump-00/instruction.md",
+  "tasks/mechanical/pump-sizing/pump-power-calculation/water-pump-station-water-pump-00/task.toml",
+  "tasks/mechanical/stormwater-pump-control/stormwater-pump-station-control-backup-energy-package/stormwater-pump-station-stormwater-pump-control-energy-case-00/instruction.md",
+  "tasks/mechanical/stormwater-pump-control/stormwater-pump-station-control-backup-energy-package/stormwater-pump-station-stormwater-pump-control-energy-case-00/task.toml",
+]
+
+[[dimensions]]
+dimension_id = "evidence_contract"
+kind = "surface"
+description = "A task-owned Markdown calculation with a fenced numeric JSON result and field-level verifier evidence"
+
+[[dimensions]]
+dimension_id = "hydraulic_domain"
+kind = "regime"
+description = "Pressurised water conveyance and pump-duty calculations"
+
+[[dimensions]]
+dimension_id = "component_role"
+kind = "component"
+description = "Whether the task isolates pipe head loss, isolates pump power, or coordinates both components"
+
+[[dimensions]]
+dimension_id = "task_scope"
+kind = "surface"
+description = "The standalone calculation or integrated stormwater pump-station memo requested from the actor"
+
+[[dimensions]]
+dimension_id = "unit_and_method_interface"
+kind = "causal"
+description = "How flow, pipe loss, static head, total head, and efficiency values connect across calculations"
+
+[[members]]
+member_id = "hazen-williams-acquisition"
+task_id = "civil/pipe-hydraulics/hazen-williams-headloss/sydney-greenfield-new-pvc-00"
+description = "A standalone Hazen-Williams head-loss and velocity calculation"
+probe_only = false
+
+[members.dimension_values]
+evidence_contract = "Markdown output with a fenced numeric JSON result and field-level verifier scores"
+hydraulic_domain = "pressurised water conveyance and pump duty"
+component_role = "component A: convert flow and diameter, then calculate Hazen-Williams loss and velocity"
+task_scope = "standalone pipe-hydraulics calculation"
+unit_and_method_interface = "flow in litres per second and diameter in millimetres become SI head loss and velocity"
+
+[[members]]
+member_id = "pump-power-acquisition"
+task_id = "mechanical/pump-sizing/pump-power-calculation/water-pump-station-water-pump-00"
+description = "A standalone pump hydraulic-power and shaft-power calculation"
+probe_only = false
+
+[members.dimension_values]
+evidence_contract = "Markdown output with a fenced numeric JSON result and field-level verifier scores"
+hydraulic_domain = "pressurised water conveyance and pump duty"
+component_role = "component B: convert flow, apply density and total head, then apply pump efficiency"
+task_scope = "standalone pump-power calculation with total dynamic head supplied"
+unit_and_method_interface = "flow in litres per second and total head in metres feed hydraulic and shaft power with percent efficiency"
+
+[[members]]
+member_id = "stormwater-pump-composition-probe"
+task_id = "mechanical/stormwater-pump-control/stormwater-pump-station-control-backup-energy-package/stormwater-pump-station-stormwater-pump-control-energy-case-00"
+description = "An integrated stormwater pump-station calculation in which computed pipe loss contributes to pump and motor power"
+probe_only = true
+
+[members.dimension_values]
+evidence_contract = "Markdown output with a fenced numeric JSON result and field-level verifier scores"
+hydraulic_domain = "pressurised water conveyance and pump duty"
+component_role = "composition: calculate pipe loss, add static head, and use the result in hydraulic and motor power"
+task_scope = "integrated stormwater capacity, rising-main, pump-power, backup-energy, and freeboard memo"
+unit_and_method_interface = "flow and diameter are converted to pipe loss, pipe loss is added to static head, and total head feeds power with decimal efficiencies"
+
+[[relations]]
+relation_id = "headloss-plus-power-to-stormwater-pump-package"
+purpose = "composition"
+source_member_ids = ["hazen-williams-acquisition", "pump-power-acquisition"]
+target_member_id = "stormwater-pump-composition-probe"
+invariant_dimensions = ["evidence_contract", "hydraulic_domain"]
+invariant_claims = [
+  "Component A contributes the SI Hazen-Williams loss and pipe-velocity method used by the target rising-main calculation.",
+  "Component B contributes the density-times-gravity-times-flow-times-head power method and the efficiency transformation used by the target pump calculation.",
+  "The target keeps both components separately observable and requires the calculated loss to enter total dynamic head before power is calculated.",
+]
+changed_dimensions = ["component_role", "task_scope", "unit_and_method_interface"]
+rationale = "The probe changes from two independent formula tasks to a new stormwater memo. It converts the component-A loss into the total-head input required by component B, changes efficiency representation from percent to decimal, and adds capacity, backup-energy, and freeboard checks. The target is therefore not a literal concatenation of the acquisition instructions."

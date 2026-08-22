@@ -62,6 +62,17 @@ def test_write_trial_record_rejects_duplicate_trial_id(tmp_path: Path) -> None:
         write_trial_record(ledger_root=tmp_path, record=record)
 
 
+def test_write_trial_record_supports_valid_long_public_file_name(tmp_path: Path) -> None:
+    trial_id = "t" * 230
+    record = make_trial_record(trial_id=trial_id)
+
+    path = write_trial_record(ledger_root=tmp_path, record=record)
+
+    assert path.name == f"{trial_id}.json"
+    assert len(path.name.encode()) < 256
+    assert read_trial_record(path, ledger_root=tmp_path).trial_id == trial_id
+
+
 def test_read_trial_record_rejects_unknown_schema_version(tmp_path: Path) -> None:
     path = tmp_path / "experiment" / "trial.json"
     path.parent.mkdir()

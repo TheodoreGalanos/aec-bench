@@ -165,6 +165,85 @@ execution, repair diagnosis and patch creation, motif learning, promotion, and
 persisted reports. Its overlapping candidate iteration uses the common
 functional composition. Evaluation owns metric meaning.
 
+### Learning Studies composition
+
+`aec_bench.experimentation.learning_studies` is an optional experimentation
+layer over existing trials. It compiles an authored finite study into exact
+`PlannedTrial` values, coordinates isolated control and exposure arms through
+caller-supplied operations, and consumes ordinary `TrialRecord` results.
+
+The layer owns the controlled relationship between experiences, declared
+learner continuity, feedback-release policy, study validity, and learning-level
+comparison. It does not own task meaning, execution, verification, evaluation,
+or model-weight training. An experience is one existing trial in a study; it is
+not another task or runtime type.
+
+Generalisation measures one fixed learner on changed holdout material. Learning
+transfer compares a learner that received a declared prior experience with a
+matched cold learner on the same probe. A sequence without the required control
+can describe behaviour, but it cannot support a controlled learning claim.
+
+Learner state is separate from task, lifecycle, and world state. Every committed
+learner transition is explicit. Probe feedback stays hidden until scoring is
+complete, and probe-created learner state is discarded by default. Thin
+environment adapters may translate these operations to their existing public
+execution APIs. Execution and task owners do not import Learning Studies policy.
+
+Artifact learning-family files are caller-selected TOML overlays. They name
+exact existing task IDs, declare dimension values, and state directed authored
+claims. They do not change task definitions, `VariationAxis`, generation, or a
+global task catalogue. The current task-authority references are
+`instruction.md` and `task.toml`; a family file remains host-held and is not
+staged for the learner.
+
+Repository-maintained studies form a task-like collection under
+`learning_studies/protocols/`. Each study directory contains one `study.toml`
+and one `family.toml`. The generic collection loader resolves family members
+and relations into `LearningStudySpec`, then binds the caller's fixed agent,
+compute configuration, and repetition count. The protocol directory contains
+no task assets, execution runtime, or verifier logic. External callers can
+supply another self-contained protocol directory by path. Collection discovery
+is filesystem-based and is not a global study or task registry.
+
+The local artifact adapter depends downward on the existing artifact harness.
+It supports the Release A `reset`, `raw-history`, and `structured-memory`
+treatments, one local single-attempt trial for each experience, named public
+feedback projectors, and explicit consolidation callbacks. Each arm has a
+separate writable root and each experience has a separate task workspace. Only
+files below `.aec-bench-learning/` can enter a later experience. Raw history is
+appended only after an explicit public feedback release. Structured memory is
+read-only during a task and can change only during consolidation. Model and
+adapter identity continue to come from the immutable planned trial.
+
+`run_trial()` has one execution-owner seam that can atomically export the exact
+selected actor snapshot before verification. The harness does not interpret
+that export as learner state. The artifact adapter validates the reserved
+namespace, constructs a new candidate learner snapshot, and leaves commit or
+probe discard to the common runtime. Verifier files and task-workspace files do
+not enter learner state.
+
+The study recorder publishes complete adapter-supplied learner snapshots through
+the existing artifact repository and writes ordinary trial records through the
+existing ledger. A final step receipt is the resume authority. The event stream
+is an append-only index over receipts, not a second execution or provenance
+system. Assessment uses caller-supplied named outcome projections and retains
+matched repetition values. Missing controls downgrade a usable comparison to
+descriptive evidence; isolation, lineage, or probe-secrecy failures make it
+invalid.
+
+The A01 Stage 1 protocol proves the structural-transfer path. The A02 Stage 1
+protocol adds matched cold, reset-after-acquisition, raw-history, and
+structured-memory paths for an authored drainage applicability boundary. The
+A03 Stage 1 protocol adds non-committing immediate and delayed probes, a neutral
+intervening task, and an explicitly released conflicting public episode. The
+A04 Stage 1 protocol adds separate component controls, both component orders,
+and a composite target with task-owned component and integration projections.
+These deterministic integration runs use real artifact tasks and verifiers but
+a model-boundary test double. They prove the learning-study plumbing and do not
+make model-learning claims. The programme charter and remaining programme
+material stay maintained as
+[Learning Studies research](research/learning-studies/programme.md).
+
 The supported prose-intake process is a higher-order composition under
 `experimentation.process_runtime`. It uses “problem model” for the generated
 representation. It is not an interactive world and does not import the

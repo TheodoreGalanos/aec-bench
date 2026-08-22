@@ -6,6 +6,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -53,6 +54,7 @@ _VERIFIER_RETRY_ARTIFACT_SUFFIXES = (
     "_marker.json",
 )
 _VERIFIER_RETRY_EXCLUDED_PREFIXES = ("expected_", "input_", "prior_", "source_")
+_CONTAINER_ROOT_PATTERN = re.compile(r"(?<![\w.-])/(?:workspace|tests|logs)(?=/|(?=[\"'\s]))")
 
 
 class AttemptRunner(Protocol):
@@ -623,6 +625,7 @@ def run_trial(
     reviewer: ReviewerRunConfig | None = None,
     verify: bool = True,
     keep_workspaces: bool = False,
+    selected_workspace_export: Path | None = None,
 ) -> TrialRecord:
     """Run one tracked recipe, verify its selection, and return durable trial evidence."""
 
@@ -674,6 +677,8 @@ def run_trial(
 
         snapshot_dir = Path(tempfile.mkdtemp(prefix="aec-bench-selected-", dir=runtime.artifact_root.parent))
         shutil.copytree(selected.workspace, snapshot_dir, dirs_exist_ok=True)
+        if selected_workspace_export is not None:
+            _export_selected_workspace(snapshot_dir, selected_workspace_export)
         evaluation, verification_seconds = _evaluate_selected_attempt(task=task, attempt=selected, verify=verify)
         if reviewer is not None and reviewer.enabled:
             review_result = run_workspace_reviewer(
@@ -704,6 +709,23 @@ def run_trial(
         if not keep_workspaces:
             for workspace in runtime.attempt_workspaces[first_workspace_index:]:
                 shutil.rmtree(workspace, ignore_errors=True)
+
+
+def _export_selected_workspace(snapshot: Path, destination: Path) -> None:
+    """Atomically export the exact actor snapshot before verification changes the workspace."""
+
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    if destination.exists():
+        if not destination.is_dir() or any(destination.iterdir()):
+            raise ValueError(f"selected workspace export destination must be empty: {destination}")
+        destination.rmdir()
+    staging = Path(tempfile.mkdtemp(prefix=f".{destination.name}-", dir=destination.parent))
+    try:
+        shutil.copytree(snapshot, staging, dirs_exist_ok=True)
+        os.replace(staging, destination)
+    except Exception:
+        shutil.rmtree(staging, ignore_errors=True)
+        raise
 
 
 def run_experiment(
@@ -1105,6 +1127,7 @@ def _run_verifier(*, task: ResolvedTaskInstance, workspace: Path, output_path: P
     verifier_path = workspace / task.task.verifier.script
     if not verifier_path.is_file():
         return None
+    _localise_staged_verifier_paths(workspace=workspace, verifier_root=verifier_path.parent)
     reward_path = resolve_workspace_path(workspace, task.task.verifier.reward_path)
     reward_path.parent.mkdir(parents=True, exist_ok=True)
     env = {**os.environ, "PYTHONPATH": str(workspace)}
@@ -1131,6 +1154,21 @@ def _run_verifier(*, task: ResolvedTaskInstance, workspace: Path, output_path: P
             check=False,
         )
     return time.monotonic() - started
+
+
+def _localise_staged_verifier_paths(*, workspace: Path, verifier_root: Path) -> None:
+    """Map container mount paths in private staged verifier files to the local workspace."""
+
+    replacements = {
+        "/workspace": str(workspace),
+        "/tests": str(workspace / "tests"),
+        "/logs": str(workspace / "logs"),
+    }
+    for path in sorted((*verifier_root.rglob("*.py"), *verifier_root.rglob("*.sh"))):
+        content = path.read_text(encoding="utf-8")
+        localised = _CONTAINER_ROOT_PATTERN.sub(lambda match: replacements[match.group(0)], content)
+        if localised != content:
+            path.write_text(localised, encoding="utf-8")
 
 
 def _with_reviewer_summary(evaluation: EvaluationResult, workspace: Path) -> EvaluationResult:

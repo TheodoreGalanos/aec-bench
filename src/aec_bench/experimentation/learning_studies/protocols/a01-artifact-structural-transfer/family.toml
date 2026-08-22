@@ -1,0 +1,66 @@
+family_id = "heat-load-single-room"
+title = "Single-room cooling-load method transfer"
+description = "Tests the same cooling-load procedure across a changed room use, occupancy basis, climate, and numerical inputs. Domain review remains required before a claim-bearing run."
+source_task_paths = [
+  "tasks/mechanical/heat-load/single-room-office-L3/brisbane-office-85m2/instruction.md",
+  "tasks/mechanical/heat-load/single-room-office-L3/brisbane-office-85m2/task.toml",
+  "tasks/mechanical/heat-load/single-room-office-L3/sydney-classroom-120m2/instruction.md",
+  "tasks/mechanical/heat-load/single-room-office-L3/sydney-classroom-120m2/task.toml",
+]
+
+[[dimensions]]
+dimension_id = "task_form"
+kind = "surface"
+description = "The requested output structure and single-room calculation form"
+
+[[dimensions]]
+dimension_id = "governing_method"
+kind = "causal"
+description = "The AS 1668.2 lookup and sensible, latent, and total heat-load calculation procedure"
+
+[[dimensions]]
+dimension_id = "room_program"
+kind = "parameter"
+description = "The room use and its occupancy and outside-air parameter values"
+
+[[dimensions]]
+dimension_id = "climate_and_loads"
+kind = "parameter"
+description = "The climate, floor area, and internal-load parameter values"
+
+[[members]]
+member_id = "brisbane-office-acquisition"
+task_id = "mechanical/heat-load/single-room-office-L3/brisbane-office-85m2"
+description = "An 85 square metre Brisbane office calculation"
+probe_only = false
+
+[members.dimension_values]
+task_form = "single-room Markdown calculation with twelve-value JSON result"
+governing_method = "AS 1668.2 occupancy and ventilation plus psychrometric heat-load summation"
+room_program = "office areas"
+climate_and_loads = "Brisbane, 85 square metres, office internal loads"
+
+[[members]]
+member_id = "sydney-classroom-probe"
+task_id = "mechanical/heat-load/single-room-office-L3/sydney-classroom-120m2"
+description = "A 120 square metre Sydney classroom calculation"
+probe_only = true
+
+[members.dimension_values]
+task_form = "single-room Markdown calculation with twelve-value JSON result"
+governing_method = "AS 1668.2 occupancy and ventilation plus psychrometric heat-load summation"
+room_program = "classrooms"
+climate_and_loads = "Sydney, 120 square metres, classroom internal loads"
+
+[[relations]]
+relation_id = "brisbane-office-to-sydney-classroom"
+purpose = "transfer"
+source_member_ids = ["brisbane-office-acquisition"]
+target_member_id = "sydney-classroom-probe"
+invariant_dimensions = ["task_form", "governing_method"]
+invariant_claims = [
+  "Both tasks require the same sequence: select the stated AS 1668.2 room values, calculate outside air, calculate sensible and latent components, and sum the cooling load.",
+  "The verifier checks the same twelve named result quantities and therefore rejects direct copying of the acquisition numbers.",
+]
+changed_dimensions = ["room_program", "climate_and_loads"]
+rationale = "The probe changes the standards row and every important numerical input while retaining the calculation structure. A mechanical-engineering domain reviewer must confirm that this is a valid method-level invariant before a claim-bearing campaign."

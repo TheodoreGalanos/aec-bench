@@ -19,7 +19,7 @@ from pydantic import ValidationError
 
 import aec_bench.experimentation.lifecycle_studies.ablation as ablation_runtime
 import aec_bench.experimentation.lifecycle_studies.ablation_plan as ablation_plan_runtime
-import aec_bench.experimentation.lifecycle_studies.transfer as transfer_runtime
+import aec_bench.experimentation.lifecycle_studies.holdout_generalization as holdout_runtime
 import aec_bench.experimentation.lifecycle_studies.trial_record as trial_record_runtime
 import aec_bench.ledger.writer as ledger_writer
 import aec_bench.lifecycles.recording as experiment_runtime
@@ -48,12 +48,12 @@ from aec_bench.experimentation.lifecycle_studies.evaluation import (
     build_lifecycle_ablation_evaluation,
     write_lifecycle_ablation_evaluation,
 )
-from aec_bench.experimentation.lifecycle_studies.transfer import (
-    LifecycleTransferCondition,
-    LifecycleTransferEvaluationSpec,
-    LifecycleTransferRecordReference,
-    LifecycleTransferStudyDesign,
-    build_lifecycle_transfer_evaluation,
+from aec_bench.experimentation.lifecycle_studies.holdout_generalization import (
+    LifecycleHoldoutCondition,
+    LifecycleHoldoutEvaluationSpec,
+    LifecycleHoldoutRecordReference,
+    LifecycleHoldoutStudyDesign,
+    build_lifecycle_holdout_evaluation,
 )
 from aec_bench.experimentation.lifecycle_studies.trial_record import (
     _persist_lifecycle_ablation_record,
@@ -683,16 +683,16 @@ def test_conditional_evidence_transactions_are_declared_and_snapshot_validated(
         build_lifecycle_ablation_plan(manifest),
         trial,
     )
-    reference = LifecycleTransferRecordReference(
+    reference = LifecycleHoldoutRecordReference(
         experiment_id=record.experiment_id,
         trial_id=record.trial_id,
         ledger_path=str(record_path),
         sha256=_sha256(record_path),
     )
-    loaded = transfer_runtime._load_record(reference)
+    loaded = holdout_runtime._load_record(reference)
     assert loaded.record == record
     assert loaded.reasons == ()
-    loaded_artifacts = transfer_runtime._load_artifacts(
+    loaded_artifacts = holdout_runtime._load_artifacts(
         record,
         ledger_root=Path(manifest.ledger_root),
     )
@@ -720,7 +720,7 @@ def test_conditional_evidence_transactions_are_declared_and_snapshot_validated(
     )
     artifacts_with_extra_projection = dict(loaded_artifacts.content_by_path)
     artifacts_with_extra_projection[extra_path] = extra_content
-    assert transfer_runtime._snapshot_record_reasons(
+    assert holdout_runtime._snapshot_record_reasons(
         record_with_extra_projection,
         artifacts=artifacts_with_extra_projection,
     ) == ("snapshot_contract_invalid",)
@@ -730,7 +730,7 @@ def test_conditional_evidence_transactions_are_declared_and_snapshot_validated(
     )
     requested_snapshot = Path(manifest.ledger_root) / "_artifacts" / requested_reference.artifact.artifact_id
     requested_snapshot.write_text("tampered\n", encoding="utf-8")
-    assert transfer_runtime._load_record(reference).reasons == ("record_invalid",)
+    assert holdout_runtime._load_record(reference).reasons == ("record_invalid",)
 
 
 def test_historical_lifecycle_record_without_visibility_still_validates_but_is_not_backfilled(
@@ -754,7 +754,7 @@ def test_historical_lifecycle_record_without_visibility_still_validates_but_is_n
     assert historical.task.visibility is None
     assert "visibility" not in historical.input.model_fields_set
     target_path = Path(manifest.ledger_root) / "holdout" / "target-001.json"
-    target_reference = LifecycleTransferRecordReference(
+    target_reference = LifecycleHoldoutRecordReference(
         experiment_id="holdout",
         trial_id="target-001",
         ledger_path=str(target_path),
@@ -762,15 +762,15 @@ def test_historical_lifecycle_record_without_visibility_still_validates_but_is_n
     )
     assert historical.lifecycle_execution is not None
     assert historical.lifecycle_provenance is not None
-    summary = build_lifecycle_transfer_evaluation(
-        LifecycleTransferEvaluationSpec(
-            study_design=LifecycleTransferStudyDesign(
+    summary = build_lifecycle_holdout_evaluation(
+        LifecycleHoldoutEvaluationSpec(
+            study_design=LifecycleHoldoutStudyDesign(
                 interpretation="descriptive_holdout_generalization",
                 selection_basis="public_calibration",
                 causal_effects_supported=False,
                 cross_run_learning_supported=False,
             ),
-            selected_condition=LifecycleTransferCondition(
+            selected_condition=LifecycleHoldoutCondition(
                 model=historical.agent.model,
                 adapter=historical.agent.adapter,
                 runtime_dependency_sha256=historical.lifecycle_provenance.runtime_dependency_sha256,
@@ -779,7 +779,7 @@ def test_historical_lifecycle_record_without_visibility_still_validates_but_is_n
                 max_turns_per_session=historical.lifecycle_execution.max_turns_per_session,
             ),
             public_calibration_records=(
-                LifecycleTransferRecordReference(
+                LifecycleHoldoutRecordReference(
                     experiment_id=historical.experiment_id,
                     trial_id=historical.trial_id,
                     ledger_path=str(record_path),
@@ -1808,7 +1808,7 @@ def test_provider_failure_before_later_conditional_checkpoint_preserves_pending_
         artifact.path.endswith("/run/workspace/checkpoints/response_review/evidence-requests.json")
         for artifact in record.outputs.artifacts or ()
     )
-    loaded = transfer_runtime._load_artifacts(
+    loaded = holdout_runtime._load_artifacts(
         record,
         ledger_root=Path(manifest.ledger_root),
     )
@@ -1824,21 +1824,21 @@ def test_provider_failure_before_later_conditional_checkpoint_preserves_pending_
         artifact for artifact in record.outputs.artifacts or () if artifact.path.endswith("/package/lifecycle.json")
     )
     invocation_reference = record.lifecycle_provenance.invocation_manifest
-    state = transfer_runtime.EvidenceLifecycleRunState.model_validate(
+    state = holdout_runtime.EvidenceLifecycleRunState.model_validate(
         json.loads(loaded.content_by_path[state_reference.path])
     )
-    metrics = transfer_runtime.LifecycleExperimentMetrics.model_validate(
+    metrics = holdout_runtime.LifecycleExperimentMetrics.model_validate(
         json.loads(loaded.content_by_path[metrics_reference.path])
     )
-    lifecycle = transfer_runtime.EvidenceLifecycleSpec.model_validate(
+    lifecycle = holdout_runtime.EvidenceLifecycleSpec.model_validate(
         json.loads(loaded.content_by_path[lifecycle_reference.path])
     )
-    invocation = transfer_runtime.LifecycleExperimentManifest.model_validate(
+    invocation = holdout_runtime.LifecycleExperimentManifest.model_validate(
         json.loads(loaded.content_by_path[invocation_reference.path])
     ).model_dump(mode="json")
 
     assert (
-        transfer_runtime._evidence_request_snapshot_reasons(
+        holdout_runtime._evidence_request_snapshot_reasons(
             record,
             artifacts=loaded.content_by_path,
             state=state,

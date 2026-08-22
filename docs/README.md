@@ -65,6 +65,8 @@ authority.
 | [Prime and interactive-world boundary study](plans/prime-world-boundary-study.md) | Plan | Historical | Prime, harness, and task-world contributors | Repository maintainers |
 | [Repository architecture study](plans/repository-architecture-study.md) | Plan | Historical | Repository maintainers and subsystem owners | Repository maintainers |
 | [Repository architecture alignment implementation](plans/repository-architecture-implementation.md) | Plan | Historical | Repository maintainers and subsystem owners | Repository maintainers |
+| [Learning Studies programme](research/learning-studies/programme.md) | Research | Proposed | Experimentation, execution, and evaluation contributors | Learning Studies programme maintainers |
+| [Learning Studies Release A tranche](research/learning-studies/release-a/README.md) | Research | Proposed | Release A implementers and reviewers | Learning Studies programme maintainers |
 | [Documentation agent guide](AGENTS.md) | Guide | Current | Coding agents editing this directory | Repository maintainers |
 
 ## Repository design docs and public docs

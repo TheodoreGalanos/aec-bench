@@ -16,6 +16,7 @@ SOURCE_ROOT = REPOSITORY_ROOT / "src" / "aec_bench"
 CONTRACT_ROOT = SOURCE_ROOT / "contracts"
 LIFECYCLE_ROOT = SOURCE_ROOT / "lifecycles"
 WORLD_ROOT = SOURCE_ROOT / "worlds"
+LEARNING_STUDIES_ROOT = SOURCE_ROOT / "experimentation" / "learning_studies"
 NEUTRAL_ROOTS = (CONTRACT_ROOT, LIFECYCLE_ROOT, WORLD_ROOT)
 OPTIONAL_RUNTIME_ROOTS = {
     "acp",
@@ -232,6 +233,48 @@ def test_core_owners_do_not_import_forbidden_owners(
             module for module in _aec_bench_imports(source_path) if module.startswith(forbidden_prefixes)
         )
         for source_path in owner_root.rglob("*.py")
+        if any(module.startswith(forbidden_prefixes) for module in _aec_bench_imports(source_path))
+    }
+
+    assert violations == {}
+
+
+def test_execution_and_task_owners_do_not_import_learning_study_policy() -> None:
+    owner_roots = (
+        SOURCE_ROOT / "contracts",
+        SOURCE_ROOT / "harness",
+        SOURCE_ROOT / "tasks",
+        SOURCE_ROOT / "lifecycles",
+        SOURCE_ROOT / "worlds",
+    )
+    forbidden = "aec_bench.experimentation.learning_studies"
+    violations = {
+        str(source_path.relative_to(REPOSITORY_ROOT)): sorted(
+            module for module in _aec_bench_imports(source_path) if module.startswith(forbidden)
+        )
+        for owner_root in owner_roots
+        for source_path in owner_root.rglob("*.py")
+        if any(module.startswith(forbidden) for module in _aec_bench_imports(source_path))
+    }
+
+    assert violations == {}
+
+
+def test_learning_study_core_does_not_import_execution_families() -> None:
+    core_paths = tuple(LEARNING_STUDIES_ROOT / filename for filename in ("planning.py", "runtime.py", "errors.py"))
+    forbidden_prefixes = (
+        "aec_bench.adapters",
+        "aec_bench.harness",
+        "aec_bench.lifecycles",
+        "aec_bench.providers",
+        "aec_bench.tasks",
+        "aec_bench.worlds",
+    )
+    violations = {
+        str(source_path.relative_to(REPOSITORY_ROOT)): sorted(
+            module for module in _aec_bench_imports(source_path) if module.startswith(forbidden_prefixes)
+        )
+        for source_path in core_paths
         if any(module.startswith(forbidden_prefixes) for module in _aec_bench_imports(source_path))
     }
 

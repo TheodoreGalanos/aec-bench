@@ -379,7 +379,7 @@ hydraulic calculations and package verifier remain in
 `lifecycles/stormwater_design/hydraulics`. Inject the concrete operation resolver into the
 runtime. The runtime must not import the lifecycle catalogue.
 
-Move lifecycle ablation, calibration, transfer, and treatment comparison to
+Move lifecycle ablation, calibration, holdout generalisation, and treatment comparison to
 `experimentation/lifecycle_studies` when they are not runtime behavior.
 
 Move lifecycle metrics and verification-result values to
@@ -492,7 +492,7 @@ Use these current owners:
 
 - proposal creation, freeze, compilation, dispatch, execution, import, and
   proposal-specific Morph code → `experimentation/proposals`;
-- lifecycle ablation, calibration, transfer, evaluation, session analysis,
+- lifecycle ablation, calibration, holdout generalisation, evaluation, session analysis,
   and finalisation → `experimentation/lifecycle_studies`;
 - authority, promotion, monitors, critic lifecycle, kernel change authority,
   and assured motif storage → `experimentation/governance`;

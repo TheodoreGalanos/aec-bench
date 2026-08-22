@@ -73,7 +73,7 @@ def _write_trial_record(
     record.bind_run_manifest(manifest)
     persisted = TrialRecord.model_validate(record.model_dump(mode="python"))
     mkdir_durable(path.parent)
-    temporary = path.parent / f".{path.name}.{uuid.uuid4().hex}.tmp"
+    temporary = _temporary_path(path.parent)
     try:
         _write_record_temp(temporary, persisted.model_dump_json(indent=2))
         try:
@@ -115,7 +115,7 @@ def _write_run_manifest_path(*, path: Path, manifest: RunManifest) -> Path:
             raise RunManifestConflictError(f"run manifest identity resolves to different content: {manifest.run_id}")
         return path
     mkdir_durable(path.parent)
-    temporary = path.parent / f".{path.name}.{uuid.uuid4().hex}.tmp"
+    temporary = _temporary_path(path.parent)
     try:
         _write_record_temp(temporary, payload)
         try:
@@ -243,3 +243,9 @@ def _write_record_temp(path: Path, payload: str) -> None:
         handle.write(payload)
         handle.flush()
         os.fsync(handle.fileno())
+
+
+def _temporary_path(parent: Path) -> Path:
+    """Keep atomic-write names bounded independently of the public record name."""
+
+    return parent / f".record.{uuid.uuid4().hex}.tmp"

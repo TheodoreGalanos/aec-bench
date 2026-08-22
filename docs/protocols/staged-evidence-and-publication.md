@@ -194,7 +194,7 @@ The freeze recomputes the declared winner, hashes the exact input records and
 artifacts, and is write-once: a retry can accept identical bytes but cannot
 replace different content.
 
-Calibration and transfer studies report the controls and resource envelope
+Calibration and holdout-generalisation studies report the controls and resource envelope
 they actually used. A descriptive sequential study does not support a causal
 effect claim merely because candidate scores differ.
 
