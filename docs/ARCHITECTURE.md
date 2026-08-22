@@ -189,6 +189,29 @@ complete, and probe-created learner state is discarded by default. Thin
 environment adapters may translate these operations to their existing public
 execution APIs. Execution and task owners do not import Learning Studies policy.
 
+Artifact learning-family files are caller-selected TOML overlays. They name
+exact existing task IDs, declare dimension values, and state directed authored
+claims. They do not change task definitions, `VariationAxis`, generation, or a
+global task catalogue. The current task-authority references are
+`instruction.md` and `task.toml`; a family file remains host-held and is not
+staged for the learner.
+
+The local artifact adapter depends downward on the existing artifact harness.
+It supports the Release A `reset` and `structured-memory` treatments, one local
+single-attempt trial for each experience, named public feedback projectors, and
+explicit consolidation callbacks. Each arm has a separate writable root and
+each experience has a separate task workspace. Only files below
+`.aec-bench-learning/` can enter a later experience. Structured memory is
+read-only during a task and can change only during consolidation. Model and
+adapter identity continue to come from the immutable planned trial.
+
+`run_trial()` has one execution-owner seam that can atomically export the exact
+selected actor snapshot before verification. The harness does not interpret
+that export as learner state. The artifact adapter validates the reserved
+namespace, constructs a new candidate learner snapshot, and leaves commit or
+probe discard to the common runtime. Verifier files and task-workspace files do
+not enter learner state.
+
 The study recorder publishes complete adapter-supplied learner snapshots through
 the existing artifact repository and writes ordinary trial records through the
 existing ledger. A final step receipt is the resume authority. The event stream
@@ -198,7 +221,11 @@ matched repetition values. Missing controls downgrade a usable comparison to
 descriptive evidence; isolation, lineage, or probe-secrecy failures make it
 invalid.
 
-The programme charter and proposed Release A tranche are maintained as
+The A01 Stage 1 protocol composes one cold probe with one acquisition,
+feedback, consolidation, and exposed probe path. Its deterministic integration
+run proves plumbing through real artifact tasks and their real verifiers. It
+does not make a model-learning claim. The programme charter and the remainder
+of Release A stay maintained as
 [Learning Studies research](research/learning-studies/programme.md).
 
 The supported prose-intake process is a higher-order composition under

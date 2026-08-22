@@ -1,0 +1,66 @@
+family_id = "heat-load-office-audit"
+title = "Office heat-load audit method transfer"
+description = "Tests the same room-by-room audit procedure across different climate data, schedules, and seeded defects. Domain review remains required before a claim-bearing run."
+source_task_paths = [
+  "tasks/mechanical/heat-load/audit-office-building/brisbane-8rm/instruction.md",
+  "tasks/mechanical/heat-load/audit-office-building/brisbane-8rm/task.toml",
+  "tasks/mechanical/heat-load/audit-office-building/sydney-8rm/instruction.md",
+  "tasks/mechanical/heat-load/audit-office-building/sydney-8rm/task.toml",
+]
+
+[[dimensions]]
+dimension_id = "task_form"
+kind = "surface"
+description = "An eight-room schedule audit with structured error findings"
+
+[[dimensions]]
+dimension_id = "governing_method"
+kind = "causal"
+description = "Room-by-room recomputation using the stated AS 1668.2 and psychrometric rules"
+
+[[dimensions]]
+dimension_id = "climate"
+kind = "parameter"
+description = "Outdoor temperature and enthalpy design conditions"
+
+[[dimensions]]
+dimension_id = "schedule_and_defects"
+kind = "parameter"
+description = "Room schedule values and the fields that contain seeded errors"
+
+[[members]]
+member_id = "brisbane-audit-acquisition"
+task_id = "mechanical/heat-load/audit-office-building/brisbane-8rm"
+description = "An eight-room Brisbane office schedule audit"
+probe_only = false
+
+[members.dimension_values]
+task_form = "eight-room Markdown audit with structured error-finding JSON"
+governing_method = "recompute each field from the supplied standards and psychrometric rules"
+climate = "Brisbane design conditions"
+schedule_and_defects = "Brisbane room schedule and seeded errors"
+
+[[members]]
+member_id = "sydney-audit-probe"
+task_id = "mechanical/heat-load/audit-office-building/sydney-8rm"
+description = "An eight-room Sydney office schedule audit"
+probe_only = true
+
+[members.dimension_values]
+task_form = "eight-room Markdown audit with structured error-finding JSON"
+governing_method = "recompute each field from the supplied standards and psychrometric rules"
+climate = "Sydney design conditions"
+schedule_and_defects = "Sydney room schedule and seeded errors"
+
+[[relations]]
+relation_id = "brisbane-to-sydney-audit"
+purpose = "transfer"
+source_member_ids = ["brisbane-audit-acquisition"]
+target_member_id = "sydney-audit-probe"
+invariant_dimensions = ["task_form", "governing_method"]
+invariant_claims = [
+  "Both tasks require independent recomputation of the same named heat-load fields for each room.",
+  "Different schedules and defect locations prevent reuse of the acquisition findings as probe answers.",
+]
+changed_dimensions = ["climate", "schedule_and_defects"]
+rationale = "The probe changes the input schedule and faults while retaining the audit method. A mechanical-engineering domain reviewer must confirm the invariant and check for shared surface cues before a claim-bearing campaign."

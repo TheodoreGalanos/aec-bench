@@ -292,6 +292,104 @@ Path(args.output).write_text(json.dumps({"reward": 1.0}))
     assert record.evaluation is not None and record.evaluation.reward == 1.0
 
 
+def test_run_trial_exports_exact_selected_actor_workspace_before_verification(tmp_path: Path) -> None:
+    task = _resolved_task(tmp_path)
+    verifier = task.instance_dir / "tests" / "verify.py"
+    verifier.write_text(
+        """import argparse
+import json
+from pathlib import Path
+
+parser = argparse.ArgumentParser()
+parser.add_argument("--input")
+parser.add_argument("--output")
+args = parser.parse_args()
+Path(args.output).write_text(json.dumps({"reward": 1.0}))
+(Path.cwd() / "logs/verifier/details.json").write_text(json.dumps({"private": True}))
+""",
+        encoding="utf-8",
+    )
+    requests: list[AdapterRequest] = []
+    runtime = LocalTaskRuntime(
+        work_root=tmp_path / "attempts",
+        adapter_builder=lambda **kwargs: _FeedbackAdapter(Path(kwargs["workspace"]), requests),
+    )
+    exported = tmp_path / "selected"
+
+    def select_first(run_once):  # noqa: ANN001, ANN202
+        first = run_once(attempt_id="first")
+        run_once(attempt_id="last")
+        return AttemptSelection.selected(first, reason="selected first attempt")
+
+    record = run_trial(
+        runtime=runtime,
+        task=task,
+        trial=_planned_trial(),
+        recipe=select_first,
+        selected_workspace_export=exported,
+    )
+
+    assert record.evaluation is not None and record.evaluation.reward == 1.0
+    assert (exported / "deliverables" / "result.md").read_bytes() == b"draft\n"
+    assert not (exported / "tests").exists()
+    assert not (exported / "logs" / "verifier").exists()
+    assert all(not workspace.exists() for workspace in runtime.attempt_workspaces)
+
+
+def test_run_trial_refuses_nonempty_selected_workspace_export(tmp_path: Path) -> None:
+    task = _resolved_task(tmp_path)
+    exported = tmp_path / "selected"
+    exported.mkdir()
+    marker = exported / "existing.txt"
+    marker.write_text("keep\n", encoding="utf-8")
+    runtime = LocalTaskRuntime(
+        work_root=tmp_path / "attempts",
+        adapter_builder=lambda **kwargs: _WorkspaceAdapter(Path(kwargs["workspace"]), []),
+    )
+
+    with pytest.raises(ValueError, match="must be empty"):
+        run_trial(
+            runtime=runtime,
+            task=task,
+            trial=_planned_trial(),
+            recipe=single_attempt(),
+            selected_workspace_export=exported,
+        )
+
+    assert marker.read_bytes() == b"keep\n"
+
+
+def test_run_trial_localises_container_paths_in_staged_shell_verifier(tmp_path: Path) -> None:
+    base = _resolved_task(tmp_path)
+    (base.instance_dir / "tests" / "test.sh").write_text(
+        "#!/bin/sh\nmkdir -p /logs/verifier\npython3 /tests/verify.py\n",
+        encoding="utf-8",
+    )
+    (base.instance_dir / "tests" / "verify.py").write_text(
+        """import json
+from pathlib import Path
+
+assert Path("/workspace/deliverables/result.md").read_text() == "Complete\\n"
+Path("/logs/verifier/reward.json").write_text(json.dumps({"reward": 1.0}))
+""",
+        encoding="utf-8",
+    )
+    task_definition = base.task.model_copy(
+        update={"verifier": base.task.verifier.model_copy(update={"script": "tests/test.sh"})}
+    )
+    task = resolve_instance_paths(task_definition, base.instance_dir)
+    runtime = LocalTaskRuntime(
+        work_root=tmp_path / "attempts",
+        adapter_builder=lambda **kwargs: _WorkspaceAdapter(Path(kwargs["workspace"]), []),
+    )
+
+    record = run_trial(runtime=runtime, task=task, trial=_planned_trial(), recipe=single_attempt())
+
+    assert record.evaluation is not None
+    assert record.evaluation.reward == 1.0
+    assert record.evaluation.validity.verifier_completed
+
+
 def test_run_experiment_resolves_planned_trials_to_supplied_tasks(tmp_path: Path) -> None:
     task = _resolved_task(tmp_path)
     verifier = task.instance_dir / "tests" / "verify.py"
