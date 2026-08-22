@@ -9,6 +9,22 @@ from_prefix = "aec_bench.contracts.evaluation_plane."
 to_prefix = "aec_bench.evaluation.legacy_regime."
 
 [[legacy_relocation]]
+from_prefix = "aec_bench.experimentation.lifecycle_studies.transfer.LifecycleTransferCondition."
+to_prefix = "aec_bench.experimentation.lifecycle_studies.holdout_generalization.LifecycleHoldoutCondition."
+
+[[legacy_relocation]]
+from_prefix = "aec_bench.experimentation.lifecycle_studies.transfer.LifecycleTransferEvaluationSpec."
+to_prefix = "aec_bench.experimentation.lifecycle_studies.holdout_generalization.LifecycleHoldoutEvaluationSpec."
+
+[[legacy_relocation]]
+from_prefix = "aec_bench.experimentation.lifecycle_studies.transfer.LifecycleTransferRecordReference."
+to_prefix = "aec_bench.experimentation.lifecycle_studies.holdout_generalization.LifecycleHoldoutRecordReference."
+
+[[legacy_relocation]]
+from_prefix = "aec_bench.experimentation.lifecycle_studies.transfer.LifecycleTransferSummary."
+to_prefix = "aec_bench.experimentation.lifecycle_studies.holdout_generalization.LifecycleHoldoutSummary."
+
+[[legacy_relocation]]
 from_prefix = "aec_bench.experimentation.lifecycle_studies.experiment."
 to_prefix = "aec_bench.lifecycles.recording."
 
@@ -1288,6 +1304,85 @@ compatibility_behavior = "the migration command accepts schema 1 only"
 compatibility_kind = "external_schema"
 
 [[field]]
+symbol = "aec_bench.contracts.learning_study.RunExperienceStep.commit_post_state"
+surface = "pydantic_model"
+wire_name = "commit_post_state"
+category = "domain_identity"
+domain_owner = "learning_study"
+authority = "learning_study_author"
+authoritative = true
+exposure = "persisted"
+status = "current"
+payload_contract = "one authored learning study experience step"
+canonicalization = "Pydantic JSON Boolean or null without rewriting"
+consumer = "learning study compiler"
+validation_behavior = "the compiler resolves null by experience role and rejects a committed probe in a controlled study"
+mismatch_behavior = "compile a different immutable study plan"
+retention = "learning_study_spec_lifetime"
+rationale = "The author must make any override of the default probe-discard policy explicit."
+duplication = "unique"
+
+[[field]]
+symbol = "aec_bench.contracts.learning_study_evidence.StudyEvent.timestamp"
+surface = "pydantic_model"
+wire_name = "timestamp"
+category = "event_time"
+domain_owner = "learning_study"
+authority = "learning_study_recorder"
+authoritative = true
+exposure = "persisted"
+status = "current"
+payload_contract = "one append-only learning study event"
+canonicalization = "UTC datetime serialized by Pydantic JSON mode"
+consumer = "learning study evidence readers"
+validation_behavior = "Pydantic parses the datetime; event loading separately checks sequence and study-run identity"
+mismatch_behavior = "reject an invalid datetime and do not use it to infer event order"
+retention = "learning_study_run_lifetime"
+rationale = "The timestamp records when the study recorder observed a real study event."
+duplication = "unique"
+event = "learning study event observed"
+
+[[field]]
+symbol = "aec_bench.contracts.learning_study_evidence.StudyStepReceipt.completed_at"
+surface = "pydantic_model"
+wire_name = "completed_at"
+category = "event_time"
+domain_owner = "learning_study"
+authority = "learning_study_recorder"
+authoritative = true
+exposure = "persisted"
+status = "current"
+payload_contract = "one learning study step execution interval"
+canonicalization = "UTC datetime serialized by Pydantic JSON mode"
+consumer = "learning study resume and evidence readers"
+validation_behavior = "StudyStepReceipt rejects completion before its recorded start"
+mismatch_behavior = "reject the step receipt"
+retention = "learning_study_run_lifetime"
+rationale = "The time records when the recorder made a step outcome available for atomic publication."
+duplication = "unique"
+event = "learning study step execution completed"
+
+[[field]]
+symbol = "aec_bench.contracts.learning_study_evidence.StudyStepReceipt.started_at"
+surface = "pydantic_model"
+wire_name = "started_at"
+category = "event_time"
+domain_owner = "learning_study"
+authority = "learning_study_recorder"
+authoritative = true
+exposure = "persisted"
+status = "current"
+payload_contract = "one learning study step execution interval"
+canonicalization = "UTC datetime serialized by Pydantic JSON mode"
+consumer = "learning study resume and evidence readers"
+validation_behavior = "StudyStepReceipt parses the datetime and checks it does not follow completed_at"
+mismatch_behavior = "reject the step receipt"
+retention = "learning_study_run_lifetime"
+rationale = "The time records when the recorder observed the start of a real study step."
+duplication = "unique"
+event = "learning study step execution started"
+
+[[field]]
 symbol = "aec_bench.contracts.legacy_content_address.LegacyContentAddressedModel.content_sha256"
 surface = "pydantic_model"
 wire_name = "content_sha256"
@@ -1899,6 +1994,26 @@ rationale = "Persisted retirement evidence needs one explicit reader contract in
 duplication = "unique"
 compatibility_behavior = "accept only critic-retirement v2"
 compatibility_kind = "external_schema"
+
+[[field]]
+symbol = "aec_bench.experimentation.learning_studies.planning.CompiledExperienceStep.commit_post_state"
+aliases = ["mapping:aec_bench.experimentation.learning_studies.planning._compiled_step_to_data.commit_post_state"]
+surface = "dataclass"
+wire_name = "commit_post_state"
+category = "domain_identity"
+domain_owner = "learning_study"
+authority = "learning_study_compiler"
+authoritative = true
+exposure = "persisted"
+status = "current"
+payload_contract = "one compiled learning study experience step"
+canonicalization = "resolved Boolean copied unchanged into canonical compiled-plan data"
+consumer = "learning study runtime and resume validation"
+validation_behavior = "controlled-study compilation rejects true for a probe; resume requires exact compiled-plan bytes"
+mismatch_behavior = "reject resume or execute the compiled commit-discard decision exactly"
+retention = "learning_study_run_lifetime"
+rationale = "Probe-generated learner state must be discarded by default and any committed transition must be explicit."
+duplication = "projection"
 
 [[field]]
 symbol = "aec_bench.experimentation.qualification.run_bundle_governed_attempt.RunBundleGovernedAttemptAssessment.plan_commitment_sha256"
