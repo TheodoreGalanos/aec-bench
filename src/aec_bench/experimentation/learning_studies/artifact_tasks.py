@@ -15,13 +15,13 @@ from aec_bench.contracts.artifacts import ArtifactRef
 from aec_bench.contracts.learning_study_evidence import FeedbackReleaseRecord, LearnerStateRef
 from aec_bench.contracts.trial_record import TrialRecord
 from aec_bench.experimentation.learning_studies.errors import LearningStudyFeatureUnsupported
+from aec_bench.experimentation.learning_studies.planning import PlannedArmRun
 from aec_bench.experimentation.learning_studies.runtime import (
     ConsolidationRequest,
     ExecuteExperienceRequest,
     ExperienceExecutionResult,
     FeedbackHandle,
     FeedbackReleaseResult,
-    InitialiseLearnerRequest,
     LearnerStateHandle,
     LearnerTransitionResult,
     LearningStudyOperations,
@@ -110,7 +110,6 @@ def build_artifact_learning_operations(
             release_feedback=coordinator.release_feedback,
             consolidate=coordinator.consolidate,
             discard_state=coordinator.discard_state,
-            close_state=lambda _state: None,
         ),
         snapshot_state=lambda state: state.value.root,
         feedback_artifacts=lambda feedback: (feedback.value.artifact,),
@@ -142,15 +141,10 @@ class _ArtifactLearningCoordinator:
 
     def initialise_learner(
         self,
-        request: InitialiseLearnerRequest,
+        arm_run: PlannedArmRun,
     ) -> LearnerStateHandle[ArtifactLearnerState]:
-        if request.compute.backend != "local":
-            raise LearningStudyFeatureUnsupported(
-                f"study {request.study_run_id} arm {request.arm_id}: "
-                f"artifact-backend-unsupported: {request.compute.backend}"
-            )
-        self._treatment_kind(request.treatment_id)
-        arm_root = self._arm_root(request.arm_run_id)
+        self._treatment_kind(arm_run.treatment_id)
+        arm_root = self._arm_root(arm_run.arm_run_id)
         if arm_root.exists():
             raise ValueError(f"arm-isolation-failed: arm root already exists: {arm_root}")
         state_root = arm_root / "states" / "initial"
@@ -158,12 +152,16 @@ class _ArtifactLearningCoordinator:
         for channel in sorted(_STATE_CHANNELS):
             (namespace / channel).mkdir(parents=True, exist_ok=False)
         _validate_state_tree(state_root)
-        return self._handle(request.arm_run_id, request.treatment_id, "initial", state_root)
+        return self._handle(arm_run.arm_run_id, arm_run.treatment_id, "initial", state_root)
 
     def execute_experience(
         self,
-        request: ExecuteExperienceRequest[ArtifactLearnerState, ArtifactFeedback],
+        request: ExecuteExperienceRequest[ArtifactLearnerState],
     ) -> ExperienceExecutionResult[ArtifactLearnerState]:
+        if request.step.trial.compute.backend != "local":
+            raise LearningStudyFeatureUnsupported(
+                f"arm {request.arm_run.arm_id}: artifact-backend-unsupported: {request.step.trial.compute.backend}"
+            )
         state = self._state_for_arm(request.state, request.arm_run.arm_run_id)
         treatment_kind = self._treatment_kind(state.treatment_id)
         task = self._resolve_task(request.step.trial.task_id)
@@ -208,7 +206,6 @@ class _ArtifactLearningCoordinator:
             return ExperienceExecutionResult(
                 trial_record=record,
                 candidate_state=candidate,
-                changed_channels=(),
             )
         except Exception:
             shutil.rmtree(candidate_root, ignore_errors=True)
@@ -241,7 +238,6 @@ class _ArtifactLearningCoordinator:
                 candidate_root / _LEARNER_NAMESPACE / "feedback" / f"{_safe_component(request.step.step_id)}.json"
             )
             feedback_path.write_bytes(projected_data)
-            changed_channels = ["feedback"]
             if treatment_kind is ArtifactLearningTreatmentKind.RAW_HISTORY:
                 history_path = (
                     candidate_root / _LEARNER_NAMESPACE / "history" / f"{_safe_component(request.step.step_id)}.json"
@@ -253,7 +249,6 @@ class _ArtifactLearningCoordinator:
                         public_feedback=projected_data,
                     )
                 )
-                changed_channels.append("history")
             _validate_state_tree(candidate_root)
             artifact = self._artifact_repository.publish_bytes(
                 data=projected_data,
@@ -273,7 +268,6 @@ class _ArtifactLearningCoordinator:
                     view_id=request.step.feedback_view_id,
                     value=ArtifactFeedback(path=feedback_path, artifact=artifact),
                 ),
-                changed_channels=tuple(changed_channels),
             )
         except Exception:
             shutil.rmtree(candidate_root, ignore_errors=True)
@@ -315,7 +309,7 @@ class _ArtifactLearningCoordinator:
                 request.step.step_id,
                 candidate_root,
             )
-            return LearnerTransitionResult(candidate_state=candidate, changed_channels=("memory",))
+            return LearnerTransitionResult(candidate_state=candidate)
         except Exception:
             shutil.rmtree(candidate_root, ignore_errors=True)
             raise

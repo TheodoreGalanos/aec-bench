@@ -1,80 +1,65 @@
 study_id = "a02-artifact-applicability-boundary"
 title = "Artifact applicability boundary: drainage provenance defect scope"
 research_question = "Does experience with an upstream provenance failure cause incorrect upstream invalidation when only a downstream design memo is stale?"
-claim_mode = "controlled"
 relation_ids = ["stale-upstream-to-stale-downstream"]
 
 [[experiences]]
 experience_id = "stale-upstream-acquisition"
 family_member_id = "stale-upstream-acquisition"
 role = "acquisition"
-description = "Stale catchment revision makes the reviewed run and report non-governing."
 
 [[experiences]]
 experience_id = "stale-downstream-boundary-probe"
 family_member_id = "stale-downstream-boundary-probe"
 role = "probe"
-description = "Upstream evidence remains governing but the downstream design memo is stale."
 
 [[measurements]]
 measurement_id = "raw-history-boundary-gain"
-kind = "boundary_gain"
 projection_id = "drainage-boundary-judgment"
 direction = "higher"
 target_experience_id = "stale-downstream-boundary-probe"
 focal_arm_id = "raw-history"
 comparator_arm_id = "cold-boundary"
-acquisition_experience_ids = ["stale-upstream-acquisition"]
 
 [[measurements]]
 measurement_id = "structured-memory-boundary-gain"
-kind = "boundary_gain"
 projection_id = "drainage-boundary-judgment"
 direction = "higher"
 target_experience_id = "stale-downstream-boundary-probe"
 focal_arm_id = "structured-memory"
 comparator_arm_id = "cold-boundary"
-acquisition_experience_ids = ["stale-upstream-acquisition"]
 
 [[measurements]]
 measurement_id = "raw-history-upstream-invalidation-effect"
-kind = "boundary_gain"
 projection_id = "drainage-upstream-invalidation"
 direction = "lower"
 target_experience_id = "stale-downstream-boundary-probe"
 focal_arm_id = "raw-history"
 comparator_arm_id = "cold-boundary"
-acquisition_experience_ids = ["stale-upstream-acquisition"]
 
 [[measurements]]
 measurement_id = "structured-memory-upstream-invalidation-effect"
-kind = "boundary_gain"
 projection_id = "drainage-upstream-invalidation"
 direction = "lower"
 target_experience_id = "stale-downstream-boundary-probe"
 focal_arm_id = "structured-memory"
 comparator_arm_id = "cold-boundary"
-acquisition_experience_ids = ["stale-upstream-acquisition"]
 
 [[measurements]]
 measurement_id = "reset-after-acquisition-boundary-effect"
-kind = "boundary_gain"
 projection_id = "drainage-boundary-judgment"
 direction = "higher"
 target_experience_id = "stale-downstream-boundary-probe"
 focal_arm_id = "reset-after-acquisition"
 comparator_arm_id = "cold-boundary"
-acquisition_experience_ids = ["stale-upstream-acquisition"]
 
 [[measurements]]
 measurement_id = "structured-memory-advantage"
-kind = "boundary_gain"
 projection_id = "drainage-boundary-judgment"
 direction = "higher"
 target_experience_id = "stale-downstream-boundary-probe"
 focal_arm_id = "structured-memory"
 comparator_arm_id = "raw-history"
-acquisition_experience_ids = ["stale-upstream-acquisition"]
 
 [[arms]]
 arm_id = "cold-boundary"

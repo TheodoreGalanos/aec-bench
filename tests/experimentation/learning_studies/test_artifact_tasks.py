@@ -1,6 +1,7 @@
 # ABOUTME: Tests the local artifact-task Learning Study adapter and filesystem isolation.
 # ABOUTME: Proves copy-on-write state, channel permissions, and cross-arm rejection with real tasks.
 
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -23,7 +24,6 @@ from aec_bench.experimentation.learning_studies.runtime import (
     ConsolidationRequest,
     ExecuteExperienceRequest,
     FeedbackReleaseResult,
-    InitialiseLearnerRequest,
     LearnerStateHandle,
     ReleaseFeedbackRequest,
 )
@@ -77,18 +77,7 @@ def _binding(  # noqa: ANN001, ANN202
 
 
 def _initialise(binding, arm_run):  # noqa: ANN001, ANN202
-    result = binding.operations.initialise_learner(
-        InitialiseLearnerRequest(
-            study_run_id="a01-adapter-test",
-            arm_run_id=arm_run.arm_run_id,
-            arm_id=arm_run.arm_id,
-            treatment_id=arm_run.treatment_id,
-            repetition=arm_run.repetition,
-            agent=_AGENT,
-            compute=_COMPUTE,
-            working_root=None,
-        )
-    )
+    result = binding.operations.initialise_learner(arm_run)
     assert isinstance(result, LearnerStateHandle)
     return result
 
@@ -113,34 +102,26 @@ def test_artifact_learning_arms_have_disjoint_roots_and_reject_cross_arm_state(t
                 arm_run=cold,
                 step=cold_step,
                 state=exposed_state,
-                completed_trial_records=(),
-                released_feedback=(),
             )
         )
 
 
-def test_artifact_learning_rejects_non_local_compute_before_creating_arm_state(tmp_path: Path) -> None:
+def test_artifact_learning_rejects_non_local_compute_before_creating_task_workspace(tmp_path: Path) -> None:
     exposed = _plan().arm_runs[1]
     binding = _binding(
         tmp_path,
         adapter_builder=lambda **kwargs: HeatLoadStudyAdapter(Path(kwargs["workspace"]), []),
     )
 
-    with pytest.raises(LearningStudyFeatureUnsupported, match="artifact-backend-unsupported: modal"):
-        binding.operations.initialise_learner(
-            InitialiseLearnerRequest(
-                study_run_id="a01-adapter-test",
-                arm_run_id=exposed.arm_run_id,
-                arm_id=exposed.arm_id,
-                treatment_id=exposed.treatment_id,
-                repetition=exposed.repetition,
-                agent=_AGENT,
-                compute=ComputeConfig(backend="modal"),
-                working_root=None,
-            )
-        )
+    initial = _initialise(binding, exposed)
+    acquisition = exposed.steps[0]
+    assert isinstance(acquisition, CompiledExperienceStep)
+    modal_step = replace(acquisition, trial=replace(acquisition.trial, compute=ComputeConfig(backend="modal")))
 
-    assert not (tmp_path / "study" / "learner-arms").exists()
+    with pytest.raises(LearningStudyFeatureUnsupported, match="artifact-backend-unsupported: modal"):
+        binding.operations.execute_experience(ExecuteExperienceRequest(arm_run=exposed, step=modal_step, state=initial))
+
+    assert not (tmp_path / "study" / "learner-arms" / exposed.arm_run_id / "task-workspaces").exists()
 
 
 def test_task_cannot_write_structured_memory_during_experience(tmp_path: Path) -> None:
@@ -170,8 +151,6 @@ def test_task_cannot_write_structured_memory_during_experience(tmp_path: Path) -
                 arm_run=exposed,
                 step=acquisition,
                 state=initial,
-                completed_trial_records=(),
-                released_feedback=(),
             )
         )
 
@@ -196,8 +175,6 @@ def test_invalid_feedback_projection_does_not_create_candidate_state(tmp_path: P
             arm_run=exposed,
             step=acquisition_step,
             state=initial,
-            completed_trial_records=(),
-            released_feedback=(),
         )
     )
 
@@ -236,8 +213,6 @@ def test_forbidden_consolidation_write_rolls_back_to_released_feedback_state(tmp
             arm_run=exposed,
             step=acquisition_step,
             state=initial,
-            completed_trial_records=(),
-            released_feedback=(),
         )
     )
     feedback = binding.operations.release_feedback(

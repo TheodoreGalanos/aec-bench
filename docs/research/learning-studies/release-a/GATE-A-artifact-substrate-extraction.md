@@ -1,10 +1,13 @@
 # Gate A — Artifact-Derived Learning Substrate Extraction
 
-**Status:** Required architecture gate
+**Status:** Completed 2026-08-22
 **Type:** Extraction review and ADR protocol
 **Release:** After LS-00 through LS-04A and artifact pilots; before lifecycle PRDs are finalised
 **Primary owner:** Learning Studies programme maintainers
 **Decision authority:** Repository architecture review
+
+**Outcome:** Pass after direct simplification. See the
+[Gate A decision](../../../adr/learning-studies-gate-a.md).
 
 ## 1. Purpose
 

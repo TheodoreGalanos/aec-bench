@@ -1,12 +1,6 @@
 family_id = "drainage-provenance-boundary"
 title = "Drainage provenance defect-scope boundary"
 description = "Tests whether an upstream evidence-invalidation response is withheld when the defect is confined to a downstream design memo. Domain and benchmark review remain required before a claim-bearing run."
-source_task_paths = [
-  "tasks/civil/drainage-review/drainage-model-run-provenance-issue-review-package/brownfield-drainage-upgrade-industrial-precinct-catchment-02/instruction.md",
-  "tasks/civil/drainage-review/drainage-model-run-provenance-issue-review-package/brownfield-drainage-upgrade-industrial-precinct-catchment-02/task.toml",
-  "tasks/civil/drainage-review/drainage-model-run-provenance-issue-review-package/industrial-precinct-catchment-industrial-precinct-catchment-00/instruction.md",
-  "tasks/civil/drainage-review/drainage-model-run-provenance-issue-review-package/industrial-precinct-catchment-industrial-precinct-catchment-00/task.toml",
-]
 
 [[dimensions]]
 dimension_id = "review_workflow"

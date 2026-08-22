@@ -162,9 +162,7 @@ def load_resumable_study(
                     candidate_state_id=transition.candidate_state_id,
                     committed_state_id=transition.committed_state_id,
                     state_committed=transition.committed,
-                    changed_channels=transition.changed_channels,
                     trial_record=trial,
-                    diagnostics=transition.diagnostics,
                 )
             )
             if feedback_record is not None:

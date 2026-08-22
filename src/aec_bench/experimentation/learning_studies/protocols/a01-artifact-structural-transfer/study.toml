@@ -1,7 +1,6 @@
 study_id = "a01-artifact-structural-transfer"
 title = "Artifact structural transfer: single-room cooling load"
 research_question = "Does public feedback and explicit structured memory from the Brisbane office calculation change performance on the matched Sydney classroom calculation?"
-claim_mode = "controlled"
 relation_ids = ["brisbane-office-to-sydney-classroom"]
 
 [[experiences]]
@@ -16,13 +15,11 @@ role = "probe"
 
 [[measurements]]
 measurement_id = "structured-memory-transfer-gain"
-kind = "transfer_gain"
 projection_id = "heat-load-verifier-reward"
 direction = "higher"
 target_experience_id = "sydney-classroom-probe"
 focal_arm_id = "structured-memory"
 comparator_arm_id = "cold-reset"
-acquisition_experience_ids = ["brisbane-office-acquisition"]
 
 [[arms]]
 arm_id = "cold-reset"

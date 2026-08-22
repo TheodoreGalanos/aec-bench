@@ -19,11 +19,7 @@ from aec_bench.experimentation.learning_studies.assessment import (
     assess_learning_study,
     project_trial_reward,
 )
-from aec_bench.experimentation.learning_studies.families import (
-    load_learning_family,
-    resolve_learning_family,
-    resolve_learning_relation,
-)
+from aec_bench.experimentation.learning_studies.families import load_learning_family
 from aec_bench.experimentation.learning_studies.planning import compile_learning_study
 from aec_bench.experimentation.learning_studies.protocol_collection import (
     BUILTIN_LEARNING_STUDY_PROTOCOLS,
@@ -32,7 +28,6 @@ from aec_bench.experimentation.learning_studies.protocol_collection import (
 from aec_bench.experimentation.learning_studies.recording import StudyRunRecorder
 from aec_bench.experimentation.learning_studies.resume import load_resumable_study
 from aec_bench.experimentation.learning_studies.runtime import ArmRunStatus, run_learning_study
-from aec_bench.tasks.instance import resolve_instance_paths
 from aec_bench.tasks.loader import load_task_definition
 from tests.experimentation.learning_studies.support import HeatLoadStudyAdapter
 
@@ -48,24 +43,19 @@ def _resolve_task_definition(task_id: str):  # noqa: ANN202
     return load_task_definition(_TASKS_ROOT / task_id, _TASKS_ROOT)
 
 
-def _resolve_task_instance(task_id: str):  # noqa: ANN202
-    instance_dir = _TASKS_ROOT / task_id
-    return resolve_instance_paths(load_task_definition(instance_dir, _TASKS_ROOT), instance_dir)
-
-
 def test_a01_real_artifact_tasks_return_a_matched_structural_transfer_result(tmp_path: Path) -> None:
     spec = load_learning_study_protocol(
         _PROTOCOL_PATH,
         agent=AgentConfig(name="a01-test-agent", adapter="direct", model="fixed-test-model"),
         compute=ComputeConfig(backend="local", resource_limits={"memory_mb": 512}, timeout_override=30),
     )
-    family = resolve_learning_family(
-        load_learning_family(_PROTOCOL_PATH / "family.toml"),
-        _resolve_task_instance,
+    family = load_learning_family(_PROTOCOL_PATH / "family.toml")
+    family_relation = next(
+        item for item in family.relations if item.relation_id == "brisbane-office-to-sydney-classroom"
     )
-    family_relation = resolve_learning_relation(family, "brisbane-office-to-sydney-classroom")
-    assert [item.task.task.task_id for item in family_relation.sources] == [spec.experiences[0].task_id]
-    assert family_relation.target.task.task.task_id == spec.experiences[1].task_id
+    members = {item.member_id: item for item in family.members}
+    assert [members[item].task_id for item in family_relation.source_member_ids] == [spec.experiences[0].task_id]
+    assert members[family_relation.target_member_id].task_id == spec.experiences[1].task_id
     plan = compile_learning_study(
         study_run_id="a01-stage-1",
         spec=spec,
@@ -120,7 +110,6 @@ def test_a01_real_artifact_tasks_return_a_matched_structural_transfer_result(tmp
         run_learning_study(
             plan=plan,
             operations=binding.operations,
-            working_root=run_root,
             observer=recorder,
         )
     )
@@ -170,10 +159,13 @@ def test_a01_real_artifact_tasks_return_a_matched_structural_transfer_result(tmp
 
     evidence = {
         arm.arm_run_id: AssessmentArmEvidence(
-            arm_run_id=arm.arm_run_id,
             adapter_id="local-artifact-single-attempt",
             initial_state_equivalence_id="a01-empty-fixed-agent-state-r01",
-            family_reviewed=False,
+            arm_isolated=True,
+            lineage_complete=True,
+            probe_feedback_hidden=True,
+            probe_state_discarded=True,
+            hidden_evaluation_leaked=False,
         )
         for arm in plan.arm_runs
     }
@@ -183,6 +175,7 @@ def test_a01_real_artifact_tasks_return_a_matched_structural_transfer_result(tmp
         execution=execution,
         projections={_PROJECTION_ID: project_trial_reward},
         arm_evidence=evidence,
+        relations_reviewed=False,
     )
 
     result = assessment.measurements[0]
@@ -192,7 +185,18 @@ def test_a01_real_artifact_tasks_return_a_matched_structural_transfer_result(tmp
     assert result.mean_effect == 1.0
     assert len(result.included_pairs) == 1
     assert result.included_pairs[0].repetition == 1
-    assert "learning-family relation is not reviewed" in " ".join(result.diagnostics)
+    assert "learning-family relations are not reviewed" in " ".join(result.diagnostics)
+
+    reviewed_result = assess_learning_study(
+        spec=spec,
+        plan=plan,
+        execution=execution,
+        projections={_PROJECTION_ID: project_trial_reward},
+        arm_evidence=evidence,
+        relations_reviewed=True,
+    ).measurements[0]
+    assert reviewed_result.validity is LearningComparisonValidity.CONTROLLED
+    assert reviewed_result.included_pairs == result.included_pairs
 
     assert (run_root / "study-spec.json").is_file()
     assert (run_root / "study-plan.json").is_file()
@@ -212,7 +216,6 @@ def test_a01_real_artifact_tasks_return_a_matched_structural_transfer_result(tmp
         run_learning_study(
             plan=plan,
             operations=binding.operations,
-            working_root=run_root,
             observer=resumable.recorder,
             resume=resumable.resume,
         )

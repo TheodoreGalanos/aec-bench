@@ -1,12 +1,6 @@
 family_id = "heat-load-single-room"
 title = "Single-room cooling-load method transfer"
 description = "Tests the same cooling-load procedure across a changed room use, occupancy basis, climate, and numerical inputs. Domain review remains required before a claim-bearing run."
-source_task_paths = [
-  "tasks/mechanical/heat-load/single-room-office-L3/brisbane-office-85m2/instruction.md",
-  "tasks/mechanical/heat-load/single-room-office-L3/brisbane-office-85m2/task.toml",
-  "tasks/mechanical/heat-load/single-room-office-L3/sydney-classroom-120m2/instruction.md",
-  "tasks/mechanical/heat-load/single-room-office-L3/sydney-classroom-120m2/task.toml",
-]
 
 [[dimensions]]
 dimension_id = "task_form"

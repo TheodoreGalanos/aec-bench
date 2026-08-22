@@ -19,11 +19,7 @@ from aec_bench.experimentation.learning_studies.assessment import (
     ProjectionResult,
     assess_learning_study,
 )
-from aec_bench.experimentation.learning_studies.families import (
-    load_learning_family,
-    resolve_learning_family,
-    resolve_learning_relation,
-)
+from aec_bench.experimentation.learning_studies.families import load_learning_family
 from aec_bench.experimentation.learning_studies.planning import compile_learning_study
 from aec_bench.experimentation.learning_studies.protocol_collection import (
     BUILTIN_LEARNING_STUDY_PROTOCOLS,
@@ -31,7 +27,6 @@ from aec_bench.experimentation.learning_studies.protocol_collection import (
 )
 from aec_bench.experimentation.learning_studies.recording import StudyRunRecorder
 from aec_bench.experimentation.learning_studies.runtime import ArmRunStatus, run_learning_study
-from aec_bench.tasks.instance import resolve_instance_paths
 from aec_bench.tasks.loader import load_task_definition
 from aec_bench.templates.builtin.civil.drainage_model_run_provenance_issue_review_package.outcomes import (
     has_correct_downstream_memo_boundary_decision,
@@ -62,11 +57,6 @@ def _resolve_task_definition(task_id: str):  # noqa: ANN202
     return load_task_definition(_TASKS_ROOT / task_id, _TASKS_ROOT)
 
 
-def _resolve_task_instance(task_id: str):  # noqa: ANN202
-    instance_dir = _TASKS_ROOT / task_id
-    return resolve_instance_paths(load_task_definition(instance_dir, _TASKS_ROOT), instance_dir)
-
-
 def _golden_output(task_id: str) -> str:
     return (_TASKS_ROOT / task_id / "tests" / "fixtures" / "golden_pass.md").read_text(encoding="utf-8")
 
@@ -90,13 +80,11 @@ def _project_upstream_invalidation(record: TrialRecord) -> ProjectionResult:
 
 def test_a02_real_artifact_tasks_identify_upstream_invalidation_from_public_output(tmp_path: Path) -> None:
     spec = load_learning_study_protocol(_PROTOCOL_PATH, agent=_AGENT, compute=_COMPUTE)
-    family = resolve_learning_family(
-        load_learning_family(_PROTOCOL_PATH / "family.toml"),
-        _resolve_task_instance,
-    )
-    relation = resolve_learning_relation(family, "stale-upstream-to-stale-downstream")
-    assert [item.task.task.task_id for item in relation.sources] == [_ACQUISITION_TASK_ID]
-    assert relation.target.task.task.task_id == _PROBE_TASK_ID
+    family = load_learning_family(_PROTOCOL_PATH / "family.toml")
+    relation = next(item for item in family.relations if item.relation_id == "stale-upstream-to-stale-downstream")
+    members = {item.member_id: item for item in family.members}
+    assert [members[item].task_id for item in relation.source_member_ids] == [_ACQUISITION_TASK_ID]
+    assert members[relation.target_member_id].task_id == _PROBE_TASK_ID
     plan = compile_learning_study(
         study_run_id="a02-stage-1",
         spec=spec,
@@ -161,7 +149,6 @@ def test_a02_real_artifact_tasks_identify_upstream_invalidation_from_public_outp
         run_learning_study(
             plan=plan,
             operations=binding.operations,
-            working_root=run_root,
             observer=recorder,
         )
     )
@@ -231,10 +218,13 @@ def test_a02_real_artifact_tasks_identify_upstream_invalidation_from_public_outp
 
     evidence = {
         arm.arm_run_id: AssessmentArmEvidence(
-            arm_run_id=arm.arm_run_id,
             adapter_id="local-artifact-single-attempt",
             initial_state_equivalence_id="a02-empty-fixed-agent-state-r01",
-            family_reviewed=False,
+            arm_isolated=True,
+            lineage_complete=True,
+            probe_feedback_hidden=True,
+            probe_state_discarded=True,
+            hidden_evaluation_leaked=False,
         )
         for arm in plan.arm_runs
     }
@@ -247,6 +237,7 @@ def test_a02_real_artifact_tasks_identify_upstream_invalidation_from_public_outp
             _UPSTREAM_INVALIDATION_PROJECTION_ID: _project_upstream_invalidation,
         },
         arm_evidence=evidence,
+        relations_reviewed=False,
     )
     results = {item.measurement_id: item for item in assessment.measurements}
     assert all(item.validity is LearningComparisonValidity.DESCRIPTIVE_ONLY for item in results.values())

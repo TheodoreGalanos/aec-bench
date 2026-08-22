@@ -3,7 +3,6 @@
 
 from __future__ import annotations
 
-from datetime import datetime
 from enum import StrEnum
 from typing import Literal
 
@@ -34,8 +33,6 @@ class StudyStepStatus(StrEnum):
 class StudyRunStatus(StrEnum):
     COMPLETED = "completed"
     COMPLETED_WITH_FAILED_ARMS = "completed_with_failed_arms"
-    CANCELLED = "cancelled"
-    INVALID = "invalid"
 
 
 class LearnerStateRef(FrozenStrictModel):
@@ -45,7 +42,6 @@ class LearnerStateRef(FrozenStrictModel):
     parent_state_id: str | None
     created_after_step_id: str | None
     artifact: ArtifactRef
-    changed_channels: tuple[NonEmptyStr, ...] = ()
 
     @model_validator(mode="after")
     def validate_parent_shape(self) -> LearnerStateRef:
@@ -82,8 +78,6 @@ class LearnerTransitionReceipt(FrozenStrictModel):
     committed_state_id: str | None
     committed: bool
     feedback_ids: tuple[NonEmptyStr, ...] = ()
-    changed_channels: tuple[NonEmptyStr, ...] = ()
-    diagnostics: tuple[str, ...] = ()
 
     @model_validator(mode="after")
     def validate_commit_shape(self) -> LearnerTransitionReceipt:
@@ -109,14 +103,10 @@ class StudyStepReceipt(FrozenStrictModel):
     trial_id: str | None = None
     feedback_id: str | None = None
     transition_id: str | None = None
-    started_at: datetime
-    completed_at: datetime
     failure: StudyStepFailureRecord | None = None
 
     @model_validator(mode="after")
     def validate_status_shape(self) -> StudyStepReceipt:
-        if self.completed_at < self.started_at:
-            raise ValueError("step completion time cannot precede start time")
         if self.status is StudyStepStatus.COMPLETED and self.failure is not None:
             raise ValueError("completed step cannot contain a failure")
         if self.status is StudyStepStatus.FAILED and self.failure is None:
@@ -126,7 +116,6 @@ class StudyStepReceipt(FrozenStrictModel):
 
 class StudyEvent(FrozenStrictModel):
     sequence: NonNegativeInt
-    timestamp: datetime
     study_run_id: NonEmptyStr
     kind: StudyEventKind
     arm_run_id: str | None = None
@@ -136,7 +125,7 @@ class StudyEvent(FrozenStrictModel):
 
 class RecordedArmRunResult(FrozenStrictModel):
     arm_run_id: NonEmptyStr
-    status: Literal["completed", "failed", "cancelled"]
+    status: Literal["completed", "failed"]
     initial_state_id: str | None
     final_state_id: str | None
     trial_ids: tuple[NonEmptyStr, ...]

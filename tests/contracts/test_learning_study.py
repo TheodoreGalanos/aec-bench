@@ -18,7 +18,6 @@ from aec_bench.contracts.learning_study import (
     ReleaseFeedbackStep,
     RunExperienceStep,
     StudyArmRole,
-    StudyClaimMode,
 )
 from aec_bench.contracts.validators import StrictModel
 from aec_bench.trials import PlannedTrial, planned_trial_from_data, planned_trial_to_data
@@ -33,7 +32,6 @@ def _spec() -> LearningStudySpec:
         study_id="method-transfer",
         title="Method transfer",
         research_question="Does the method transfer?",
-        claim_mode=StudyClaimMode.CONTROLLED,
         agent=AgentConfig(name="learner", adapter="direct", model="fixed-model"),
         compute=ComputeConfig(backend="local", timeout_override=30),
         repetitions=2,

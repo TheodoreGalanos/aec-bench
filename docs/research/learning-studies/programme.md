@@ -19,7 +19,7 @@ The layer will:
 3. Control what feedback becomes visible, and when.
 4. Record changes to learner state without interpreting its contents.
 5. Compare exposed learners against matched cold controls.
-6. Measure structural transfer, applicability, composition, retention, interference, and learning efficiency.
+6. Compute named paired differences for structural transfer, applicability, composition, retention, and interference. Cost or learning-efficiency analysis remains study-owned secondary analysis.
 7. Reference task-owned causal and hierarchical evidence where environments can provide it.
 8. Produce normal study artefacts and reports that may later support RL research, without defining an RL training contract now.
 
@@ -265,9 +265,8 @@ It does require:
 
 - an identity for each snapshot;
 - a parent-state reference;
-- artefact references for persisted components;
-- a receipt for every committed transition;
-- the declared channels that changed.
+- one artefact reference for the persisted snapshot;
+- a receipt for every committed or discarded transition.
 
 ## 5.6 Probes are isolated
 
@@ -367,7 +366,7 @@ TrialRecord                                TrialRecord
                 study-level assessor
                          │
                          ▼
-                LearningStudyResult
+       RecordedStudyExecution + LearningStudyAssessment
 ```
 
 ## 6.1 Layers
@@ -428,15 +427,17 @@ LearningStudySpec
   study_id
   title
   research_question
-  claim_mode
+  fixed agent and compute configuration
+  repetitions
   experiences
   arms
   relations
   measurements
-  execution_seed
 ```
 
-It contains selectors and author intent, not necessarily final trial identity.
+The protocol form contains family-member selectors and author intent. Loading
+resolves these selectors to exact task IDs. Compilation then creates final
+trial identities.
 
 ## 7.2 `LearningStudyPlan`
 
@@ -481,32 +482,28 @@ Makes selected host-held evidence visible.
 ```text
 ReleaseFeedback
   source_experience
-  view:
-    terminal_outcome
-    evaluation_breakdown
-    task_explanation
-    failure_analysis
-    counterfactual_comparison
+  feedback_view_id
 ```
 
 Not every environment must support every view.
 
 ### Consolidation step
 
-Allows the learner to update specified state channels.
+Allows the adapter to apply one bounded learner-state operation.
 
 ```text
 Consolidate
-  visible_feedback
-  permitted_channels
-  instructions
+  feedback_step_ids
+  operation_id
 ```
 
 Consolidation is not automatically a benchmark trial. It produces a learner-transition receipt.
 
 ## 7.4 Learner continuity
 
-The common contract identifies channels, while adapters define how they are implemented.
+The common contract does not identify learner-state channels. Adapters define
+the channel layout, permissions, and treatment behavior. The common runtime
+sees only opaque copy-on-write snapshots and explicit transition identity.
 
 | Channel | Possible policy |
 |---|---|
@@ -533,11 +530,11 @@ model weights: fixed
 ```text
 LearnerStateRef
   state_id
+  arm_run_id
   parent_state_id
   created_after_step
   treatment_id
-  artefact_refs
-  changed_channels
+  artefact_ref
 ```
 
 ```text
@@ -547,7 +544,6 @@ LearnerTransitionReceipt
   operation
   visible_feedback_refs
   committed
-  diagnostics
 ```
 
 A study may discard a state transition, especially after a probe.
@@ -563,7 +559,6 @@ ExperienceRelation
   purpose
   invariant_claims
   changed_dimensions
-  expected_effect
 ```
 
 ### Relation purposes
@@ -571,18 +566,17 @@ ExperienceRelation
 - `transfer`
 - `boundary`
 - `composition`
-- `retention`
-- `interference`
+
+Retention and interference are sequence roles and named measurement questions.
+They do not require separate task-relation purposes.
 
 ### Changed dimensions
 
 - `surface`
-- `parameters`
-- `causal_structure`
+- `parameter`
+- `causal`
 - `applicability`
-- `observability`
-- `authority_or_resources`
-- `regime`
+- `component`
 
 Examples:
 
@@ -593,9 +587,7 @@ purpose: transfer
 invariant:
   governing load-path method
 changed:
-  surface, parameters
-expected:
-  positive learning effect
+  surface, parameter
 ```
 
 ```text
@@ -605,9 +597,7 @@ purpose: boundary
 invariant:
   superficial asset presentation
 changed:
-  causal_structure, applicability
-expected:
-  familiar method should not be applied
+  causal, applicability
 ```
 
 For composition:
@@ -622,38 +612,35 @@ changed:
   novel coordination requirement
 ```
 
-## 7.7 Study result
+## 7.7 Study results
 
 ```text
-LearningStudyResult
+RecordedStudyExecution
   study_run_id
-  validity
   arm_results
-  experience_results
-  learner_state_lineage
-  feedback_releases
+  trial_ids
+
+LearningStudyAssessment
+  study_run_id
   measurement_results
-  diagnostics
-  evidence_refs
 ```
 
-The result references existing `TrialRecord` values. It does not duplicate them.
+State, feedback, transition, and step evidence remains in its own persisted
+records. Assessment retains included pairs, excluded repetitions, validity,
+compact means, and diagnostics. These records reference existing `TrialRecord`
+values. They do not duplicate them.
 
 ---
 
 # 8. Claim and measurement discipline
 
-## 8.1 Claim modes
+## 8.1 Evidence-derived comparison validity
 
-### Descriptive sequence
+The authored protocol does not select a claim mode. The assessor derives one
+of `controlled`, `descriptive_only`, or `invalid` from the compiled comparison
+shape and explicit execution evidence.
 
-Reports what occurred across an ordered set of experiences.
-
-It does not attribute change to exposure.
-
-### Controlled learning comparison
-
-Requires:
+A controlled learning comparison requires:
 
 - a matched cold control;
 - the same initial model and harness;
@@ -664,9 +651,16 @@ Requires:
 
 It reports an estimated learning effect under those controls.
 
-The substrate should avoid automatically using stronger causal language.
+A within-arm or treatment-to-treatment comparison is descriptive. A failed
+isolation, probe, lineage, or hidden-evidence condition is invalid. The
+substrate should avoid automatically using stronger causal language.
 
-## 8.2 Core measurements
+## 8.2 Named paired differences
+
+The common contract has one paired-difference shape. `measurement_id` and the
+selected task-owned projection state the research meaning. Transfer,
+retention, interference, composition, and boundary formulas remain protocol
+semantics rather than common enum values.
 
 Let:
 
@@ -731,6 +725,9 @@ E_{\text{learning}}
 \]
 
 Efficiency is secondary to validity and should never hide absolute performance.
+It is not a Release A common measurement type. A study can derive it from
+pair-level results and execution-owner token, interaction, trial, or cost
+evidence when that evidence exists.
 
 ## 8.3 Named outcome projections
 
@@ -754,13 +751,14 @@ The relevant evaluation owner supplies the projection.
 Controlled studies should support:
 
 - paired repetition identifiers;
-- cloned initial learner state;
+- explicit evidence that isolated initial learner states are equivalent;
 - randomised or interleaved arm order;
 - multiple seeds or repetitions;
-- confidence intervals;
 - ceiling and floor diagnostics.
 
 A single exposed run and a single cold run may be exploratory, but should not support strong conclusions.
+Uncertainty analysis remains study-owned until observed repetition counts and a
+declared method justify it.
 
 ---
 
@@ -886,10 +884,11 @@ Introduce only contracts that cross a persistence boundary:
 ```text
 LearningStudySpec
 LearningStudyPlan
-LearningStudyResult
 LearnerStateRef
 LearnerTransitionReceipt
 StudyEvent
+RecordedStudyExecution
+LearningStudyAssessment
 ```
 
 Runtime-only helper values should remain frozen dataclasses inside the owner package.
@@ -911,14 +910,10 @@ def compile_learning_study(
 async def run_learning_study(
     *,
     plan,
-    initialise_learner,
-    execute_experience,
-    snapshot_learner,
-    release_feedback,
-    consolidate,
-    assess,
-    record_event,
-) -> LearningStudyResult:
+    operations,
+    observer=None,
+    resume=None,
+) -> LearningStudyExecution:
     ...
 ```
 
@@ -1193,9 +1188,6 @@ A family may annotate existing axes as:
 - parameter;
 - causal;
 - applicability;
-- observability;
-- authority or resource;
-- regime;
 - composition component.
 
 These annotations are assertions by the study author. The compiler cannot infer their domain truth.
@@ -1708,7 +1700,8 @@ Did explicit feedback-release steps remain useful, or can some cases be simplifi
 
 ### Learner continuity
 
-Which state channels were genuinely common across artifact and lifecycle studies?
+Gate A found no common artifact learner-state channels. Which lifecycle
+requirements, if any, cannot remain adapter-owned?
 
 ### Outcome projections
 
@@ -1720,9 +1713,7 @@ Did lifecycle studies require any relation purpose not covered by:
 
 - transfer;
 - boundary;
-- composition;
-- retention;
-- interference?
+- composition?
 
 ## Promotion rule
 
@@ -1849,7 +1840,7 @@ These labels do not alter action execution.
 
 ## Acceptance criteria
 
-1. Dam profiles express surface, causal, applicability, and observability changes.
+1. Dam profiles express surface, causal, and applicability changes, including changes in available evidence.
 2. At least one structural-transfer and one negative-transfer study execute.
 3. The same typed world actions remain authoritative.
 4. The study can determine whether an action revealed relevant evidence.

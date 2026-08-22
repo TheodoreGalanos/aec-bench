@@ -1,7 +1,6 @@
 study_id = "a03-artifact-retention-interference"
 title = "Artifact retention and interference: occupied-space heat-load method"
 research_question = "Does consolidated occupied-space heat-load knowledge survive a neutral task, and does a later server-room exception distort its use on a delayed occupied-space probe?"
-claim_mode = "controlled"
 relation_ids = [
   "brisbane-office-to-sydney-classroom-immediate-transfer",
   "brisbane-office-to-adelaide-library-retention",
@@ -27,7 +26,6 @@ role = "probe"
 experience_id = "drainage-review-neutral"
 task_id = "civil/drainage-review/drainage-model-run-provenance-issue-review-package/brownfield-drainage-upgrade-industrial-precinct-catchment-02"
 role = "practice"
-description = "An unrelated drainage provenance review with a comparable single artifact-task execution slot."
 
 [[experiences]]
 experience_id = "cairns-server-interference"
@@ -36,47 +34,38 @@ role = "interference"
 
 [[measurements]]
 measurement_id = "immediate-transfer-gain"
-kind = "transfer_gain"
 projection_id = "heat-load-verifier-reward"
 direction = "higher"
 target_experience_id = "sydney-classroom-immediate-probe"
 focal_arm_id = "immediate-transfer"
 comparator_arm_id = "cold-immediate"
-acquisition_experience_ids = ["brisbane-office-acquisition"]
 
 [[measurements]]
 measurement_id = "retained-gain-after-neutral"
-kind = "retained_gain"
 projection_id = "heat-load-verifier-reward"
 direction = "higher"
 target_experience_id = "adelaide-library-delayed-probe"
 focal_arm_id = "neutral-retention"
 comparator_arm_id = "cold-delayed-neutral"
-acquisition_experience_ids = ["brisbane-office-acquisition"]
 
 [[measurements]]
 measurement_id = "within-order-retention-decay"
-kind = "retention_decay"
 projection_id = "heat-load-verifier-reward"
 direction = "lower"
 target_experience_id = "adelaide-library-delayed-probe"
 focal_arm_id = "neutral-retention"
 reference_experience_id = "sydney-classroom-immediate-probe"
-acquisition_experience_ids = ["brisbane-office-acquisition"]
 
 [[measurements]]
 measurement_id = "interference-effect"
-kind = "interference_effect"
 projection_id = "heat-load-verifier-reward"
 direction = "higher"
 target_experience_id = "adelaide-library-delayed-probe"
 focal_arm_id = "interference"
 comparator_arm_id = "neutral-retention"
-acquisition_experience_ids = ["brisbane-office-acquisition"]
 
 [[measurements]]
 measurement_id = "reset-interference-control"
-kind = "interference_effect"
 projection_id = "heat-load-verifier-reward"
 direction = "higher"
 target_experience_id = "adelaide-library-delayed-probe"

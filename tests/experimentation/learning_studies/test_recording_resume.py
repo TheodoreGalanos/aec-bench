@@ -19,7 +19,6 @@ from aec_bench.contracts.learning_study import (
     ReleaseFeedbackStep,
     RunExperienceStep,
     StudyArmRole,
-    StudyClaimMode,
 )
 from aec_bench.contracts.learning_study_evidence import (
     FeedbackReleaseRecord,
@@ -43,7 +42,6 @@ from aec_bench.experimentation.learning_studies.runtime import (
     ExperienceExecutionResult,
     FeedbackHandle,
     FeedbackReleaseResult,
-    InitialiseLearnerRequest,
     LearnerStateHandle,
     LearnerTransitionResult,
     LearningStudyOperations,
@@ -76,10 +74,10 @@ class _FileOperations:
         (destination / "last-operation.txt").write_text(label, encoding="utf-8")
         return LearnerStateHandle(state_id=f"state-{self.state_counter}", value=destination)
 
-    def initialise(self, request: InitialiseLearnerRequest) -> LearnerStateHandle[Path]:
+    def initialise(self, request: PlannedArmRun) -> LearnerStateHandle[Path]:
         return self.state(None, f"initial:{request.arm_run_id}")
 
-    def execute(self, request: ExecuteExperienceRequest[Path, Path]) -> ExperienceExecutionResult[Path]:
+    def execute(self, request: ExecuteExperienceRequest[Path]) -> ExperienceExecutionResult[Path]:
         self.calls[request.step.step_id] = self.calls.get(request.step.step_id, 0) + 1
         if request.step.step_id in self.fail_steps:
             raise RuntimeError(f"declared failure: {request.step.step_id}")
@@ -91,7 +89,6 @@ class _FileOperations:
                 task_id=request.step.trial.task_id,
             ),
             candidate_state=candidate,
-            changed_channels=("workspace",),
         )
 
     def release(self, request: ReleaseFeedbackRequest[Path]) -> FeedbackReleaseResult[Path, Path]:
@@ -108,7 +105,6 @@ class _FileOperations:
                 view_id=request.step.feedback_view_id,
                 value=feedback_path,
             ),
-            changed_channels=("feedback",),
         )
 
     def consolidate(self, request: ConsolidationRequest[Path, Path]) -> LearnerTransitionResult[Path]:
@@ -118,7 +114,7 @@ class _FileOperations:
         )
         candidate = self.state(request.state.value, f"consolidation:{request.step.step_id}")
         (candidate.value / "memory.txt").write_text("method", encoding="utf-8")
-        return LearnerTransitionResult(candidate_state=candidate, changed_channels=("memory",))
+        return LearnerTransitionResult(candidate_state=candidate)
 
     def bundle(self) -> LearningStudyOperations[Path, Path]:
         return LearningStudyOperations(
@@ -127,7 +123,6 @@ class _FileOperations:
             release_feedback=self.release,
             consolidate=self.consolidate,
             discard_state=lambda _state: None,
-            close_state=lambda _state: None,
         )
 
 
@@ -136,7 +131,6 @@ def _plan() -> CompiledLearningStudy:
         study_id="recording-study",
         title="Recording study",
         research_question="Can a committed sequence resume?",
-        claim_mode=StudyClaimMode.CONTROLLED,
         agent=AgentConfig(name="agent", adapter="direct", model="fixed"),
         compute=ComputeConfig(backend="local"),
         experiences=(

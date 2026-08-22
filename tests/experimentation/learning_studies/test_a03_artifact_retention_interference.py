@@ -120,7 +120,6 @@ def test_a03_real_artifact_tasks_measure_retention_and_explicit_interference(tmp
         run_learning_study(
             plan=plan,
             operations=binding.operations,
-            working_root=run_root,
             observer=recorder,
         )
     )
@@ -174,10 +173,13 @@ def test_a03_real_artifact_tasks_measure_retention_and_explicit_interference(tmp
 
     evidence = {
         arm.arm_run_id: AssessmentArmEvidence(
-            arm_run_id=arm.arm_run_id,
             adapter_id="local-artifact-single-attempt",
             initial_state_equivalence_id="a03-empty-fixed-agent-state-r01",
-            family_reviewed=False,
+            arm_isolated=True,
+            lineage_complete=True,
+            probe_feedback_hidden=True,
+            probe_state_discarded=True,
+            hidden_evaluation_leaked=False,
         )
         for arm in plan.arm_runs
     }
@@ -187,6 +189,7 @@ def test_a03_real_artifact_tasks_measure_retention_and_explicit_interference(tmp
         execution=execution,
         projections={"heat-load-verifier-reward": project_trial_reward},
         arm_evidence=evidence,
+        relations_reviewed=False,
     )
     results = {item.measurement_id: item for item in assessment.measurements}
     assert all(item.validity is LearningComparisonValidity.DESCRIPTIVE_ONLY for item in results.values())
