@@ -189,6 +189,15 @@ complete, and probe-created learner state is discarded by default. Thin
 environment adapters may translate these operations to their existing public
 execution APIs. Execution and task owners do not import Learning Studies policy.
 
+The study recorder publishes complete adapter-supplied learner snapshots through
+the existing artifact repository and writes ordinary trial records through the
+existing ledger. A final step receipt is the resume authority. The event stream
+is an append-only index over receipts, not a second execution or provenance
+system. Assessment uses caller-supplied named outcome projections and retains
+matched repetition values. Missing controls downgrade a usable comparison to
+descriptive evidence; isolation, lineage, or probe-secrecy failures make it
+invalid.
+
 The programme charter and proposed Release A tranche are maintained as
 [Learning Studies research](research/learning-studies/programme.md).
 

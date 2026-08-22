@@ -36,11 +36,16 @@ class LearningStudyRuntimeError(LearningStudyError):
     pass
 
 
+class LearningStudyPersistenceError(LearningStudyRuntimeError):
+    pass
+
+
 __all__ = (
     "LearningStudyError",
     "LearningStudyFeatureUnsupported",
     "LearningStudyOrderInvalid",
     "LearningStudyPlanCollision",
+    "LearningStudyPersistenceError",
     "LearningStudyReferenceInvalid",
     "LearningStudyRuntimeError",
     "LearningStudySpecInvalid",

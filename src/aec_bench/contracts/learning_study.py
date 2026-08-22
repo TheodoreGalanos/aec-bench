@@ -37,6 +37,34 @@ class ExperienceRelationPurpose(StrEnum):
     INTERFERENCE = "interference"
 
 
+class LearningMeasurementKind(StrEnum):
+    TRANSFER_GAIN = "transfer_gain"
+    BOUNDARY_GAIN = "boundary_gain"
+    COMPOSITION_GAIN = "composition_gain"
+    RETAINED_GAIN = "retained_gain"
+    RETENTION_DECAY = "retention_decay"
+    INTERFERENCE_EFFECT = "interference_effect"
+    LEARNING_EFFICIENCY = "learning_efficiency"
+
+
+class ImprovementDirection(StrEnum):
+    HIGHER = "higher"
+    LOWER = "lower"
+
+
+class LearningMeasurementSpec(FrozenStrictModel):
+    measurement_id: NonEmptyStr
+    kind: LearningMeasurementKind
+    projection_id: NonEmptyStr
+    direction: ImprovementDirection
+    target_experience_id: NonEmptyStr
+    focal_arm_id: NonEmptyStr
+    comparator_arm_id: str | None = None
+    reference_experience_id: str | None = None
+    acquisition_experience_ids: tuple[NonEmptyStr, ...] = ()
+    efficiency_denominator_id: str | None = None
+
+
 class LearningExperienceSpec(FrozenStrictModel):
     experience_id: NonEmptyStr
     task_id: NonEmptyStr
@@ -139,12 +167,14 @@ class LearningStudySpec(FrozenStrictModel):
     repetitions: PositiveInt = 1
     experiences: tuple[LearningExperienceSpec, ...]
     relations: tuple[ExperienceRelationSpec, ...] = ()
+    measurements: tuple[LearningMeasurementSpec, ...] = ()
     arms: tuple[LearningArmSpec, ...]
 
     @model_validator(mode="after")
     def validate_identities(self) -> LearningStudySpec:
         _require_unique("experience", [item.experience_id for item in self.experiences])
         _require_unique("relation", [item.relation_id for item in self.relations])
+        _require_unique("measurement", [item.measurement_id for item in self.measurements])
         _require_unique("arm", [item.arm_id for item in self.arms])
         if not self.experiences:
             raise ValueError("learning study requires at least one experience")
@@ -165,10 +195,13 @@ __all__ = (
     "ExperienceRole",
     "LearningArmSpec",
     "LearningExperienceSpec",
+    "LearningMeasurementKind",
+    "LearningMeasurementSpec",
     "LearningStudySpec",
     "LearningStudyStep",
     "ReleaseFeedbackStep",
     "RunExperienceStep",
     "StudyArmRole",
     "StudyClaimMode",
+    "ImprovementDirection",
 )

@@ -11,6 +11,7 @@ from aec_bench.contracts.learning_study import (
     ConsolidateStep,
     ExperienceRelationPurpose,
     ExperienceRole,
+    LearningMeasurementKind,
     LearningStudySpec,
     ReleaseFeedbackStep,
     RunExperienceStep,
@@ -82,6 +83,7 @@ def compile_learning_study(
 
     _validate_safe_id("study run", study_run_id)
     _validate_references(spec)
+    _validate_measurements(spec)
     _validate_controlled_shape(spec)
     resolved: dict[str, PlannableTask] = {}
     for experience in spec.experiences:
@@ -325,6 +327,67 @@ def _validate_controlled_shape(spec: LearningStudySpec) -> None:
         raise LearningStudySpecInvalid(
             "controlled learning study requires a matched probe in control and exposure arms"
         )
+
+
+def _validate_measurements(spec: LearningStudySpec) -> None:
+    experiences = {item.experience_id: item for item in spec.experiences}
+    arms = {item.arm_id: item for item in spec.arms}
+    between_arm_kinds = {
+        LearningMeasurementKind.TRANSFER_GAIN,
+        LearningMeasurementKind.BOUNDARY_GAIN,
+        LearningMeasurementKind.COMPOSITION_GAIN,
+        LearningMeasurementKind.RETAINED_GAIN,
+        LearningMeasurementKind.INTERFERENCE_EFFECT,
+    }
+    for measurement in spec.measurements:
+        _validate_safe_id("measurement", measurement.measurement_id)
+        target = experiences.get(measurement.target_experience_id)
+        if target is None or target.role is not ExperienceRole.PROBE:
+            raise LearningStudyReferenceInvalid(
+                f"study {spec.study_id} measurement {measurement.measurement_id} target must be a declared probe"
+            )
+        focal = arms.get(measurement.focal_arm_id)
+        comparator = None if measurement.comparator_arm_id is None else arms.get(measurement.comparator_arm_id)
+        if focal is None or (measurement.comparator_arm_id is not None and comparator is None):
+            raise LearningStudyReferenceInvalid(
+                f"study {spec.study_id} measurement {measurement.measurement_id} references an unknown arm"
+            )
+        if measurement.kind in between_arm_kinds and comparator is None:
+            raise LearningStudySpecInvalid(
+                f"study {spec.study_id} measurement {measurement.measurement_id} requires a comparator arm"
+            )
+        if comparator is not None and comparator.arm_id == focal.arm_id:
+            raise LearningStudySpecInvalid(
+                f"study {spec.study_id} measurement {measurement.measurement_id} comparator must differ from focal"
+            )
+        for arm in (focal, comparator):
+            if arm is None:
+                continue
+            if not any(
+                isinstance(step, RunExperienceStep) and step.experience_id == measurement.target_experience_id
+                for step in arm.steps
+            ):
+                raise LearningStudyReferenceInvalid(
+                    f"study {spec.study_id} measurement {measurement.measurement_id} arm {arm.arm_id} "
+                    "does not run its target probe"
+                )
+        referenced_experiences = {
+            *measurement.acquisition_experience_ids,
+            *(() if measurement.reference_experience_id is None else (measurement.reference_experience_id,)),
+        }
+        missing = referenced_experiences - set(experiences)
+        if missing:
+            raise LearningStudyReferenceInvalid(
+                f"study {spec.study_id} measurement {measurement.measurement_id} references unknown experiences: "
+                f"{sorted(missing)}"
+            )
+        focal_experience_ids = {step.experience_id for step in focal.steps if isinstance(step, RunExperienceStep)}
+        missing_acquisition = set(measurement.acquisition_experience_ids) - focal_experience_ids
+        if missing_acquisition:
+            raise LearningStudyReferenceInvalid(
+                f"study {spec.study_id} measurement {measurement.measurement_id} focal arm does not run "
+                f"declared acquisition experiences: {sorted(missing_acquisition)}"
+            )
 
 
 def _validate_safe_id(label: str, value: str) -> None:
