@@ -49,12 +49,12 @@ from aec_bench.experimentation.lifecycle_studies.ablation_plan import (
     LifecycleRuntimeProvenance,
     build_lifecycle_ablation_plan,
 )
-from aec_bench.experimentation.lifecycle_studies.transfer import (
-    LifecycleTransferCondition,
-    LifecycleTransferEvaluationSpec,
-    LifecycleTransferRecordReference,
-    LifecycleTransferStudyDesign,
-    build_lifecycle_transfer_evaluation,
+from aec_bench.experimentation.lifecycle_studies.holdout_generalization import (
+    LifecycleHoldoutCondition,
+    LifecycleHoldoutEvaluationSpec,
+    LifecycleHoldoutRecordReference,
+    LifecycleHoldoutStudyDesign,
+    build_lifecycle_holdout_evaluation,
 )
 from aec_bench.ledger.artifact_repository import ArtifactRepository
 from aec_bench.ledger.reader import read_trial_record
@@ -118,7 +118,7 @@ def test_partial_holdout_cannot_stand_in_for_complete_target_evidence(
     )
     target_bytes = target.record_path.read_bytes()
 
-    result = build_lifecycle_transfer_evaluation(
+    result = build_lifecycle_holdout_evaluation(
         _spec(condition=condition, calibration=(calibration.reference,), targets=(target.reference,))
     )
 
@@ -137,7 +137,6 @@ def test_partial_holdout_cannot_stand_in_for_complete_target_evidence(
     assert target.record_path.read_bytes() == target_bytes
     assert read_trial_record(target.record_path).evaluation.reward == 0.75
     serialized = result.model_dump(mode="json")
-    assert "transfer_effect" not in serialized
     assert "winner" not in serialized
 
 
@@ -173,7 +172,7 @@ def test_calibration_requires_explicit_public_visibility(
         condition=condition,
     )
 
-    result = build_lifecycle_transfer_evaluation(
+    result = build_lifecycle_holdout_evaluation(
         _spec(condition=condition, calibration=(calibration.reference,), targets=(target.reference,))
     )
 
@@ -216,7 +215,7 @@ def test_target_requires_explicit_holdout_visibility(
         condition=condition,
     )
 
-    result = build_lifecycle_transfer_evaluation(
+    result = build_lifecycle_holdout_evaluation(
         _spec(condition=condition, calibration=(calibration.reference,), targets=(target.reference,))
     )
 
@@ -248,7 +247,7 @@ def test_target_package_must_be_distinct_from_every_supporting_calibration_packa
         condition=condition,
     )
 
-    result = build_lifecycle_transfer_evaluation(
+    result = build_lifecycle_holdout_evaluation(
         _spec(condition=condition, calibration=(calibration.reference,), targets=(target.reference,))
     )
 
@@ -292,7 +291,7 @@ def test_target_package_must_be_distinct_from_any_integrity_valid_calibration_in
         condition=selected,
     )
 
-    result = build_lifecycle_transfer_evaluation(
+    result = build_lifecycle_holdout_evaluation(
         _spec(
             condition=selected,
             calibration=(supporting.reference, other_condition.reference),
@@ -343,7 +342,7 @@ def test_partial_or_unverified_target_is_not_evaluable(
         verifier_completed=verifier_completed,
     )
 
-    result = build_lifecycle_transfer_evaluation(
+    result = build_lifecycle_holdout_evaluation(
         _spec(condition=condition, calibration=(calibration.reference,), targets=(target.reference,))
     )
 
@@ -374,7 +373,7 @@ def test_partial_calibration_record_cannot_support_the_selected_condition(tmp_pa
         condition=condition,
     )
 
-    result = build_lifecycle_transfer_evaluation(
+    result = build_lifecycle_holdout_evaluation(
         _spec(condition=condition, calibration=(calibration.reference,), targets=(target.reference,))
     )
 
@@ -425,7 +424,7 @@ def test_target_must_match_every_selected_condition_dimension(
         condition=selected.model_copy(update=updates),
     )
 
-    result = build_lifecycle_transfer_evaluation(
+    result = build_lifecycle_holdout_evaluation(
         _spec(condition=selected, calibration=(calibration.reference,), targets=(target.reference,))
     )
 
@@ -462,7 +461,7 @@ def test_tampered_record_or_snapshot_artifact_is_not_evaluable(tmp_path: Path, t
         _published_artifact_path(target, "lifecycle_verification").write_text("tampered", encoding="utf-8")
         expected_reason = "record_invalid"
 
-    result = build_lifecycle_transfer_evaluation(
+    result = build_lifecycle_holdout_evaluation(
         _spec(condition=condition, calibration=(calibration.reference,), targets=(target.reference,))
     )
 
@@ -475,7 +474,7 @@ def test_tampered_record_or_snapshot_artifact_is_not_evaluable(tmp_path: Path, t
     ("forge_catalog", "expected_status"),
     [(False, "supports_selected_condition"), (True, "not_supporting")],
 )
-def test_transfer_evaluator_fully_validates_operation_operation_snapshot(
+def test_holdout_evaluator_fully_validates_operation_operation_snapshot(
     tmp_path: Path,
     forge_catalog: bool,
     expected_status: str,
@@ -503,7 +502,7 @@ def test_transfer_evaluator_fully_validates_operation_operation_snapshot(
         condition=condition,
     )
 
-    result = build_lifecycle_transfer_evaluation(
+    result = build_lifecycle_holdout_evaluation(
         _spec(condition=condition, calibration=(calibration.reference,), targets=(target.reference,))
     )
 
@@ -521,7 +520,7 @@ def test_transfer_evaluator_fully_validates_operation_operation_snapshot(
         assert result.target_results[0].reasons == ("source_not_reconstructive",)
 
 
-def test_transfer_evaluator_rejects_rehashed_malformed_operation_tool_schema(tmp_path: Path) -> None:
+def test_holdout_evaluator_rejects_rehashed_malformed_operation_tool_schema(tmp_path: Path) -> None:
     condition = _condition()
     calibration = _upgrade_to_operation_snapshot(
         _write_record(
@@ -546,7 +545,7 @@ def test_transfer_evaluator_rejects_rehashed_malformed_operation_tool_schema(tmp
         condition=condition,
     )
 
-    result = build_lifecycle_transfer_evaluation(
+    result = build_lifecycle_holdout_evaluation(
         _spec(condition=condition, calibration=(calibration.reference,), targets=(target.reference,))
     )
 
@@ -554,7 +553,7 @@ def test_transfer_evaluator_rejects_rehashed_malformed_operation_tool_schema(tmp
     assert result.status == "not_evaluable"
 
 
-def test_transfer_evaluator_rejects_forged_operation_protocol_tool_projection(tmp_path: Path) -> None:
+def test_holdout_evaluator_rejects_forged_operation_protocol_tool_projection(tmp_path: Path) -> None:
     condition = _condition()
     calibration = _upgrade_to_operation_snapshot(
         _write_record(
@@ -579,7 +578,7 @@ def test_transfer_evaluator_rejects_forged_operation_protocol_tool_projection(tm
         condition=condition,
     )
 
-    result = build_lifecycle_transfer_evaluation(
+    result = build_lifecycle_holdout_evaluation(
         _spec(condition=condition, calibration=(calibration.reference,), targets=(target.reference,))
     )
 
@@ -587,7 +586,7 @@ def test_transfer_evaluator_rejects_forged_operation_protocol_tool_projection(tm
     assert result.status == "not_evaluable"
 
 
-def test_transfer_evaluator_rejects_operation_evidence_state_absent_from_contract(tmp_path: Path) -> None:
+def test_holdout_evaluator_rejects_operation_evidence_state_absent_from_contract(tmp_path: Path) -> None:
     condition = _condition()
     calibration = _upgrade_to_operation_snapshot(
         _write_record(
@@ -612,7 +611,7 @@ def test_transfer_evaluator_rejects_operation_evidence_state_absent_from_contrac
         condition=condition,
     )
 
-    result = build_lifecycle_transfer_evaluation(
+    result = build_lifecycle_holdout_evaluation(
         _spec(condition=condition, calibration=(calibration.reference,), targets=(target.reference,))
     )
 
@@ -631,7 +630,7 @@ def test_transfer_evaluator_rejects_operation_evidence_state_absent_from_contrac
         ("operation", "mismatched"),
     ],
 )
-def test_transfer_evaluator_reconciles_operation_snapshot_inventory_with_manifest(
+def test_holdout_evaluator_reconciles_operation_snapshot_inventory_with_manifest(
     tmp_path: Path,
     namespace: Literal["package", "operation"],
     mutation: Literal["missing", "extra", "mismatched"],
@@ -660,7 +659,7 @@ def test_transfer_evaluator_reconciles_operation_snapshot_inventory_with_manifes
         condition=condition,
     )
 
-    result = build_lifecycle_transfer_evaluation(
+    result = build_lifecycle_holdout_evaluation(
         _spec(condition=condition, calibration=(calibration.reference,), targets=(target.reference,))
     )
 
@@ -668,7 +667,7 @@ def test_transfer_evaluator_reconciles_operation_snapshot_inventory_with_manifes
     assert result.status == "not_evaluable"
 
 
-def test_transfer_evaluator_uses_one_exact_prefix_when_snapshot_path_contains_run_component(
+def test_holdout_evaluator_uses_one_exact_prefix_when_snapshot_path_contains_run_component(
     tmp_path: Path,
 ) -> None:
     condition = _condition()
@@ -695,7 +694,7 @@ def test_transfer_evaluator_uses_one_exact_prefix_when_snapshot_path_contains_ru
         condition=condition,
     )
 
-    result = build_lifecycle_transfer_evaluation(
+    result = build_lifecycle_holdout_evaluation(
         _spec(condition=condition, calibration=(calibration.reference,), targets=(target.reference,))
     )
 
@@ -704,7 +703,7 @@ def test_transfer_evaluator_uses_one_exact_prefix_when_snapshot_path_contains_ru
     assert result.status == "not_evaluable"
 
 
-def test_transfer_evaluator_replays_nonempty_operation_history_from_reconciled_snapshot_bytes(
+def test_holdout_evaluator_replays_nonempty_operation_history_from_reconciled_snapshot_bytes(
     tmp_path: Path,
 ) -> None:
     condition = _condition()
@@ -731,7 +730,7 @@ def test_transfer_evaluator_replays_nonempty_operation_history_from_reconciled_s
         condition=condition,
     )
 
-    result = build_lifecycle_transfer_evaluation(
+    result = build_lifecycle_holdout_evaluation(
         _spec(condition=condition, calibration=(calibration.reference,), targets=(target.reference,))
     )
 
@@ -740,7 +739,7 @@ def test_transfer_evaluator_replays_nonempty_operation_history_from_reconciled_s
     assert result.status == "not_evaluable"
 
 
-def test_transfer_evaluator_binds_action_free_current_source_to_packaged_resolver(
+def test_holdout_evaluator_binds_action_free_current_source_to_packaged_resolver(
     tmp_path: Path,
 ) -> None:
     condition = _condition()
@@ -767,7 +766,7 @@ def test_transfer_evaluator_binds_action_free_current_source_to_packaged_resolve
         condition=condition,
     )
 
-    result = build_lifecycle_transfer_evaluation(
+    result = build_lifecycle_holdout_evaluation(
         _spec(condition=condition, calibration=(calibration.reference,), targets=(target.reference,))
     )
 
@@ -775,7 +774,7 @@ def test_transfer_evaluator_binds_action_free_current_source_to_packaged_resolve
     assert result.status == "not_evaluable"
 
 
-def test_transfer_evaluator_binds_operation_spec_identity_across_snapshot(tmp_path: Path) -> None:
+def test_holdout_evaluator_binds_operation_spec_identity_across_snapshot(tmp_path: Path) -> None:
     condition = _condition()
     calibration = _upgrade_to_operation_snapshot(
         _write_record(
@@ -800,7 +799,7 @@ def test_transfer_evaluator_binds_operation_spec_identity_across_snapshot(tmp_pa
         condition=condition,
     )
 
-    result = build_lifecycle_transfer_evaluation(
+    result = build_lifecycle_holdout_evaluation(
         _spec(condition=condition, calibration=(calibration.reference,), targets=(target.reference,))
     )
 
@@ -809,7 +808,7 @@ def test_transfer_evaluator_binds_operation_spec_identity_across_snapshot(tmp_pa
 
 
 @pytest.mark.parametrize("metadata", ["seal", "sweep_manifest", "sweep_plan"])
-def test_transfer_evaluator_validates_operation_canonical_metadata_contents(
+def test_holdout_evaluator_validates_operation_canonical_metadata_contents(
     tmp_path: Path,
     metadata: Literal["seal", "sweep_manifest", "sweep_plan"],
 ) -> None:
@@ -837,7 +836,7 @@ def test_transfer_evaluator_validates_operation_canonical_metadata_contents(
         condition=condition,
     )
 
-    result = build_lifecycle_transfer_evaluation(
+    result = build_lifecycle_holdout_evaluation(
         _spec(condition=condition, calibration=(calibration.reference,), targets=(target.reference,))
     )
 
@@ -845,7 +844,7 @@ def test_transfer_evaluator_validates_operation_canonical_metadata_contents(
     assert result.status == "not_evaluable"
 
 
-def test_transfer_evaluator_binds_operation_visibility_to_validated_package_variant(
+def test_holdout_evaluator_binds_operation_visibility_to_validated_package_variant(
     tmp_path: Path,
 ) -> None:
     condition = _condition()
@@ -872,7 +871,7 @@ def test_transfer_evaluator_binds_operation_visibility_to_validated_package_vari
         manifest_visibility_override="holdout",
     )
 
-    result = build_lifecycle_transfer_evaluation(
+    result = build_lifecycle_holdout_evaluation(
         _spec(condition=condition, calibration=(calibration.reference,), targets=(target.reference,))
     )
 
@@ -883,7 +882,7 @@ def test_transfer_evaluator_binds_operation_visibility_to_validated_package_vari
     assert result.status == "not_evaluable"
 
 
-def test_transfer_evaluator_binds_operation_package_template_to_record_task(
+def test_holdout_evaluator_binds_operation_package_template_to_record_task(
     tmp_path: Path,
 ) -> None:
     condition = _condition()
@@ -910,7 +909,7 @@ def test_transfer_evaluator_binds_operation_package_template_to_record_task(
         condition=condition,
     )
 
-    result = build_lifecycle_transfer_evaluation(
+    result = build_lifecycle_holdout_evaluation(
         _spec(condition=condition, calibration=(calibration.reference,), targets=(target.reference,))
     )
 
@@ -919,7 +918,7 @@ def test_transfer_evaluator_binds_operation_package_template_to_record_task(
 
 
 @pytest.mark.parametrize("identity", ["package", "spec"])
-def test_transfer_evaluator_recomputes_operation_package_and_spec_identities(
+def test_holdout_evaluator_recomputes_operation_package_and_spec_identities(
     tmp_path: Path,
     identity: Literal["package", "spec"],
 ) -> None:
@@ -947,7 +946,7 @@ def test_transfer_evaluator_recomputes_operation_package_and_spec_identities(
         condition=condition,
     )
 
-    result = build_lifecycle_transfer_evaluation(
+    result = build_lifecycle_holdout_evaluation(
         _spec(condition=condition, calibration=(calibration.reference,), targets=(target.reference,))
     )
 
@@ -997,7 +996,7 @@ def test_rehashed_record_fields_must_still_match_the_immutable_snapshot(
     calibration.record_path.write_text(json.dumps(payload), encoding="utf-8")
     reference = calibration.reference.model_copy(update={"sha256": _sha256(calibration.record_path)})
 
-    result = build_lifecycle_transfer_evaluation(
+    result = build_lifecycle_holdout_evaluation(
         _spec(condition=condition, calibration=(reference,), targets=(target.reference,))
     )
 
@@ -1043,7 +1042,7 @@ def test_repointed_verification_artifact_must_match_the_invocation_manifest(tmp_
     target.record_path.write_text(json.dumps(payload), encoding="utf-8")
     reference = target.reference.model_copy(update={"sha256": _sha256(target.record_path)})
 
-    result = build_lifecycle_transfer_evaluation(
+    result = build_lifecycle_holdout_evaluation(
         _spec(condition=condition, calibration=(calibration.reference,), targets=(reference,))
     )
 
@@ -1091,7 +1090,7 @@ def test_missing_or_escaping_snapshot_artifact_is_not_evaluable(
         reference = reference.model_copy(update={"sha256": _sha256(target.record_path)})
         expected_reason = "record_invalid"
 
-    result = build_lifecycle_transfer_evaluation(
+    result = build_lifecycle_holdout_evaluation(
         _spec(condition=condition, calibration=(calibration.reference,), targets=(reference,))
     )
 
@@ -1138,7 +1137,7 @@ def test_incomplete_zero_reward_is_not_misreported_as_holdout_evidence(tmp_path:
         condition=condition,
     )
 
-    result = build_lifecycle_transfer_evaluation(
+    result = build_lifecycle_holdout_evaluation(
         _spec(condition=condition, calibration=(calibration.reference,), targets=(target.reference,))
     )
 
@@ -1176,14 +1175,14 @@ def test_input_order_does_not_change_evaluation_identity_or_summary(tmp_path: Pa
         for index, (character, reward) in enumerate((("c", 0.25), ("d", 0.75)), start=1)
     )
 
-    forward = build_lifecycle_transfer_evaluation(
+    forward = build_lifecycle_holdout_evaluation(
         _spec(
             condition=condition,
             calibration=tuple(item.reference for item in calibrations),
             targets=tuple(item.reference for item in targets),
         )
     )
-    reverse = build_lifecycle_transfer_evaluation(
+    reverse = build_lifecycle_holdout_evaluation(
         _spec(
             condition=condition,
             calibration=tuple(item.reference for item in reversed(calibrations)),
@@ -1219,14 +1218,14 @@ def test_cloned_record_identity_cannot_reuse_one_immutable_invocation(tmp_path: 
     clone_payload = json.loads(target.record_path.read_text(encoding="utf-8"))
     clone_payload["trial_id"] = "target-002"
     clone_path.write_text(json.dumps(clone_payload), encoding="utf-8")
-    clone_reference = LifecycleTransferRecordReference(
+    clone_reference = LifecycleHoldoutRecordReference(
         experiment_id="target",
         trial_id="target-002",
         ledger_path=str(clone_path),
         sha256=_sha256(clone_path),
     )
 
-    result = build_lifecycle_transfer_evaluation(
+    result = build_lifecycle_holdout_evaluation(
         _spec(
             condition=condition,
             calibration=(calibration.reference,),
@@ -1262,7 +1261,7 @@ def test_malformed_verifier_result_cannot_support_evaluation(tmp_path: Path) -> 
         condition=condition,
     )
 
-    result = build_lifecycle_transfer_evaluation(
+    result = build_lifecycle_holdout_evaluation(
         _spec(condition=condition, calibration=(calibration.reference,), targets=(target.reference,))
     )
 
@@ -1304,7 +1303,7 @@ def test_verifier_identity_must_match_the_lifecycle_record(
         condition=condition,
     )
 
-    result = build_lifecycle_transfer_evaluation(
+    result = build_lifecycle_holdout_evaluation(
         _spec(condition=condition, calibration=(calibration.reference,), targets=(target.reference,))
     )
 
@@ -1355,7 +1354,7 @@ def test_duplicate_record_references_are_rejected(tmp_path: Path) -> None:
         condition=condition,
     )
 
-    with pytest.raises(ValidationError, match="duplicate lifecycle transfer record reference"):
+    with pytest.raises(ValidationError, match="duplicate lifecycle holdout record reference"):
         _spec(
             condition=condition,
             calibration=(calibration.reference, calibration.reference),
@@ -1400,17 +1399,17 @@ def test_selected_condition_turn_limit_is_a_strict_integer(value: object) -> Non
     payload["max_turns_per_session"] = value
 
     with pytest.raises(ValidationError, match="positive integer"):
-        LifecycleTransferCondition.model_validate(payload)
+        LifecycleHoldoutCondition.model_validate(payload)
 
 
 def _spec(
     *,
-    condition: LifecycleTransferCondition,
-    calibration: tuple[LifecycleTransferRecordReference, ...],
-    targets: tuple[LifecycleTransferRecordReference, ...],
-) -> LifecycleTransferEvaluationSpec:
-    return LifecycleTransferEvaluationSpec(
-        study_design=LifecycleTransferStudyDesign(
+    condition: LifecycleHoldoutCondition,
+    calibration: tuple[LifecycleHoldoutRecordReference, ...],
+    targets: tuple[LifecycleHoldoutRecordReference, ...],
+) -> LifecycleHoldoutEvaluationSpec:
+    return LifecycleHoldoutEvaluationSpec(
+        study_design=LifecycleHoldoutStudyDesign(
             interpretation="descriptive_holdout_generalization",
             selection_basis="public_calibration",
             causal_effects_supported=False,
@@ -1422,8 +1421,8 @@ def _spec(
     )
 
 
-def _condition() -> LifecycleTransferCondition:
-    return LifecycleTransferCondition(
+def _condition() -> LifecycleHoldoutCondition:
+    return LifecycleHoldoutCondition(
         model="model-a",
         adapter="tool_loop",
         runtime_dependency_sha256=_RUNTIME_SHA256,
@@ -1437,7 +1436,7 @@ class _WrittenRecord:
     def __init__(
         self,
         *,
-        reference: LifecycleTransferRecordReference,
+        reference: LifecycleHoldoutRecordReference,
         record_path: Path,
         snapshot_path: Path,
     ) -> None:
@@ -1461,7 +1460,7 @@ def _write_record(
     visibility: Visibility | None,
     package_sha256: str,
     reward: float,
-    condition: LifecycleTransferCondition,
+    condition: LifecycleHoldoutCondition,
     source_reconstructive: bool | None = None,
     verifier_completed: bool = True,
     semantic_transition: dict[str, object] | None = None,
@@ -1816,7 +1815,7 @@ def _write_record(
         )
     record_path = write_trial_record(ledger_root=ledger_root, record=record)
     return _WrittenRecord(
-        reference=LifecycleTransferRecordReference(
+        reference=LifecycleHoldoutRecordReference(
             experiment_id=experiment_id,
             trial_id=trial_id,
             ledger_path=str(record_path),
@@ -1882,7 +1881,7 @@ def _upgrade_to_operation_snapshot(
                 checkpoint_id=checkpoint.checkpoint_id,
                 operation_id="hydrology.design-10yr",
                 visible_source_state_sha256=str(current_source["visible_source_state_sha256"]),
-                reason="Exercise immutable transfer replay.",
+                reason="Exercise immutable holdout replay.",
                 session_id=f"fixture.session-{checkpoint_number:03d}",
             )
         submission: dict[str, object] = {field: {} for field in checkpoint.required_submission_fields}
@@ -2164,7 +2163,7 @@ def _operation_ablation_metadata(
         variants=("tailwater_revision",),
         agents=(
             AgentConfig(
-                name="transfer-fixture",
+                name="holdout-fixture",
                 adapter=record.agent.adapter,
                 model=record.agent.model,
                 parameters={"max_turns_per_session": record.lifecycle_execution.max_turns_per_session},
@@ -2657,7 +2656,7 @@ def _rewrite_trial_record(
         )
     written.record_path.unlink()
     write_trial_record(ledger_root=ledger_root, record=rewritten)
-    written.reference = LifecycleTransferRecordReference(
+    written.reference = LifecycleHoldoutRecordReference(
         experiment_id=rewritten.experiment_id,
         trial_id=rewritten.trial_id,
         ledger_path=str(written.record_path),

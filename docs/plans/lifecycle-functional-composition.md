@@ -700,7 +700,7 @@ removed.
 | Verification meaning | Concrete lifecycle verifier |
 | Trial construction | Lifecycle application plus core `TrialRecord` builder functions |
 | Ledger persistence | `ledger` |
-| Ablation, calibration, transfer, and treatment policy | `experimentation.lifecycle_studies` |
+| Ablation, calibration, holdout generalisation, and treatment policy | `experimentation.lifecycle_studies` |
 | Generic harness comparison and refinement | `experimentation.meta_harness` |
 | CLI parsing and rendering | `cli.commands.lifecycle` |
 

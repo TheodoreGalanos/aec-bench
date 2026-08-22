@@ -81,7 +81,7 @@ from aec_bench.lifecycles.runtime.state import (
 type SnapshotReference = ArtifactReference | TrialArtifactRef
 
 
-class LifecycleTransferRecordReference(StrictModel):
+class LifecycleHoldoutRecordReference(StrictModel):
     experiment_id: NonEmptyStr
     trial_id: NonEmptyStr
     ledger_path: NonEmptyStr
@@ -96,11 +96,11 @@ class LifecycleTransferRecordReference(StrictModel):
     @classmethod
     def validate_canonical_ledger_path(cls, value: str) -> str:
         if not _is_canonical_absolute_path(value):
-            raise ValueError("lifecycle transfer ledger_path must be an absolute canonical path")
+            raise ValueError("lifecycle holdout ledger_path must be an absolute canonical path")
         return value
 
 
-class LifecycleTransferCondition(StrictModel):
+class LifecycleHoldoutCondition(StrictModel):
     model: NonEmptyStr
     adapter: NonEmptyStr
     runtime_dependency_sha256: NonEmptyStr
@@ -121,7 +121,7 @@ class LifecycleTransferCondition(StrictModel):
         return value
 
     @model_validator(mode="after")
-    def validate_mode_policy_pair(self) -> LifecycleTransferCondition:
+    def validate_mode_policy_pair(self) -> LifecycleHoldoutCondition:
         if (
             self.execution_mode is LifecycleExecutionMode.PERSISTENT_CONTEXT
             and self.memory_visibility_policy is not LifecycleVisibilityPolicy.PERSISTENT_CONTEXT
@@ -135,57 +135,57 @@ class LifecycleTransferCondition(StrictModel):
         return self
 
 
-class LifecycleTransferStudyDesign(StrictModel):
+class LifecycleHoldoutStudyDesign(StrictModel):
     interpretation: Literal["descriptive_holdout_generalization"]
     selection_basis: Literal["public_calibration"]
     causal_effects_supported: Literal[False]
     cross_run_learning_supported: Literal[False]
 
 
-class LifecycleTransferEvaluationSpec(StrictModel):
+class LifecycleHoldoutEvaluationSpec(StrictModel):
     schema_version: Literal["1"] = "1"
-    study_design: LifecycleTransferStudyDesign
-    selected_condition: LifecycleTransferCondition
-    public_calibration_records: tuple[LifecycleTransferRecordReference, ...]
-    holdout_target_records: tuple[LifecycleTransferRecordReference, ...]
+    study_design: LifecycleHoldoutStudyDesign
+    selected_condition: LifecycleHoldoutCondition
+    public_calibration_records: tuple[LifecycleHoldoutRecordReference, ...]
+    holdout_target_records: tuple[LifecycleHoldoutRecordReference, ...]
 
     @field_validator("public_calibration_records", "holdout_target_records")
     @classmethod
     def validate_record_references(
         cls,
-        value: tuple[LifecycleTransferRecordReference, ...],
-    ) -> tuple[LifecycleTransferRecordReference, ...]:
+        value: tuple[LifecycleHoldoutRecordReference, ...],
+    ) -> tuple[LifecycleHoldoutRecordReference, ...]:
         if not value:
-            raise ValueError("lifecycle transfer record references must not be empty")
+            raise ValueError("lifecycle holdout record references must not be empty")
         if any(not _is_canonical_absolute_path(item.ledger_path) for item in value):
-            raise ValueError("lifecycle transfer ledger_path must be an absolute canonical path")
+            raise ValueError("lifecycle holdout ledger_path must be an absolute canonical path")
         logical_identities = [_reference_logical_identity(item) for item in value]
         physical_identities = [_reference_physical_identity(item) for item in value]
         if len(logical_identities) != len(set(logical_identities)) or len(physical_identities) != len(
             set(physical_identities)
         ):
-            raise ValueError("duplicate lifecycle transfer record reference")
+            raise ValueError("duplicate lifecycle holdout record reference")
         return tuple(sorted(value, key=_reference_sort_key))
 
     @model_validator(mode="after")
-    def validate_disjoint_record_sets(self) -> LifecycleTransferEvaluationSpec:
+    def validate_disjoint_record_sets(self) -> LifecycleHoldoutEvaluationSpec:
         calibration_logical = {_reference_logical_identity(item) for item in self.public_calibration_records}
         target_logical = {_reference_logical_identity(item) for item in self.holdout_target_records}
         calibration_physical = {_reference_physical_identity(item) for item in self.public_calibration_records}
         target_physical = {_reference_physical_identity(item) for item in self.holdout_target_records}
         if calibration_logical & target_logical or calibration_physical & target_physical:
-            raise ValueError("duplicate lifecycle transfer record reference across evidence sets")
+            raise ValueError("duplicate lifecycle holdout record reference across evidence sets")
         return self
 
 
-class LifecycleTransferCalibrationResult(StrictModel):
-    record: LifecycleTransferRecordReference
+class LifecycleHoldoutCalibrationResult(StrictModel):
+    record: LifecycleHoldoutRecordReference
     status: Literal["supports_selected_condition", "not_supporting"]
     reasons: tuple[NonEmptyStr, ...] = ()
 
 
-class LifecycleTransferTargetResult(StrictModel):
-    record: LifecycleTransferRecordReference
+class LifecycleHoldoutTargetResult(StrictModel):
+    record: LifecycleHoldoutRecordReference
     status: Literal["eligible", "not_evaluable"]
     reasons: tuple[NonEmptyStr, ...] = ()
     verifier_reward: float | None = None
@@ -194,19 +194,19 @@ class LifecycleTransferTargetResult(StrictModel):
     diagnostic_reasons: tuple[NonEmptyStr, ...] = ()
 
 
-class LifecycleTransferSummary(StrictModel):
+class LifecycleHoldoutSummary(StrictModel):
     schema_version: Literal["1"] = "1"
     evaluation_id: NonEmptyStr
     status: Literal["evaluated", "not_evaluable"]
-    study_design: LifecycleTransferStudyDesign
-    selected_condition: LifecycleTransferCondition
+    study_design: LifecycleHoldoutStudyDesign
+    selected_condition: LifecycleHoldoutCondition
     calibration_record_count: NonNegativeInt
     calibration_support_count: NonNegativeInt
     target_record_count: NonNegativeInt
     eligible_target_count: NonNegativeInt
     mean_target_reward: float | None
-    calibration_results: tuple[LifecycleTransferCalibrationResult, ...]
-    target_results: tuple[LifecycleTransferTargetResult, ...]
+    calibration_results: tuple[LifecycleHoldoutCalibrationResult, ...]
+    target_results: tuple[LifecycleHoldoutTargetResult, ...]
 
 
 @dataclass(frozen=True)
@@ -228,21 +228,21 @@ class _LifecycleSnapshot:
     lifecycle_variant: dict[str, object]
 
 
-def build_lifecycle_transfer_evaluation(
-    spec: LifecycleTransferEvaluationSpec,
-) -> LifecycleTransferSummary:
+def build_lifecycle_holdout_evaluation(
+    spec: LifecycleHoldoutEvaluationSpec,
+) -> LifecycleHoldoutSummary:
     """Describe holdout performance under one condition supported by public calibration evidence."""
-    return _build_lifecycle_transfer_evaluation(spec, target_loader=_load_record)
+    return _build_lifecycle_holdout_evaluation(spec, target_loader=_load_record)
 
 
-def _build_lifecycle_transfer_evaluation(
-    spec: LifecycleTransferEvaluationSpec,
+def _build_lifecycle_holdout_evaluation(
+    spec: LifecycleHoldoutEvaluationSpec,
     *,
-    target_loader: Callable[[LifecycleTransferRecordReference], _LoadedRecord],
-) -> LifecycleTransferSummary:
-    spec = LifecycleTransferEvaluationSpec.model_validate(spec.model_dump(mode="json"))
+    target_loader: Callable[[LifecycleHoldoutRecordReference], _LoadedRecord],
+) -> LifecycleHoldoutSummary:
+    spec = LifecycleHoldoutEvaluationSpec.model_validate(spec.model_dump(mode="json"))
     calibration_loaded = [(_reference, _load_record(_reference)) for _reference in spec.public_calibration_records]
-    calibration_results: list[LifecycleTransferCalibrationResult] = []
+    calibration_results: list[LifecycleHoldoutCalibrationResult] = []
     supporting_records: list[TrialRecord] = []
     calibration_packages: set[str] = set()
     for reference, loaded in calibration_loaded:
@@ -257,14 +257,14 @@ def _build_lifecycle_transfer_evaluation(
         if not normalized_reasons and loaded.record is not None:
             supporting_records.append(loaded.record)
         calibration_results.append(
-            LifecycleTransferCalibrationResult(
+            LifecycleHoldoutCalibrationResult(
                 record=reference,
                 status="supports_selected_condition" if not normalized_reasons else "not_supporting",
                 reasons=normalized_reasons,
             )
         )
 
-    target_results: list[LifecycleTransferTargetResult] = []
+    target_results: list[LifecycleHoldoutTargetResult] = []
     eligible_rewards: list[float] = []
     for reference in spec.holdout_target_records:
         loaded = target_loader(reference)
@@ -289,7 +289,7 @@ def _build_lifecycle_transfer_evaluation(
         if reward is not None:
             eligible_rewards.append(reward)
         target_results.append(
-            LifecycleTransferTargetResult(
+            LifecycleHoldoutTargetResult(
                 record=reference,
                 status="eligible" if eligible else "not_evaluable",
                 reasons=normalized_reasons,
@@ -300,8 +300,8 @@ def _build_lifecycle_transfer_evaluation(
             )
         )
 
-    return LifecycleTransferSummary(
-        evaluation_id=f"lifecycle-transfer-{_canonical_sha256(spec.model_dump(mode='json'))}",
+    return LifecycleHoldoutSummary(
+        evaluation_id=f"lifecycle-holdout-{_canonical_sha256(spec.model_dump(mode='json'))}",
         status="evaluated" if eligible_rewards else "not_evaluable",
         study_design=spec.study_design,
         selected_condition=spec.selected_condition,
@@ -315,7 +315,7 @@ def _build_lifecycle_transfer_evaluation(
     )
 
 
-def _load_record(reference: LifecycleTransferRecordReference) -> _LoadedRecord:
+def _load_record(reference: LifecycleHoldoutRecordReference) -> _LoadedRecord:
     path = Path(reference.ledger_path)
     reasons: list[str] = []
     try:
@@ -977,7 +977,7 @@ def _validate_lifecycle_operation_resolver_snapshot_replay(
     state: EvidenceLifecycleRunState,
     spec: EvidenceLifecycleSpec,
 ) -> None:
-    with TemporaryDirectory(prefix="aec-bench-lifecycle-transfer-") as temporary_root:
+    with TemporaryDirectory(prefix="aec-bench-lifecycle-holdout-") as temporary_root:
         root = Path(temporary_root)
         package_dir = root / "package"
         run_dir = root / "run"
@@ -1292,7 +1292,7 @@ def _record_eligibility_reasons(record: TrialRecord, *, expected_visibility: Vis
     publication = derive_publication_eligibility(
         record,
         record.run_manifest,
-        PublicationPolicy(policy_id="lifecycle-transfer", require_dataset=False),
+        PublicationPolicy(policy_id="lifecycle-holdout", require_dataset=False),
     )
     reasons.extend(publication.reasons)
     if record.evaluation is None:
@@ -1308,7 +1308,7 @@ def _record_eligibility_reasons(record: TrialRecord, *, expected_visibility: Vis
 
 def _condition_mismatch_reasons(
     record: TrialRecord,
-    expected: LifecycleTransferCondition,
+    expected: LifecycleHoldoutCondition,
 ) -> tuple[str, ...]:
     execution = record.lifecycle_execution
     provenance = record.lifecycle_provenance
@@ -1348,15 +1348,15 @@ def _semantic_diagnostics(record: TrialRecord) -> tuple[LifecycleSemanticMetrics
         return None, ("invalid_semantic_transition_metrics",)
 
 
-def _reference_logical_identity(reference: LifecycleTransferRecordReference) -> tuple[str, str]:
+def _reference_logical_identity(reference: LifecycleHoldoutRecordReference) -> tuple[str, str]:
     return reference.experiment_id, reference.trial_id
 
 
-def _reference_physical_identity(reference: LifecycleTransferRecordReference) -> str:
+def _reference_physical_identity(reference: LifecycleHoldoutRecordReference) -> str:
     return str(Path(reference.ledger_path).resolve())
 
 
-def _reference_sort_key(reference: LifecycleTransferRecordReference) -> tuple[str, str, str, str]:
+def _reference_sort_key(reference: LifecycleHoldoutRecordReference) -> tuple[str, str, str, str]:
     return reference.experiment_id, reference.trial_id, reference.ledger_path, reference.sha256
 
 
