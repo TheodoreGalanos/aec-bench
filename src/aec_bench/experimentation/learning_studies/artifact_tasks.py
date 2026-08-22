@@ -496,6 +496,17 @@ def public_episode_feedback(record: TrialRecord) -> bytes:
     return (json.dumps(data, sort_keys=True, separators=(",", ":")) + "\n").encode("utf-8")
 
 
+def public_actor_episode(record: TrialRecord) -> bytes:
+    """Project only the public task identity, instruction, and selected actor output."""
+
+    data = {
+        "task_id": record.task_id,
+        "instruction": record.input.instruction,
+        "selected_output": _selected_output_text(record),
+    }
+    return (json.dumps(data, sort_keys=True, separators=(",", ":")) + "\n").encode("utf-8")
+
+
 def _selected_output_text(record: TrialRecord) -> str:
     output_path = None if record.output is None else record.output.raw_output_path
     if output_path is None:
@@ -607,6 +618,7 @@ __all__ = (
     "ArtifactLearningBinding",
     "ArtifactLearningTreatmentKind",
     "build_artifact_learning_operations",
+    "public_actor_episode",
     "public_episode_feedback",
     "terminal_outcome_feedback",
 )

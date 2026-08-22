@@ -1,0 +1,120 @@
+family_id = "heat-load-retention-interference"
+title = "Single-room heat-load retention and ventilation-rule interference"
+description = "Tests retention of the occupied-space heat-load method and possible interference from the server-room minimum-area ventilation rule. Domain review remains required before a claim-bearing run."
+source_task_paths = [
+  "tasks/mechanical/heat-load/single-room-office-L3/brisbane-office-85m2/instruction.md",
+  "tasks/mechanical/heat-load/single-room-office-L3/brisbane-office-85m2/task.toml",
+  "tasks/mechanical/heat-load/single-room-office-L3/sydney-classroom-120m2/instruction.md",
+  "tasks/mechanical/heat-load/single-room-office-L3/sydney-classroom-120m2/task.toml",
+  "tasks/mechanical/heat-load/single-room-office-L3/adelaide-library-150m2/instruction.md",
+  "tasks/mechanical/heat-load/single-room-office-L3/adelaide-library-150m2/task.toml",
+  "tasks/mechanical/heat-load/single-room-office-L3/cairns-server-60m2/instruction.md",
+  "tasks/mechanical/heat-load/single-room-office-L3/cairns-server-60m2/task.toml",
+]
+
+[[dimensions]]
+dimension_id = "task_form"
+kind = "surface"
+description = "A single-room Markdown calculation with the same twelve-value JSON result"
+
+[[dimensions]]
+dimension_id = "heat_load_summation"
+kind = "causal"
+description = "The sensible, latent, and total heat-load component calculation"
+
+[[dimensions]]
+dimension_id = "ventilation_regime"
+kind = "applicability"
+description = "Whether outside air follows occupied-person values or the unoccupied minimum-area rule"
+
+[[dimensions]]
+dimension_id = "room_and_climate"
+kind = "parameter"
+description = "Room use, floor area, climate, and internal-load values"
+
+[[members]]
+member_id = "brisbane-office-acquisition"
+task_id = "mechanical/heat-load/single-room-office-L3/brisbane-office-85m2"
+description = "An occupied Brisbane office calculation used for acquisition"
+probe_only = false
+
+[members.dimension_values]
+task_form = "single-room Markdown calculation with twelve-value JSON result"
+heat_load_summation = "sum people, lighting, equipment, conduction, and ventilation sensible and latent loads"
+ventilation_regime = "occupied space: people from area and outside air per person"
+room_and_climate = "Brisbane office, 85 square metres"
+
+[[members]]
+member_id = "sydney-classroom-immediate-probe"
+task_id = "mechanical/heat-load/single-room-office-L3/sydney-classroom-120m2"
+description = "An occupied Sydney classroom calculation used as the immediate probe"
+probe_only = true
+
+[members.dimension_values]
+task_form = "single-room Markdown calculation with twelve-value JSON result"
+heat_load_summation = "sum people, lighting, equipment, conduction, and ventilation sensible and latent loads"
+ventilation_regime = "occupied space: people from area and outside air per person"
+room_and_climate = "Sydney classroom, 120 square metres"
+
+[[members]]
+member_id = "adelaide-library-delayed-probe"
+task_id = "mechanical/heat-load/single-room-office-L3/adelaide-library-150m2"
+description = "An occupied Adelaide library calculation used as the delayed probe"
+probe_only = true
+
+[members.dimension_values]
+task_form = "single-room Markdown calculation with twelve-value JSON result"
+heat_load_summation = "sum people, lighting, equipment, conduction, and ventilation sensible and latent loads"
+ventilation_regime = "occupied space: people from area and outside air per person"
+room_and_climate = "Adelaide library, 150 square metres"
+
+[[members]]
+member_id = "cairns-server-interference"
+task_id = "mechanical/heat-load/single-room-office-L3/cairns-server-60m2"
+description = "An unoccupied Cairns server-room calculation that uses minimum outside air per floor area"
+probe_only = false
+
+[members.dimension_values]
+task_form = "single-room Markdown calculation with twelve-value JSON result"
+heat_load_summation = "sum people, lighting, equipment, conduction, and ventilation sensible and latent loads"
+ventilation_regime = "unoccupied server room: zero people and minimum outside air per floor area"
+room_and_climate = "Cairns server room, 60 square metres"
+
+[[relations]]
+relation_id = "brisbane-office-to-sydney-classroom-immediate-transfer"
+purpose = "transfer"
+source_member_ids = ["brisbane-office-acquisition"]
+target_member_id = "sydney-classroom-immediate-probe"
+invariant_dimensions = ["task_form", "heat_load_summation", "ventilation_regime"]
+invariant_claims = [
+  "Both tasks use occupied-space AS 1668.2 values and the same heat-load calculation sequence.",
+  "Both verifiers score the same twelve named output quantities.",
+]
+changed_dimensions = ["room_and_climate"]
+rationale = "The immediate probe changes the occupied room type, standards row, climate, and numerical inputs while preserving the method."
+
+[[relations]]
+relation_id = "brisbane-office-to-adelaide-library-retention"
+purpose = "retention"
+source_member_ids = ["brisbane-office-acquisition"]
+target_member_id = "adelaide-library-delayed-probe"
+invariant_dimensions = ["task_form", "heat_load_summation", "ventilation_regime"]
+invariant_claims = [
+  "The delayed probe uses the same occupied-space ventilation rule and heat-load summation as acquisition.",
+  "The delayed probe retains the same output and verifier expectations as the immediate probe.",
+]
+changed_dimensions = ["room_and_climate"]
+rationale = "The delayed probe provides a second occupied-space task after an intervening experience without allowing acquisition values to be copied."
+
+[[relations]]
+relation_id = "cairns-server-to-adelaide-library-interference"
+purpose = "interference"
+source_member_ids = ["cairns-server-interference"]
+target_member_id = "adelaide-library-delayed-probe"
+invariant_dimensions = ["task_form", "heat_load_summation"]
+invariant_claims = [
+  "The interference task has the same calculation surface and output schema as the delayed probe.",
+  "The server-room exception is valid only when the stated occupied-person rule does not apply.",
+]
+changed_dimensions = ["ventilation_regime", "room_and_climate"]
+rationale = "The server-room task introduces a valid but conflicting outside-air branch that becomes harmful if reused for the occupied library probe."

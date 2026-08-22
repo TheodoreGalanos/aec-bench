@@ -9,9 +9,14 @@ import pytest
 
 from aec_bench.contracts.experiment_manifest import AgentConfig, ComputeConfig
 from aec_bench.contracts.learning_study import (
+    ExperienceRelationPurpose,
+    ExperienceRelationSpec,
     ExperienceRole,
+    ImprovementDirection,
     LearningArmSpec,
     LearningExperienceSpec,
+    LearningMeasurementKind,
+    LearningMeasurementSpec,
     LearningStudySpec,
     ReleaseFeedbackStep,
     RunExperienceStep,
@@ -115,6 +120,98 @@ def test_compilation_resolves_every_task_before_execution() -> None:
 
     with pytest.raises(LearningStudyTaskResolutionFailed, match="experience probe"):
         compile_learning_study(study_run_id="run-1", spec=_spec(), resolve_task=resolve)
+
+
+def test_compilation_preserves_family_specific_changed_dimension_ids() -> None:
+    relation = ExperienceRelationSpec(
+        relation_id="boundary",
+        purpose=ExperienceRelationPurpose.BOUNDARY,
+        source_experience_ids=("acquire",),
+        target_experience_id="probe",
+        invariant_claims=("The review workflow stays fixed.",),
+        changed_dimensions=("issue_locus", "transition_scope"),
+        rationale="The family overlay declares the semantic kinds of these dimensions.",
+    )
+
+    compiled = compile_learning_study(
+        study_run_id="run-1",
+        spec=_spec().model_copy(update={"relations": (relation,)}),
+        resolve_task=lambda task_id: _Task(task_id),
+    )
+
+    assert compiled.spec.relations == (relation,)
+
+
+def test_compilation_accepts_retention_decay_between_two_probes_in_one_exposed_arm() -> None:
+    spec = _spec(repetitions=1)
+    delayed = LearningExperienceSpec(experience_id="delayed", task_id="task/delayed", role=ExperienceRole.PROBE)
+    cold = spec.arms[0].model_copy(update={"steps": (RunExperienceStep(step_id="delayed", experience_id="delayed"),)})
+    exposed = spec.arms[1].model_copy(
+        update={"steps": (*spec.arms[1].steps, RunExperienceStep(step_id="delayed", experience_id="delayed"))}
+    )
+    measurement = LearningMeasurementSpec(
+        measurement_id="decay",
+        kind=LearningMeasurementKind.RETENTION_DECAY,
+        projection_id="reward",
+        direction=ImprovementDirection.LOWER,
+        target_experience_id="delayed",
+        focal_arm_id="exposed",
+        reference_experience_id="probe",
+        acquisition_experience_ids=("acquire",),
+    )
+
+    compiled = compile_learning_study(
+        study_run_id="run-1",
+        spec=spec.model_copy(
+            update={
+                "experiences": (*spec.experiences, delayed),
+                "arms": (cold, exposed),
+                "measurements": (measurement,),
+            }
+        ),
+        resolve_task=lambda task_id: _Task(task_id),
+    )
+
+    assert compiled.spec.measurements == (measurement,)
+
+
+def test_compilation_rejects_ambiguous_or_unexecuted_retention_references() -> None:
+    spec = _spec(repetitions=1)
+    base = LearningMeasurementSpec(
+        measurement_id="decay",
+        kind=LearningMeasurementKind.RETENTION_DECAY,
+        projection_id="reward",
+        direction=ImprovementDirection.LOWER,
+        target_experience_id="probe",
+        focal_arm_id="exposed",
+        reference_experience_id="acquire",
+    )
+    with pytest.raises(LearningStudySpecInvalid, match="cannot use both"):
+        compile_learning_study(
+            study_run_id="run-1",
+            spec=spec.model_copy(update={"measurements": (base.model_copy(update={"comparator_arm_id": "cold"}),)}),
+            resolve_task=lambda task_id: _Task(task_id),
+        )
+
+    with pytest.raises(LearningStudyReferenceInvalid, match="does not run reference experience"):
+        compile_learning_study(
+            study_run_id="run-1",
+            spec=spec.model_copy(
+                update={
+                    "measurements": (
+                        base.model_copy(update={"focal_arm_id": "cold", "reference_experience_id": "acquire"}),
+                    )
+                }
+            ),
+            resolve_task=lambda task_id: _Task(task_id),
+        )
+
+    with pytest.raises(LearningStudySpecInvalid, match="requires a reference experience"):
+        compile_learning_study(
+            study_run_id="run-1",
+            spec=spec.model_copy(update={"measurements": (base.model_copy(update={"reference_experience_id": None}),)}),
+            resolve_task=lambda task_id: _Task(task_id),
+        )
 
 
 def test_compilation_rejects_feedback_before_source_and_probe_commit() -> None:

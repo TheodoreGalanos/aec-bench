@@ -31,6 +31,7 @@ def _resolve_task(task_id: str):  # noqa: ANN202
     (
         ("a01-artifact-structural-transfer", 2),
         ("a02-artifact-applicability-boundary", 2),
+        ("a03-artifact-retention-interference", 4),
     ),
 )
 def test_real_learning_families_resolve_exact_existing_tasks(protocol_id: str, member_count: int) -> None:

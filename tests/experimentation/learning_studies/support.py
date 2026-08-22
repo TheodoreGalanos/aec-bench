@@ -119,6 +119,80 @@ class DrainageBoundaryStudyAdapter:
         return "fixed-test-model"
 
 
+class RetentionInterferenceStudyAdapter:
+    def __init__(
+        self,
+        workspace: Path,
+        *,
+        neutral_output: str,
+        observations: list[dict[str, object]],
+    ) -> None:
+        self.workspace = workspace
+        self._neutral_output = neutral_output
+        self._observations = observations
+
+    def execute(self, request: AdapterRequest) -> AdapterResult:
+        namespace = self.workspace / ".aec-bench-learning"
+        memory_root = namespace / "memory"
+        feedback_root = namespace / "feedback"
+        has_memory = memory_root.is_dir() and any(path.is_file() for path in memory_root.rglob("*"))
+        feedback_files = (
+            tuple(path for path in feedback_root.rglob("*") if path.is_file()) if feedback_root.is_dir() else ()
+        )
+        has_interference_episode = any(
+            "cairns-server-60m2" in path.read_text(encoding="utf-8") for path in feedback_files
+        )
+
+        if (self.workspace / "sources" / "model-input-manifest.md").is_file():
+            task = "neutral-drainage"
+            content = self._neutral_output
+        else:
+            instruction = (self.workspace / "instruction.md").read_text(encoding="utf-8")
+            location = next(
+                name for name in ("brisbane", "sydney", "adelaide", "cairns") if name.title() in instruction
+            )
+            task = location
+            if location in {"brisbane", "cairns"}:
+                content = correct_heat_load_output(location)
+            elif not has_memory:
+                content = incorrect_heat_load_output()
+            elif location == "adelaide" and has_interference_episode:
+                content = interfered_adelaide_heat_load_output()
+            else:
+                content = correct_heat_load_output(location)
+
+        self._observations.append(
+            {
+                "task": task,
+                "has_memory": has_memory,
+                "feedback_count": len(feedback_files),
+                "has_interference_episode": has_interference_episode,
+                "has_verifier": (self.workspace / "tests").exists(),
+            }
+        )
+        (self.workspace / "output.md").write_text(content, encoding="utf-8")
+        return AdapterResult(
+            adapter_name="direct",
+            resolved_model="fixed-test-model",
+            configuration_record={},
+            agent_output=AgentOutput(
+                status=AgentOutputStatus.COMPLETED,
+                output_path=request.output_path,
+                output_format=request.output_format,
+            ),
+            transcript=[],
+            usage_model_calls=1,
+            usage_input_tokens=30,
+            usage_output_tokens=15,
+        )
+
+    def adapter_name(self) -> str:
+        return "direct"
+
+    def resolved_model(self) -> str:
+        return "fixed-test-model"
+
+
 def upstream_invalidation_output(probe_output: str) -> str:
     """Return a parseable probe response that repeats the acquisition transition pattern."""
 
@@ -176,6 +250,28 @@ def correct_heat_load_output(location: str) -> str:
             small_power_density=10,
             conduction_factor=15,
         )
+    elif location == "adelaide":
+        values = _heat_load_values(
+            floor_area=150,
+            area_per_person=5.0,
+            outside_air_per_person=10.0,
+            outdoor_temperature=39.6,
+            outdoor_enthalpy=62.8,
+            lighting_density=10,
+            small_power_density=8,
+            conduction_factor=15,
+        )
+    elif location == "cairns":
+        values = _heat_load_values_for_airflow(
+            floor_area=60,
+            people=0.0,
+            outside_air=60.0,
+            outdoor_temperature=34.0,
+            outdoor_enthalpy=81.4,
+            lighting_density=5,
+            small_power_density=250,
+            conduction_factor=25,
+        )
     else:
         raise ValueError(f"unsupported test location: {location}")
     return f"Calculation result\n\n```json\n{json.dumps(values, sort_keys=True)}\n```\n"
@@ -183,6 +279,22 @@ def correct_heat_load_output(location: str) -> str:
 
 def incorrect_heat_load_output() -> str:
     return "Calculation result\n\n```json\n{}\n```\n"
+
+
+def interfered_adelaide_heat_load_output() -> str:
+    """Apply the server-room ventilation exception incorrectly to the occupied library."""
+
+    values = _heat_load_values_for_airflow(
+        floor_area=150,
+        people=0.0,
+        outside_air=150.0,
+        outdoor_temperature=39.6,
+        outdoor_enthalpy=62.8,
+        lighting_density=10,
+        small_power_density=8,
+        conduction_factor=15,
+    )
+    return f"Calculation result\n\n```json\n{json.dumps(values, sort_keys=True)}\n```\n"
 
 
 def _heat_load_values(
@@ -198,6 +310,29 @@ def _heat_load_values(
 ) -> dict[str, float]:
     people = floor_area / area_per_person
     outside_air = people * outside_air_per_person
+    return _heat_load_values_for_airflow(
+        floor_area=floor_area,
+        people=people,
+        outside_air=outside_air,
+        outdoor_temperature=outdoor_temperature,
+        outdoor_enthalpy=outdoor_enthalpy,
+        lighting_density=lighting_density,
+        small_power_density=small_power_density,
+        conduction_factor=conduction_factor,
+    )
+
+
+def _heat_load_values_for_airflow(
+    *,
+    floor_area: float,
+    people: float,
+    outside_air: float,
+    outdoor_temperature: float,
+    outdoor_enthalpy: float,
+    lighting_density: float,
+    small_power_density: float,
+    conduction_factor: float,
+) -> dict[str, float]:
     people_sensible = people * 75.0
     people_latent = people * 55.0
     lighting = floor_area * lighting_density

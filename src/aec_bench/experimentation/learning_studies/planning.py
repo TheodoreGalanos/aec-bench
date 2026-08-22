@@ -354,6 +354,15 @@ def _validate_measurements(spec: LearningStudySpec) -> None:
             raise LearningStudySpecInvalid(
                 f"study {spec.study_id} measurement {measurement.measurement_id} comparator must differ from focal"
             )
+        if measurement.reference_experience_id is not None and comparator is not None:
+            raise LearningStudySpecInvalid(
+                f"study {spec.study_id} measurement {measurement.measurement_id} cannot use both a comparator arm "
+                "and a reference experience"
+            )
+        if measurement.kind is LearningMeasurementKind.RETENTION_DECAY and measurement.reference_experience_id is None:
+            raise LearningStudySpecInvalid(
+                f"study {spec.study_id} measurement {measurement.measurement_id} requires a reference experience"
+            )
         for arm in (focal, comparator):
             if arm is None:
                 continue
@@ -376,6 +385,14 @@ def _validate_measurements(spec: LearningStudySpec) -> None:
                 f"{sorted(missing)}"
             )
         focal_experience_ids = {step.experience_id for step in focal.steps if isinstance(step, RunExperienceStep)}
+        if (
+            measurement.reference_experience_id is not None
+            and measurement.reference_experience_id not in focal_experience_ids
+        ):
+            raise LearningStudyReferenceInvalid(
+                f"study {spec.study_id} measurement {measurement.measurement_id} focal arm does not run "
+                f"reference experience {measurement.reference_experience_id}"
+            )
         missing_acquisition = set(measurement.acquisition_experience_ids) - focal_experience_ids
         if missing_acquisition:
             raise LearningStudyReferenceInvalid(

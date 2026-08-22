@@ -220,6 +220,7 @@ def _assess_measurement(
             focal_record=focal_record,
             comparator_record=comparator_record,
             evidence=arm_evidence,
+            require_matching_task=measurement.reference_experience_id is None,
         )
         diagnostics.update(pair_diagnostics)
         validity = _least_valid(validity, pair_validity)
@@ -286,6 +287,7 @@ def _pair_validity(
     focal_record: TrialRecord,
     comparator_record: TrialRecord | None,
     evidence: Mapping[str, AssessmentArmEvidence],
+    require_matching_task: bool,
 ) -> tuple[LearningComparisonValidity, tuple[str, ...]]:
     focal_evidence = evidence.get(focal_plan.arm_run_id)
     comparator_evidence = None if comparator_plan is None else evidence.get(comparator_plan.arm_run_id)
@@ -319,7 +321,7 @@ def _pair_validity(
             descriptive.append(f"recorded agent differs from the compiled study: {record.trial_id}")
         if record.environment.compute_backend != plan.spec.compute.backend:
             descriptive.append(f"recorded compute backend differs from the compiled study: {record.trial_id}")
-    if comparator_record is not None and comparator_record.task_id != focal_record.task_id:
+    if require_matching_task and comparator_record is not None and comparator_record.task_id != focal_record.task_id:
         invalid.append("matched probe records refer to different task identities")
     if invalid:
         return LearningComparisonValidity.INVALID, tuple(invalid + descriptive)

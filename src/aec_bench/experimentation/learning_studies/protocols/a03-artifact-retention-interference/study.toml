@@ -1,0 +1,243 @@
+study_id = "a03-artifact-retention-interference"
+title = "Artifact retention and interference: occupied-space heat-load method"
+research_question = "Does consolidated occupied-space heat-load knowledge survive a neutral task, and does a later server-room exception distort its use on a delayed occupied-space probe?"
+claim_mode = "controlled"
+relation_ids = [
+  "brisbane-office-to-sydney-classroom-immediate-transfer",
+  "brisbane-office-to-adelaide-library-retention",
+  "cairns-server-to-adelaide-library-interference",
+]
+
+[[experiences]]
+experience_id = "brisbane-office-acquisition"
+family_member_id = "brisbane-office-acquisition"
+role = "acquisition"
+
+[[experiences]]
+experience_id = "sydney-classroom-immediate-probe"
+family_member_id = "sydney-classroom-immediate-probe"
+role = "probe"
+
+[[experiences]]
+experience_id = "adelaide-library-delayed-probe"
+family_member_id = "adelaide-library-delayed-probe"
+role = "probe"
+
+[[experiences]]
+experience_id = "drainage-review-neutral"
+task_id = "civil/drainage-review/drainage-model-run-provenance-issue-review-package/brownfield-drainage-upgrade-industrial-precinct-catchment-02"
+role = "practice"
+description = "An unrelated drainage provenance review with a comparable single artifact-task execution slot."
+
+[[experiences]]
+experience_id = "cairns-server-interference"
+family_member_id = "cairns-server-interference"
+role = "interference"
+
+[[measurements]]
+measurement_id = "immediate-transfer-gain"
+kind = "transfer_gain"
+projection_id = "heat-load-verifier-reward"
+direction = "higher"
+target_experience_id = "sydney-classroom-immediate-probe"
+focal_arm_id = "immediate-transfer"
+comparator_arm_id = "cold-immediate"
+acquisition_experience_ids = ["brisbane-office-acquisition"]
+
+[[measurements]]
+measurement_id = "retained-gain-after-neutral"
+kind = "retained_gain"
+projection_id = "heat-load-verifier-reward"
+direction = "higher"
+target_experience_id = "adelaide-library-delayed-probe"
+focal_arm_id = "neutral-retention"
+comparator_arm_id = "cold-delayed-neutral"
+acquisition_experience_ids = ["brisbane-office-acquisition"]
+
+[[measurements]]
+measurement_id = "within-order-retention-decay"
+kind = "retention_decay"
+projection_id = "heat-load-verifier-reward"
+direction = "lower"
+target_experience_id = "adelaide-library-delayed-probe"
+focal_arm_id = "neutral-retention"
+reference_experience_id = "sydney-classroom-immediate-probe"
+acquisition_experience_ids = ["brisbane-office-acquisition"]
+
+[[measurements]]
+measurement_id = "interference-effect"
+kind = "interference_effect"
+projection_id = "heat-load-verifier-reward"
+direction = "higher"
+target_experience_id = "adelaide-library-delayed-probe"
+focal_arm_id = "interference"
+comparator_arm_id = "neutral-retention"
+acquisition_experience_ids = ["brisbane-office-acquisition"]
+
+[[measurements]]
+measurement_id = "reset-interference-control"
+kind = "interference_effect"
+projection_id = "heat-load-verifier-reward"
+direction = "higher"
+target_experience_id = "adelaide-library-delayed-probe"
+focal_arm_id = "cold-delayed-interference"
+comparator_arm_id = "cold-delayed-neutral"
+
+[[arms]]
+arm_id = "cold-immediate"
+role = "control"
+treatment_id = "reset"
+
+[[arms.steps]]
+kind = "run_experience"
+step_id = "cold-immediate-probe"
+experience_id = "sydney-classroom-immediate-probe"
+commit_post_state = false
+
+[[arms]]
+arm_id = "cold-delayed-neutral"
+role = "control"
+treatment_id = "reset"
+
+[[arms.steps]]
+kind = "run_experience"
+step_id = "cold-neutral"
+experience_id = "drainage-review-neutral"
+commit_post_state = false
+
+[[arms.steps]]
+kind = "run_experience"
+step_id = "cold-delayed-probe-after-neutral"
+experience_id = "adelaide-library-delayed-probe"
+commit_post_state = false
+
+[[arms]]
+arm_id = "cold-delayed-interference"
+role = "control"
+treatment_id = "reset"
+
+[[arms.steps]]
+kind = "run_experience"
+step_id = "cold-interference"
+experience_id = "cairns-server-interference"
+commit_post_state = false
+
+[[arms.steps]]
+kind = "run_experience"
+step_id = "cold-delayed-probe-after-interference"
+experience_id = "adelaide-library-delayed-probe"
+commit_post_state = false
+
+[[arms]]
+arm_id = "immediate-transfer"
+role = "exposure"
+treatment_id = "structured-memory"
+
+[[arms.steps]]
+kind = "run_experience"
+step_id = "immediate-acquisition"
+experience_id = "brisbane-office-acquisition"
+
+[[arms.steps]]
+kind = "release_feedback"
+step_id = "immediate-acquisition-feedback"
+source_experience_id = "brisbane-office-acquisition"
+feedback_view_id = "heat-load-public-episode"
+
+[[arms.steps]]
+kind = "consolidate"
+step_id = "immediate-consolidation"
+feedback_step_ids = ["immediate-acquisition-feedback"]
+operation_id = "consolidate-occupied-heat-load-method"
+
+[[arms.steps]]
+kind = "run_experience"
+step_id = "immediate-probe"
+experience_id = "sydney-classroom-immediate-probe"
+commit_post_state = false
+
+[[arms]]
+arm_id = "neutral-retention"
+role = "exposure"
+treatment_id = "structured-memory"
+
+[[arms.steps]]
+kind = "run_experience"
+step_id = "neutral-acquisition"
+experience_id = "brisbane-office-acquisition"
+
+[[arms.steps]]
+kind = "release_feedback"
+step_id = "neutral-acquisition-feedback"
+source_experience_id = "brisbane-office-acquisition"
+feedback_view_id = "heat-load-public-episode"
+
+[[arms.steps]]
+kind = "consolidate"
+step_id = "neutral-consolidation"
+feedback_step_ids = ["neutral-acquisition-feedback"]
+operation_id = "consolidate-occupied-heat-load-method"
+
+[[arms.steps]]
+kind = "run_experience"
+step_id = "neutral-immediate-probe"
+experience_id = "sydney-classroom-immediate-probe"
+commit_post_state = false
+
+[[arms.steps]]
+kind = "run_experience"
+step_id = "neutral-intervening-task"
+experience_id = "drainage-review-neutral"
+commit_post_state = false
+
+[[arms.steps]]
+kind = "run_experience"
+step_id = "neutral-delayed-probe"
+experience_id = "adelaide-library-delayed-probe"
+commit_post_state = false
+
+[[arms]]
+arm_id = "interference"
+role = "exposure"
+treatment_id = "structured-memory"
+
+[[arms.steps]]
+kind = "run_experience"
+step_id = "interference-acquisition"
+experience_id = "brisbane-office-acquisition"
+
+[[arms.steps]]
+kind = "release_feedback"
+step_id = "interference-acquisition-feedback"
+source_experience_id = "brisbane-office-acquisition"
+feedback_view_id = "heat-load-public-episode"
+
+[[arms.steps]]
+kind = "consolidate"
+step_id = "interference-consolidation"
+feedback_step_ids = ["interference-acquisition-feedback"]
+operation_id = "consolidate-occupied-heat-load-method"
+
+[[arms.steps]]
+kind = "run_experience"
+step_id = "interference-immediate-probe"
+experience_id = "sydney-classroom-immediate-probe"
+commit_post_state = false
+
+[[arms.steps]]
+kind = "run_experience"
+step_id = "interference-task"
+experience_id = "cairns-server-interference"
+commit_post_state = true
+
+[[arms.steps]]
+kind = "release_feedback"
+step_id = "interference-episode"
+source_experience_id = "cairns-server-interference"
+feedback_view_id = "heat-load-actor-episode"
+
+[[arms.steps]]
+kind = "run_experience"
+step_id = "interference-delayed-probe"
+experience_id = "adelaide-library-delayed-probe"
+commit_post_state = false
