@@ -9,7 +9,6 @@ from dataclasses import dataclass
 
 from aec_bench.contracts.learning_study import (
     ConsolidateStep,
-    ExperienceRelationPurpose,
     ExperienceRole,
     LearningMeasurementKind,
     LearningStudySpec,
@@ -250,13 +249,6 @@ def _validate_references(spec: LearningStudySpec) -> None:
         if target.role is not ExperienceRole.PROBE:
             raise LearningStudyReferenceInvalid(
                 f"study {spec.study_id} relation {relation.relation_id} target must be a probe"
-            )
-        if relation.purpose is ExperienceRelationPurpose.BOUNDARY and not {
-            "applicability",
-            "causal",
-        }.intersection(relation.changed_dimensions):
-            raise LearningStudySpecInvalid(
-                f"study {spec.study_id} boundary relation {relation.relation_id} must change applicability or causal"
             )
     for arm in spec.arms:
         seen_experiences: set[str] = set()

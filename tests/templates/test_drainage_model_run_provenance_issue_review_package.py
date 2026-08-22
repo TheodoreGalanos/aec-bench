@@ -21,6 +21,10 @@ from aec_bench.generation.scaffolder import scaffold_task_instance
 from aec_bench.harness.compilation.task_surface import project_declared_task_surface
 from aec_bench.harness.kernel_catalogue import default_kernel_registry
 from aec_bench.tasks.loader import load_task_definition
+from aec_bench.templates.builtin.civil.drainage_model_run_provenance_issue_review_package.outcomes import (
+    has_correct_downstream_memo_boundary_decision,
+    has_upstream_model_invalidation_decision,
+)
 from aec_bench.templates.contracts import TemplateConfig
 from aec_bench.templates.registry import LoadedTemplate, discover_templates, load_template
 
@@ -283,6 +287,30 @@ def test_checked_stage1_program_recovery_pair_is_distinct_synthetic_long_horizon
         for task_dir in task_dirs
     )
     assert scores == ((0.31, 1.0), (0.21, 1.0))
+
+
+def test_public_boundary_outcomes_distinguish_downstream_localisation_from_upstream_invalidation() -> None:
+    boundary_output = (
+        CHECKED_STAGE1_TASKS
+        / "industrial-precinct-catchment-industrial-precinct-catchment-00"
+        / "tests"
+        / "fixtures"
+        / "golden_pass.md"
+    ).read_text(encoding="utf-8")
+    upstream_output = (
+        CHECKED_STAGE1_TASKS
+        / "brownfield-drainage-upgrade-industrial-precinct-catchment-02"
+        / "tests"
+        / "fixtures"
+        / "golden_pass.md"
+    ).read_text(encoding="utf-8")
+
+    assert has_correct_downstream_memo_boundary_decision(boundary_output)
+    assert not has_upstream_model_invalidation_decision(boundary_output)
+    assert not has_correct_downstream_memo_boundary_decision(upstream_output)
+    assert has_upstream_model_invalidation_decision(upstream_output)
+    assert not has_correct_downstream_memo_boundary_decision("No submitted JSON output.")
+    assert not has_upstream_model_invalidation_decision("No submitted JSON output.")
 
 
 def test_generated_task_review_has_no_declared_stage_graph(tmp_path: Path) -> None:

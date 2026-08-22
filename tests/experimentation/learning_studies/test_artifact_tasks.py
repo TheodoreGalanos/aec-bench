@@ -15,6 +15,10 @@ from aec_bench.experimentation.learning_studies.artifact_tasks import (
 )
 from aec_bench.experimentation.learning_studies.errors import LearningStudyFeatureUnsupported
 from aec_bench.experimentation.learning_studies.planning import CompiledExperienceStep, compile_learning_study
+from aec_bench.experimentation.learning_studies.protocol_collection import (
+    BUILTIN_LEARNING_STUDY_PROTOCOLS,
+    load_learning_study_protocol,
+)
 from aec_bench.experimentation.learning_studies.runtime import (
     ConsolidationRequest,
     ExecuteExperienceRequest,
@@ -22,11 +26,6 @@ from aec_bench.experimentation.learning_studies.runtime import (
     InitialiseLearnerRequest,
     LearnerStateHandle,
     ReleaseFeedbackRequest,
-)
-from aec_bench.experimentation.learning_studies.studies.a01_artifact_structural_transfer import (
-    A01_CONSOLIDATION_OPERATION_ID,
-    A01_FEEDBACK_VIEW_ID,
-    build_a01_study_spec,
 )
 from aec_bench.tasks.loader import load_task_definition
 
@@ -36,6 +35,9 @@ _REPOSITORY_ROOT = Path(__file__).parents[3]
 _TASKS_ROOT = _REPOSITORY_ROOT / "tasks"
 _AGENT = AgentConfig(name="a01-test-agent", adapter="direct", model="fixed-test-model")
 _COMPUTE = ComputeConfig(backend="local", resource_limits={"memory_mb": 512}, timeout_override=30)
+_PROTOCOL_PATH = BUILTIN_LEARNING_STUDY_PROTOCOLS / "a01-artifact-structural-transfer"
+_FEEDBACK_VIEW_ID = "heat-load-public-evaluation"
+_CONSOLIDATION_OPERATION_ID = "update-structured-memory"
 
 
 def _resolve_task(task_id: str):  # noqa: ANN202
@@ -45,7 +47,7 @@ def _resolve_task(task_id: str):  # noqa: ANN202
 def _plan():  # noqa: ANN202
     return compile_learning_study(
         study_run_id="a01-adapter-test",
-        spec=build_a01_study_spec(agent=_AGENT, compute=_COMPUTE),
+        spec=load_learning_study_protocol(_PROTOCOL_PATH, agent=_AGENT, compute=_COMPUTE),
         resolve_task=_resolve_task,
     )
 
@@ -68,8 +70,8 @@ def _binding(  # noqa: ANN001, ANN202
             "reset": ArtifactLearningTreatmentKind.RESET,
             "structured-memory": ArtifactLearningTreatmentKind.STRUCTURED_MEMORY,
         },
-        feedback_projectors={A01_FEEDBACK_VIEW_ID: feedback_projector},
-        consolidation_operations={A01_CONSOLIDATION_OPERATION_ID: consolidation_operation or default_consolidation},
+        feedback_projectors={_FEEDBACK_VIEW_ID: feedback_projector},
+        consolidation_operations={_CONSOLIDATION_OPERATION_ID: consolidation_operation or default_consolidation},
         adapter_builder=adapter_builder,
     )
 

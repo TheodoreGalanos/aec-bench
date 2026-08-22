@@ -196,12 +196,22 @@ global task catalogue. The current task-authority references are
 `instruction.md` and `task.toml`; a family file remains host-held and is not
 staged for the learner.
 
+Repository-maintained studies form a task-like collection under
+`learning_studies/protocols/`. Each study directory contains one `study.toml`
+and one `family.toml`. The generic collection loader resolves family members
+and relations into `LearningStudySpec`, then binds the caller's fixed agent,
+compute configuration, and repetition count. The protocol directory contains
+no task assets, execution runtime, or verifier logic. External callers can
+supply another self-contained protocol directory by path. Collection discovery
+is filesystem-based and is not a global study or task registry.
+
 The local artifact adapter depends downward on the existing artifact harness.
-It supports the Release A `reset` and `structured-memory` treatments, one local
-single-attempt trial for each experience, named public feedback projectors, and
-explicit consolidation callbacks. Each arm has a separate writable root and
-each experience has a separate task workspace. Only files below
-`.aec-bench-learning/` can enter a later experience. Structured memory is
+It supports the Release A `reset`, `raw-history`, and `structured-memory`
+treatments, one local single-attempt trial for each experience, named public
+feedback projectors, and explicit consolidation callbacks. Each arm has a
+separate writable root and each experience has a separate task workspace. Only
+files below `.aec-bench-learning/` can enter a later experience. Raw history is
+appended only after an explicit public feedback release. Structured memory is
 read-only during a task and can change only during consolidation. Model and
 adapter identity continue to come from the immutable planned trial.
 

@@ -2,6 +2,7 @@
 # ABOUTME: Drives real artifact tasks and verifiers without a paid or hosted model call.
 
 import json
+import re
 from pathlib import Path
 
 from aec_bench.adapters.base import AdapterRequest, AdapterResult
@@ -25,7 +26,7 @@ class HeatLoadStudyAdapter:
                 "has_memory": has_memory,
                 "has_feedback": feedback_root.is_dir() and any(feedback_root.iterdir()),
                 "has_verifier": (self.workspace / "tests").exists(),
-                "has_family_file": any(self.workspace.rglob("heat-load-single-room.toml")),
+                "has_family_file": any(self.workspace.rglob("family.toml")),
             }
         )
         content = (
@@ -53,6 +54,103 @@ class HeatLoadStudyAdapter:
 
     def resolved_model(self) -> str:
         return "fixed-test-model"
+
+
+class DrainageBoundaryStudyAdapter:
+    def __init__(
+        self,
+        workspace: Path,
+        *,
+        acquisition_output: str,
+        probe_output: str,
+        observations: list[dict[str, object]],
+    ) -> None:
+        self.workspace = workspace
+        self._acquisition_output = acquisition_output
+        self._probe_output = probe_output
+        self._observations = observations
+
+    def execute(self, request: AdapterRequest) -> AdapterResult:
+        manifest = (self.workspace / "sources" / "model-input-manifest.md").read_text(encoding="utf-8")
+        is_acquisition = "| Catchment basis revision | Rev C |" in manifest
+        namespace = self.workspace / ".aec-bench-learning"
+        history_root = namespace / "history"
+        memory_root = namespace / "memory"
+        feedback_root = namespace / "feedback"
+        has_history = history_root.is_dir() and any(path.is_file() for path in history_root.rglob("*"))
+        has_memory = memory_root.is_dir() and any(path.is_file() for path in memory_root.rglob("*"))
+        has_feedback = feedback_root.is_dir() and any(path.is_file() for path in feedback_root.rglob("*"))
+        self._observations.append(
+            {
+                "task": "acquisition" if is_acquisition else "probe",
+                "has_history": has_history,
+                "has_memory": has_memory,
+                "has_feedback": has_feedback,
+                "has_verifier": (self.workspace / "tests").exists(),
+            }
+        )
+        if is_acquisition:
+            content = self._acquisition_output
+        elif has_history:
+            content = upstream_invalidation_output(self._probe_output)
+        else:
+            content = self._probe_output
+        output = self.workspace / "output.md"
+        output.write_text(content, encoding="utf-8")
+        return AdapterResult(
+            adapter_name="direct",
+            resolved_model="fixed-test-model",
+            configuration_record={},
+            agent_output=AgentOutput(
+                status=AgentOutputStatus.COMPLETED,
+                output_path=request.output_path,
+                output_format=request.output_format,
+            ),
+            transcript=[],
+            usage_model_calls=1,
+            usage_input_tokens=40,
+            usage_output_tokens=20,
+        )
+
+    def adapter_name(self) -> str:
+        return "direct"
+
+    def resolved_model(self) -> str:
+        return "fixed-test-model"
+
+
+def upstream_invalidation_output(probe_output: str) -> str:
+    """Return a parseable probe response that repeats the acquisition transition pattern."""
+
+    matches = re.findall(r"```json\s*\n(.*?)\n\s*```", probe_output, re.DOTALL)
+    if not matches:
+        raise ValueError("probe fixture has no final JSON output")
+    payload = json.loads(matches[-1])
+    payload["review_matrix"]["PRV-03"] = {
+        "status": "fail",
+        "evidence": "The acquisition response was reused and the current upstream revision was rejected.",
+    }
+    payload["review_matrix"]["PRV-06"] = {
+        "status": "pass",
+        "evidence": "The downstream propagation defect was not localized.",
+    }
+    payload["transition_decision"] = {
+        "model_run": "non_governing",
+        "model_report": "non_governing",
+        "design_claim": "unsupported",
+    }
+    payload["findings"] = [
+        {
+            "item": "PRV-03",
+            "severity": "critical",
+            "source_id": "MANIFEST-03-042",
+            "object_id": "RUN-03-042",
+            "consequence": "The model run and report are treated as non-governing.",
+            "action": "Update the model manifest before using the model evidence.",
+        }
+    ]
+    prefix = probe_output[: probe_output.rfind("```json")]
+    return f"{prefix}```json\n{json.dumps(payload, indent=2, sort_keys=True)}\n```\n"
 
 
 def correct_heat_load_output(location: str) -> str:

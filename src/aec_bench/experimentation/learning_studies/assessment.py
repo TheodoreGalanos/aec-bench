@@ -62,6 +62,19 @@ class ProjectionResult:
 type OutcomeProjection = Callable[[TrialRecord], ProjectionResult]
 
 
+def project_trial_reward(record: TrialRecord) -> ProjectionResult:
+    """Project the task evaluator's canonical reward without parsing its breakdown."""
+
+    if record.evaluation is None:
+        return ProjectionResult(eligible=False, value=None, reason="task evaluation is unavailable")
+    return ProjectionResult(
+        eligible=True,
+        value=record.evaluation.reward,
+        lower_bound=0.0,
+        upper_bound=1.0,
+    )
+
+
 @dataclass(frozen=True)
 class AssessmentArmEvidence:
     arm_run_id: str
@@ -408,4 +421,5 @@ __all__ = (
     "OutcomeProjection",
     "ProjectionResult",
     "assess_learning_study",
+    "project_trial_reward",
 )

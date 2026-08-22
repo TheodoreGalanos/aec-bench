@@ -72,6 +72,21 @@ class LearningExperienceSpec(FrozenStrictModel):
     description: str | None = None
 
 
+class LearningProtocolExperienceSpec(FrozenStrictModel):
+    experience_id: NonEmptyStr
+    role: ExperienceRole
+    family_member_id: NonEmptyStr | None = None
+    task_id: NonEmptyStr | None = None
+    description: str | None = None
+
+    @model_validator(mode="after")
+    def validate_task_source(self) -> LearningProtocolExperienceSpec:
+        sources = [value for value in (self.family_member_id, self.task_id) if value is not None]
+        if len(sources) != 1:
+            raise ValueError("protocol experience requires exactly one family member or direct task id")
+        return self
+
+
 class RunExperienceStep(FrozenStrictModel):
     kind: Literal["run_experience"] = "run_experience"
     step_id: NonEmptyStr
@@ -183,6 +198,33 @@ class LearningStudySpec(FrozenStrictModel):
         return self
 
 
+class LearningStudyProtocolSpec(FrozenStrictModel):
+    study_id: NonEmptyStr
+    title: NonEmptyStr
+    research_question: NonEmptyStr
+    claim_mode: StudyClaimMode
+    experiences: tuple[LearningProtocolExperienceSpec, ...]
+    relation_ids: tuple[NonEmptyStr, ...] = ()
+    measurements: tuple[LearningMeasurementSpec, ...] = ()
+    arms: tuple[LearningArmSpec, ...]
+
+    @model_validator(mode="after")
+    def validate_identities(self) -> LearningStudyProtocolSpec:
+        _require_unique("protocol experience", [item.experience_id for item in self.experiences])
+        _require_unique(
+            "protocol family member",
+            [member_id for item in self.experiences if (member_id := item.family_member_id) is not None],
+        )
+        _require_unique("protocol relation", list(self.relation_ids))
+        _require_unique("protocol measurement", [item.measurement_id for item in self.measurements])
+        _require_unique("protocol arm", [item.arm_id for item in self.arms])
+        if not self.experiences:
+            raise ValueError("learning study protocol requires at least one experience")
+        if not self.arms:
+            raise ValueError("learning study protocol requires at least one arm")
+        return self
+
+
 def _require_unique(label: str, values: list[str]) -> None:
     if len(values) != len(set(values)):
         raise ValueError(f"learning study {label} ids must be unique")
@@ -195,9 +237,11 @@ __all__ = (
     "ExperienceRole",
     "LearningArmSpec",
     "LearningExperienceSpec",
+    "LearningProtocolExperienceSpec",
     "LearningMeasurementKind",
     "LearningMeasurementSpec",
     "LearningStudySpec",
+    "LearningStudyProtocolSpec",
     "LearningStudyStep",
     "ReleaseFeedbackStep",
     "RunExperienceStep",

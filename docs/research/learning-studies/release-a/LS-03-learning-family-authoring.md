@@ -64,15 +64,19 @@ This PRD does not:
 
 ## 5. Authored file placement
 
-A family file is an explicit input to a study or builder. It is not registered globally.
+A family file is an explicit input to a study protocol. It is not registered globally.
 
-Recommended examples live under:
+Maintained repository-owned studies use one task-like protocol directory:
 
 ```text
-docs/examples/learning-studies/families/
+src/aec_bench/experimentation/learning_studies/protocols/<study-id>/
+├── study.toml
+└── family.toml
 ```
 
-Real research configurations may live in a caller-owned project or workspace and are supplied by path.
+The generic loader composes `family.toml` into the executable study contract.
+Real research configurations may live in a caller-owned project or workspace
+and are supplied as a protocol directory path.
 
 Do not add a second repository-wide task catalogue.
 
@@ -358,7 +362,7 @@ src/aec_bench/contracts/learning_family.py
 src/aec_bench/experimentation/learning_studies/families.py
 tests/contracts/test_learning_family.py
 tests/experimentation/learning_studies/test_families.py
-docs/examples/learning-studies/families/
+src/aec_bench/experimentation/learning_studies/protocols/<study-id>/family.toml
 ```
 
 Do not modify:

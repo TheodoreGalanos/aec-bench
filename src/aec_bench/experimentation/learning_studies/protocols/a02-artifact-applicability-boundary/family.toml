@@ -1,0 +1,59 @@
+family_id = "drainage-provenance-boundary"
+title = "Drainage provenance defect-scope boundary"
+description = "Tests whether an upstream evidence-invalidation response is withheld when the defect is confined to a downstream design memo. Domain and benchmark review remain required before a claim-bearing run."
+source_task_paths = [
+  "tasks/civil/drainage-review/drainage-model-run-provenance-issue-review-package/brownfield-drainage-upgrade-industrial-precinct-catchment-02/instruction.md",
+  "tasks/civil/drainage-review/drainage-model-run-provenance-issue-review-package/brownfield-drainage-upgrade-industrial-precinct-catchment-02/task.toml",
+  "tasks/civil/drainage-review/drainage-model-run-provenance-issue-review-package/industrial-precinct-catchment-industrial-precinct-catchment-00/instruction.md",
+  "tasks/civil/drainage-review/drainage-model-run-provenance-issue-review-package/industrial-precinct-catchment-industrial-precinct-catchment-00/task.toml",
+]
+
+[[dimensions]]
+dimension_id = "review_workflow"
+kind = "surface"
+description = "The nine-item provenance review matrix, structured output, and readiness decision"
+
+[[dimensions]]
+dimension_id = "issue_locus"
+kind = "applicability"
+description = "The evidence-chain location at which the provenance defect occurs"
+
+[[dimensions]]
+dimension_id = "transition_scope"
+kind = "causal"
+description = "The evidence objects whose governing or support state must change because of the defect"
+
+[[members]]
+member_id = "stale-upstream-acquisition"
+task_id = "civil/drainage-review/drainage-model-run-provenance-issue-review-package/brownfield-drainage-upgrade-industrial-precinct-catchment-02"
+description = "A stale catchment revision in the model manifest invalidates the reviewed run and downstream evidence"
+probe_only = false
+
+[members.dimension_values]
+review_workflow = "nine-item drainage provenance matrix and final fenced JSON record"
+issue_locus = "upstream model input revision"
+transition_scope = "model run, model report, and downstream design claim"
+
+[[members]]
+member_id = "stale-downstream-boundary-probe"
+task_id = "civil/drainage-review/drainage-model-run-provenance-issue-review-package/industrial-precinct-catchment-industrial-precinct-catchment-00"
+description = "The model evidence is current but the downstream design memo cites stale values"
+probe_only = true
+
+[members.dimension_values]
+review_workflow = "nine-item drainage provenance matrix and final fenced JSON record"
+issue_locus = "downstream design memo value propagation"
+transition_scope = "downstream design claim only"
+
+[[relations]]
+relation_id = "stale-upstream-to-stale-downstream"
+purpose = "boundary"
+source_member_ids = ["stale-upstream-acquisition"]
+target_member_id = "stale-downstream-boundary-probe"
+invariant_dimensions = ["review_workflow"]
+invariant_claims = [
+  "Both tasks require the same provenance ledger, nine review items, transition decision, finding linkage, and readiness vocabulary.",
+  "Both tasks contain one real provenance defect and require one localized finding rather than generic non-completion.",
+]
+changed_dimensions = ["issue_locus", "transition_scope"]
+rationale = "The acquisition teaches a valid upstream invalidation response. The probe preserves upstream authority and changes only downstream claim propagation, so repeating the acquisition transition is observably wrong. A civil-engineering domain reviewer and benchmark reviewer must approve this relation before a claim-bearing campaign."

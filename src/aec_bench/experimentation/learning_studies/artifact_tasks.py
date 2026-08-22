@@ -33,8 +33,7 @@ from aec_bench.tasks.instance import ResolvedTaskInstance, resolve_instance_path
 from aec_bench.tasks.loader import load_task_definition
 
 _LEARNER_NAMESPACE = ".aec-bench-learning"
-_READABLE_CHANNELS = ("memory", "feedback")
-_STATE_CHANNELS = frozenset(_READABLE_CHANNELS)
+_STATE_CHANNELS = frozenset({"history", "memory", "feedback"})
 _MAX_FILE_BYTES = 1_000_000
 _MAX_STATE_BYTES = 4_000_000
 _ALLOWED_MEMORY_SUFFIXES = frozenset({".json", ".md", ".txt"})
@@ -42,6 +41,7 @@ _ALLOWED_MEMORY_SUFFIXES = frozenset({".json", ".md", ".txt"})
 
 class ArtifactLearningTreatmentKind(StrEnum):
     RESET = "reset"
+    RAW_HISTORY = "raw-history"
     STRUCTURED_MEMORY = "structured-memory"
 
 
@@ -241,6 +241,19 @@ class _ArtifactLearningCoordinator:
                 candidate_root / _LEARNER_NAMESPACE / "feedback" / f"{_safe_component(request.step.step_id)}.json"
             )
             feedback_path.write_bytes(projected_data)
+            changed_channels = ["feedback"]
+            if treatment_kind is ArtifactLearningTreatmentKind.RAW_HISTORY:
+                history_path = (
+                    candidate_root / _LEARNER_NAMESPACE / "history" / f"{_safe_component(request.step.step_id)}.json"
+                )
+                history_path.write_bytes(
+                    _raw_history_entry(
+                        source_experience_id=request.step.source_experience_id,
+                        feedback_view_id=request.step.feedback_view_id,
+                        public_feedback=projected_data,
+                    )
+                )
+                changed_channels.append("history")
             _validate_state_tree(candidate_root)
             artifact = self._artifact_repository.publish_bytes(
                 data=projected_data,
@@ -260,7 +273,7 @@ class _ArtifactLearningCoordinator:
                     view_id=request.step.feedback_view_id,
                     value=ArtifactFeedback(path=feedback_path, artifact=artifact),
                 ),
-                changed_channels=("feedback",),
+                changed_channels=tuple(changed_channels),
             )
         except Exception:
             shutil.rmtree(candidate_root, ignore_errors=True)
@@ -372,7 +385,7 @@ class _ArtifactLearningCoordinator:
             return {}
         files: dict[str, Path] = {}
         namespace = state.root / _LEARNER_NAMESPACE
-        for channel in _READABLE_CHANNELS:
+        for channel in _readable_channels(treatment_kind):
             for source in sorted((namespace / channel).rglob("*")):
                 if source.is_file():
                     relative = source.relative_to(state.root).as_posix()
@@ -393,7 +406,7 @@ class _ArtifactLearningCoordinator:
             return
         expected = {
             path.relative_to(state.root / _LEARNER_NAMESPACE).as_posix(): path.read_bytes()
-            for channel in _READABLE_CHANNELS
+            for channel in _readable_channels(treatment_kind)
             for path in sorted((state.root / _LEARNER_NAMESPACE / channel).rglob("*"))
             if path.is_file()
         }
@@ -472,6 +485,49 @@ def terminal_outcome_feedback(record: TrialRecord) -> bytes:
     return (json.dumps(data, sort_keys=True, separators=(",", ":")) + "\n").encode("utf-8")
 
 
+def public_episode_feedback(record: TrialRecord) -> bytes:
+    """Project public instruction, selected output, and terminal outcome for one episode."""
+
+    data = {
+        "instruction": record.input.instruction,
+        "selected_output": _selected_output_text(record),
+        "terminal_outcome": json.loads(terminal_outcome_feedback(record)),
+    }
+    return (json.dumps(data, sort_keys=True, separators=(",", ":")) + "\n").encode("utf-8")
+
+
+def _selected_output_text(record: TrialRecord) -> str:
+    output_path = None if record.output is None else record.output.raw_output_path
+    if output_path is None:
+        raise ValueError("public episode has no selected output")
+    try:
+        return Path(output_path).read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as error:
+        raise ValueError("public episode selected output is unavailable or not UTF-8 text") from error
+
+
+def _raw_history_entry(
+    *,
+    source_experience_id: str,
+    feedback_view_id: str,
+    public_feedback: bytes,
+) -> bytes:
+    data = {
+        "source_experience_id": source_experience_id,
+        "feedback_view_id": feedback_view_id,
+        "public_feedback": json.loads(public_feedback),
+    }
+    return (json.dumps(data, sort_keys=True, separators=(",", ":")) + "\n").encode("utf-8")
+
+
+def _readable_channels(treatment_kind: ArtifactLearningTreatmentKind) -> tuple[str, ...]:
+    if treatment_kind is ArtifactLearningTreatmentKind.RESET:
+        return ()
+    if treatment_kind is ArtifactLearningTreatmentKind.RAW_HISTORY:
+        return ("history", "feedback")
+    return ("memory", "feedback")
+
+
 def _validate_feedback_projection(data: bytes) -> None:
     if not isinstance(data, bytes) or not data:
         raise ValueError("artifact feedback projection must be a non-empty JSON object")
@@ -517,6 +573,8 @@ def _validate_state_tree(root: Path) -> None:
         relative = path.relative_to(namespace)
         if not relative.parts or relative.parts[0] not in _STATE_CHANNELS:
             raise ValueError(f"learner-path-unsafe: file is outside a declared channel: {path}")
+        if relative.parts[0] == "history" and path.suffix.lower() != ".json":
+            raise ValueError(f"raw-history-output-invalid: unsupported history file type: {path.suffix}")
         if relative.parts[0] == "memory" and path.suffix.lower() not in _ALLOWED_MEMORY_SUFFIXES:
             raise ValueError(f"consolidation-output-invalid: unsupported memory file type: {path.suffix}")
 
@@ -549,5 +607,6 @@ __all__ = (
     "ArtifactLearningBinding",
     "ArtifactLearningTreatmentKind",
     "build_artifact_learning_operations",
+    "public_episode_feedback",
     "terminal_outcome_feedback",
 )

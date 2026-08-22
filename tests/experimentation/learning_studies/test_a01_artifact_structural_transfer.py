@@ -14,31 +14,34 @@ from aec_bench.experimentation.learning_studies.artifact_tasks import (
     build_artifact_learning_operations,
     terminal_outcome_feedback,
 )
-from aec_bench.experimentation.learning_studies.assessment import AssessmentArmEvidence, assess_learning_study
+from aec_bench.experimentation.learning_studies.assessment import (
+    AssessmentArmEvidence,
+    assess_learning_study,
+    project_trial_reward,
+)
 from aec_bench.experimentation.learning_studies.families import (
     load_learning_family,
     resolve_learning_family,
     resolve_learning_relation,
 )
 from aec_bench.experimentation.learning_studies.planning import compile_learning_study
+from aec_bench.experimentation.learning_studies.protocol_collection import (
+    BUILTIN_LEARNING_STUDY_PROTOCOLS,
+    load_learning_study_protocol,
+)
 from aec_bench.experimentation.learning_studies.recording import StudyRunRecorder
 from aec_bench.experimentation.learning_studies.resume import load_resumable_study
 from aec_bench.experimentation.learning_studies.runtime import ArmRunStatus, run_learning_study
-from aec_bench.experimentation.learning_studies.studies.a01_artifact_structural_transfer import (
-    A01_CONSOLIDATION_OPERATION_ID,
-    A01_FAMILY_RELATION_ID,
-    A01_FAMILY_SPEC_PATH,
-    A01_FEEDBACK_VIEW_ID,
-    A01_PROJECTION_ID,
-    build_a01_study_spec,
-    project_heat_load_verifier_reward,
-)
 from aec_bench.tasks.instance import resolve_instance_paths
 from aec_bench.tasks.loader import load_task_definition
 from tests.experimentation.learning_studies.support import HeatLoadStudyAdapter
 
 _REPOSITORY_ROOT = Path(__file__).parents[3]
 _TASKS_ROOT = _REPOSITORY_ROOT / "tasks"
+_PROTOCOL_PATH = BUILTIN_LEARNING_STUDY_PROTOCOLS / "a01-artifact-structural-transfer"
+_FEEDBACK_VIEW_ID = "heat-load-public-evaluation"
+_CONSOLIDATION_OPERATION_ID = "update-structured-memory"
+_PROJECTION_ID = "heat-load-verifier-reward"
 
 
 def _resolve_task_definition(task_id: str):  # noqa: ANN202
@@ -51,15 +54,16 @@ def _resolve_task_instance(task_id: str):  # noqa: ANN202
 
 
 def test_a01_real_artifact_tasks_return_a_matched_structural_transfer_result(tmp_path: Path) -> None:
-    spec = build_a01_study_spec(
+    spec = load_learning_study_protocol(
+        _PROTOCOL_PATH,
         agent=AgentConfig(name="a01-test-agent", adapter="direct", model="fixed-test-model"),
         compute=ComputeConfig(backend="local", resource_limits={"memory_mb": 512}, timeout_override=30),
     )
     family = resolve_learning_family(
-        load_learning_family(_REPOSITORY_ROOT / A01_FAMILY_SPEC_PATH),
+        load_learning_family(_PROTOCOL_PATH / "family.toml"),
         _resolve_task_instance,
     )
-    family_relation = resolve_learning_relation(family, A01_FAMILY_RELATION_ID)
+    family_relation = resolve_learning_relation(family, "brisbane-office-to-sydney-classroom")
     assert [item.task.task.task_id for item in family_relation.sources] == [spec.experiences[0].task_id]
     assert family_relation.target.task.task.task_id == spec.experiences[1].task_id
     plan = compile_learning_study(
@@ -101,8 +105,8 @@ def test_a01_real_artifact_tasks_return_a_matched_structural_transfer_result(tmp
             "reset": ArtifactLearningTreatmentKind.RESET,
             "structured-memory": ArtifactLearningTreatmentKind.STRUCTURED_MEMORY,
         },
-        feedback_projectors={A01_FEEDBACK_VIEW_ID: terminal_outcome_feedback},
-        consolidation_operations={A01_CONSOLIDATION_OPERATION_ID: consolidate_method},
+        feedback_projectors={_FEEDBACK_VIEW_ID: terminal_outcome_feedback},
+        consolidation_operations={_CONSOLIDATION_OPERATION_ID: consolidate_method},
         adapter_builder=lambda **kwargs: HeatLoadStudyAdapter(Path(kwargs["workspace"]), observations),
     )
     recorder = StudyRunRecorder(
@@ -177,7 +181,7 @@ def test_a01_real_artifact_tasks_return_a_matched_structural_transfer_result(tmp
         spec=spec,
         plan=plan,
         execution=execution,
-        projections={A01_PROJECTION_ID: project_heat_load_verifier_reward},
+        projections={_PROJECTION_ID: project_trial_reward},
         arm_evidence=evidence,
     )
 
