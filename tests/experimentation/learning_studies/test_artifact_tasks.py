@@ -9,11 +9,11 @@ from aec_bench.adapters.base import AdapterRequest, AdapterResult
 from aec_bench.contracts.experiment_manifest import AgentConfig, ComputeConfig
 from aec_bench.experimentation.learning_studies.artifact_tasks import (
     ArtifactConsolidationContext,
-    ArtifactLearningTreatment,
     ArtifactLearningTreatmentKind,
     build_artifact_learning_operations,
     terminal_outcome_feedback,
 )
+from aec_bench.experimentation.learning_studies.errors import LearningStudyFeatureUnsupported
 from aec_bench.experimentation.learning_studies.planning import CompiledExperienceStep, compile_learning_study
 from aec_bench.experimentation.learning_studies.runtime import (
     ConsolidationRequest,
@@ -50,7 +50,13 @@ def _plan():  # noqa: ANN202
     )
 
 
-def _binding(tmp_path: Path, *, adapter_builder, consolidation_operation=None):  # noqa: ANN001, ANN202
+def _binding(  # noqa: ANN001, ANN202
+    tmp_path: Path,
+    *,
+    adapter_builder,
+    consolidation_operation=None,
+    feedback_projector=terminal_outcome_feedback,
+):
     def default_consolidation(context: ArtifactConsolidationContext) -> None:
         context.memory_root.mkdir(parents=True, exist_ok=True)
         (context.memory_root / "method.json").write_text('{"method":"heat-load"}\n', encoding="utf-8")
@@ -58,13 +64,11 @@ def _binding(tmp_path: Path, *, adapter_builder, consolidation_operation=None): 
     return build_artifact_learning_operations(
         tasks_root=_TASKS_ROOT,
         run_root=tmp_path / "study",
-        treatment_specs={
-            "reset": ArtifactLearningTreatment("reset", ArtifactLearningTreatmentKind.RESET),
-            "structured-memory": ArtifactLearningTreatment(
-                "structured-memory", ArtifactLearningTreatmentKind.STRUCTURED_MEMORY
-            ),
+        treatment_kinds={
+            "reset": ArtifactLearningTreatmentKind.RESET,
+            "structured-memory": ArtifactLearningTreatmentKind.STRUCTURED_MEMORY,
         },
-        feedback_projectors={A01_FEEDBACK_VIEW_ID: terminal_outcome_feedback},
+        feedback_projectors={A01_FEEDBACK_VIEW_ID: feedback_projector},
         consolidation_operations={A01_CONSOLIDATION_OPERATION_ID: consolidation_operation or default_consolidation},
         adapter_builder=adapter_builder,
     )
@@ -113,6 +117,30 @@ def test_artifact_learning_arms_have_disjoint_roots_and_reject_cross_arm_state(t
         )
 
 
+def test_artifact_learning_rejects_non_local_compute_before_creating_arm_state(tmp_path: Path) -> None:
+    exposed = _plan().arm_runs[1]
+    binding = _binding(
+        tmp_path,
+        adapter_builder=lambda **kwargs: HeatLoadStudyAdapter(Path(kwargs["workspace"]), []),
+    )
+
+    with pytest.raises(LearningStudyFeatureUnsupported, match="artifact-backend-unsupported: modal"):
+        binding.operations.initialise_learner(
+            InitialiseLearnerRequest(
+                study_run_id="a01-adapter-test",
+                arm_run_id=exposed.arm_run_id,
+                arm_id=exposed.arm_id,
+                treatment_id=exposed.treatment_id,
+                repetition=exposed.repetition,
+                agent=_AGENT,
+                compute=ComputeConfig(backend="modal"),
+                working_root=None,
+            )
+        )
+
+    assert not (tmp_path / "study" / "learner-arms").exists()
+
+
 def test_task_cannot_write_structured_memory_during_experience(tmp_path: Path) -> None:
     plan = _plan()
     exposed = plan.arm_runs[1]
@@ -147,6 +175,41 @@ def test_task_cannot_write_structured_memory_during_experience(tmp_path: Path) -
 
     assert tuple(initial.value.root.rglob("*")) == before
     assert not (initial.value.root.parent / acquisition.step_id).exists()
+
+
+@pytest.mark.parametrize("data", [b"not JSON", b"[]"])
+def test_invalid_feedback_projection_does_not_create_candidate_state(tmp_path: Path, data: bytes) -> None:
+    exposed = _plan().arm_runs[1]
+    binding = _binding(
+        tmp_path,
+        adapter_builder=lambda **kwargs: HeatLoadStudyAdapter(Path(kwargs["workspace"]), []),
+        feedback_projector=lambda _record: data,
+    )
+    initial = _initialise(binding, exposed)
+    acquisition_step = exposed.steps[0]
+    feedback_step = exposed.steps[1]
+    assert isinstance(acquisition_step, CompiledExperienceStep)
+    acquisition = binding.operations.execute_experience(
+        ExecuteExperienceRequest(
+            arm_run=exposed,
+            step=acquisition_step,
+            state=initial,
+            completed_trial_records=(),
+            released_feedback=(),
+        )
+    )
+
+    with pytest.raises(ValueError, match="feedback-projection-failed"):
+        binding.operations.release_feedback(
+            ReleaseFeedbackRequest(
+                arm_run=exposed,
+                step=feedback_step,
+                state=acquisition.candidate_state,
+                source_trial_record=acquisition.trial_record,
+            )
+        )
+
+    assert not (acquisition.candidate_state.value.root.parent / feedback_step.step_id).exists()
 
 
 def test_forbidden_consolidation_write_rolls_back_to_released_feedback_state(tmp_path: Path) -> None:

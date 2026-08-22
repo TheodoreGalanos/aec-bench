@@ -10,7 +10,6 @@ from aec_bench.contracts.learning_study_assessment import LearningComparisonVali
 from aec_bench.contracts.trial_record import TrialRecord
 from aec_bench.experimentation.learning_studies.artifact_tasks import (
     ArtifactConsolidationContext,
-    ArtifactLearningTreatment,
     ArtifactLearningTreatmentKind,
     build_artifact_learning_operations,
     terminal_outcome_feedback,
@@ -76,6 +75,12 @@ def test_a01_real_artifact_tasks_return_a_matched_structural_transfer_result(tmp
         assert len(context.feedback) == 1
         public_feedback = json.loads(context.feedback[0].path.read_text(encoding="utf-8"))
         assert public_feedback["reward"] == 1.0
+        assert set(public_feedback) == {"execution_status", "reward", "task_id", "trial_id", "validity"}
+        assert set(public_feedback["validity"]) == {
+            "output_parseable",
+            "schema_valid",
+            "verifier_completed",
+        }
         context.memory_root.mkdir(parents=True, exist_ok=True)
         (context.memory_root / "method.json").write_text(
             json.dumps(
@@ -92,11 +97,9 @@ def test_a01_real_artifact_tasks_return_a_matched_structural_transfer_result(tmp
     binding = build_artifact_learning_operations(
         tasks_root=_TASKS_ROOT,
         run_root=run_root,
-        treatment_specs={
-            "reset": ArtifactLearningTreatment("reset", ArtifactLearningTreatmentKind.RESET),
-            "structured-memory": ArtifactLearningTreatment(
-                "structured-memory", ArtifactLearningTreatmentKind.STRUCTURED_MEMORY
-            ),
+        treatment_kinds={
+            "reset": ArtifactLearningTreatmentKind.RESET,
+            "structured-memory": ArtifactLearningTreatmentKind.STRUCTURED_MEMORY,
         },
         feedback_projectors={A01_FEEDBACK_VIEW_ID: terminal_outcome_feedback},
         consolidation_operations={A01_CONSOLIDATION_OPERATION_ID: consolidate_method},

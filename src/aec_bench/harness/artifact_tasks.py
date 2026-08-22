@@ -6,6 +6,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -53,6 +54,7 @@ _VERIFIER_RETRY_ARTIFACT_SUFFIXES = (
     "_marker.json",
 )
 _VERIFIER_RETRY_EXCLUDED_PREFIXES = ("expected_", "input_", "prior_", "source_")
+_CONTAINER_ROOT_PATTERN = re.compile(r"(?<![\w.-])/(?:workspace|tests|logs)(?=/|(?=[\"'\s]))")
 
 
 class AttemptRunner(Protocol):
@@ -1157,16 +1159,14 @@ def _run_verifier(*, task: ResolvedTaskInstance, workspace: Path, output_path: P
 def _localise_staged_verifier_paths(*, workspace: Path, verifier_root: Path) -> None:
     """Map container mount paths in private staged verifier files to the local workspace."""
 
-    replacements = (
-        ("/workspace", str(workspace)),
-        ("/tests", str(workspace / "tests")),
-        ("/logs", str(workspace / "logs")),
-    )
+    replacements = {
+        "/workspace": str(workspace),
+        "/tests": str(workspace / "tests"),
+        "/logs": str(workspace / "logs"),
+    }
     for path in sorted((*verifier_root.rglob("*.py"), *verifier_root.rglob("*.sh"))):
         content = path.read_text(encoding="utf-8")
-        localised = content
-        for source, destination in replacements:
-            localised = localised.replace(source, destination)
+        localised = _CONTAINER_ROOT_PATTERN.sub(lambda match: replacements[match.group(0)], content)
         if localised != content:
             path.write_text(localised, encoding="utf-8")
 

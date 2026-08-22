@@ -81,7 +81,7 @@ def compile_learning_study(
 ) -> CompiledLearningStudy:
     """Resolve one complete finite study before any execution starts."""
 
-    _validate_safe_id("study run", study_run_id)
+    _validate_safe_id("study run", study_run_id, context=f"study {spec.study_id}")
     _validate_references(spec)
     _validate_measurements(spec)
     _validate_controlled_shape(spec)
@@ -238,7 +238,7 @@ def _validate_references(spec: LearningStudySpec) -> None:
         *(item.experience_id for item in spec.experiences),
         *(item.arm_id for item in spec.arms),
     ):
-        _validate_safe_id("study", identity)
+        _validate_safe_id("study", identity, context=f"study {spec.study_id}")
     for relation in spec.relations:
         missing = {*relation.source_experience_ids, relation.target_experience_id} - set(experiences)
         if missing:
@@ -263,7 +263,7 @@ def _validate_references(spec: LearningStudySpec) -> None:
         seen_feedback: set[str] = set()
         released_views: set[tuple[str, str]] = set()
         for step in arm.steps:
-            _validate_safe_id("step", step.step_id)
+            _validate_safe_id("step", step.step_id, context=f"study {spec.study_id} arm {arm.arm_id}")
             if isinstance(step, RunExperienceStep):
                 if step.experience_id not in experiences:
                     raise LearningStudyReferenceInvalid(
@@ -314,7 +314,9 @@ def _validate_controlled_shape(spec: LearningStudySpec) -> None:
         return
     roles = {arm.role for arm in spec.arms}
     if not {StudyArmRole.CONTROL, StudyArmRole.EXPOSURE}.issubset(roles):
-        raise LearningStudySpecInvalid("controlled learning study requires control and exposure arms")
+        raise LearningStudySpecInvalid(
+            f"study {spec.study_id}: controlled learning study requires control and exposure arms"
+        )
     arm_probe_ids: dict[StudyArmRole, set[str]] = {StudyArmRole.CONTROL: set(), StudyArmRole.EXPOSURE: set()}
     experience_roles = {item.experience_id: item.role for item in spec.experiences}
     for arm in spec.arms:
@@ -325,7 +327,7 @@ def _validate_controlled_shape(spec: LearningStudySpec) -> None:
         )
     if not arm_probe_ids[StudyArmRole.CONTROL].intersection(arm_probe_ids[StudyArmRole.EXPOSURE]):
         raise LearningStudySpecInvalid(
-            "controlled learning study requires a matched probe in control and exposure arms"
+            f"study {spec.study_id}: controlled learning study requires a matched probe in control and exposure arms"
         )
 
 
@@ -340,7 +342,7 @@ def _validate_measurements(spec: LearningStudySpec) -> None:
         LearningMeasurementKind.INTERFERENCE_EFFECT,
     }
     for measurement in spec.measurements:
-        _validate_safe_id("measurement", measurement.measurement_id)
+        _validate_safe_id("measurement", measurement.measurement_id, context=f"study {spec.study_id}")
         target = experiences.get(measurement.target_experience_id)
         if target is None or target.role is not ExperienceRole.PROBE:
             raise LearningStudyReferenceInvalid(
@@ -390,10 +392,10 @@ def _validate_measurements(spec: LearningStudySpec) -> None:
             )
 
 
-def _validate_safe_id(label: str, value: str) -> None:
+def _validate_safe_id(label: str, value: str, *, context: str) -> None:
     if not _SAFE_ID.fullmatch(value):
         raise LearningStudySpecInvalid(
-            f"{label} id must start with an alphanumeric character and contain only letters, numbers, "
+            f"{context}: {label} id must start with an alphanumeric character and contain only letters, numbers, "
             "'.', '_', or '-': "
             f"{value!r}"
         )

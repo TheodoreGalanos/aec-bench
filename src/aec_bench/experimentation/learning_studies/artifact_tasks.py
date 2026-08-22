@@ -14,6 +14,7 @@ from pathlib import Path, PurePosixPath
 from aec_bench.contracts.artifacts import ArtifactRef
 from aec_bench.contracts.learning_study_evidence import FeedbackReleaseRecord, LearnerStateRef
 from aec_bench.contracts.trial_record import TrialRecord
+from aec_bench.experimentation.learning_studies.errors import LearningStudyFeatureUnsupported
 from aec_bench.experimentation.learning_studies.runtime import (
     ConsolidationRequest,
     ExecuteExperienceRequest,
@@ -45,35 +46,10 @@ class ArtifactLearningTreatmentKind(StrEnum):
 
 
 @dataclass(frozen=True)
-class ArtifactLearningTreatment:
-    treatment_id: str
-    kind: ArtifactLearningTreatmentKind
-
-    def __post_init__(self) -> None:
-        if not self.treatment_id.strip():
-            raise ValueError("artifact learning treatment id must not be blank")
-
-
-@dataclass(frozen=True)
 class ArtifactLearnerState:
     arm_run_id: str
     treatment_id: str
     root: Path
-
-
-@dataclass(frozen=True)
-class ArtifactFeedbackProjection:
-    data: bytes
-    media_type: str = "application/json"
-    file_suffix: str = ".json"
-
-    def __post_init__(self) -> None:
-        if not self.data:
-            raise ValueError("artifact feedback projection must not be empty")
-        if not self.media_type.strip():
-            raise ValueError("artifact feedback media type must not be blank")
-        if not self.file_suffix.startswith(".") or "/" in self.file_suffix:
-            raise ValueError("artifact feedback suffix must be one safe file extension")
 
 
 @dataclass(frozen=True)
@@ -92,7 +68,7 @@ class ArtifactConsolidationContext:
         return self.namespace_root / "memory"
 
 
-type ArtifactFeedbackProjector = Callable[[TrialRecord], ArtifactFeedbackProjection]
+type ArtifactFeedbackProjector = Callable[[TrialRecord], bytes]
 type ArtifactConsolidationOperation = Callable[[ArtifactConsolidationContext], None]
 
 
@@ -112,7 +88,7 @@ def build_artifact_learning_operations(
     *,
     tasks_root: Path,
     run_root: Path,
-    treatment_specs: Mapping[str, ArtifactLearningTreatment],
+    treatment_kinds: Mapping[str, ArtifactLearningTreatmentKind],
     feedback_projectors: Mapping[str, ArtifactFeedbackProjector],
     consolidation_operations: Mapping[str, ArtifactConsolidationOperation],
     adapter_builder: AdapterBuilder | None = None,
@@ -122,7 +98,7 @@ def build_artifact_learning_operations(
     coordinator = _ArtifactLearningCoordinator(
         tasks_root=tasks_root,
         run_root=run_root,
-        treatment_specs=treatment_specs,
+        treatment_kinds=treatment_kinds,
         feedback_projectors=feedback_projectors,
         consolidation_operations=consolidation_operations,
         adapter_builder=adapter_builder,
@@ -149,19 +125,19 @@ class _ArtifactLearningCoordinator:
         *,
         tasks_root: Path,
         run_root: Path,
-        treatment_specs: Mapping[str, ArtifactLearningTreatment],
+        treatment_kinds: Mapping[str, ArtifactLearningTreatmentKind],
         feedback_projectors: Mapping[str, ArtifactFeedbackProjector],
         consolidation_operations: Mapping[str, ArtifactConsolidationOperation],
         adapter_builder: AdapterBuilder | None,
     ) -> None:
         self._tasks_root = tasks_root.resolve()
         self._run_root = run_root.resolve()
-        self._treatments = dict(treatment_specs)
+        self._treatment_kinds = dict(treatment_kinds)
         self._feedback_projectors = dict(feedback_projectors)
         self._consolidation_operations = dict(consolidation_operations)
         self._adapter_builder = adapter_builder
-        if set(self._treatments) != {item.treatment_id for item in self._treatments.values()}:
-            raise ValueError("artifact learning treatment map keys must match treatment ids")
+        if any(not treatment_id.strip() for treatment_id in self._treatment_kinds):
+            raise ValueError("artifact learning treatment ids must not be blank")
         self._artifact_repository = ArtifactRepository(self._run_root / "_artifacts")
 
     def initialise_learner(
@@ -169,8 +145,11 @@ class _ArtifactLearningCoordinator:
         request: InitialiseLearnerRequest,
     ) -> LearnerStateHandle[ArtifactLearnerState]:
         if request.compute.backend != "local":
-            raise ValueError(f"artifact-backend-unsupported: {request.compute.backend}")
-        treatment = self._treatment(request.treatment_id)
+            raise LearningStudyFeatureUnsupported(
+                f"study {request.study_run_id} arm {request.arm_id}: "
+                f"artifact-backend-unsupported: {request.compute.backend}"
+            )
+        self._treatment_kind(request.treatment_id)
         arm_root = self._arm_root(request.arm_run_id)
         if arm_root.exists():
             raise ValueError(f"arm-isolation-failed: arm root already exists: {arm_root}")
@@ -179,14 +158,14 @@ class _ArtifactLearningCoordinator:
         for channel in sorted(_STATE_CHANNELS):
             (namespace / channel).mkdir(parents=True, exist_ok=False)
         _validate_state_tree(state_root)
-        return self._handle(request.arm_run_id, treatment.treatment_id, "initial", state_root)
+        return self._handle(request.arm_run_id, request.treatment_id, "initial", state_root)
 
     def execute_experience(
         self,
         request: ExecuteExperienceRequest[ArtifactLearnerState, ArtifactFeedback],
     ) -> ExperienceExecutionResult[ArtifactLearnerState]:
         state = self._state_for_arm(request.state, request.arm_run.arm_run_id)
-        treatment = self._treatment(state.treatment_id)
+        treatment_kind = self._treatment_kind(state.treatment_id)
         task = self._resolve_task(request.step.trial.task_id)
         if (task.instance_dir / _LEARNER_NAMESPACE).exists():
             raise ValueError("learner-path-unsafe: task uses the reserved learner namespace")
@@ -204,7 +183,7 @@ class _ArtifactLearningCoordinator:
             # so all arms can publish ordinary record artifacts to the study ledger.
             artifact_root=self._run_root / "ledger" / "_artifacts",
             adapter_builder=self._adapter_builder,
-            agent_files=self._agent_files(state, treatment),
+            agent_files=self._agent_files(state, treatment_kind),
         )
         record = run_trial(
             runtime=runtime,
@@ -214,11 +193,15 @@ class _ArtifactLearningCoordinator:
             selected_workspace_export=export,
         )
         try:
-            self._validate_experience_namespace(state=state, treatment=treatment, exported_workspace=export)
+            self._validate_experience_namespace(
+                state=state,
+                treatment_kind=treatment_kind,
+                exported_workspace=export,
+            )
             _copy_state(state.root, candidate_root)
             candidate = self._handle(
                 request.arm_run.arm_run_id,
-                treatment.treatment_id,
+                state.treatment_id,
                 request.step.step_id,
                 candidate_root,
             )
@@ -236,17 +219,18 @@ class _ArtifactLearningCoordinator:
         request: ReleaseFeedbackRequest[ArtifactLearnerState],
     ) -> FeedbackReleaseResult[ArtifactLearnerState, ArtifactFeedback]:
         state = self._state_for_arm(request.state, request.arm_run.arm_run_id)
-        treatment = self._treatment(state.treatment_id)
-        if treatment.kind is ArtifactLearningTreatmentKind.RESET:
+        treatment_kind = self._treatment_kind(state.treatment_id)
+        if treatment_kind is ArtifactLearningTreatmentKind.RESET:
             raise ValueError("feedback-view-unsupported: reset treatment cannot retain feedback")
         projector = self._feedback_projectors.get(request.step.feedback_view_id)
         if projector is None:
             raise ValueError(f"feedback-view-unsupported: {request.step.feedback_view_id}")
         try:
-            projected = projector(request.source_trial_record)
+            projected_data = projector(request.source_trial_record)
+            _validate_feedback_projection(projected_data)
         except Exception as error:
             raise ValueError(f"feedback-projection-failed: {error}") from error
-        if len(projected.data) > _MAX_FILE_BYTES:
+        if len(projected_data) > _MAX_FILE_BYTES:
             raise ValueError("feedback-projection-failed: projected feedback is too large")
 
         candidate_root = self._candidate_root(request.arm_run.arm_run_id, request.step.step_id)
@@ -254,20 +238,17 @@ class _ArtifactLearningCoordinator:
             _copy_state(state.root, candidate_root)
             feedback_id = f"{request.arm_run.arm_run_id}:feedback:{request.step.step_id}"
             feedback_path = (
-                candidate_root
-                / _LEARNER_NAMESPACE
-                / "feedback"
-                / f"{_safe_component(request.step.step_id)}{projected.file_suffix}"
+                candidate_root / _LEARNER_NAMESPACE / "feedback" / f"{_safe_component(request.step.step_id)}.json"
             )
-            feedback_path.write_bytes(projected.data)
+            feedback_path.write_bytes(projected_data)
             _validate_state_tree(candidate_root)
             artifact = self._artifact_repository.publish_bytes(
-                data=projected.data,
-                media_type=projected.media_type,
+                data=projected_data,
+                media_type="application/json",
             )
             candidate = self._handle(
                 request.arm_run.arm_run_id,
-                treatment.treatment_id,
+                state.treatment_id,
                 request.step.step_id,
                 candidate_root,
             )
@@ -290,9 +271,9 @@ class _ArtifactLearningCoordinator:
         request: ConsolidationRequest[ArtifactLearnerState, ArtifactFeedback],
     ) -> LearnerTransitionResult[ArtifactLearnerState]:
         state = self._state_for_arm(request.state, request.arm_run.arm_run_id)
-        treatment = self._treatment(state.treatment_id)
-        if treatment.kind is not ArtifactLearningTreatmentKind.STRUCTURED_MEMORY:
-            raise ValueError(f"consolidation-operation-unsupported: treatment {treatment.kind.value}")
+        treatment_kind = self._treatment_kind(state.treatment_id)
+        if treatment_kind is not ArtifactLearningTreatmentKind.STRUCTURED_MEMORY:
+            raise ValueError(f"consolidation-operation-unsupported: treatment {treatment_kind.value}")
         operation = self._consolidation_operations.get(request.step.operation_id)
         if operation is None:
             raise ValueError(f"consolidation-operation-unsupported: {request.step.operation_id}")
@@ -317,7 +298,7 @@ class _ArtifactLearningCoordinator:
                 raise ValueError("consolidation-output-invalid: structured memory did not change")
             candidate = self._handle(
                 request.arm_run.arm_run_id,
-                treatment.treatment_id,
+                state.treatment_id,
                 request.step.step_id,
                 candidate_root,
             )
@@ -335,13 +316,13 @@ class _ArtifactLearningCoordinator:
         reference: LearnerStateRef,
         state_root: Path,
     ) -> LearnerStateHandle[ArtifactLearnerState]:
-        treatment = self._treatment(reference.treatment_id)
+        self._treatment_kind(reference.treatment_id)
         _validate_state_tree(state_root)
         return LearnerStateHandle(
             state_id=reference.state_id,
             value=ArtifactLearnerState(
                 arm_run_id=reference.arm_run_id,
-                treatment_id=treatment.treatment_id,
+                treatment_id=reference.treatment_id,
                 root=state_root,
             ),
         )
@@ -385,9 +366,9 @@ class _ArtifactLearningCoordinator:
     def _agent_files(
         self,
         state: ArtifactLearnerState,
-        treatment: ArtifactLearningTreatment,
+        treatment_kind: ArtifactLearningTreatmentKind,
     ) -> dict[str, Path]:
-        if treatment.kind is ArtifactLearningTreatmentKind.RESET:
+        if treatment_kind is ArtifactLearningTreatmentKind.RESET:
             return {}
         files: dict[str, Path] = {}
         namespace = state.root / _LEARNER_NAMESPACE
@@ -402,11 +383,11 @@ class _ArtifactLearningCoordinator:
         self,
         *,
         state: ArtifactLearnerState,
-        treatment: ArtifactLearningTreatment,
+        treatment_kind: ArtifactLearningTreatmentKind,
         exported_workspace: Path,
     ) -> None:
         exported_namespace = exported_workspace / _LEARNER_NAMESPACE
-        if treatment.kind is ArtifactLearningTreatmentKind.RESET:
+        if treatment_kind is ArtifactLearningTreatmentKind.RESET:
             if exported_namespace.exists():
                 raise ValueError("learner-channel-write-forbidden: reset experience created learner artifacts")
             return
@@ -428,18 +409,18 @@ class _ArtifactLearningCoordinator:
         if actual != expected:
             raise ValueError("learner-channel-write-forbidden: task execution changed learner artifacts")
 
-    def _treatment(self, treatment_id: str) -> ArtifactLearningTreatment:
-        treatment = self._treatments.get(treatment_id)
-        if treatment is None:
+    def _treatment_kind(self, treatment_id: str) -> ArtifactLearningTreatmentKind:
+        treatment_kind = self._treatment_kinds.get(treatment_id)
+        if treatment_kind is None:
             raise ValueError(f"artifact treatment is unsupported: {treatment_id}")
-        return treatment
+        return treatment_kind
 
     def _state_for_arm(
         self,
         handle: LearnerStateHandle[ArtifactLearnerState],
         arm_run_id: str,
     ) -> ArtifactLearnerState:
-        state = handle.value
+        state: ArtifactLearnerState = handle.value
         if state.arm_run_id != arm_run_id:
             raise ValueError(f"cross-arm-path-detected: state belongs to {state.arm_run_id}, requested by {arm_run_id}")
         _validate_state_tree(state.root)
@@ -471,7 +452,7 @@ class _ArtifactLearningCoordinator:
         )
 
 
-def terminal_outcome_feedback(record: TrialRecord) -> ArtifactFeedbackProjection:
+def terminal_outcome_feedback(record: TrialRecord) -> bytes:
     """Project a small public terminal outcome without arbitrary evaluator breakdowns."""
 
     evaluation = record.evaluation
@@ -486,12 +467,20 @@ def terminal_outcome_feedback(record: TrialRecord) -> ArtifactFeedbackProjection
             "output_parseable": evaluation.validity.output_parseable,
             "schema_valid": evaluation.validity.schema_valid,
             "verifier_completed": evaluation.validity.verifier_completed,
-            "errors": evaluation.validity.errors,
         },
     }
-    return ArtifactFeedbackProjection(
-        data=(json.dumps(data, sort_keys=True, separators=(",", ":")) + "\n").encode("utf-8")
-    )
+    return (json.dumps(data, sort_keys=True, separators=(",", ":")) + "\n").encode("utf-8")
+
+
+def _validate_feedback_projection(data: bytes) -> None:
+    if not isinstance(data, bytes) or not data:
+        raise ValueError("artifact feedback projection must be a non-empty JSON object")
+    try:
+        decoded = json.loads(data)
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise ValueError("artifact feedback projection must be a non-empty JSON object") from error
+    if not isinstance(decoded, dict):
+        raise ValueError("artifact feedback projection must be a non-empty JSON object")
 
 
 def _copy_state(source: Path, destination: Path) -> None:
@@ -555,11 +544,9 @@ __all__ = (
     "ArtifactConsolidationContext",
     "ArtifactConsolidationOperation",
     "ArtifactFeedback",
-    "ArtifactFeedbackProjection",
     "ArtifactFeedbackProjector",
     "ArtifactLearnerState",
     "ArtifactLearningBinding",
-    "ArtifactLearningTreatment",
     "ArtifactLearningTreatmentKind",
     "build_artifact_learning_operations",
     "terminal_outcome_feedback",

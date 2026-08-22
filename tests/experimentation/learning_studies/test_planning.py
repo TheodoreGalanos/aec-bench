@@ -21,6 +21,7 @@ from aec_bench.contracts.learning_study import (
 from aec_bench.experimentation.learning_studies.errors import (
     LearningStudyOrderInvalid,
     LearningStudyReferenceInvalid,
+    LearningStudySpecInvalid,
     LearningStudyTaskResolutionFailed,
 )
 from aec_bench.experimentation.learning_studies.planning import (
@@ -167,5 +168,19 @@ def test_compilation_rejects_repeated_experience_in_one_arm() -> None:
         compile_learning_study(
             study_run_id="run-1",
             spec=spec.model_copy(update={"arms": (spec.arms[0], exposure)}),
+            resolve_task=lambda task_id: _Task(task_id),
+        )
+
+
+def test_compilation_error_identifies_study_and_arm_for_unsafe_step_id() -> None:
+    spec = _spec()
+    invalid_cold = spec.arms[0].model_copy(
+        update={"steps": (RunExperienceStep(step_id="unsafe/step", experience_id="probe"),)}
+    )
+
+    with pytest.raises(LearningStudySpecInvalid, match="study study arm cold: step id"):
+        compile_learning_study(
+            study_run_id="run-1",
+            spec=spec.model_copy(update={"arms": (invalid_cold, spec.arms[1])}),
             resolve_task=lambda task_id: _Task(task_id),
         )

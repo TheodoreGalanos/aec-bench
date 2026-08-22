@@ -370,6 +370,7 @@ def test_run_trial_localises_container_paths_in_staged_shell_verifier(tmp_path: 
 from pathlib import Path
 
 assert Path("/workspace/deliverables/result.md").read_text() == "Complete\\n"
+assert Path("/workspace/tests/verify.py").is_file()
 Path("/logs/verifier/reward.json").write_text(json.dumps({"reward": 1.0}))
 """,
         encoding="utf-8",
