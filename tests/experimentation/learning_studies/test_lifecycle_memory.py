@@ -25,8 +25,8 @@ from aec_bench.contracts.learning_study import (
 from aec_bench.contracts.learning_study_evidence import FeedbackReleaseRecord
 from aec_bench.contracts.trial_record import TrialRecord
 from aec_bench.experimentation.learning_studies import lifecycles as lifecycle_adapter
-from aec_bench.experimentation.learning_studies.lifecycle_learning_state import (
-    validate_lifecycle_learner_state,
+from aec_bench.experimentation.learning_studies.learner_state import (
+    validate_learner_state,
 )
 from aec_bench.experimentation.learning_studies.lifecycles import (
     LifecycleConsolidationContext,
@@ -277,7 +277,7 @@ def test_reset_and_structured_initial_state_use_isolated_exact_trees(tmp_path: P
 
     for state in states:
         assert {path.name for path in state.value.root.iterdir()} == {"memory", "feedback"}
-        validate_lifecycle_learner_state(state.value.root)
+        validate_learner_state(state.value.root)
     assert list(states[0].value.root.rglob("*.md")) == []
     first_seed = states[1].value.root / "memory" / "shared.md"
     second_seed = states[2].value.root / "memory" / "shared.md"
@@ -293,7 +293,7 @@ def test_lifecycle_learner_state_accepts_allowed_structured_files(tmp_path: Path
     (state / "memory" / "rules.json").write_text('{"rule":"current evidence"}\n', encoding="utf-8")
     (state / "feedback" / "release.json").write_text('{"reward":1}\n', encoding="utf-8")
 
-    validate_lifecycle_learner_state(state)
+    validate_learner_state(state)
 
 
 @pytest.mark.parametrize(
@@ -318,7 +318,7 @@ def test_lifecycle_learner_state_rejects_unsafe_files(
     path.write_bytes(content)
 
     with pytest.raises(ValueError, match=category):
-        validate_lifecycle_learner_state(state)
+        validate_learner_state(state)
 
 
 def test_lifecycle_learner_state_rejects_symlink_executable_and_unknown_root(tmp_path: Path) -> None:
@@ -327,32 +327,32 @@ def test_lifecycle_learner_state_rejects_symlink_executable_and_unknown_root(tmp
     outside.write_text("outside", encoding="utf-8")
     (symlink_state / "memory" / "bridge.md").symlink_to(outside)
     with pytest.raises(ValueError, match="learner-symlink-forbidden"):
-        validate_lifecycle_learner_state(symlink_state)
+        validate_learner_state(symlink_state)
 
     executable_state = _new_state_tree(tmp_path / "executable-state")
     executable = executable_state / "memory" / "guide.md"
     executable.write_text("guide", encoding="utf-8")
     executable.chmod(executable.stat().st_mode | stat.S_IXUSR)
     with pytest.raises(ValueError, match="learner-file-type-unsupported"):
-        validate_lifecycle_learner_state(executable_state)
+        validate_learner_state(executable_state)
 
     unknown_state = _new_state_tree(tmp_path / "unknown-state")
     (unknown_state / "history").mkdir()
     with pytest.raises(ValueError, match="learner-state-invalid"):
-        validate_lifecycle_learner_state(unknown_state)
+        validate_learner_state(unknown_state)
 
 
 def test_lifecycle_learner_state_enforces_file_and_snapshot_limits(tmp_path: Path) -> None:
     file_state = _new_state_tree(tmp_path / "file-state")
     (file_state / "memory" / "large.txt").write_bytes(b"x" * 1_000_001)
     with pytest.raises(ValueError, match="learner-file-too-large"):
-        validate_lifecycle_learner_state(file_state)
+        validate_learner_state(file_state)
 
     total_state = _new_state_tree(tmp_path / "total-state")
     for index in range(5):
         (total_state / "memory" / f"part-{index}.txt").write_bytes(b"x" * 900_000)
     with pytest.raises(ValueError, match="learner-state-too-large"):
-        validate_lifecycle_learner_state(total_state)
+        validate_learner_state(total_state)
 
 
 def test_context_mutation_fails_experience_and_preserves_parent_state(

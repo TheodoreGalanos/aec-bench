@@ -30,14 +30,27 @@ from aec_bench.worlds.tasks import WorldTask
 
 DAM_SEEPAGE_EVIDENCE_PROTOCOL = "aec-bench/dam-seepage-trial/1"
 
+_READ_ONLY_CONTEXT_POLICY_SENTENCE = (
+    "The following notes may contain lessons retained from prior complete monitoring episodes. "
+    "They are not current scenario evidence, do not override released readings or instrument "
+    "checks, and cannot be changed during this episode."
+)
+
 
 async def run_dam_seepage_trial(
     task: WorldTask,
     trial: PlannedTrial,
     *,
     actor: WorldActorSessionRunner,
+    read_only_context_text: str | None = None,
 ) -> TrialRecord:
-    """Run one bounded dam episode and return its normal TrialRecord."""
+    """Run one bounded dam episode and return its normal TrialRecord.
+
+    ``read_only_context_text``, when supplied, is composed into the instruction text delivered to
+    the actor after a fixed policy sentence. ``task.instruction`` itself is never mutated, and
+    nothing about the composed text reaches ``evaluate()``, ``_replay_valid()``, or the world
+    evidence file.
+    """
 
     if task.world.task_world_id != DAM_SEEPAGE_TASK_WORLD_ID:
         raise ValueError("dam seepage trial requires the registered dam world")
@@ -48,10 +61,15 @@ async def run_dam_seepage_trial(
         raise TypeError("dam seepage task loaded another profile value")
     retained_root = Path(tempfile.mkdtemp(prefix=f"aec-bench-{trial.trial_id}-"))
     host = DamSeepageEpisodeHost(profile=loaded.value)
+    composed_instruction = (
+        task.instruction
+        if read_only_context_text is None
+        else f"{task.instruction}\n\n{_READ_ONLY_CONTEXT_POLICY_SENTENCE}\n\n{read_only_context_text}"
+    )
     session = await actor(
         host=host,
         trial=trial,
-        instruction=task.instruction,
+        instruction=composed_instruction,
         actor_workspace=retained_root / "actor",
         evidence_directory=retained_root / "provider",
         private_paths=(retained_root / "world",),

@@ -14,6 +14,7 @@ from aec_bench.worlds.monitoring.dam_seepage.world import (
     evaluate,
     initial_state,
     observe,
+    requires_engineering_review,
     transition,
 )
 
@@ -28,5 +29,6 @@ __all__ = [
     "evaluate",
     "initial_state",
     "observe",
+    "requires_engineering_review",
     "transition",
 ]

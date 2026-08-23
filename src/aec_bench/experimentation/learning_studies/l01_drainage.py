@@ -30,8 +30,8 @@ from aec_bench.experimentation.learning_studies.assessment import (
     ProjectionResult,
     assess_learning_study,
 )
-from aec_bench.experimentation.learning_studies.lifecycle_learning_state import (
-    validate_lifecycle_learner_state,
+from aec_bench.experimentation.learning_studies.learner_state import (
+    validate_learner_state,
 )
 from aec_bench.experimentation.learning_studies.lifecycles import (
     LifecycleConsolidationOperation,
@@ -471,7 +471,7 @@ def _hidden_evaluation_absent(root: Path, arm_run: PlannedArmRun) -> bool:
         arm_root = root / "learner-arms" / arm_run.arm_run_id
         states_root = arm_root / "states"
         for state_root in (path for path in states_root.iterdir() if path.is_dir()):
-            validate_lifecycle_learner_state(state_root)
+            validate_learner_state(state_root)
             for path in (item for item in state_root.rglob("*") if item.is_file()):
                 if path.name in _FORBIDDEN_LEARNER_FILENAMES:
                     return False

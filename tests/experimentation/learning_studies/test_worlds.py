@@ -1,5 +1,5 @@
-# ABOUTME: Tests the reset-only Interactive World Learning Studies adapter and target resolution.
-# ABOUTME: Proves complete dam trial reuse, isolated paths, and one cold probe through the common runtime.
+# ABOUTME: Tests the Interactive World Learning Studies adapter and target resolution.
+# ABOUTME: Proves complete dam trial reuse, isolated paths, and reset/structured-memory treatments.
 
 from __future__ import annotations
 
@@ -19,8 +19,9 @@ from aec_bench.contracts.learning_study import (
     RunExperienceStep,
     StudyArmRole,
 )
+from aec_bench.contracts.learning_study_evidence import FeedbackReleaseRecord
 from aec_bench.contracts.trial_record import TrialRecord
-from aec_bench.experimentation.learning_studies.errors import LearningStudyFeatureUnsupported
+from aec_bench.experimentation.learning_studies.learner_state import memory_snapshot
 from aec_bench.experimentation.learning_studies.planning import (
     CompiledConsolidationStep,
     CompiledExperienceStep,
@@ -38,6 +39,7 @@ from aec_bench.experimentation.learning_studies.runtime import (
     run_learning_study,
 )
 from aec_bench.experimentation.learning_studies.worlds import (
+    WorldConsolidationContext,
     WorldLearningExecutionCondition,
     WorldLearningTreatmentKind,
     build_world_learning_operations,
@@ -275,7 +277,7 @@ def test_reset_binding_rejects_feedback_and_consolidation(tmp_path: Path) -> Non
     binding = _binding(tmp_path)
     state = _initialise(binding, arm_run)
 
-    with pytest.raises(LearningStudyFeatureUnsupported, match="world-feedback-unsupported"):
+    with pytest.raises(ValueError, match="feedback-view-unsupported"):
         binding.operations.release_feedback(
             ReleaseFeedbackRequest(
                 arm_run=arm_run,
@@ -289,7 +291,7 @@ def test_reset_binding_rejects_feedback_and_consolidation(tmp_path: Path) -> Non
             )
         )
 
-    with pytest.raises(LearningStudyFeatureUnsupported, match="world-consolidation-unsupported"):
+    with pytest.raises(ValueError, match="consolidation-operation-unsupported"):
         binding.operations.consolidate(
             ConsolidationRequest(
                 arm_run=arm_run,
@@ -360,6 +362,259 @@ def test_cold_dam_probe_runs_as_one_record_through_the_common_runtime(tmp_path: 
     assert state_files == []
     assert (run_root / "study-plan.json").is_file()
     assert (run_root / "result.json").is_file()
+
+
+def _structured_spec(agent: AgentConfig) -> LearningStudySpec:
+    return LearningStudySpec(
+        study_id="w01-structured-dam",
+        title="W01 structured-memory dam arm",
+        research_question="Does structured memory persist across steps and stay isolated from world evidence?",
+        agent=agent,
+        compute=_COMPUTE,
+        repetitions=1,
+        experiences=(LearningExperienceSpec(experience_id="probe", task_id=_TASK_ID, role=ExperienceRole.PROBE),),
+        arms=(
+            LearningArmSpec(
+                arm_id="structured-memory",
+                role=StudyArmRole.EXPOSURE,
+                treatment_id="structured-memory",
+                steps=(RunExperienceStep(step_id="probe-1", experience_id="probe", commit_post_state=True),),
+            ),
+        ),
+    )
+
+
+def _structured_plan(agent: AgentConfig):  # noqa: ANN202
+    return compile_learning_study(
+        study_run_id="w2-structured-test",
+        spec=_structured_spec(agent),
+        resolve_task=resolve_world_learning_target,
+    )
+
+
+def _feedback_projector(record: TrialRecord) -> bytes:
+    reward = None if record.evaluation is None else record.evaluation.reward
+    return json.dumps({"reward": reward}).encode("utf-8")
+
+
+def _consolidation_operation(context: WorldConsolidationContext) -> None:
+    names = ", ".join(sorted(item.path.name for item in context.feedback))
+    (context.memory_root / "history.md").write_text(f"reviewed: {names}\n", encoding="utf-8")
+
+
+def _noop_consolidation_operation(context: WorldConsolidationContext) -> None:
+    return None
+
+
+def _structured_binding(
+    tmp_path: Path,
+    *,
+    memory_seed_root: Path | None = None,
+    feedback_projectors=None,  # noqa: ANN001
+    consolidation_operations=None,  # noqa: ANN001
+):  # noqa: ANN202
+    return build_world_learning_operations(
+        run_root=tmp_path / "study",
+        world_id=_WORLD_ID,
+        execution_condition=_CONDITION,
+        run_trial=run_dam_seepage_trial,
+        instructions={_TASK_ID: _INSTRUCTION},
+        treatment_kinds={"structured-memory": WorldLearningTreatmentKind.STRUCTURED_MEMORY},
+        feedback_projectors=feedback_projectors or {"terminal": _feedback_projector},
+        consolidation_operations=consolidation_operations or {"structured-memory": _consolidation_operation},
+        initial_memory_root=memory_seed_root,
+    )
+
+
+def test_structured_memory_binding_builds_a_real_memory_and_feedback_tree(tmp_path: Path) -> None:
+    agent = _agent(tmp_path, actions=_ESCALATION_ACTIONS)
+    arm_run = _structured_plan(agent).arm_runs[0]
+    seed_root = tmp_path / "seed-memory"
+    seed_root.mkdir()
+    (seed_root / "notes.md").write_text("prior surveillance notes\n", encoding="utf-8")
+    binding = _structured_binding(tmp_path, memory_seed_root=seed_root)
+
+    state = _initialise(binding, arm_run)
+
+    assert (state.value.root / "memory" / "notes.md").read_text(encoding="utf-8") == "prior surveillance notes\n"
+    assert (state.value.root / "feedback").is_dir()
+    assert list((state.value.root / "feedback").iterdir()) == []
+
+
+def test_structured_memory_execution_composes_context_and_preserves_memory_bytes(tmp_path: Path) -> None:
+    agent = _agent(tmp_path, actions=_ESCALATION_ACTIONS)
+    arm_run = _structured_plan(agent).arm_runs[0]
+    seed_root = tmp_path / "seed-memory"
+    seed_root.mkdir()
+    (seed_root / "notes.md").write_text("prior surveillance notes\n", encoding="utf-8")
+    captured: dict[str, object] = {}
+
+    async def capturing_trial(task, trial, *, actor, read_only_context_text=None):  # noqa: ANN001, ANN202
+        captured["instruction"] = task.instruction
+        captured["context"] = read_only_context_text
+        return await run_dam_seepage_trial(task, trial, actor=actor, read_only_context_text=read_only_context_text)
+
+    binding = build_world_learning_operations(
+        run_root=tmp_path / "study",
+        world_id=_WORLD_ID,
+        execution_condition=_CONDITION,
+        run_trial=capturing_trial,
+        instructions={_TASK_ID: _INSTRUCTION},
+        treatment_kinds={"structured-memory": WorldLearningTreatmentKind.STRUCTURED_MEMORY},
+        initial_memory_root=seed_root,
+    )
+    state = _initialise(binding, arm_run)
+    step = arm_run.steps[0]
+    assert isinstance(step, CompiledExperienceStep)
+
+    result = asyncio.run(
+        binding.operations.execute_experience(ExecuteExperienceRequest(arm_run=arm_run, step=step, state=state))
+    )
+
+    assert captured["instruction"] == _INSTRUCTION
+    assert isinstance(captured["context"], str)
+    assert "prior surveillance notes" in captured["context"]
+    assert memory_snapshot(result.candidate_state.value.root) == memory_snapshot(state.value.root)
+
+
+def test_release_feedback_writes_projected_bytes_and_publishes_one_artifact(tmp_path: Path) -> None:
+    agent = _agent(tmp_path, actions=_ESCALATION_ACTIONS)
+    arm_run = _structured_plan(agent).arm_runs[0]
+    binding = _structured_binding(tmp_path)
+    state = _initialise(binding, arm_run)
+    record = make_trial_record()
+
+    result = binding.operations.release_feedback(
+        ReleaseFeedbackRequest(
+            arm_run=arm_run,
+            step=CompiledFeedbackStep(step_id="feedback-1", source_experience_id="probe", feedback_view_id="terminal"),
+            state=state,
+            source_trial_record=record,
+        )
+    )
+
+    feedback_path = result.candidate_state.value.root / "feedback" / "feedback-1.json"
+    assert json.loads(feedback_path.read_text(encoding="utf-8")) == {"reward": record.evaluation.reward}
+    artifacts = binding.feedback_artifacts(result.feedback)
+    assert len(artifacts) == 1
+    assert artifacts[0] == result.feedback.value.artifact
+
+
+def test_release_feedback_rejects_forbidden_leaked_keys(tmp_path: Path) -> None:
+    def leaking_projector(record: TrialRecord) -> bytes:
+        return json.dumps({"required_response": "engineering-review"}).encode("utf-8")
+
+    agent = _agent(tmp_path, actions=_ESCALATION_ACTIONS)
+    arm_run = _structured_plan(agent).arm_runs[0]
+    binding = _structured_binding(tmp_path, feedback_projectors={"terminal": leaking_projector})
+    state = _initialise(binding, arm_run)
+
+    with pytest.raises(ValueError, match="feedback-projection-failed"):
+        binding.operations.release_feedback(
+            ReleaseFeedbackRequest(
+                arm_run=arm_run,
+                step=CompiledFeedbackStep(
+                    step_id="feedback-1", source_experience_id="probe", feedback_view_id="terminal"
+                ),
+                state=state,
+                source_trial_record=make_trial_record(),
+            )
+        )
+
+
+def test_consolidate_updates_only_memory_and_requires_a_real_change(tmp_path: Path) -> None:
+    agent = _agent(tmp_path, actions=_ESCALATION_ACTIONS)
+    arm_run = _structured_plan(agent).arm_runs[0]
+    binding = _structured_binding(tmp_path)
+    state = _initialise(binding, arm_run)
+    release = binding.operations.release_feedback(
+        ReleaseFeedbackRequest(
+            arm_run=arm_run,
+            step=CompiledFeedbackStep(step_id="feedback-1", source_experience_id="probe", feedback_view_id="terminal"),
+            state=state,
+            source_trial_record=make_trial_record(),
+        )
+    )
+
+    result = binding.operations.consolidate(
+        ConsolidationRequest(
+            arm_run=arm_run,
+            step=CompiledConsolidationStep(
+                step_id="consolidate-1",
+                feedback_step_ids=("feedback-1",),
+                operation_id="structured-memory",
+            ),
+            state=release.candidate_state,
+            feedback=(release.feedback,),
+        )
+    )
+
+    memory_file = result.candidate_state.value.root / "memory" / "history.md"
+    assert memory_file.read_text(encoding="utf-8") == "reviewed: feedback-1.json\n"
+    assert memory_snapshot(result.candidate_state.value.root) != memory_snapshot(release.candidate_state.value.root)
+
+
+def test_consolidate_rejects_an_operation_that_leaves_memory_unchanged(tmp_path: Path) -> None:
+    agent = _agent(tmp_path, actions=_ESCALATION_ACTIONS)
+    arm_run = _structured_plan(agent).arm_runs[0]
+    binding = _structured_binding(
+        tmp_path,
+        consolidation_operations={"structured-memory": _noop_consolidation_operation},
+    )
+    state = _initialise(binding, arm_run)
+    release = binding.operations.release_feedback(
+        ReleaseFeedbackRequest(
+            arm_run=arm_run,
+            step=CompiledFeedbackStep(step_id="feedback-1", source_experience_id="probe", feedback_view_id="terminal"),
+            state=state,
+            source_trial_record=make_trial_record(),
+        )
+    )
+
+    with pytest.raises(ValueError, match="consolidation-forbidden-state-change"):
+        binding.operations.consolidate(
+            ConsolidationRequest(
+                arm_run=arm_run,
+                step=CompiledConsolidationStep(
+                    step_id="consolidate-1",
+                    feedback_step_ids=("feedback-1",),
+                    operation_id="structured-memory",
+                ),
+                state=release.candidate_state,
+                feedback=(release.feedback,),
+            )
+        )
+
+
+def test_restore_feedback_rejects_a_record_from_another_arm(tmp_path: Path) -> None:
+    agent = _agent(tmp_path, actions=_ESCALATION_ACTIONS)
+    binding = _structured_binding(tmp_path)
+    arm_run = _structured_plan(agent).arm_runs[0]
+    other_agent = _agent(tmp_path, actions=_ESCALATION_ACTIONS)
+    other_plan = compile_learning_study(
+        study_run_id="w2-structured-test-2",
+        spec=_structured_spec(other_agent),
+        resolve_task=resolve_world_learning_target,
+    )
+    other_arm_run = other_plan.arm_runs[0]
+    state_one = _initialise(binding, arm_run)
+    state_two = _initialise(binding, other_arm_run)
+    assert state_one.value.arm_run_id != state_two.value.arm_run_id
+
+    foreign_record = FeedbackReleaseRecord(
+        feedback_id=f"{arm_run.arm_run_id}:feedback:release",
+        arm_run_id=arm_run.arm_run_id,
+        release_step_id="release",
+        source_experience_id="probe",
+        source_trial_id="some-trial",
+        view_id="terminal",
+        public_artifact_refs=(),
+        state_before_id=state_one.state_id,
+        state_after_id=f"{arm_run.arm_run_id}:state:release",
+    )
+
+    with pytest.raises(ValueError, match="cross-arm-path-detected"):
+        binding.restore_feedback(foreign_record, state_two)
 
 
 def test_world_learning_rejects_returned_identity_mismatch(tmp_path: Path) -> None:

@@ -15,14 +15,15 @@ from aec_bench.contracts.artifacts import ArtifactRef
 from aec_bench.contracts.learning_study_evidence import FeedbackReleaseRecord, LearnerStateRef
 from aec_bench.contracts.trial_record import TrialRecord
 from aec_bench.experimentation.learning_studies.errors import LearningStudyFeatureUnsupported
-from aec_bench.experimentation.learning_studies.lifecycle_learning_state import (
-    LifecycleLearnerTreeSnapshot,
-    copy_lifecycle_learner_state,
+from aec_bench.experimentation.learning_studies.learner_state import (
+    LearnerTreeSnapshot,
+    copy_learner_state,
     create_read_only_context_projection,
-    initialise_lifecycle_learner_state,
-    lifecycle_learner_tree_snapshot,
-    lifecycle_memory_snapshot,
-    validate_lifecycle_learner_state,
+    initialise_learner_state,
+    learner_tree_snapshot,
+    memory_snapshot,
+    require_only_channel_changed,
+    validate_learner_state,
     validate_read_only_context_projection,
 )
 from aec_bench.experimentation.learning_studies.planning import PlannedArmRun
@@ -251,7 +252,7 @@ class _LifecycleLearningCoordinator:
             raise ValueError(f"arm-isolation-failed: arm root already exists: {arm_root}")
         state_root = arm_root / "states" / "initial"
         state_root.parent.mkdir(parents=True, exist_ok=False)
-        initialise_lifecycle_learner_state(
+        initialise_learner_state(
             state_root,
             memory_seed_root=(
                 self._initial_memory_root
@@ -302,8 +303,8 @@ class _LifecycleLearningCoordinator:
         ):
             raise ValueError("lifecycle-target-mismatch: compiled lifecycle differs from the planned target")
         try:
-            copy_lifecycle_learner_state(state.root, candidate_root)
-            context_snapshot: LifecycleLearnerTreeSnapshot | None = None
+            copy_learner_state(state.root, candidate_root)
+            context_snapshot: LearnerTreeSnapshot | None = None
             selected_context: Path | None = None
             if treatment_kind is LifecycleLearningTreatmentKind.STRUCTURED_MEMORY:
                 context_snapshot = create_read_only_context_projection(state.root, context_root)
@@ -383,16 +384,16 @@ class _LifecycleLearningCoordinator:
             raise ValueError(f"feedback-projection-failed: {error}") from error
 
         candidate_root = self._candidate_root(request.arm_run.arm_run_id, request.step.step_id)
-        before = lifecycle_learner_tree_snapshot(state.root)
+        before = learner_tree_snapshot(state.root)
         try:
-            copy_lifecycle_learner_state(state.root, candidate_root)
+            copy_learner_state(state.root, candidate_root)
             release_component = _safe_component(request.step.step_id)
             feedback_path = candidate_root / "feedback" / f"{release_component}.json"
             feedback_path.write_bytes(projected_data)
-            validate_lifecycle_learner_state(candidate_root)
-            _require_only_channel_changed(
+            validate_learner_state(candidate_root)
+            require_only_channel_changed(
                 before,
-                lifecycle_learner_tree_snapshot(candidate_root),
+                learner_tree_snapshot(candidate_root),
                 allowed="feedback",
                 category="feedback-state-mismatch",
             )
@@ -435,10 +436,10 @@ class _LifecycleLearningCoordinator:
         current_feedback = self._consolidation_feedback(state, request.feedback)
 
         candidate_root = self._candidate_root(request.arm_run.arm_run_id, request.step.step_id)
-        before_tree = lifecycle_learner_tree_snapshot(state.root)
-        before_memory = lifecycle_memory_snapshot(state.root)
+        before_tree = learner_tree_snapshot(state.root)
+        before_memory = memory_snapshot(state.root)
         try:
-            copy_lifecycle_learner_state(state.root, candidate_root)
+            copy_learner_state(state.root, candidate_root)
             candidate_feedback = tuple(
                 LifecycleFeedback(
                     path=candidate_root / "feedback" / item.path.name,
@@ -453,15 +454,15 @@ class _LifecycleLearningCoordinator:
                     feedback=candidate_feedback,
                 )
             )
-            validate_lifecycle_learner_state(candidate_root)
-            after_tree = lifecycle_learner_tree_snapshot(candidate_root)
-            _require_only_channel_changed(
+            validate_learner_state(candidate_root)
+            after_tree = learner_tree_snapshot(candidate_root)
+            require_only_channel_changed(
                 before_tree,
                 after_tree,
                 allowed="memory",
                 category="consolidation-forbidden-state-change",
             )
-            if lifecycle_memory_snapshot(candidate_root) == before_memory:
+            if memory_snapshot(candidate_root) == before_memory:
                 raise ValueError("consolidation-memory-unchanged: structured memory did not change")
             return LearnerTransitionResult(
                 candidate_state=self._handle(
@@ -480,7 +481,7 @@ class _LifecycleLearningCoordinator:
     def discard_state(self, state: LearnerStateHandle[LifecycleLearnerState]) -> None:
         value = state.value
         self._treatment_kind(value.treatment_id)
-        validate_lifecycle_learner_state(value.root)
+        validate_learner_state(value.root)
         states_root = (self._arm_root(value.arm_run_id) / "states").resolve()
         candidate_root = value.root.resolve()
         if candidate_root.parent != states_root or candidate_root.name == "initial":
@@ -493,7 +494,7 @@ class _LifecycleLearningCoordinator:
         state_root: Path,
     ) -> LearnerStateHandle[LifecycleLearnerState]:
         self._treatment_kind(reference.treatment_id)
-        validate_lifecycle_learner_state(state_root)
+        validate_learner_state(state_root)
         self._validate_state_location(reference.arm_run_id, state_root)
         return LearnerStateHandle(
             state_id=reference.state_id,
@@ -514,7 +515,7 @@ class _LifecycleLearningCoordinator:
         treatment_kind = self._treatment_kind(state.value.treatment_id)
         if treatment_kind is LifecycleLearningTreatmentKind.RESET:
             raise ValueError("feedback-view-unsupported: reset treatment has no feedback to restore")
-        validate_lifecycle_learner_state(state.value.root)
+        validate_learner_state(state.value.root)
         release_component = _safe_component(record.release_step_id)
         candidates = tuple(sorted((state.value.root / "feedback").glob(f"{release_component}.*")))
         if len(candidates) != 1 or candidates[0].suffix != ".json" or len(record.public_artifact_refs) != 1:
@@ -547,7 +548,7 @@ class _LifecycleLearningCoordinator:
         if state.treatment_id != arm_run.treatment_id:
             raise ValueError("learner-state-invalid: state treatment does not match the planned arm")
         self._treatment_kind(state.treatment_id)
-        validate_lifecycle_learner_state(state.root)
+        validate_learner_state(state.root)
         self._validate_state_location(arm_run.arm_run_id, state.root)
         return state
 
@@ -665,21 +666,6 @@ def _validate_feedback_value(value: object, *, forbidden_roots: tuple[str, ...])
         raise ValueError("feedback-hidden-path-detected: hidden lifecycle path detected")
     if any(root and root in value for root in forbidden_roots):
         raise ValueError("feedback-projection-unsafe: lifecycle package or run root detected")
-
-
-def _require_only_channel_changed(
-    before: LifecycleLearnerTreeSnapshot,
-    after: LifecycleLearnerTreeSnapshot,
-    *,
-    allowed: str,
-    category: str,
-) -> None:
-    before_map = {(path, kind): content for path, kind, content in before}
-    after_map = {(path, kind): content for path, kind, content in after}
-    changed = {key[0] for key in before_map.keys() | after_map.keys() if before_map.get(key) != after_map.get(key)}
-    changed_roots = {PurePosixPath(path).parts[0] for path in changed}
-    if changed_roots != {allowed}:
-        raise ValueError(f"{category}: expected only {allowed}/ to change, changed {sorted(changed_roots)}")
 
 
 def _safe_component(value: str) -> str:
