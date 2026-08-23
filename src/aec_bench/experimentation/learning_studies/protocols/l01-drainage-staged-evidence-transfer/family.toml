@@ -1,0 +1,66 @@
+family_id = "drainage-lifecycle-staged-evidence"
+title = "Drainage lifecycle staged-evidence transfer"
+description = "Tests whether evidence-governance discipline from a valid staged correction transfers when the response release is a semantic no-op and the corrective chain arrives at closeout. Independent drainage-domain review is required before a claim-bearing run."
+
+[[dimensions]]
+dimension_id = "review_contract"
+kind = "surface"
+description = "The three-checkpoint drainage review contract, stable finding identities, accepted decisions, readiness, and claim-boundary fields"
+
+[[dimensions]]
+dimension_id = "evidence_governance"
+kind = "causal"
+description = "Current registered evidence, not assertions or unrelated releases, governs finding, closure, and readiness transitions"
+
+[[dimensions]]
+dimension_id = "response_release_form"
+kind = "surface"
+description = "The document type released at the response checkpoint"
+
+[[dimensions]]
+dimension_id = "response_transition_applicability"
+kind = "applicability"
+description = "Whether the response release supports a substantive review-state transition"
+
+[[dimensions]]
+dimension_id = "corrective_chain_timing"
+kind = "parameter"
+description = "The checkpoint at which the corrected model chain and propagated design memo become available"
+
+[[members]]
+member_id = "staged-full-correction-acquisition"
+task_id = "lifecycle/drainage-model-evidence-lifecycle-review/staged_full_correction"
+description = "The corrected manifest and rerun arrive at response, followed by the propagated design memo at closeout"
+probe_only = false
+[members.dimension_values]
+review_contract = "initial review, response review, and closeout review with cumulative evidence-backed submissions"
+evidence_governance = "status changes require current registered evidence and stable decision continuity"
+response_release_form = "corrected manifest, rerun register, and model report"
+response_transition_applicability = "response release supports correction of the affected model-chain findings"
+corrective_chain_timing = "corrected model chain at response; propagated design memo at closeout"
+
+[[members]]
+member_id = "semantic-no-op-release-probe"
+task_id = "lifecycle/drainage-model-evidence-lifecycle-review/semantic_no_op_release"
+description = "An unrelated administrative notice arrives at response; the corrected chain and propagated memo arrive only at closeout"
+probe_only = true
+[members.dimension_values]
+review_contract = "initial review, response review, and closeout review with cumulative evidence-backed submissions"
+evidence_governance = "status changes require current registered evidence and stable decision continuity"
+response_release_form = "administrative runtime notice that is not a registered project source"
+response_transition_applicability = "response release supports no engineering status transition"
+corrective_chain_timing = "corrected model chain and propagated design memo at closeout"
+
+[[relations]]
+relation_id = "staged-correction-to-semantic-no-op"
+purpose = "transfer"
+source_member_ids = ["staged-full-correction-acquisition"]
+target_member_id = "semantic-no-op-release-probe"
+invariant_dimensions = ["review_contract", "evidence_governance"]
+invariant_claims = [
+  "Both variants require the same evidence-backed review discipline: findings, accepted decisions, readiness, and claim boundaries remain tied to current registered evidence.",
+  "Both variants require stable finding and decision identities unless a released evidence chain supports an explicit transition.",
+  "Closure requires the complete relevant evidence chain, not an assertion or unrelated administrative release.",
+]
+changed_dimensions = ["response_release_form", "response_transition_applicability", "corrective_chain_timing"]
+rationale = "The acquisition contains a valid response-stage correction. The probe preserves the governing review rule but makes the response-stage release non-governing and delays the real correction until closeout. Copying the acquisition transition is wrong; transferring the conditional evidence rule must preserve state through the no-op and update later. A drainage-domain reviewer and benchmark reviewer must approve this relation before a claim-bearing campaign."

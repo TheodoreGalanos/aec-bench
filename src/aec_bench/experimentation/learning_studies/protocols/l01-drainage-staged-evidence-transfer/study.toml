@@ -1,0 +1,119 @@
+study_id = "l01-lifecycle-staged-evidence-transfer"
+title = "Lifecycle staged-evidence transfer: drainage model review"
+research_question = "Does declared public feedback and explicit structured memory from a valid staged correction improve performance when the response-stage release is non-governing and the actual correction arrives at closeout?"
+relation_ids = ["staged-correction-to-semantic-no-op"]
+
+[[experiences]]
+experience_id = "staged-full-correction-acquisition"
+family_member_id = "staged-full-correction-acquisition"
+role = "acquisition"
+
+[[experiences]]
+experience_id = "semantic-no-op-release-probe"
+family_member_id = "semantic-no-op-release-probe"
+role = "probe"
+
+[[measurements]]
+measurement_id = "structured-memory-canonical-reward-gain"
+projection_id = "lifecycle.canonical-reward"
+direction = "higher"
+target_experience_id = "semantic-no-op-release-probe"
+focal_arm_id = "structured-memory"
+comparator_arm_id = "cold-reset"
+
+[[measurements]]
+measurement_id = "structured-memory-staged-disclosure-gain"
+projection_id = "drainage.staged-disclosure"
+direction = "higher"
+target_experience_id = "semantic-no-op-release-probe"
+focal_arm_id = "structured-memory"
+comparator_arm_id = "cold-reset"
+
+[[measurements]]
+measurement_id = "structured-memory-finding-continuity-gain"
+projection_id = "drainage.finding-continuity"
+direction = "higher"
+target_experience_id = "semantic-no-op-release-probe"
+focal_arm_id = "structured-memory"
+comparator_arm_id = "cold-reset"
+
+[[measurements]]
+measurement_id = "structured-memory-closure-evidence-gain"
+projection_id = "drainage.closure-evidence"
+direction = "higher"
+target_experience_id = "semantic-no-op-release-probe"
+focal_arm_id = "structured-memory"
+comparator_arm_id = "cold-reset"
+
+[[measurements]]
+measurement_id = "structured-memory-claim-boundary-gain"
+projection_id = "drainage.claim-boundary"
+direction = "higher"
+target_experience_id = "semantic-no-op-release-probe"
+focal_arm_id = "structured-memory"
+comparator_arm_id = "cold-reset"
+
+[[measurements]]
+measurement_id = "reset-after-acquisition-canonical-effect"
+projection_id = "lifecycle.canonical-reward"
+direction = "higher"
+target_experience_id = "semantic-no-op-release-probe"
+focal_arm_id = "reset-after-acquisition"
+comparator_arm_id = "cold-reset"
+
+[[arms]]
+arm_id = "cold-reset"
+role = "control"
+treatment_id = "reset"
+
+[[arms.steps]]
+kind = "run_experience"
+step_id = "cold-probe"
+experience_id = "semantic-no-op-release-probe"
+commit_post_state = false
+
+[[arms]]
+arm_id = "reset-after-acquisition"
+role = "control"
+treatment_id = "reset"
+
+[[arms.steps]]
+kind = "run_experience"
+step_id = "reset-acquisition"
+experience_id = "staged-full-correction-acquisition"
+commit_post_state = true
+
+[[arms.steps]]
+kind = "run_experience"
+step_id = "reset-probe"
+experience_id = "semantic-no-op-release-probe"
+commit_post_state = false
+
+[[arms]]
+arm_id = "structured-memory"
+role = "exposure"
+treatment_id = "structured-memory"
+
+[[arms.steps]]
+kind = "run_experience"
+step_id = "structured-acquisition"
+experience_id = "staged-full-correction-acquisition"
+commit_post_state = true
+
+[[arms.steps]]
+kind = "release_feedback"
+step_id = "release-acquisition-feedback"
+source_experience_id = "staged-full-correction-acquisition"
+feedback_view_id = "drainage-staged-review-public-feedback"
+
+[[arms.steps]]
+kind = "consolidate"
+step_id = "consolidate-review-method"
+feedback_step_ids = ["release-acquisition-feedback"]
+operation_id = "update-lifecycle-review-memory"
+
+[[arms.steps]]
+kind = "run_experience"
+step_id = "structured-probe"
+experience_id = "semantic-no-op-release-probe"
+commit_post_state = false

@@ -1472,6 +1472,28 @@ AEC-Bench currently retains one complete trial record for a lifecycle even when 
 
 Implement a lifecycle adapter in which one study experience equals one complete lifecycle trial.
 
+The first Release B increment implements exact lifecycle target resolution and
+a reset-only local binding for `fresh_context` with `artifact_memory`. It uses
+the existing lifecycle compiler and `run_lifecycle_trial()` path to return one
+normal record. Structured memory, terminal feedback, and checkpoint analysis
+remain later Release B work.
+
+The second Release B increment adds adapter-owned reset and structured-memory
+treatments. Learner snapshots contain only `memory/` and `feedback/` and use
+copy-on-write transitions. An optional local-harness input exposes a validated
+memory projection as read-only `learner_context/` without adding it to lifecycle
+state, evidence, visibility policy, or verifier input. Feedback projector
+content and lifecycle outcome projections remain LS-06C work.
+
+The third Release B increment adds one drainage-owned public feedback view and
+task-owned drainage gate extraction. Study-owned L01 glue supplies the explicit
+projection mapping, derives assessment facts from persisted state and transition
+evidence, and runs the cold, reset-after-acquisition, and structured-memory arms
+through the common recorder and assessor. Missing projection evidence is
+ineligible. Relation review remains an explicit assessor input. The
+[deterministic L01 evidence](l01-deterministic-evidence.md) proves composition
+and isolation only; it is not a model-learning result.
+
 ## Continuity matrix
 
 | Within-lifecycle execution | Between-lifecycle learner state | Interpretation |
