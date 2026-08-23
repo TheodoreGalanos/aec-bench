@@ -60,6 +60,7 @@ authority.
 | [Staged evidence and publication](protocols/staged-evidence-and-publication.md) | Protocol | Current | Lifecycle and evaluation contributors | Lifecycle runtime and task owners |
 | [Learning Studies Gate A](adr/learning-studies-gate-a.md) | Decision | Current | Learning Studies and lifecycle contributors | Repository architecture review |
 | [Learning Studies lifecycle L01 review](adr/learning-studies-lifecycle-l01-review.md) | Decision | Current | Learning Studies and lifecycle contributors | Repository architecture review |
+| [Learning Studies Gate B](adr/learning-studies-gate-b.md) | Decision | Current | Learning Studies, lifecycle, and world contributors | Repository architecture review |
 | [Artifact task composition](plans/artifact-task-composition.md) | Plan | Proposed | Task generation, dataset, harness, evaluation, and CLI contributors | Repository maintainers |
 | [Evolution functional composition](plans/evolution-functional-composition.md) | Plan | Proposed | Evolution, harness, experiment, and CLI contributors | Repository maintainers |
 | [Lifecycle functional composition](plans/lifecycle-functional-composition.md) | Plan | Historical | Lifecycle, harness, experimentation, evaluation, and CLI contributors | Repository maintainers |
