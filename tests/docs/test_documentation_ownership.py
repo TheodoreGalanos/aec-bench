@@ -31,6 +31,7 @@ EXPECTED_REPOSITORY_DOCS = {
     "protocols/interactive-world-runtime.md",
     "protocols/staged-evidence-and-publication.md",
     "research/learning-studies/l01-deterministic-evidence.md",
+    "research/learning-studies/l01-relation-domain-review.md",
     "research/learning-studies/programme.md",
     "research/learning-studies/release-a/GATE-A-artifact-substrate-extraction.md",
     "research/learning-studies/release-a/LS-00-programme-boundary-and-semantic-cleanup.md",

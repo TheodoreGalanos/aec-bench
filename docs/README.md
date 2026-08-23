@@ -70,6 +70,7 @@ authority.
 | [Learning Studies programme](research/learning-studies/programme.md) | Research | Proposed | Experimentation, execution, and evaluation contributors | Learning Studies programme maintainers |
 | [Learning Studies Release A tranche](research/learning-studies/release-a/README.md) | Research | Historical | Release A implementers and reviewers | Learning Studies programme maintainers |
 | [L01 deterministic evidence](research/learning-studies/l01-deterministic-evidence.md) | Research | Research | L01 architecture reviewers | Learning Studies programme maintainers |
+| [L01 relation domain review](research/learning-studies/l01-relation-domain-review.md) | Research | Research | L01 programme owner and domain reviewers | Learning Studies programme maintainers |
 | [Documentation agent guide](AGENTS.md) | Guide | Current | Coding agents editing this directory | Repository maintainers |
 
 ## Repository design docs and public docs
