@@ -219,6 +219,44 @@ appended only after an explicit public feedback release. Structured memory is
 read-only during a task and can change only during consolidation. Model and
 adapter identity continue to come from the immutable planned trial.
 
+The local lifecycle adapter resolves exact task IDs of the form
+`lifecycle/<template_id>/<variant_id>` through the existing lifecycle catalogue;
+templates without variants omit the final component. One adapter binding fixes
+the lifecycle execution condition. The first binding supports only
+`fresh_context` with `artifact_memory`. It provides reset and structured-memory
+treatments. Each complete lifecycle uses its existing compiler, local harness,
+verifier, recorder, and normal `TrialRecord` builder through
+`run_lifecycle_trial()`.
+
+Lifecycle learner state is adapter-owned and contains only `memory/` and
+`feedback/`. Every experience, feedback release, and consolidation operation
+uses a separate copy-on-write candidate. Feedback can change only `feedback/`,
+and consolidation can change only `memory/`. Lifecycle package, run, hidden,
+verification, and metrics files never enter this tree.
+
+Local lifecycle execution has one optional `read_only_context_root` composition
+input. When present, the workspace tool exposes it as `learner_context/` and
+labels it as prior-task guidance that is not current task evidence. The root is
+not part of lifecycle episode requests, package identity, run state, visibility
+policy, or verifier input. Fresh checkpoint sessions receive the same context
+projection. Direct lifecycle callers that omit the input keep their existing
+workspace and prompt behavior.
+
+Lifecycle feedback meaning remains task-owned. A feedback projector receives a
+completed normal `TrialRecord` and constructs one explicit public view. The
+lifecycle adapter checks JSON structure, size, unsafe keys, hidden paths, and
+host paths before it writes or publishes the exact bytes. Feedback does not
+enter later lifecycle context directly; only an explicit consolidation can
+write to `memory/`.
+
+Lifecycle outcome meaning also remains outside the common assessor. Study-owned
+glue supplies explicit projection callbacks that read canonical reward or
+task-owned gate scores from the existing record. Missing or malformed evidence
+makes a projection ineligible; it is not changed to zero. The first maintained
+lifecycle study uses the existing drainage gates and archived learner
+submissions. It adds no lifecycle phase contract, global projection registry,
+or `TrialRecord` field.
+
 The [Gate A decision](adr/learning-studies-gate-a.md) records the field-level
 extraction review and the concepts that remain adapter-owned.
 

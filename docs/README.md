@@ -59,6 +59,7 @@ authority.
 | [Interactive-world runtime](protocols/interactive-world-runtime.md) | Protocol | Current | World, runtime, and transport contributors | World runtime and registered worlds |
 | [Staged evidence and publication](protocols/staged-evidence-and-publication.md) | Protocol | Current | Lifecycle and evaluation contributors | Lifecycle runtime and task owners |
 | [Learning Studies Gate A](adr/learning-studies-gate-a.md) | Decision | Current | Learning Studies and lifecycle contributors | Repository architecture review |
+| [Learning Studies lifecycle L01 review](adr/learning-studies-lifecycle-l01-review.md) | Decision | Current | Learning Studies and lifecycle contributors | Repository architecture review |
 | [Artifact task composition](plans/artifact-task-composition.md) | Plan | Proposed | Task generation, dataset, harness, evaluation, and CLI contributors | Repository maintainers |
 | [Evolution functional composition](plans/evolution-functional-composition.md) | Plan | Proposed | Evolution, harness, experiment, and CLI contributors | Repository maintainers |
 | [Lifecycle functional composition](plans/lifecycle-functional-composition.md) | Plan | Historical | Lifecycle, harness, experimentation, evaluation, and CLI contributors | Repository maintainers |
@@ -68,6 +69,7 @@ authority.
 | [Repository architecture alignment implementation](plans/repository-architecture-implementation.md) | Plan | Historical | Repository maintainers and subsystem owners | Repository maintainers |
 | [Learning Studies programme](research/learning-studies/programme.md) | Research | Proposed | Experimentation, execution, and evaluation contributors | Learning Studies programme maintainers |
 | [Learning Studies Release A tranche](research/learning-studies/release-a/README.md) | Research | Historical | Release A implementers and reviewers | Learning Studies programme maintainers |
+| [L01 deterministic evidence](research/learning-studies/l01-deterministic-evidence.md) | Research | Research | L01 architecture reviewers | Learning Studies programme maintainers |
 | [Documentation agent guide](AGENTS.md) | Guide | Current | Coding agents editing this directory | Repository maintainers |
 
 ## Repository design docs and public docs
