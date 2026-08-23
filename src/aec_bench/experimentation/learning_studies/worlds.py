@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import math
 import shutil
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
@@ -45,12 +46,15 @@ _WORLD_NAMESPACE = "world"
 _MAX_FEEDBACK_BYTES = 1_000_000
 _FORBIDDEN_FEEDBACK_KEYS = {
     "expected_answer",
+    "expected_response",
     "gold",
     "private_path",
     "secret",
     "verifier_source",
     "required_response",
     "instrument_condition",
+    "visual_alert_conditions",
+    "required_consecutive_alert_readings",
 }
 _FORBIDDEN_FEEDBACK_PATH_PARTS = ("/hidden/", "hidden/", "gold-submissions", "verifier-config")
 
@@ -167,6 +171,41 @@ def resolve_world_learning_target(task_id: str) -> WorldLearningTarget:
     if task_id != canonical:
         raise ValueError(f"world-task-id-invalid: task id is not canonical: {task_id!r}")
     return WorldLearningTarget(task_id=canonical, world_id=world_id, profile_id=profile_id)
+
+
+def world_terminal_outcome_feedback(record: TrialRecord) -> bytes:
+    """Project a small, generic terminal outcome reusable across future bounded worlds."""
+
+    evaluation = record.evaluation
+    data = {
+        "trial_id": record.trial_id,
+        "task_id": record.task_id,
+        "execution_status": record.execution_status.value,
+        "reward": None if evaluation is None else evaluation.reward,
+        "validity": None
+        if evaluation is None
+        else {
+            "output_parseable": evaluation.validity.output_parseable,
+            "schema_valid": evaluation.validity.schema_valid,
+            "verifier_completed": evaluation.validity.verifier_completed,
+        },
+    }
+    return (json.dumps(data, sort_keys=True, separators=(",", ":")) + "\n").encode("utf-8")
+
+
+def world_canonical_reward(record: TrialRecord) -> float:
+    """Read the generic canonical reward, reusable unchanged by a future bounded world."""
+
+    evaluation = record.evaluation
+    if evaluation is None or not evaluation.validity.verifier_completed:
+        raise ValueError("world-projection-ineligible: evaluation is unavailable or replay was invalid")
+    value = evaluation.reward
+    if isinstance(value, bool) or not isinstance(value, int | float) or not math.isfinite(value):
+        raise ValueError("world-projection-value-out-of-bounds: reward must be finite")
+    selected = float(value)
+    if not 0.0 <= selected <= 1.0:
+        raise ValueError("world-projection-value-out-of-bounds: reward must be within [0, 1]")
+    return selected
 
 
 def build_world_learning_operations(
@@ -651,5 +690,7 @@ __all__ = (
     "WorldLearningTrialRunner",
     "build_world_learning_operations",
     "resolve_world_learning_target",
+    "world_canonical_reward",
     "world_learning_task_id",
+    "world_terminal_outcome_feedback",
 )

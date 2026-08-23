@@ -1,0 +1,59 @@
+family_id = "dam-seepage-escalation-applicability"
+title = "Dam-seepage escalation applicability boundary"
+description = "Tests whether escalation experience justified solely by instrument unreliability incorrectly transfers to a surface-similar profile where the instrument is reliable and escalation is not supported by evidence. Independent domain review is required before a claim-bearing run."
+
+[[dimensions]]
+dimension_id = "monitoring_point_pattern"
+kind = "surface"
+description = "The monitoring point type, action set, and prose objective presented to the learner"
+
+[[dimensions]]
+dimension_id = "reading_pattern"
+kind = "parameter"
+description = "The flow, rainfall, and reservoir reading values and cadence across the episode"
+
+[[dimensions]]
+dimension_id = "instrument_reliability"
+kind = "causal"
+description = "Whether the measurement instrument is reliable or unreliable, and when this is released to the learner (only after CHECK_MEASUREMENT_SYSTEM)"
+
+[[dimensions]]
+dimension_id = "response_applicability"
+kind = "applicability"
+description = "Whether escalation is the response the currently released evidence supports"
+
+[[members]]
+member_id = "unreliable-instrument-escalation-acquisition"
+task_id = "world/dam-seepage-monitoring/unreliable-instrument-escalation"
+description = "The measurement instrument is unreliable; no visual alert condition or flow-threshold breach occurs; escalation is justified solely by instrument distrust"
+probe_only = false
+[members.dimension_values]
+monitoring_point_pattern = "single monitoring point, standard action set, standard surveillance objective"
+reading_pattern = "flow stays below alert thresholds throughout; no visual alert condition in any reading"
+instrument_reliability = "unreliable, released only after CHECK_MEASUREMENT_SYSTEM"
+response_applicability = "engineering-review escalation is the only response the released evidence supports"
+
+[[members]]
+member_id = "reliable-routine-surveillance-probe"
+task_id = "world/dam-seepage-monitoring/reliable-routine-surveillance"
+description = "The measurement instrument is reliable; no visual alert condition or flow-threshold breach occurs; routine surveillance is the response the evidence supports"
+probe_only = true
+[members.dimension_values]
+monitoring_point_pattern = "single monitoring point, standard action set, standard surveillance objective"
+reading_pattern = "flow stays below alert thresholds throughout; no visual alert condition in any reading"
+instrument_reliability = "serviceable, released only after CHECK_MEASUREMENT_SYSTEM"
+response_applicability = "routine surveillance is the only response the released evidence supports"
+
+[[relations]]
+relation_id = "unreliable-instrument-escalation-to-reliable-routine-surveillance"
+purpose = "boundary"
+source_member_ids = ["unreliable-instrument-escalation-acquisition"]
+target_member_id = "reliable-routine-surveillance-probe"
+invariant_dimensions = ["monitoring_point_pattern", "reading_pattern"]
+invariant_claims = [
+  "Both profiles present the same monitoring point type, action set, and prose objective.",
+  "In both profiles, flow stays below alert thresholds and no visual alert condition ever occurs, so the correct response is fully determined by the instrument-reliability finding.",
+  "The correct response in each profile follows only from checking the measurement system, never from the surface reading pattern alone.",
+]
+changed_dimensions = ["instrument_reliability", "response_applicability"]
+rationale = "The acquisition teaches a valid escalation conditioned on instrument distrust. The probe holds the surface and reading pattern constant but removes the condition that justified escalation. A learner that copies the acquisition's terminal action will escalate inappropriately; a learner that transferred the conditional rule should check the instrument and correctly conclude routine surveillance. A domain reviewer and benchmark reviewer must approve this relation before a claim-bearing campaign."

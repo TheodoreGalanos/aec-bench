@@ -1,0 +1,111 @@
+study_id = "w01-dam-escalation-applicability-boundary"
+title = "Dam-seepage escalation applicability boundary"
+research_question = "Does declared public feedback and explicit structured memory from an instrument-unreliability-justified escalation cause inappropriate escalation on a surface-similar probe where the instrument is reliable and escalation is not supported by evidence?"
+relation_ids = ["unreliable-instrument-escalation-to-reliable-routine-surveillance"]
+
+[[experiences]]
+experience_id = "unreliable-instrument-escalation-acquisition"
+family_member_id = "unreliable-instrument-escalation-acquisition"
+role = "acquisition"
+
+[[experiences]]
+experience_id = "reliable-routine-surveillance-probe"
+family_member_id = "reliable-routine-surveillance-probe"
+role = "probe"
+
+[[measurements]]
+measurement_id = "structured-memory-inappropriate-escalation-effect"
+projection_id = "dam.inappropriate-escalation"
+direction = "lower"
+target_experience_id = "reliable-routine-surveillance-probe"
+focal_arm_id = "structured-memory"
+comparator_arm_id = "cold-reset"
+
+[[measurements]]
+measurement_id = "reset-after-acquisition-inappropriate-escalation-effect"
+projection_id = "dam.inappropriate-escalation"
+direction = "lower"
+target_experience_id = "reliable-routine-surveillance-probe"
+focal_arm_id = "reset-after-acquisition"
+comparator_arm_id = "cold-reset"
+
+[[measurements]]
+measurement_id = "structured-memory-response-correct-gain"
+projection_id = "dam.response-correct"
+direction = "higher"
+target_experience_id = "reliable-routine-surveillance-probe"
+focal_arm_id = "structured-memory"
+comparator_arm_id = "cold-reset"
+
+[[measurements]]
+measurement_id = "structured-memory-evidence-complete-gain"
+projection_id = "dam.evidence-complete"
+direction = "higher"
+target_experience_id = "reliable-routine-surveillance-probe"
+focal_arm_id = "structured-memory"
+comparator_arm_id = "cold-reset"
+
+[[measurements]]
+measurement_id = "structured-memory-canonical-reward-gain"
+projection_id = "world.canonical-reward"
+direction = "higher"
+target_experience_id = "reliable-routine-surveillance-probe"
+focal_arm_id = "structured-memory"
+comparator_arm_id = "cold-reset"
+
+[[arms]]
+arm_id = "cold-reset"
+role = "control"
+treatment_id = "reset"
+
+[[arms.steps]]
+kind = "run_experience"
+step_id = "cold-probe"
+experience_id = "reliable-routine-surveillance-probe"
+commit_post_state = false
+
+[[arms]]
+arm_id = "reset-after-acquisition"
+role = "control"
+treatment_id = "reset"
+
+[[arms.steps]]
+kind = "run_experience"
+step_id = "reset-acquisition"
+experience_id = "unreliable-instrument-escalation-acquisition"
+commit_post_state = true
+
+[[arms.steps]]
+kind = "run_experience"
+step_id = "reset-probe"
+experience_id = "reliable-routine-surveillance-probe"
+commit_post_state = false
+
+[[arms]]
+arm_id = "structured-memory"
+role = "exposure"
+treatment_id = "structured-memory"
+
+[[arms.steps]]
+kind = "run_experience"
+step_id = "structured-acquisition"
+experience_id = "unreliable-instrument-escalation-acquisition"
+commit_post_state = true
+
+[[arms.steps]]
+kind = "release_feedback"
+step_id = "release-acquisition-feedback"
+source_experience_id = "unreliable-instrument-escalation-acquisition"
+feedback_view_id = "dam-escalation-boundary-public-feedback"
+
+[[arms.steps]]
+kind = "consolidate"
+step_id = "consolidate-monitoring-method"
+feedback_step_ids = ["release-acquisition-feedback"]
+operation_id = "update-dam-monitoring-memory"
+
+[[arms.steps]]
+kind = "run_experience"
+step_id = "structured-probe"
+experience_id = "reliable-routine-surveillance-probe"
+commit_post_state = false
