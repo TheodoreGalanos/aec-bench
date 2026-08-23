@@ -221,6 +221,7 @@ class EvidenceLifecycleWorkspaceTool:
     run_dir: Path
     operation_resolver: LifecycleOperationResolver | None = None
     visibility_policy: LifecycleVisibilityPolicy = LifecycleVisibilityPolicy.ARTIFACT_MEMORY
+    read_only_context_root: Path | None = None
 
     def list_workspace(self, path: str = ".") -> str:
         """List one visible workspace directory without permitting path escape."""
@@ -228,14 +229,19 @@ class EvidenceLifecycleWorkspaceTool:
             target, relative = self._read_path(path)
             if not target.is_dir():
                 raise EvidenceLifecycleError(f"workspace directory not found: {relative}")
-            entries = sorted(
+            if relative == "learner_context" or relative.startswith("learner_context/"):
+                if any(child.is_symlink() for child in target.iterdir()):
+                    raise EvidenceLifecycleError(f"learner_context path is unsafe: {relative}")
+            entries = {
                 child.name
                 for child in target.iterdir()
                 if not child.name.startswith(".") and self._is_visible_path(PurePosixPath(relative) / child.name)
-            )
+            }
+            if relative == "." and self.read_only_context_root is not None:
+                entries.add("learner_context")
         except EvidenceLifecycleError as exc:
             return json.dumps({"status": "rejected", "error": str(exc)})
-        return json.dumps({"status": "ok", "path": relative, "entries": entries})
+        return json.dumps({"status": "ok", "path": relative, "entries": sorted(entries)})
 
     def read_workspace_file(self, path: str) -> str:
         """Read one released or persisted review artifact inside the workspace."""
@@ -244,8 +250,10 @@ class EvidenceLifecycleWorkspaceTool:
             if not target.is_file():
                 raise EvidenceLifecycleError(f"workspace file not found: {relative}")
             content = target.read_text(encoding="utf-8")
-        except (EvidenceLifecycleError, OSError, UnicodeError) as exc:
+        except EvidenceLifecycleError as exc:
             return json.dumps({"status": "rejected", "error": str(exc)})
+        except (OSError, UnicodeError):
+            return json.dumps({"status": "rejected", "error": f"workspace file is not readable UTF-8: {path}"})
         return json.dumps({"status": "ok", "path": relative, "content": content})
 
     def write_checkpoint_submission(self, checkpoint_id: str, content: str) -> str:
@@ -285,6 +293,9 @@ class EvidenceLifecycleWorkspaceTool:
         if path.is_absolute() or ".." in path.parts:
             raise EvidenceLifecycleError("workspace path must stay inside the lifecycle workspace")
         relative = path.as_posix()
+        parts = tuple(part for part in path.parts if part not in {".", ""})
+        if parts and parts[0] == "learner_context":
+            return self._read_context_path(path)
         if not self._is_visible_path(path):
             raise EvidenceLifecycleError(f"workspace path is not agent-readable: {relative}")
         workspace = (self.run_dir / "workspace").resolve()
@@ -293,11 +304,37 @@ class EvidenceLifecycleWorkspaceTool:
             raise EvidenceLifecycleError("workspace path must stay inside the lifecycle workspace")
         return target, relative
 
+    def _read_context_path(self, path: PurePosixPath) -> tuple[Path, str]:
+        relative = path.as_posix()
+        if self.read_only_context_root is None:
+            raise EvidenceLifecycleError(f"workspace path is not agent-readable: {relative}")
+        parts = tuple(part for part in path.parts if part not in {".", ""})
+        if any(part.startswith(".") for part in parts[1:]):
+            raise EvidenceLifecycleError(f"workspace path is not agent-readable: {relative}")
+        context_root = Path(self.read_only_context_root)
+        if context_root.is_symlink() or not context_root.is_dir():
+            raise EvidenceLifecycleError("learner_context is unavailable")
+        current = context_root
+        for part in parts[1:]:
+            current = current / part
+            if current.is_symlink():
+                raise EvidenceLifecycleError(f"learner_context path is unsafe: {relative}")
+        try:
+            resolved_root = context_root.resolve(strict=True)
+            target = current.resolve(strict=True)
+        except OSError as error:
+            raise EvidenceLifecycleError(f"learner_context path not found: {relative}") from error
+        if target != resolved_root and resolved_root not in target.parents:
+            raise EvidenceLifecycleError(f"learner_context path is unsafe: {relative}")
+        return target, relative
+
     def _is_visible_path(self, path: PurePosixPath) -> bool:
         parts = tuple(part for part in path.parts if part not in {".", ""})
         if not parts:
             return True
         root = parts[0]
+        if root == "learner_context":
+            return self.read_only_context_root is not None
         if root == "instruction.md":
             return len(parts) == 1
         if root == CURRENT_SOURCE_WORKSPACE_PATH.parts[0]:
@@ -436,6 +473,7 @@ def run_local_lifecycle(
     trial: LifecycleTrial,
     *,
     adapter_builder: Callable[..., Any] | None = None,
+    read_only_context_root: Path | None = None,
 ) -> LifecycleExecution:
     """Run one local lifecycle treatment and return execution evidence without verification."""
     from aec_bench.lifecycles.catalogue import lifecycle_operation_resolver
@@ -472,6 +510,7 @@ def run_local_lifecycle(
             max_tokens=max_tokens,
             timeout_sec=timeout_sec,
             resolver=resolver,
+            read_only_context_root=read_only_context_root,
         )
     except Exception:
         if not (trial.run_dir / "state.json").is_file():
@@ -522,6 +561,7 @@ def _execute_local_lifecycle_mode(
     max_tokens: int | None,
     timeout_sec: int | None,
     resolver: LifecycleOperationResolver | None,
+    read_only_context_root: Path | None,
 ) -> dict[str, Any]:
     if trial.execution_mode is LifecycleExecutionMode.PERSISTENT_CONTEXT:
         if (trial.run_dir / "state.json").is_file():
@@ -538,6 +578,7 @@ def _execute_local_lifecycle_mode(
             timeout_sec=timeout_sec,
             adapter_builder=adapter_builder,
             require_adapter_identity_match=True,
+            read_only_context_root=read_only_context_root,
         )
     if trial.planned.agent.adapter == "deepseek_harness":
         raise ValueError("deepseek_harness lifecycle execution requires persistent_context mode")
@@ -545,6 +586,7 @@ def _execute_local_lifecycle_mode(
         **common,
         adapter_builder=adapter_builder,
         require_adapter_identity_match=True,
+        read_only_context_root=read_only_context_root,
     )
 
 
@@ -565,6 +607,7 @@ def _run_local_lifecycle_persistent_session(
     require_adapter_identity_match: bool = False,
     run_recorder: LifecycleRunRecorder | None = None,
     run_authorization_sha256: str | None = None,
+    read_only_context_root: Path | None = None,
 ) -> dict[str, Any]:
     """Run all checkpoints in one adapter execution, optionally leaving reward to an external verifier."""
     if adapter_kind not in {"deepseek_harness", "tool_loop", "pydantic_ai"}:
@@ -621,6 +664,7 @@ def _run_local_lifecycle_persistent_session(
         run_dir=run,
         operation_resolver=operation_resolver,
         visibility_policy=visibility_policy,
+        read_only_context_root=read_only_context_root,
     )
     supports_evidence_requests = _supports_evidence_requests(package)
     supports_lifecycle_operations = _supports_lifecycle_operations(package)
@@ -709,6 +753,7 @@ def _run_local_lifecycle_persistent_session(
                     visibility_policy=visibility_policy,
                     supports_evidence_requests=supports_evidence_requests,
                     supports_lifecycle_operations=supports_lifecycle_operations,
+                    has_read_only_context=read_only_context_root is not None,
                 ),
                 tools=tool_specs,
                 configuration=request_configuration,
@@ -1021,6 +1066,7 @@ def _run_local_lifecycle_fresh_session(
     require_adapter_identity_match: bool = False,
     run_recorder: LifecycleRunRecorder | None = None,
     run_authorization_sha256: str | None = None,
+    read_only_context_root: Path | None = None,
 ) -> dict[str, Any]:
     """Run every checkpoint in a fresh adapter and return the normalized local result."""
     package = Path(package_dir)
@@ -1036,6 +1082,7 @@ def _run_local_lifecycle_fresh_session(
         visibility_policy=visibility_policy,
         operation_resolver=operation_resolver,
         require_adapter_identity_match=require_adapter_identity_match,
+        read_only_context_root=read_only_context_root,
     )
     try:
         lifecycle = run_lifecycle(
@@ -1101,6 +1148,7 @@ class LocalEvidenceLifecycleEpisodeEnvironment:
     memory_visibility_policy: LifecycleVisibilityPolicy = LifecycleVisibilityPolicy.ARTIFACT_MEMORY
     require_adapter_identity_match: bool = False
     execution_mode: LifecycleExecutionMode = LifecycleExecutionMode.FRESH_CONTEXT
+    read_only_context_root: Path | None = None
 
     @property
     def requested_adapter(self) -> str:
@@ -1182,6 +1230,7 @@ class LocalEvidenceLifecycleEpisodeEnvironment:
             run_dir=run_dir,
             operation_resolver=self.operation_resolver,
             visibility_policy=self.memory_visibility_policy,
+            read_only_context_root=self.read_only_context_root,
         )
         control = EvidenceLifecycleControlTool(
             package_dir=Path(self.package_dir),
@@ -1253,6 +1302,7 @@ class LocalEvidenceLifecycleEpisodeEnvironment:
                         visibility_policy=self.memory_visibility_policy,
                         supports_evidence_requests=supports_evidence_requests,
                         supports_lifecycle_operations=supports_lifecycle_operations,
+                        has_read_only_context=self.read_only_context_root is not None,
                     ),
                     tools=tools,
                     configuration={"max_turns": self.max_turns},
@@ -1333,6 +1383,7 @@ def build_local_evidence_lifecycle_episode_environment(
     visibility_policy: LifecycleVisibilityPolicy = LifecycleVisibilityPolicy.ARTIFACT_MEMORY,
     operation_resolver: LifecycleOperationResolver | None = None,
     require_adapter_identity_match: bool = False,
+    read_only_context_root: Path | None = None,
 ) -> LifecycleEpisodeEnvironment:
     """Build the typed fresh-checkpoint environment used by the lifecycle host."""
     return LocalEvidenceLifecycleEpisodeEnvironment(
@@ -1344,6 +1395,7 @@ def build_local_evidence_lifecycle_episode_environment(
         adapter_builder=adapter_builder,
         memory_visibility_policy=visibility_policy,
         require_adapter_identity_match=require_adapter_identity_match,
+        read_only_context_root=read_only_context_root,
     )
 
 
@@ -1395,6 +1447,7 @@ def _workspace_policy(
     visibility_policy: LifecycleVisibilityPolicy,
     supports_evidence_requests: bool,
     supports_lifecycle_operations: bool = False,
+    has_read_only_context: bool = False,
 ) -> str:
     if visibility_policy in {
         LifecycleVisibilityPolicy.PERSISTENT_CONTEXT,
@@ -1429,6 +1482,12 @@ def _workspace_policy(
             "When the active checkpoint provides an operations catalogue, use it with the current hash in "
             f"{CURRENT_SOURCE_WORKSPACE_PATH.as_posix()}. Operation results are evidence, not verification or "
             "reward."
+        )
+    if has_read_only_context:
+        policy += (
+            " A read-only learner_context/ directory may contain lessons retained from prior complete tasks. "
+            "It is not task evidence, does not override current released sources, and cannot be modified during "
+            "this lifecycle."
         )
     if persistent:
         policy += (
