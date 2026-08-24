@@ -19,6 +19,7 @@ from aec_bench.worlds.monitoring.dam_seepage.world import (
     evaluate,
     initial_state,
     observe,
+    requires_engineering_review,
     transition,
 )
 from aec_bench.worlds.runtime.episode import (
@@ -35,8 +36,12 @@ _BASE_PROFILE_ID = "synthetic-rising-seepage"
 
 
 def _profile() -> DamSeepageProfile:
+    return _profile_by_id(_BASE_PROFILE_ID)
+
+
+def _profile_by_id(profile_id: str) -> DamSeepageProfile:
     definition = dam_seepage_world_definition()
-    reference = next(profile for profile in definition.profiles if profile.profile_id == _BASE_PROFILE_ID)
+    reference = next(profile for profile in definition.profiles if profile.profile_id == profile_id)
     loaded = definition.load_profile(reference)
     assert isinstance(loaded.value, DamSeepageProfile)
     return loaded.value
@@ -99,6 +104,38 @@ def test_observation_reveals_only_requested_monitoring_evidence() -> None:
     inspected_view = observe(inspected.state)
     assert inspected_view.readings[0].downstream_condition is None
     assert inspected_view.readings[1].downstream_condition is DownstreamCondition.CLEAR
+
+
+def test_opening_probe_observation_uses_a_neutral_identifier() -> None:
+    profile = _profile_by_id("reliable-routine-surveillance")
+
+    opening = observe(profile.opening_state)
+
+    assert opening.profile_id == profile.scenario.monitoring_point_id == "SEEP-WEIR-02"
+    assert opening.profile_id not in {
+        "unreliable-instrument-escalation",
+        "reliable-routine-surveillance",
+    }
+    assert opening.instrument_condition is None
+    assert not hasattr(opening, "required_response")
+
+
+def test_w01_profiles_are_matched_except_declared_instrument_condition() -> None:
+    acquisition = _profile_by_id("unreliable-instrument-escalation").scenario
+    probe = _profile_by_id("reliable-routine-surveillance").scenario
+
+    acquisition_fields = acquisition.model_dump(mode="json")
+    probe_fields = probe.model_dump(mode="json")
+    acquisition_fields.pop("profile_id")
+    probe_fields.pop("profile_id")
+
+    differing_fields = {field for field in acquisition_fields if acquisition_fields[field] != probe_fields[field]}
+
+    assert differing_fields == {"instrument_condition"}
+    assert acquisition_fields["monitoring_point_id"] == probe_fields["monitoring_point_id"]
+    assert acquisition_fields["readings"] == probe_fields["readings"]
+    assert requires_engineering_review(acquisition)
+    assert not requires_engineering_review(probe)
 
 
 def test_world_accepts_judgment_then_evaluation_checks_it() -> None:

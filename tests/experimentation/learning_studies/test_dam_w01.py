@@ -6,7 +6,9 @@ from __future__ import annotations
 import json
 import os
 import sys
+from dataclasses import replace
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -56,6 +58,33 @@ _ROUTINE_ACTIONS = [
     {"action_name": SeepageAction.INSPECT_DOWNSTREAM_AREA.value, "arguments": {}, "request_id": "inspect"},
     {"action_name": SeepageAction.CONTINUE_ROUTINE_SURVEILLANCE.value, "arguments": {}, "request_id": "submit"},
 ]
+_ACQUISITION_ACTIONS = [
+    {"action_name": SeepageAction.CHECK_MEASUREMENT_SYSTEM.value, "arguments": {}, "request_id": "check"},
+    {
+        "action_name": SeepageAction.ESCALATE_FOR_ENGINEERING_REVIEW.value,
+        "arguments": {},
+        "request_id": "escalate",
+    },
+]
+
+
+async def _instrument_aware_actor_session(**kwargs: Any):  # noqa: ANN202
+    trial = kwargs["trial"]
+    actions = _ACQUISITION_ACTIONS if trial.task_id == DAM_W01_ACQUISITION_TASK_ID else _ROUTINE_ACTIONS
+    environment = {
+        **trial.agent.parameters["environment"],
+        "FAKE_WORLD_ACTIONS": json.dumps(actions),
+    }
+    agent = trial.agent.model_copy(update={"parameters": {**trial.agent.parameters, "environment": environment}})
+    return await run_prime_world_actor_session(**{**kwargs, "trial": replace(trial, agent=agent)})
+
+
+_INSTRUMENT_AWARE_CONDITION = WorldLearningExecutionCondition(
+    actor=_instrument_aware_actor_session,
+    actor_binding_label=_CONDITION.actor_binding_label,
+)
+
+
 _PROJECTION_IDS = {
     "world.canonical-reward",
     "dam.response-correct",
@@ -64,7 +93,11 @@ _PROJECTION_IDS = {
 }
 
 
-def _agent(tmp_path: Path, *, isolation: str = "development_same_user") -> AgentConfig:
+def _agent(
+    tmp_path: Path,
+    *,
+    isolation: str = "development_same_user",
+) -> AgentConfig:
     from tests.prime_agent.test_acp import _fake_prime_agent
 
     return AgentConfig(
@@ -383,7 +416,7 @@ def test_deterministic_w01_runs_all_arms_and_builds_truthful_assessment_evidence
         study_run_id="w01-deterministic",
         agent=agent,
         compute=_COMPUTE,
-        execution_condition=_CONDITION,
+        execution_condition=_INSTRUMENT_AWARE_CONDITION,
         consolidation_operation=consolidator,
     )
 
@@ -396,6 +429,19 @@ def test_deterministic_w01_runs_all_arms_and_builds_truthful_assessment_evidence
     assert all(item.probe_feedback_hidden for item in result.arm_evidence.values())
     assert all(item.probe_state_discarded for item in result.arm_evidence.values())
     assert all(not item.hidden_evaluation_leaked for item in result.arm_evidence.values())
+    assert set(result.acquisition_fidelity) == {
+        arm.arm_run_id for arm in result.plan.arm_runs if arm.arm_id in {"reset-after-acquisition", "structured-memory"}
+    }
+    assert all(
+        item.trial_record_present
+        and item.replay_valid is True
+        and item.response_correct is True
+        and item.evidence_complete is True
+        and item.escalation_selected is True
+        and item.acquisition_successful
+        and item.fidelity_satisfied
+        for item in result.acquisition_fidelity.values()
+    )
 
     assert all(
         measurement.validity is LearningComparisonValidity.DESCRIPTIVE_ONLY

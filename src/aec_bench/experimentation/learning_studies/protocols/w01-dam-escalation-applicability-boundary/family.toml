@@ -1,3 +1,5 @@
+# Profile slugs remain stable harness/task identity; the world observation
+# deliberately exposes only the neutral monitoring-point identifier.
 family_id = "dam-seepage-escalation-applicability"
 title = "Dam-seepage escalation applicability boundary"
 description = "Tests whether escalation experience justified solely by instrument unreliability incorrectly transfers to a surface-similar profile where the instrument is reliable and escalation is not supported by evidence. Independent domain review is required before a claim-bearing run."
@@ -5,12 +7,12 @@ description = "Tests whether escalation experience justified solely by instrumen
 [[dimensions]]
 dimension_id = "monitoring_point_pattern"
 kind = "surface"
-description = "The monitoring point type, action set, and prose objective presented to the learner"
+description = "The monitoring point type, action set, and prose objective presented to the learner; the matched profiles use the same point."
 
 [[dimensions]]
 dimension_id = "reading_pattern"
 kind = "parameter"
-description = "The flow, rainfall, and reservoir reading values and cadence across the episode"
+description = "The byte-identical flow, rainfall, reservoir, threshold, condition, and cadence readings across the episode"
 
 [[dimensions]]
 dimension_id = "instrument_reliability"
@@ -52,7 +54,7 @@ target_member_id = "reliable-routine-surveillance-probe"
 invariant_dimensions = ["monitoring_point_pattern", "reading_pattern"]
 invariant_claims = [
   "Both profiles present the same monitoring point type, action set, and prose objective.",
-  "In both profiles, flow stays below alert thresholds and no visual alert condition ever occurs, so the correct response is fully determined by the instrument-reliability finding.",
+  "Both profiles use byte-identical readings: flow stays below alert thresholds and no visual alert condition ever occurs, so the correct response is fully determined by the instrument-reliability finding.",
   "The correct response in each profile follows only from checking the measurement system, never from the surface reading pattern alone.",
 ]
 changed_dimensions = ["instrument_reliability", "response_applicability"]
