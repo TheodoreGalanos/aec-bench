@@ -1,30 +1,29 @@
-# ABOUTME: Binds runtime-neutral Learning Studies to complete local lifecycle trials.
-# ABOUTME: Resolves exact lifecycle targets and keeps reset learner state separate from lifecycle evidence.
+# ABOUTME: Binds runtime-neutral Learning Studies to complete local Interactive World trials.
+# ABOUTME: Resolves exact world/profile targets and keeps world evidence separate from learner state.
 
 from __future__ import annotations
 
 import json
+import math
 import shutil
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path, PurePosixPath
-from typing import Any
+from typing import Protocol
 
+from aec_bench import worlds
 from aec_bench.contracts.artifacts import ArtifactRef
 from aec_bench.contracts.learning_study_evidence import FeedbackReleaseRecord, LearnerStateRef
 from aec_bench.contracts.trial_record import TrialRecord
-from aec_bench.experimentation.learning_studies.errors import LearningStudyFeatureUnsupported
 from aec_bench.experimentation.learning_studies.learner_state import (
     LearnerTreeSnapshot,
     copy_learner_state,
-    create_read_only_context_projection,
     initialise_learner_state,
     learner_tree_snapshot,
     memory_snapshot,
     require_only_channel_changed,
     validate_learner_state,
-    validate_read_only_context_projection,
 )
 from aec_bench.experimentation.learning_studies.planning import PlannedArmRun
 from aec_bench.experimentation.learning_studies.runtime import (
@@ -38,170 +37,214 @@ from aec_bench.experimentation.learning_studies.runtime import (
     LearningStudyOperations,
     ReleaseFeedbackRequest,
 )
-from aec_bench.harness.lifecycle_local import run_local_lifecycle
+from aec_bench.harness.world_trials import WorldActorSessionRunner
 from aec_bench.ledger.artifact_repository import ArtifactRepository
-from aec_bench.lifecycles.application import run_lifecycle_trial
-from aec_bench.lifecycles.catalogue import lifecycle_template_ids, lifecycle_variant_ids, verify_lifecycle
-from aec_bench.lifecycles.compiled import compile_lifecycle
-from aec_bench.lifecycles.runtime.episode import LifecycleExecutionMode, LifecycleVisibilityPolicy
-from aec_bench.lifecycles.values import LifecycleExecution, LifecycleTrial
+from aec_bench.trials import PlannedTrial
+from aec_bench.worlds.tasks import WorldTask
 
-_LIFECYCLE_NAMESPACE = "lifecycle"
+_WORLD_NAMESPACE = "world"
 _MAX_FEEDBACK_BYTES = 1_000_000
-_FORBIDDEN_FEEDBACK_KEYS = {"expected_answer", "gold", "private_path", "secret", "verifier_source"}
+_FORBIDDEN_FEEDBACK_KEYS = {
+    "expected_answer",
+    "expected_response",
+    "gold",
+    "private_path",
+    "secret",
+    "verifier_source",
+    "required_response",
+    "instrument_condition",
+    "visual_alert_conditions",
+    "required_consecutive_alert_readings",
+}
 _FORBIDDEN_FEEDBACK_PATH_PARTS = ("/hidden/", "hidden/", "gold-submissions", "verifier-config")
 
 
 @dataclass(frozen=True, slots=True)
-class LifecycleLearningTarget:
+class WorldLearningTarget:
+    """One exact ``world/<world_id>/<profile_id>`` Learning Studies task identity."""
+
     task_id: str
-    template_id: str
-    variant_id: str | None
+    world_id: str
+    profile_id: str
 
 
 @dataclass(frozen=True, slots=True)
-class LifecycleExecutionCondition:
-    execution_mode: LifecycleExecutionMode
-    visibility_policy: LifecycleVisibilityPolicy
+class WorldLearningExecutionCondition:
+    """The actor binding a world learning arm treats as its fixed execution condition."""
+
+    actor: WorldActorSessionRunner
+    actor_binding_label: str
 
     def __post_init__(self) -> None:
-        if not isinstance(self.execution_mode, LifecycleExecutionMode) or not isinstance(
-            self.visibility_policy, LifecycleVisibilityPolicy
-        ):
-            raise ValueError("lifecycle-condition-invalid: execution mode and visibility policy must be typed values")
+        _safe_component(self.actor_binding_label)
 
     @property
     def adapter_id(self) -> str:
-        return f"lifecycle-local:{self.execution_mode.value}:{self.visibility_policy.value}"
+        return f"world-local:{self.actor_binding_label}"
 
 
-class LifecycleLearningTreatmentKind(StrEnum):
+class WorldLearningTreatmentKind(StrEnum):
     RESET = "reset"
     STRUCTURED_MEMORY = "structured-memory"
 
 
 @dataclass(frozen=True)
-class LifecycleLearnerState:
+class WorldLearnerState:
     arm_run_id: str
     treatment_id: str
     root: Path
 
 
 @dataclass(frozen=True)
-class LifecycleFeedback:
+class WorldFeedback:
     path: Path
     artifact: ArtifactRef
 
 
 @dataclass(frozen=True)
-class LifecycleConsolidationContext:
+class WorldConsolidationContext:
     state_root: Path
     memory_root: Path
-    feedback: tuple[LifecycleFeedback, ...]
+    feedback: tuple[WorldFeedback, ...]
 
 
-type LifecycleFeedbackProjector = Callable[[TrialRecord], bytes]
-type LifecycleConsolidationOperation = Callable[[LifecycleConsolidationContext], None]
+type WorldFeedbackProjector = Callable[[TrialRecord], bytes]
+type WorldConsolidationOperation = Callable[[WorldConsolidationContext], None]
+
+
+class WorldLearningTrialRunner(Protocol):
+    """The exact ``run_<world>_trial`` shape this adapter composes directly."""
+
+    async def __call__(
+        self,
+        task: WorldTask,
+        trial: PlannedTrial,
+        *,
+        actor: WorldActorSessionRunner,
+        read_only_context_text: str | None = None,
+    ) -> TrialRecord: ...
 
 
 @dataclass(frozen=True)
-class LifecycleLearningBinding:
-    operations: LearningStudyOperations[LifecycleLearnerState, LifecycleFeedback]
-    snapshot_state: Callable[[LearnerStateHandle[LifecycleLearnerState]], Path]
-    feedback_artifacts: Callable[[FeedbackHandle[LifecycleFeedback]], tuple[ArtifactRef, ...]]
-    restore_state: Callable[[LearnerStateRef, Path], LearnerStateHandle[LifecycleLearnerState]]
+class WorldLearningBinding:
+    operations: LearningStudyOperations[WorldLearnerState, WorldFeedback]
+    snapshot_state: Callable[[LearnerStateHandle[WorldLearnerState]], Path]
+    feedback_artifacts: Callable[[FeedbackHandle[WorldFeedback]], tuple[ArtifactRef, ...]]
+    restore_state: Callable[[LearnerStateRef, Path], LearnerStateHandle[WorldLearnerState]]
     restore_feedback: Callable[
-        [FeedbackReleaseRecord, LearnerStateHandle[LifecycleLearnerState]],
-        FeedbackHandle[LifecycleFeedback],
+        [FeedbackReleaseRecord, LearnerStateHandle[WorldLearnerState]],
+        FeedbackHandle[WorldFeedback],
     ]
 
 
-def lifecycle_learning_task_id(*, template_id: str, variant_id: str | None) -> str:
-    """Build and validate one exact lifecycle task identity."""
+def world_learning_task_id(*, world_id: str, profile_id: str) -> str:
+    """Build and validate one exact world Learning Studies task identity."""
 
-    _safe_component(template_id)
-    if variant_id is not None:
-        _safe_component(variant_id)
-    return resolve_lifecycle_learning_target(_canonical_task_id(template_id=template_id, variant_id=variant_id)).task_id
+    _safe_component(world_id)
+    _safe_component(profile_id)
+    return resolve_world_learning_target(_canonical_task_id(world_id=world_id, profile_id=profile_id)).task_id
 
 
-def resolve_lifecycle_learning_target(task_id: str) -> LifecycleLearningTarget:
-    """Resolve one exact namespaced lifecycle task through the existing catalogue."""
+def resolve_world_learning_target(task_id: str) -> WorldLearningTarget:
+    """Resolve one exact namespaced world task through the existing worlds public API."""
 
     if not isinstance(task_id, str) or not task_id or "\\" in task_id:
-        raise ValueError(f"lifecycle-task-id-invalid: {task_id!r}")
+        raise ValueError(f"world-task-id-invalid: {task_id!r}")
     parts = task_id.split("/")
-    if len(parts) not in {2, 3} or parts[0] != _LIFECYCLE_NAMESPACE:
-        raise ValueError(f"lifecycle-task-id-invalid: {task_id!r}")
-    template_id = parts[1]
-    variant_id = parts[2] if len(parts) == 3 else None
+    if len(parts) != 3 or parts[0] != _WORLD_NAMESPACE:
+        raise ValueError(f"world-task-id-invalid: {task_id!r}")
+    world_id, profile_id = parts[1], parts[2]
     try:
-        _safe_component(template_id)
-        if variant_id is not None:
-            _safe_component(variant_id)
+        _safe_component(world_id)
+        _safe_component(profile_id)
     except ValueError as error:
-        raise ValueError(f"lifecycle-task-id-invalid: {task_id!r}") from error
+        raise ValueError(f"world-task-id-invalid: {task_id!r}") from error
 
-    if template_id not in lifecycle_template_ids():
-        raise ValueError(f"lifecycle-template-unknown: {template_id}")
-    variants = lifecycle_variant_ids(template_id)
-    if variants and variant_id is None:
-        raise ValueError(f"lifecycle-variant-required: {template_id}")
-    if not variants and variant_id is not None:
-        raise ValueError(f"lifecycle-task-id-invalid: lifecycle {template_id!r} does not declare variants")
-    if variant_id is not None and variant_id not in variants:
-        known = ", ".join(variants)
-        raise ValueError(f"lifecycle-variant-unknown: {variant_id}. Known: {known}")
+    try:
+        info = worlds.get(world_id)
+    except KeyError as error:
+        raise ValueError(f"world-unknown: {world_id}") from error
+    if profile_id not in {item.id for item in info.profiles}:
+        raise ValueError(f"world-profile-unknown: {world_id}/{profile_id}")
 
-    canonical = _canonical_task_id(template_id=template_id, variant_id=variant_id)
+    canonical = _canonical_task_id(world_id=world_id, profile_id=profile_id)
     if task_id != canonical:
-        raise ValueError(f"lifecycle-task-id-invalid: task id is not canonical: {task_id!r}")
-    return LifecycleLearningTarget(
-        task_id=canonical,
-        template_id=template_id,
-        variant_id=variant_id,
-    )
+        raise ValueError(f"world-task-id-invalid: task id is not canonical: {task_id!r}")
+    return WorldLearningTarget(task_id=canonical, world_id=world_id, profile_id=profile_id)
 
 
-def build_lifecycle_learning_operations(
+def world_terminal_outcome_feedback(record: TrialRecord) -> bytes:
+    """Project a small, generic terminal outcome reusable across future bounded worlds."""
+
+    evaluation = record.evaluation
+    data = {
+        "trial_id": record.trial_id,
+        "task_id": record.task_id,
+        "execution_status": record.execution_status.value,
+        "reward": None if evaluation is None else evaluation.reward,
+        "validity": None
+        if evaluation is None
+        else {
+            "output_parseable": evaluation.validity.output_parseable,
+            "schema_valid": evaluation.validity.schema_valid,
+            "verifier_completed": evaluation.validity.verifier_completed,
+        },
+    }
+    return (json.dumps(data, sort_keys=True, separators=(",", ":")) + "\n").encode("utf-8")
+
+
+def world_canonical_reward(record: TrialRecord) -> float:
+    """Read the generic canonical reward, reusable unchanged by a future bounded world."""
+
+    evaluation = record.evaluation
+    if evaluation is None or not evaluation.validity.verifier_completed:
+        raise ValueError("world-projection-ineligible: evaluation is unavailable or replay was invalid")
+    value = evaluation.reward
+    if isinstance(value, bool) or not isinstance(value, int | float) or not math.isfinite(value):
+        raise ValueError("world-projection-value-out-of-bounds: reward must be finite")
+    selected = float(value)
+    if not 0.0 <= selected <= 1.0:
+        raise ValueError("world-projection-value-out-of-bounds: reward must be within [0, 1]")
+    return selected
+
+
+def build_world_learning_operations(
     *,
     run_root: Path,
-    execution_condition: LifecycleExecutionCondition,
-    treatment_kinds: Mapping[str, LifecycleLearningTreatmentKind],
-    feedback_projectors: Mapping[str, LifecycleFeedbackProjector] | None = None,
-    consolidation_operations: Mapping[str, LifecycleConsolidationOperation] | None = None,
+    world_id: str,
+    execution_condition: WorldLearningExecutionCondition,
+    run_trial: WorldLearningTrialRunner,
+    instructions: Mapping[str, str],
+    treatment_kinds: Mapping[str, WorldLearningTreatmentKind],
+    feedback_projectors: Mapping[str, WorldFeedbackProjector] | None = None,
+    consolidation_operations: Mapping[str, WorldConsolidationOperation] | None = None,
     initial_memory_root: Path | None = None,
-    adapter_builder: Callable[..., Any] | None = None,
     resume_existing_run: bool = False,
-) -> LifecycleLearningBinding:
-    """Build the local lifecycle Learning Studies callback bundle."""
+) -> WorldLearningBinding:
+    """Build the local Interactive World Learning Studies callback bundle."""
 
-    if (
-        execution_condition.execution_mode is not LifecycleExecutionMode.FRESH_CONTEXT
-        or execution_condition.visibility_policy is not LifecycleVisibilityPolicy.ARTIFACT_MEMORY
-    ):
-        raise LearningStudyFeatureUnsupported(
-            "lifecycle-condition-invalid: B1 supports only fresh_context with artifact_memory"
-        )
+    _safe_component(world_id)
     selected_root = Path(run_root).resolve()
     if (
         not resume_existing_run
         and selected_root.exists()
         and (not selected_root.is_dir() or any(selected_root.iterdir()))
     ):
-        raise ValueError(f"arm-isolation-failed: lifecycle learning run root must be empty: {selected_root}")
+        raise ValueError(f"arm-isolation-failed: world learning run root must be empty: {selected_root}")
     if resume_existing_run and not selected_root.is_dir():
-        raise ValueError(f"state-restore-invalid: lifecycle learning run root is unavailable: {selected_root}")
-    coordinator = _LifecycleLearningCoordinator(
+        raise ValueError(f"state-restore-invalid: world learning run root is unavailable: {selected_root}")
+    coordinator = _WorldLearningCoordinator(
         run_root=selected_root,
+        world_id=world_id,
         execution_condition=execution_condition,
+        run_trial=run_trial,
+        instructions=dict(instructions),
         treatment_kinds=treatment_kinds,
         feedback_projectors=feedback_projectors or {},
         consolidation_operations=consolidation_operations or {},
         initial_memory_root=initial_memory_root,
-        adapter_builder=adapter_builder,
     )
-    return LifecycleLearningBinding(
+    return WorldLearningBinding(
         operations=LearningStudyOperations(
             initialise_learner=coordinator.initialise_learner,
             execute_experience=coordinator.execute_experience,
@@ -216,36 +259,37 @@ def build_lifecycle_learning_operations(
     )
 
 
-class _LifecycleLearningCoordinator:
+class _WorldLearningCoordinator:
     def __init__(
         self,
         *,
         run_root: Path,
-        execution_condition: LifecycleExecutionCondition,
-        treatment_kinds: Mapping[str, LifecycleLearningTreatmentKind],
-        feedback_projectors: Mapping[str, LifecycleFeedbackProjector],
-        consolidation_operations: Mapping[str, LifecycleConsolidationOperation],
+        world_id: str,
+        execution_condition: WorldLearningExecutionCondition,
+        run_trial: WorldLearningTrialRunner,
+        instructions: Mapping[str, str],
+        treatment_kinds: Mapping[str, WorldLearningTreatmentKind],
+        feedback_projectors: Mapping[str, WorldFeedbackProjector],
+        consolidation_operations: Mapping[str, WorldConsolidationOperation],
         initial_memory_root: Path | None,
-        adapter_builder: Callable[..., Any] | None,
     ) -> None:
         self._run_root = run_root
+        self._world_id = world_id
         self._execution_condition = execution_condition
+        self._run_trial = run_trial
+        self._instructions = dict(instructions)
         self._treatment_kinds = dict(treatment_kinds)
         self._feedback_projectors = dict(feedback_projectors)
         self._consolidation_operations = dict(consolidation_operations)
         self._initial_memory_root = None if initial_memory_root is None else Path(initial_memory_root).resolve()
-        self._adapter_builder = adapter_builder
         self._artifact_repository = ArtifactRepository(self._run_root / "_artifacts")
         for treatment_id, treatment_kind in self._treatment_kinds.items():
             if not treatment_id.strip():
-                raise ValueError("lifecycle-treatment-unsupported: treatment ids must not be blank")
-            if not isinstance(treatment_kind, LifecycleLearningTreatmentKind):
-                raise ValueError(f"lifecycle-treatment-unsupported: {treatment_id}")
+                raise ValueError("world-treatment-unsupported: treatment ids must not be blank")
+            if not isinstance(treatment_kind, WorldLearningTreatmentKind):
+                raise ValueError(f"world-treatment-unsupported: {treatment_id}")
 
-    def initialise_learner(
-        self,
-        arm_run: PlannedArmRun,
-    ) -> LearnerStateHandle[LifecycleLearnerState]:
+    def initialise_learner(self, arm_run: PlannedArmRun) -> LearnerStateHandle[WorldLearnerState]:
         treatment_kind = self._treatment_kind(arm_run.treatment_id)
         arm_root = self._arm_root(arm_run.arm_run_id)
         if arm_root.exists():
@@ -256,105 +300,57 @@ class _LifecycleLearningCoordinator:
             state_root,
             memory_seed_root=(
                 self._initial_memory_root
-                if treatment_kind is LifecycleLearningTreatmentKind.STRUCTURED_MEMORY
+                if treatment_kind is WorldLearningTreatmentKind.STRUCTURED_MEMORY
                 else None
             ),
         )
         return self._handle(arm_run.arm_run_id, arm_run.treatment_id, "initial", state_root)
 
-    def execute_experience(
+    async def execute_experience(
         self,
-        request: ExecuteExperienceRequest[LifecycleLearnerState],
-    ) -> ExperienceExecutionResult[LifecycleLearnerState]:
-        if request.step.trial.compute.backend != "local":
-            raise LearningStudyFeatureUnsupported(
-                f"lifecycle-backend-unsupported: {request.step.trial.compute.backend}"
-            )
+        request: ExecuteExperienceRequest[WorldLearnerState],
+    ) -> ExperienceExecutionResult[WorldLearnerState]:
         state = self._state_for_arm(request.state, request.arm_run)
         treatment_kind = self._treatment_kind(state.treatment_id)
-        target = resolve_lifecycle_learning_target(request.step.trial.task_id)
-        arm_root = self._arm_root(request.arm_run.arm_run_id)
-        step_component = _safe_component(request.step.step_id)
-        experience_root = arm_root / "lifecycle-experiences" / step_component
-        package_dir = experience_root / "package"
-        run_dir = experience_root / "run"
-        context_root = experience_root / "context"
-        candidate_root = arm_root / "states" / step_component
-        if package_dir.exists():
-            raise ValueError(f"lifecycle-package-path-exists: {package_dir}")
-        if run_dir.exists():
-            raise ValueError(f"lifecycle-run-path-exists: {run_dir}")
-        if experience_root.exists() or candidate_root.exists():
-            raise ValueError(f"arm-isolation-failed: step storage already exists: {request.step.step_id}")
-        experience_root.mkdir(parents=True, exist_ok=False)
+        target = resolve_world_learning_target(request.step.trial.task_id)
+        if target.world_id != self._world_id:
+            raise ValueError(f"world-target-mismatch: {target.world_id} != {self._world_id}")
+        instruction = self._instructions.get(target.task_id)
+        if not instruction:
+            raise ValueError(f"world-instruction-missing: {target.task_id}")
 
-        try:
-            compiled = compile_lifecycle(
-                target.template_id,
-                package_dir,
-                variant_id=target.variant_id,
-            )
-        except Exception as error:
-            raise ValueError(f"lifecycle-compile-failed: {error}") from error
-        if (
-            compiled.package_dir.resolve() != package_dir.resolve()
-            or compiled.envelope.template_id != target.template_id
-            or compiled.envelope.variant_id != target.variant_id
-        ):
-            raise ValueError("lifecycle-target-mismatch: compiled lifecycle differs from the planned target")
+        candidate_root = self._candidate_root(request.arm_run.arm_run_id, request.step.step_id)
         try:
             copy_learner_state(state.root, candidate_root)
             context_snapshot: LearnerTreeSnapshot | None = None
-            selected_context: Path | None = None
-            if treatment_kind is LifecycleLearningTreatmentKind.STRUCTURED_MEMORY:
-                context_snapshot = create_read_only_context_projection(state.root, context_root)
-                selected_context = context_root
+            if treatment_kind is WorldLearningTreatmentKind.STRUCTURED_MEMORY:
+                context_snapshot = memory_snapshot(state.root)
 
-            lifecycle_trial = LifecycleTrial(
-                planned=request.step.trial,
-                package_dir=compiled.package_dir,
-                run_dir=run_dir,
-                execution_mode=self._execution_condition.execution_mode,
-                visibility_policy=self._execution_condition.visibility_policy,
+            task = worlds.task(
+                target.world_id,
+                profile=target.profile_id,
+                instruction=instruction,
+                task_id=target.task_id,
             )
-
-            def execute(trial: LifecycleTrial) -> LifecycleExecution:
-                try:
-                    return run_local_lifecycle(
-                        trial,
-                        adapter_builder=self._adapter_builder,
-                        read_only_context_root=selected_context,
-                    )
-                except Exception as error:
-                    raise RuntimeError(f"lifecycle-execution-failed: {error}") from error
-
             try:
-                record = run_lifecycle_trial(
-                    trial=lifecycle_trial,
-                    execute=execute,
-                    verify=verify_lifecycle,
-                )
-            except RuntimeError as error:
-                if str(error).startswith("lifecycle-execution-failed:"):
-                    raise
-                raise ValueError(f"lifecycle-recording-failed: {error}") from error
-            except Exception as error:
-                raise ValueError(f"lifecycle-recording-failed: {error}") from error
+                if context_snapshot is None:
+                    record = await self._run_trial(task, request.step.trial, actor=self._execution_condition.actor)
+                else:
+                    read_only_context_text = _render_memory_context(context_snapshot)
+                    record = await self._run_trial(
+                        task,
+                        request.step.trial,
+                        actor=self._execution_condition.actor,
+                        read_only_context_text=read_only_context_text,
+                    )
             finally:
-                if context_snapshot is not None:
-                    validate_read_only_context_projection(context_root, context_snapshot)
+                if context_snapshot is not None and memory_snapshot(state.root) != context_snapshot:
+                    raise ValueError("context-readonly-violation: learner memory changed during world execution")
 
-            expected_identity = (
-                request.step.trial.trial_id,
-                request.step.trial.task_id,
-                request.step.trial.repetition,
-            )
-            actual_identity = (record.trial_id, record.task_id, record.attempt)
-            if actual_identity != expected_identity:
+            if record.trial_id != request.step.trial.trial_id or record.task_id != target.task_id:
                 raise ValueError(
-                    f"lifecycle-trial-record-mismatch: returned {actual_identity!r}, expected {expected_identity!r}"
+                    "world-trial-record-mismatch: returned trial identity does not match the planned target"
                 )
-
             candidate = self._handle(
                 request.arm_run.arm_run_id,
                 state.treatment_id,
@@ -368,11 +364,11 @@ class _LifecycleLearningCoordinator:
 
     def release_feedback(
         self,
-        request: ReleaseFeedbackRequest[LifecycleLearnerState],
-    ) -> FeedbackReleaseResult[LifecycleLearnerState, LifecycleFeedback]:
+        request: ReleaseFeedbackRequest[WorldLearnerState],
+    ) -> FeedbackReleaseResult[WorldLearnerState, WorldFeedback]:
         state = self._state_for_arm(request.state, request.arm_run)
         treatment_kind = self._treatment_kind(state.treatment_id)
-        if treatment_kind is LifecycleLearningTreatmentKind.RESET:
+        if treatment_kind is WorldLearningTreatmentKind.RESET:
             raise ValueError("feedback-view-unsupported: reset treatment cannot retain feedback")
         projector = self._feedback_projectors.get(request.step.feedback_view_id)
         if projector is None:
@@ -413,7 +409,7 @@ class _LifecycleLearningCoordinator:
                     feedback_id=f"{request.arm_run.arm_run_id}:feedback:{request.step.step_id}",
                     source_experience_id=request.step.source_experience_id,
                     view_id=request.step.feedback_view_id,
-                    value=LifecycleFeedback(path=feedback_path, artifact=artifact),
+                    value=WorldFeedback(path=feedback_path, artifact=artifact),
                 ),
             )
         except Exception:
@@ -422,11 +418,11 @@ class _LifecycleLearningCoordinator:
 
     def consolidate(
         self,
-        request: ConsolidationRequest[LifecycleLearnerState, LifecycleFeedback],
-    ) -> LearnerTransitionResult[LifecycleLearnerState]:
+        request: ConsolidationRequest[WorldLearnerState, WorldFeedback],
+    ) -> LearnerTransitionResult[WorldLearnerState]:
         state = self._state_for_arm(request.state, request.arm_run)
         treatment_kind = self._treatment_kind(state.treatment_id)
-        if treatment_kind is not LifecycleLearningTreatmentKind.STRUCTURED_MEMORY:
+        if treatment_kind is not WorldLearningTreatmentKind.STRUCTURED_MEMORY:
             raise ValueError(f"consolidation-operation-unsupported: treatment {treatment_kind.value}")
         if not request.feedback:
             raise ValueError("consolidation-input-invalid: at least one feedback handle is required")
@@ -441,14 +437,14 @@ class _LifecycleLearningCoordinator:
         try:
             copy_learner_state(state.root, candidate_root)
             candidate_feedback = tuple(
-                LifecycleFeedback(
+                WorldFeedback(
                     path=candidate_root / "feedback" / item.path.name,
                     artifact=item.artifact,
                 )
                 for item in current_feedback
             )
             operation(
-                LifecycleConsolidationContext(
+                WorldConsolidationContext(
                     state_root=candidate_root,
                     memory_root=candidate_root / "memory",
                     feedback=candidate_feedback,
@@ -478,7 +474,7 @@ class _LifecycleLearningCoordinator:
                 raise
             raise ValueError(f"consolidation-output-invalid: {error}") from error
 
-    def discard_state(self, state: LearnerStateHandle[LifecycleLearnerState]) -> None:
+    def discard_state(self, state: LearnerStateHandle[WorldLearnerState]) -> None:
         value = state.value
         self._treatment_kind(value.treatment_id)
         validate_learner_state(value.root)
@@ -492,13 +488,13 @@ class _LifecycleLearningCoordinator:
         self,
         reference: LearnerStateRef,
         state_root: Path,
-    ) -> LearnerStateHandle[LifecycleLearnerState]:
+    ) -> LearnerStateHandle[WorldLearnerState]:
         self._treatment_kind(reference.treatment_id)
         validate_learner_state(state_root)
         self._validate_state_location(reference.arm_run_id, state_root)
         return LearnerStateHandle(
             state_id=reference.state_id,
-            value=LifecycleLearnerState(
+            value=WorldLearnerState(
                 arm_run_id=reference.arm_run_id,
                 treatment_id=reference.treatment_id,
                 root=Path(state_root),
@@ -508,12 +504,12 @@ class _LifecycleLearningCoordinator:
     def restore_feedback(
         self,
         record: FeedbackReleaseRecord,
-        state: LearnerStateHandle[LifecycleLearnerState],
-    ) -> FeedbackHandle[LifecycleFeedback]:
+        state: LearnerStateHandle[WorldLearnerState],
+    ) -> FeedbackHandle[WorldFeedback]:
         if state.value.arm_run_id != record.arm_run_id:
             raise ValueError("cross-arm-path-detected: feedback and restored state use different arms")
         treatment_kind = self._treatment_kind(state.value.treatment_id)
-        if treatment_kind is LifecycleLearningTreatmentKind.RESET:
+        if treatment_kind is WorldLearningTreatmentKind.RESET:
             raise ValueError("feedback-view-unsupported: reset treatment has no feedback to restore")
         validate_learner_state(state.value.root)
         release_component = _safe_component(record.release_step_id)
@@ -528,18 +524,18 @@ class _LifecycleLearningCoordinator:
             feedback_id=record.feedback_id,
             source_experience_id=record.source_experience_id,
             view_id=record.view_id,
-            value=LifecycleFeedback(path=candidates[0], artifact=reference),
+            value=WorldFeedback(path=candidates[0], artifact=reference),
         )
 
     @staticmethod
-    def feedback_artifacts(feedback: FeedbackHandle[LifecycleFeedback]) -> tuple[ArtifactRef, ...]:
+    def feedback_artifacts(feedback: FeedbackHandle[WorldFeedback]) -> tuple[ArtifactRef, ...]:
         return (feedback.value.artifact,)
 
     def _state_for_arm(
         self,
-        handle: LearnerStateHandle[LifecycleLearnerState],
+        handle: LearnerStateHandle[WorldLearnerState],
         arm_run: PlannedArmRun,
-    ) -> LifecycleLearnerState:
+    ) -> WorldLearnerState:
         state = handle.value
         if state.arm_run_id != arm_run.arm_run_id:
             raise ValueError(
@@ -554,10 +550,10 @@ class _LifecycleLearningCoordinator:
 
     def _consolidation_feedback(
         self,
-        state: LifecycleLearnerState,
-        feedback: tuple[FeedbackHandle[LifecycleFeedback], ...],
-    ) -> tuple[LifecycleFeedback, ...]:
-        selected: list[LifecycleFeedback] = []
+        state: WorldLearnerState,
+        feedback: tuple[FeedbackHandle[WorldFeedback], ...],
+    ) -> tuple[WorldFeedback, ...]:
+        selected: list[WorldFeedback] = []
         seen: set[str] = set()
         for handle in feedback:
             expected_prefix = f"{state.arm_run_id}:feedback:"
@@ -573,7 +569,7 @@ class _LifecycleLearningCoordinator:
             published = self._artifact_repository.read_bytes(handle.value.artifact)
             if current_path.read_bytes() != published:
                 raise ValueError(f"feedback-state-mismatch: current state differs from {handle.feedback_id}")
-            selected.append(LifecycleFeedback(path=current_path, artifact=handle.value.artifact))
+            selected.append(WorldFeedback(path=current_path, artifact=handle.value.artifact))
         return tuple(selected)
 
     def _validate_state_location(self, arm_run_id: str, state_root: Path) -> None:
@@ -584,15 +580,15 @@ class _LifecycleLearningCoordinator:
             if len(relative.parts) != 3 or relative.parts[0] != arm_run_id or relative.parts[1] != "states":
                 if relative.parts and relative.parts[0] != arm_run_id:
                     raise ValueError("cross-arm-path-detected: state path belongs to another arm")
-                raise ValueError("learner-state-invalid: lifecycle evidence cannot be learner state")
+                raise ValueError("learner-state-invalid: world evidence cannot be learner state")
             return
         if resolved.parent.name != arm_run_id:
             raise ValueError("state-restore-invalid: restored state path does not match its arm")
 
-    def _treatment_kind(self, treatment_id: str) -> LifecycleLearningTreatmentKind:
+    def _treatment_kind(self, treatment_id: str) -> WorldLearningTreatmentKind:
         treatment_kind = self._treatment_kinds.get(treatment_id)
         if treatment_kind is None:
-            raise ValueError(f"lifecycle-treatment-unsupported: {treatment_id}")
+            raise ValueError(f"world-treatment-unsupported: {treatment_id}")
         return treatment_kind
 
     def _arm_root(self, arm_run_id: str) -> Path:
@@ -610,38 +606,42 @@ class _LifecycleLearningCoordinator:
         treatment_id: str,
         step_id: str,
         root: Path,
-    ) -> LearnerStateHandle[LifecycleLearnerState]:
+    ) -> LearnerStateHandle[WorldLearnerState]:
         return LearnerStateHandle(
             state_id=f"{arm_run_id}:state:{step_id}",
-            value=LifecycleLearnerState(
-                arm_run_id=arm_run_id,
-                treatment_id=treatment_id,
-                root=root,
-            ),
+            value=WorldLearnerState(arm_run_id=arm_run_id, treatment_id=treatment_id, root=root),
         )
 
 
-def _canonical_task_id(*, template_id: str, variant_id: str | None) -> str:
-    suffix = template_id if variant_id is None else f"{template_id}/{variant_id}"
-    return f"{_LIFECYCLE_NAMESPACE}/{suffix}"
+def _render_memory_context(snapshot: LearnerTreeSnapshot) -> str:
+    """Render committed memory files into one deterministic, delimited text block."""
+
+    sections = tuple(
+        f"--- {relative} ---\n{content.decode('utf-8')}" for relative, kind, content in snapshot if kind == "file"
+    )
+    return "\n\n".join(sections)
+
+
+def _canonical_task_id(*, world_id: str, profile_id: str) -> str:
+    return f"{_WORLD_NAMESPACE}/{world_id}/{profile_id}"
 
 
 def _validate_feedback_projection(data: bytes, *, source_record: TrialRecord) -> None:
     if not isinstance(data, bytes) or not data:
-        raise ValueError("feedback-projection-invalid-json: lifecycle feedback must be non-empty bytes")
+        raise ValueError("feedback-projection-invalid-json: world feedback must be non-empty bytes")
     if len(data) > _MAX_FEEDBACK_BYTES:
-        raise ValueError("feedback-projection-too-large: lifecycle feedback exceeds the file limit")
+        raise ValueError("feedback-projection-too-large: world feedback exceeds the file limit")
     try:
         decoded = json.loads(data.decode("utf-8"))
     except (UnicodeDecodeError, json.JSONDecodeError) as error:
-        raise ValueError("feedback-projection-invalid-json: lifecycle feedback must be UTF-8 JSON") from error
+        raise ValueError("feedback-projection-invalid-json: world feedback must be UTF-8 JSON") from error
     if not isinstance(decoded, dict):
-        raise ValueError("feedback-projection-invalid-json: lifecycle feedback must be a JSON object")
+        raise ValueError("feedback-projection-invalid-json: world feedback must be a JSON object")
     forbidden_roots: tuple[str, ...] = ()
     output = source_record.output
     if output is not None and output.agent_output is not None:
         run_root = Path(output.agent_output.output_path)
-        forbidden_roots = (str(run_root), str(run_root.parent / "package"))
+        forbidden_roots = (str(run_root), str(run_root.parent))
     _validate_feedback_value(decoded, forbidden_roots=forbidden_roots)
 
 
@@ -663,31 +663,34 @@ def _validate_feedback_value(value: object, *, forbidden_roots: tuple[str, ...])
     if value.startswith("/") or (len(value) >= 3 and value[0].isalpha() and value[1:3] in {":/", ":\\"}):
         raise ValueError("feedback-projection-unsafe: absolute path string detected")
     if any(part in lowered for part in _FORBIDDEN_FEEDBACK_PATH_PARTS):
-        raise ValueError("feedback-hidden-path-detected: hidden lifecycle path detected")
+        raise ValueError("feedback-hidden-path-detected: hidden world path detected")
     if any(root and root in value for root in forbidden_roots):
-        raise ValueError("feedback-projection-unsafe: lifecycle package or run root detected")
+        raise ValueError("feedback-projection-unsafe: world execution root detected")
 
 
 def _safe_component(value: str) -> str:
     if not isinstance(value, str) or not value.strip() or "\\" in value:
-        raise ValueError(f"lifecycle-task-id-invalid: unsafe identity component: {value!r}")
+        raise ValueError(f"world-task-id-invalid: unsafe identity component: {value!r}")
     candidate = PurePosixPath(value)
     if candidate.is_absolute() or len(candidate.parts) != 1 or value in {".", ".."} or candidate.name != value:
-        raise ValueError(f"lifecycle-task-id-invalid: unsafe identity component: {value!r}")
+        raise ValueError(f"world-task-id-invalid: unsafe identity component: {value!r}")
     return value
 
 
 __all__ = (
-    "LifecycleConsolidationContext",
-    "LifecycleConsolidationOperation",
-    "LifecycleExecutionCondition",
-    "LifecycleFeedback",
-    "LifecycleFeedbackProjector",
-    "LifecycleLearnerState",
-    "LifecycleLearningBinding",
-    "LifecycleLearningTarget",
-    "LifecycleLearningTreatmentKind",
-    "build_lifecycle_learning_operations",
-    "lifecycle_learning_task_id",
-    "resolve_lifecycle_learning_target",
+    "WorldConsolidationContext",
+    "WorldConsolidationOperation",
+    "WorldFeedback",
+    "WorldFeedbackProjector",
+    "WorldLearnerState",
+    "WorldLearningBinding",
+    "WorldLearningExecutionCondition",
+    "WorldLearningTarget",
+    "WorldLearningTreatmentKind",
+    "WorldLearningTrialRunner",
+    "build_world_learning_operations",
+    "resolve_world_learning_target",
+    "world_canonical_reward",
+    "world_learning_task_id",
+    "world_terminal_outcome_feedback",
 )

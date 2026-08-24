@@ -1,5 +1,5 @@
-# ABOUTME: Validates and copies lifecycle Learning Studies learner-state snapshots.
-# ABOUTME: Keeps portable memory and feedback separate from lifecycle packages, runs, and verifier evidence.
+# ABOUTME: Validates and copies Learning Studies learner-state snapshots, generic across adapters.
+# ABOUTME: Keeps portable memory and feedback separate from any adapter's own packages, runs, and evidence.
 
 from __future__ import annotations
 
@@ -14,10 +14,10 @@ _FEEDBACK_SUFFIXES = frozenset({".json"})
 _MAX_FILE_BYTES = 1_000_000
 _MAX_STATE_BYTES = 4_000_000
 
-type LifecycleLearnerTreeSnapshot = tuple[tuple[str, str, bytes], ...]
+type LearnerTreeSnapshot = tuple[tuple[str, str, bytes], ...]
 
 
-def initialise_lifecycle_learner_state(
+def initialise_learner_state(
     root: Path,
     *,
     memory_seed_root: Path | None = None,
@@ -44,14 +44,14 @@ def initialise_lifecycle_learner_state(
                     shutil.copytree(source, destination)
                 else:
                     shutil.copy2(source, destination)
-        validate_lifecycle_learner_state(selected)
+        validate_learner_state(selected)
     except Exception:
         shutil.rmtree(selected, ignore_errors=True)
         raise
 
 
-def validate_lifecycle_learner_state(root: Path) -> None:
-    """Validate one complete lifecycle learner-state tree without changing it."""
+def validate_learner_state(root: Path) -> None:
+    """Validate one complete learner-state tree without changing it."""
 
     selected = Path(root)
     _require_directory(selected, category="learner-state-invalid")
@@ -75,43 +75,60 @@ def validate_lifecycle_learner_state(root: Path) -> None:
     _reject_case_collisions(selected)
 
 
-def copy_lifecycle_learner_state(source: Path, destination: Path) -> None:
+def copy_learner_state(source: Path, destination: Path) -> None:
     """Copy one validated committed snapshot to a distinct candidate root."""
 
-    validate_lifecycle_learner_state(source)
+    validate_learner_state(source)
     target = Path(destination)
     if target.exists() or target.is_symlink():
         raise ValueError(f"arm-isolation-failed: state destination already exists: {target}")
     target.parent.mkdir(parents=True, exist_ok=True)
     try:
         shutil.copytree(source, target)
-        validate_lifecycle_learner_state(target)
+        validate_learner_state(target)
     except Exception:
         shutil.rmtree(target, ignore_errors=True)
         raise
 
 
-def lifecycle_learner_tree_snapshot(root: Path) -> LifecycleLearnerTreeSnapshot:
+def learner_tree_snapshot(root: Path) -> LearnerTreeSnapshot:
     """Return an exact directory-and-file snapshot for state-change checks."""
 
-    validate_lifecycle_learner_state(root)
+    validate_learner_state(root)
     return _tree_snapshot(Path(root))
 
 
-def lifecycle_memory_snapshot(root: Path) -> LifecycleLearnerTreeSnapshot:
+def memory_snapshot(root: Path) -> LearnerTreeSnapshot:
     """Return the exact memory subtree for consolidation-change checks."""
 
-    validate_lifecycle_learner_state(root)
+    validate_learner_state(root)
     return _tree_snapshot(Path(root) / "memory")
+
+
+def require_only_channel_changed(
+    before: LearnerTreeSnapshot,
+    after: LearnerTreeSnapshot,
+    *,
+    allowed: str,
+    category: str,
+) -> None:
+    """Require that only one top-level learner-state channel changed between two snapshots."""
+
+    before_map = {(path, kind): content for path, kind, content in before}
+    after_map = {(path, kind): content for path, kind, content in after}
+    changed = {key[0] for key in before_map.keys() | after_map.keys() if before_map.get(key) != after_map.get(key)}
+    changed_roots = {PurePosixPath(path).parts[0] for path in changed}
+    if changed_roots != {allowed}:
+        raise ValueError(f"{category}: expected only {allowed}/ to change, changed {sorted(changed_roots)}")
 
 
 def create_read_only_context_projection(
     state_root: Path,
     destination: Path,
-) -> LifecycleLearnerTreeSnapshot:
+) -> LearnerTreeSnapshot:
     """Copy only committed memory into one restrictive experience-local context."""
 
-    validate_lifecycle_learner_state(state_root)
+    validate_learner_state(state_root)
     target = Path(destination)
     if target.exists() or target.is_symlink():
         raise ValueError(f"context-projection-failed: context path already exists: {target}")
@@ -132,7 +149,7 @@ def create_read_only_context_projection(
 
 def validate_read_only_context_projection(
     root: Path,
-    expected: LifecycleLearnerTreeSnapshot,
+    expected: LearnerTreeSnapshot,
 ) -> None:
     """Require an experience-local context to retain its exact byte tree."""
 
@@ -142,7 +159,7 @@ def validate_read_only_context_projection(
     except Exception as error:
         raise ValueError(f"context-readonly-violation: {error}") from error
     if actual != expected:
-        raise ValueError("context-readonly-violation: learner_context changed during lifecycle execution")
+        raise ValueError("context-readonly-violation: learner_context changed during adapter execution")
 
 
 def _validate_context_tree(root: Path) -> None:
@@ -253,7 +270,7 @@ def _reject_case_collisions(root: Path, *, category: str = "learner-state-invali
         seen.add(key)
 
 
-def _tree_snapshot(root: Path) -> LifecycleLearnerTreeSnapshot:
+def _tree_snapshot(root: Path) -> LearnerTreeSnapshot:
     entries: list[tuple[str, str, bytes]] = []
     for path in sorted(Path(root).rglob("*"), key=lambda item: item.as_posix()):
         relative = path.relative_to(root).as_posix()
@@ -265,12 +282,13 @@ def _tree_snapshot(root: Path) -> LifecycleLearnerTreeSnapshot:
 
 
 __all__ = (
-    "LifecycleLearnerTreeSnapshot",
-    "copy_lifecycle_learner_state",
+    "LearnerTreeSnapshot",
+    "copy_learner_state",
     "create_read_only_context_projection",
-    "initialise_lifecycle_learner_state",
-    "lifecycle_learner_tree_snapshot",
-    "lifecycle_memory_snapshot",
-    "validate_lifecycle_learner_state",
+    "initialise_learner_state",
+    "learner_tree_snapshot",
+    "memory_snapshot",
+    "require_only_channel_changed",
+    "validate_learner_state",
     "validate_read_only_context_projection",
 )

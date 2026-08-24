@@ -276,7 +276,7 @@ def transition(
     )
 
 
-def _requires_engineering_review(scenario: SeepageScenario) -> bool:
+def requires_engineering_review(scenario: SeepageScenario) -> bool:
     if scenario.instrument_condition is InstrumentCondition.UNRELIABLE:
         return True
 
@@ -317,7 +317,7 @@ def evaluate(state: SeepageState) -> SeepageEvaluation:
     """Evaluate the submitted response from canonical task state outside transition."""
     required_response = (
         SeepageResponse.ENGINEERING_REVIEW
-        if _requires_engineering_review(state.scenario)
+        if requires_engineering_review(state.scenario)
         else SeepageResponse.ROUTINE_SURVEILLANCE
     )
     all_readings_reviewed = state.reading_index == len(state.scenario.readings) - 1

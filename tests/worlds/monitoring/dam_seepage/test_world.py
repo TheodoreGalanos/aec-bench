@@ -31,10 +31,13 @@ from aec_bench.worlds.runtime.episode import (
 from aec_bench.worlds.runtime.world_logic import ActionRejected, Transition
 from tests.worlds.world_conformance import assert_world_conformance
 
+_BASE_PROFILE_ID = "synthetic-rising-seepage"
+
 
 def _profile() -> DamSeepageProfile:
     definition = dam_seepage_world_definition()
-    loaded = definition.load_profile(definition.profiles[0])
+    reference = next(profile for profile in definition.profiles if profile.profile_id == _BASE_PROFILE_ID)
+    loaded = definition.load_profile(reference)
     assert isinstance(loaded.value, DamSeepageProfile)
     return loaded.value
 

@@ -18,10 +18,13 @@ from aec_bench.worlds.monitoring.dam_seepage.episode_runtime import DamSeepageEp
 from aec_bench.worlds.monitoring.dam_seepage.world import SeepageAction, evaluate
 from aec_bench.worlds.runtime.episode import EpisodeStatus
 
+_BASE_PROFILE_ID = "synthetic-rising-seepage"
+
 
 def _profile() -> DamSeepageProfile:
     definition = dam_seepage_world_definition()
-    loaded = definition.load_profile(definition.profiles[0])
+    reference = next(profile for profile in definition.profiles if profile.profile_id == _BASE_PROFILE_ID)
+    loaded = definition.load_profile(reference)
     assert isinstance(loaded.value, DamSeepageProfile)
     return loaded.value
 

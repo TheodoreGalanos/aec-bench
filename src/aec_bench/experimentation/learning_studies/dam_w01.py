@@ -1,10 +1,9 @@
-# ABOUTME: Composes and assesses the first lifecycle-backed Learning Study vertical slice.
-# ABOUTME: Keeps L01 treatment, projection, and evidence policy in explicit study-owned glue.
+# ABOUTME: Composes and assesses the W01 dam-seepage applicability-boundary Learning Study.
+# ABOUTME: Keeps W01 treatment, projection, and evidence policy in explicit study-owned glue.
 
 from __future__ import annotations
 
 import asyncio
-import math
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
@@ -23,25 +22,14 @@ from aec_bench.contracts.learning_study_evidence import (
     StudyStepReceipt,
     StudyStepStatus,
 )
-from aec_bench.contracts.trial_record import EvaluationStatus, TrialRecord
+from aec_bench.contracts.trial_record import TrialRecord
 from aec_bench.experimentation.learning_studies.assessment import (
     AssessmentArmEvidence,
     OutcomeProjection,
     ProjectionResult,
     assess_learning_study,
 )
-from aec_bench.experimentation.learning_studies.learner_state import (
-    validate_learner_state,
-)
-from aec_bench.experimentation.learning_studies.lifecycles import (
-    LifecycleConsolidationOperation,
-    LifecycleExecutionCondition,
-    LifecycleFeedback,
-    LifecycleLearningBinding,
-    LifecycleLearningTreatmentKind,
-    build_lifecycle_learning_operations,
-    resolve_lifecycle_learning_target,
-)
+from aec_bench.experimentation.learning_studies.learner_state import validate_learner_state
 from aec_bench.experimentation.learning_studies.planning import (
     CompiledConsolidationStep,
     CompiledExperienceStep,
@@ -61,146 +49,163 @@ from aec_bench.experimentation.learning_studies.runtime import (
     LearningStudyExecution,
     run_learning_study,
 )
-from aec_bench.lifecycles.runtime.episode import LifecycleExecutionMode, LifecycleVisibilityPolicy
-from aec_bench.lifecycles.stormwater_design.drainage_learning import (
-    DRAINAGE_PROBE_TASK_ID,
-    DRAINAGE_STAGED_REVIEW_FEEDBACK_VIEW_ID,
-    drainage_gate_score,
-    drainage_staged_review_feedback,
-    validate_drainage_staged_review_feedback,
+from aec_bench.experimentation.learning_studies.worlds import (
+    WorldConsolidationOperation,
+    WorldFeedback,
+    WorldLearningBinding,
+    WorldLearningExecutionCondition,
+    WorldLearningTreatmentKind,
+    build_world_learning_operations,
+    resolve_world_learning_target,
+    world_canonical_reward,
 )
-
-L01_DRAINAGE_PROTOCOL_ID = "l01-drainage-staged-evidence-transfer"
-L01_DRAINAGE_STUDY_ID = "l01-lifecycle-staged-evidence-transfer"
-L01_CONSOLIDATION_OPERATION_ID = "update-lifecycle-review-memory"
-L01_EXECUTION_CONDITION = LifecycleExecutionCondition(
-    execution_mode=LifecycleExecutionMode.FRESH_CONTEXT,
-    visibility_policy=LifecycleVisibilityPolicy.ARTIFACT_MEMORY,
+from aec_bench.harness.dam_seepage_trial import run_dam_seepage_trial
+from aec_bench.worlds.monitoring.dam_seepage.dam_learning import (
+    DAM_ESCALATION_BOUNDARY_FEEDBACK_VIEW_ID,
+    dam_escalation_boundary_feedback,
+    dam_evidence_complete,
+    dam_inappropriate_escalation,
+    dam_response_correct,
+    validate_dam_escalation_boundary_feedback,
 )
+from aec_bench.worlds.monitoring.dam_seepage.world import DAM_SEEPAGE_TASK_WORLD_ID
 
-_GATE_PROJECTIONS = {
-    "drainage.staged-disclosure": "staged_disclosure",
-    "drainage.finding-continuity": "finding_continuity",
-    "drainage.closure-evidence": "closure_evidence",
-    "drainage.claim-boundary": "claim_boundary",
+DAM_W01_PROTOCOL_ID = "w01-dam-escalation-applicability-boundary"
+DAM_W01_STUDY_ID = "w01-dam-escalation-applicability-boundary"
+DAM_W01_CONSOLIDATION_OPERATION_ID = "update-dam-monitoring-memory"
+DAM_W01_ACQUISITION_TASK_ID = f"world/{DAM_SEEPAGE_TASK_WORLD_ID}/unreliable-instrument-escalation"
+DAM_W01_PROBE_TASK_ID = f"world/{DAM_SEEPAGE_TASK_WORLD_ID}/reliable-routine-surveillance"
+
+_DAM_PROJECTORS: dict[str, Callable[[TrialRecord], float]] = {
+    "dam.response-correct": dam_response_correct,
+    "dam.evidence-complete": dam_evidence_complete,
+    "dam.inappropriate-escalation": dam_inappropriate_escalation,
 }
 _FORBIDDEN_LEARNER_MARKERS = (
     b"/hidden/",
     b"expected_answer",
+    b"expected_response",
     b"gold-submissions",
     b"private_path",
-    b"semantic_no_op_release",
     b"verifier-config",
+    b"required_response",
+    b"instrument_condition",
+    b"visual_alert_conditions",
+    b"required_consecutive_alert_readings",
+    b"reliable-routine-surveillance",
 )
-_FORBIDDEN_LEARNER_FILENAMES = {
-    "experiment-manifest.json",
-    "gold-submissions.json",
-    "metrics.json",
-    "verification.json",
-}
+_FORBIDDEN_LEARNER_FILENAMES: frozenset[str] = frozenset({"dam-world-evidence.json"})
 ModelT = TypeVar("ModelT", bound=BaseModel)
 
 
 @dataclass(frozen=True)
-class L01DrainageRun:
+class W01DamRun:
     spec: LearningStudySpec
     plan: CompiledLearningStudy
-    execution: LearningStudyExecution[LifecycleFeedback]
+    execution: LearningStudyExecution[WorldFeedback]
     arm_evidence: Mapping[str, AssessmentArmEvidence]
     unreviewed_assessment: LearningStudyAssessment
     reviewed_assessment: LearningStudyAssessment
 
 
-def load_l01_drainage_protocol(
+def load_w01_dam_protocol(
     *,
     agent: AgentConfig,
     compute: ComputeConfig,
     repetitions: int = 1,
 ) -> LearningStudySpec:
-    """Load the maintained L01 protocol with one explicit run configuration."""
+    """Load the maintained W01 protocol with one explicit run configuration."""
 
     return load_learning_study_protocol(
-        BUILTIN_LEARNING_STUDY_PROTOCOLS / L01_DRAINAGE_PROTOCOL_ID,
+        BUILTIN_LEARNING_STUDY_PROTOCOLS / DAM_W01_PROTOCOL_ID,
         agent=agent,
         compute=compute,
         repetitions=repetitions,
     )
 
 
-def compile_l01_drainage_study(
+def compile_w01_dam_study(
     *,
     study_run_id: str,
     agent: AgentConfig,
     compute: ComputeConfig,
     repetitions: int = 1,
 ) -> CompiledLearningStudy:
-    """Compile L01 into ordinary planned lifecycle trials."""
+    """Compile W01 into ordinary planned world trials."""
 
-    spec = load_l01_drainage_protocol(agent=agent, compute=compute, repetitions=repetitions)
+    spec = load_w01_dam_protocol(agent=agent, compute=compute, repetitions=repetitions)
     return compile_learning_study(
         study_run_id=study_run_id,
         spec=spec,
-        resolve_task=resolve_lifecycle_learning_target,
+        resolve_task=resolve_world_learning_target,
     )
 
 
-def build_l01_drainage_binding(
+def build_w01_dam_binding(
     *,
     run_root: Path,
-    consolidation_operation: LifecycleConsolidationOperation,
-    adapter_builder: Callable[..., Any] | None = None,
+    execution_condition: WorldLearningExecutionCondition,
+    consolidation_operation: WorldConsolidationOperation,
     resume_existing_run: bool = False,
-) -> LifecycleLearningBinding:
-    """Bind L01's two treatments, one feedback view, and one consolidation operation."""
+) -> WorldLearningBinding:
+    """Bind W01's two treatments, one feedback view, and one consolidation operation."""
 
-    return build_lifecycle_learning_operations(
+    instruction = (
+        "Review the dam-seepage monitoring point, gather enough measurement and visual evidence "
+        "for the current response, and submit either engineering-review escalation or continued "
+        "routine surveillance."
+    )
+    return build_world_learning_operations(
         run_root=run_root,
-        execution_condition=L01_EXECUTION_CONDITION,
-        treatment_kinds={
-            "reset": LifecycleLearningTreatmentKind.RESET,
-            "structured-memory": LifecycleLearningTreatmentKind.STRUCTURED_MEMORY,
+        world_id=DAM_SEEPAGE_TASK_WORLD_ID,
+        execution_condition=execution_condition,
+        run_trial=run_dam_seepage_trial,
+        instructions={
+            DAM_W01_ACQUISITION_TASK_ID: instruction,
+            DAM_W01_PROBE_TASK_ID: instruction,
         },
-        feedback_projectors={DRAINAGE_STAGED_REVIEW_FEEDBACK_VIEW_ID: drainage_staged_review_feedback},
-        consolidation_operations={L01_CONSOLIDATION_OPERATION_ID: consolidation_operation},
-        adapter_builder=adapter_builder,
+        treatment_kinds={
+            "reset": WorldLearningTreatmentKind.RESET,
+            "structured-memory": WorldLearningTreatmentKind.STRUCTURED_MEMORY,
+        },
+        feedback_projectors={DAM_ESCALATION_BOUNDARY_FEEDBACK_VIEW_ID: dam_escalation_boundary_feedback},
+        consolidation_operations={DAM_W01_CONSOLIDATION_OPERATION_ID: consolidation_operation},
         resume_existing_run=resume_existing_run,
     )
 
 
-def l01_drainage_outcome_projections() -> dict[str, OutcomeProjection]:
-    """Return the explicit L01 projection mapping without global registration."""
+def w01_dam_outcome_projections() -> dict[str, OutcomeProjection]:
+    """Return the explicit W01 projection mapping without global registration."""
 
-    projections: dict[str, OutcomeProjection] = {
-        "lifecycle.canonical-reward": _project_probe_reward,
-    }
+    projections: dict[str, OutcomeProjection] = {"world.canonical-reward": _project_probe_reward}
     projections.update(
-        {projection_id: _gate_projection(gate_id) for projection_id, gate_id in _GATE_PROJECTIONS.items()}
+        {projection_id: _dam_projection(reader) for projection_id, reader in _DAM_PROJECTORS.items()}
     )
     return projections
 
 
-async def run_l01_drainage_study(
+async def run_w01_dam_study(
     *,
     run_root: Path,
     study_run_id: str,
     agent: AgentConfig,
     compute: ComputeConfig,
-    consolidation_operation: LifecycleConsolidationOperation,
-    adapter_builder: Callable[..., Any] | None = None,
+    execution_condition: WorldLearningExecutionCondition,
+    consolidation_operation: WorldConsolidationOperation,
     repetitions: int = 1,
-) -> L01DrainageRun:
-    """Run, record, and assess L01 under both relation-review states."""
+) -> W01DamRun:
+    """Run, record, and assess W01 under both relation-review states."""
 
-    plan = compile_l01_drainage_study(
+    plan = compile_w01_dam_study(
         study_run_id=study_run_id,
         agent=agent,
         compute=compute,
         repetitions=repetitions,
     )
-    binding = build_l01_drainage_binding(
+    binding = build_w01_dam_binding(
         run_root=run_root,
+        execution_condition=execution_condition,
         consolidation_operation=consolidation_operation,
-        adapter_builder=adapter_builder,
     )
     recorder = StudyRunRecorder(
         root=run_root,
@@ -209,14 +214,15 @@ async def run_l01_drainage_study(
         feedback_artifacts=binding.feedback_artifacts,
     )
     execution = await run_learning_study(plan=plan, operations=binding.operations, observer=recorder)
-    arm_evidence = build_l01_assessment_arm_evidence(
+    arm_evidence = build_w01_assessment_arm_evidence(
         run_root=run_root,
         plan=plan,
         execution=execution,
+        adapter_id=execution_condition.adapter_id,
     )
-    projections = l01_drainage_outcome_projections()
+    projections = w01_dam_outcome_projections()
     assessment_execution = cast(LearningStudyExecution[object], execution)
-    return L01DrainageRun(
+    return W01DamRun(
         spec=plan.spec,
         plan=plan,
         execution=execution,
@@ -240,23 +246,24 @@ async def run_l01_drainage_study(
     )
 
 
-def run_l01_drainage_study_sync(**kwargs: Any) -> L01DrainageRun:
-    """Run L01 from synchronous research and test entry points."""
+def run_w01_dam_study_sync(**kwargs: Any) -> W01DamRun:
+    """Run W01 from synchronous research and test entry points."""
 
-    return asyncio.run(run_l01_drainage_study(**kwargs))
+    return asyncio.run(run_w01_dam_study(**kwargs))
 
 
-def build_l01_assessment_arm_evidence(
+def build_w01_assessment_arm_evidence(
     *,
     run_root: Path,
     plan: CompiledLearningStudy,
-    execution: LearningStudyExecution[LifecycleFeedback],
+    execution: LearningStudyExecution[WorldFeedback],
+    adapter_id: str,
 ) -> dict[str, AssessmentArmEvidence]:
     """Derive every assessment fact from the completed plan and persisted evidence."""
 
     root = Path(run_root).resolve(strict=True)
-    if plan.spec.study_id != L01_DRAINAGE_STUDY_ID or execution.study_run_id != plan.study_run_id:
-        raise ValueError("assessment-evidence-incomplete: inputs do not identify L01")
+    if plan.spec.study_id != DAM_W01_STUDY_ID or execution.study_run_id != plan.study_run_id:
+        raise ValueError("assessment-evidence-incomplete: inputs do not identify W01")
     execution_by_arm = {item.arm_run_id: item for item in execution.arm_runs}
     evidence: dict[str, AssessmentArmEvidence] = {}
     for arm_run in plan.arm_runs:
@@ -270,8 +277,8 @@ def build_l01_assessment_arm_evidence(
         if initial_ref.arm_run_id != arm_run.arm_run_id or initial_ref.parent_state_id is not None:
             raise ValueError(f"assessment-evidence-incomplete: initial state is invalid: {arm_run.arm_run_id}")
         evidence[arm_run.arm_run_id] = AssessmentArmEvidence(
-            adapter_id=L01_EXECUTION_CONDITION.adapter_id,
-            initial_state_equivalence_id=f"lifecycle-initial-state:{initial_ref.artifact.sha256}",
+            adapter_id=adapter_id,
+            initial_state_equivalence_id=f"world-initial-state:{initial_ref.artifact.sha256}",
             arm_isolated=_arm_isolated(root, arm_run, arm_result),
             lineage_complete=_lineage_complete(root, plan, arm_run, arm_result),
             probe_feedback_hidden=_probe_feedback_hidden(root, plan.spec, arm_run, arm_result),
@@ -282,27 +289,21 @@ def build_l01_assessment_arm_evidence(
 
 
 def _project_probe_reward(record: TrialRecord) -> ProjectionResult:
-    if record.task_id != DRAINAGE_PROBE_TASK_ID:
+    if record.task_id != DAM_W01_PROBE_TASK_ID:
         return _ineligible(f"projection-task-mismatch: {record.task_id}")
-    if record.evaluation_status is not EvaluationStatus.COMPLETED or record.evaluation is None:
-        return _ineligible("projection-evaluation-missing: lifecycle evaluation is unavailable")
-    if not record.evaluation.validity.verifier_completed:
-        return _ineligible("projection-evaluation-missing: lifecycle verifier did not complete")
-    reward = record.evaluation.reward
-    if isinstance(reward, bool) or not isinstance(reward, int | float) or not math.isfinite(reward):
-        return _ineligible("projection-value-invalid: canonical reward is not finite")
-    value = float(reward)
-    if not 0.0 <= value <= 1.0:
-        return _ineligible("projection-value-out-of-bounds: canonical reward is outside [0, 1]")
+    try:
+        value = world_canonical_reward(record)
+    except ValueError as error:
+        return _ineligible(str(error))
     return ProjectionResult(eligible=True, value=value, lower_bound=0.0, upper_bound=1.0)
 
 
-def _gate_projection(gate_id: str) -> OutcomeProjection:
+def _dam_projection(reader: Callable[[TrialRecord], float]) -> OutcomeProjection:
     def project(record: TrialRecord) -> ProjectionResult:
-        if record.task_id != DRAINAGE_PROBE_TASK_ID:
+        if record.task_id != DAM_W01_PROBE_TASK_ID:
             return _ineligible(f"projection-task-mismatch: {record.task_id}")
         try:
-            value = drainage_gate_score(record, gate_id)
+            value = reader(record)
         except ValueError as error:
             return _ineligible(str(error))
         return ProjectionResult(eligible=True, value=value, lower_bound=0.0, upper_bound=1.0)
@@ -314,31 +315,21 @@ def _ineligible(reason: str) -> ProjectionResult:
     return ProjectionResult(eligible=False, value=None, reason=reason)
 
 
-def _arm_isolated(root: Path, arm_run: PlannedArmRun, result: ArmRunExecutionResult[LifecycleFeedback]) -> bool:
+def _arm_isolated(root: Path, arm_run: PlannedArmRun, result: ArmRunExecutionResult[WorldFeedback]) -> bool:
     try:
         arm_root = root / "learner-arms" / arm_run.arm_run_id
-        if (
-            not arm_root.is_dir()
-            or arm_root.is_symlink()
-            or arm_root.resolve(strict=True).parent != (root / "learner-arms")
-        ):
+        learner_arms_root = (root / "learner-arms").resolve(strict=True)
+        if not arm_root.is_dir() or arm_root.is_symlink() or arm_root.resolve(strict=True).parent != learner_arms_root:
             return False
+        arm_root_resolved = arm_root.resolve(strict=True)
         for step_result in result.completed_steps:
             if step_result.trial_record is None:
                 continue
-            expected = arm_root / "lifecycle-experiences" / step_result.step_id
-            package = expected / "package"
-            run = expected / "run"
             output = step_result.trial_record.output
-            if (
-                not package.is_dir()
-                or package.is_symlink()
-                or not run.is_dir()
-                or run.is_symlink()
-                or output is None
-                or output.agent_output is None
-                or Path(output.agent_output.output_path).resolve(strict=True) != run.resolve(strict=True)
-            ):
+            if output is None or output.agent_output is None:
+                return False
+            evidence_path = Path(output.agent_output.output_path).resolve(strict=True)
+            if evidence_path == arm_root_resolved or arm_root_resolved in evidence_path.parents:
                 return False
         return True
     except (OSError, ValueError):
@@ -349,7 +340,7 @@ def _lineage_complete(
     root: Path,
     plan: CompiledLearningStudy,
     arm_run: PlannedArmRun,
-    result: ArmRunExecutionResult[LifecycleFeedback],
+    result: ArmRunExecutionResult[WorldFeedback],
 ) -> bool:
     try:
         if result.status is not ArmRunStatus.COMPLETED or result.initial_state_id is None:
@@ -413,7 +404,7 @@ def _probe_feedback_hidden(
     root: Path,
     spec: LearningStudySpec,
     arm_run: PlannedArmRun,
-    result: ArmRunExecutionResult[LifecycleFeedback],
+    result: ArmRunExecutionResult[WorldFeedback],
 ) -> bool:
     probe_ids = {item.experience_id for item in spec.experiences if item.role is ExperienceRole.PROBE}
     if any(isinstance(step, CompiledFeedbackStep) and step.source_experience_id in probe_ids for step in arm_run.steps):
@@ -421,7 +412,7 @@ def _probe_feedback_hidden(
     probe_trial_ids = {
         step_result.trial_record.trial_id
         for step_result in result.completed_steps
-        if step_result.trial_record is not None and step_result.trial_record.task_id == DRAINAGE_PROBE_TASK_ID
+        if step_result.trial_record is not None and step_result.trial_record.task_id == DAM_W01_PROBE_TASK_ID
     }
     try:
         for feedback_path in (root / "feedback").glob("*.json"):
@@ -429,13 +420,6 @@ def _probe_feedback_hidden(
             if feedback.arm_run_id == arm_run.arm_run_id and (
                 feedback.source_experience_id in probe_ids or feedback.source_trial_id in probe_trial_ids
             ):
-                return False
-        arm_root = root / "learner-arms" / arm_run.arm_run_id
-        for step in arm_run.steps:
-            if not isinstance(step, CompiledExperienceStep) or step.role is not ExperienceRole.PROBE:
-                continue
-            context = arm_root / "lifecycle-experiences" / step.step_id / "context"
-            if context.exists() and any("feedback" in path.relative_to(context).parts for path in context.rglob("*")):
                 return False
         return True
     except (OSError, ValueError):
@@ -479,14 +463,7 @@ def _hidden_evaluation_absent(root: Path, arm_run: PlannedArmRun) -> bool:
                 if any(marker in data.lower() for marker in _FORBIDDEN_LEARNER_MARKERS):
                     return False
                 if path.parent.name == "feedback":
-                    validate_drainage_staged_review_feedback(data)
-        for context in (arm_root / "lifecycle-experiences").glob("*/context"):
-            for path in (item for item in context.rglob("*") if item.is_file()):
-                if path.name in _FORBIDDEN_LEARNER_FILENAMES:
-                    return False
-                data = path.read_bytes().lower()
-                if any(marker in data for marker in _FORBIDDEN_LEARNER_MARKERS):
-                    return False
+                    validate_dam_escalation_boundary_feedback(data)
         return True
     except (OSError, ValueError):
         return False
@@ -497,16 +474,17 @@ def _read_model(path: Path, model_type: type[ModelT]) -> ModelT:
 
 
 __all__ = (
-    "L01_CONSOLIDATION_OPERATION_ID",
-    "L01_DRAINAGE_PROTOCOL_ID",
-    "L01_DRAINAGE_STUDY_ID",
-    "L01_EXECUTION_CONDITION",
-    "L01DrainageRun",
-    "build_l01_assessment_arm_evidence",
-    "build_l01_drainage_binding",
-    "compile_l01_drainage_study",
-    "l01_drainage_outcome_projections",
-    "load_l01_drainage_protocol",
-    "run_l01_drainage_study",
-    "run_l01_drainage_study_sync",
+    "DAM_W01_ACQUISITION_TASK_ID",
+    "DAM_W01_CONSOLIDATION_OPERATION_ID",
+    "DAM_W01_PROBE_TASK_ID",
+    "DAM_W01_PROTOCOL_ID",
+    "DAM_W01_STUDY_ID",
+    "W01DamRun",
+    "build_w01_assessment_arm_evidence",
+    "build_w01_dam_binding",
+    "compile_w01_dam_study",
+    "load_w01_dam_protocol",
+    "run_w01_dam_study",
+    "run_w01_dam_study_sync",
+    "w01_dam_outcome_projections",
 )
