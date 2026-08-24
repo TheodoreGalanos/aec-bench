@@ -443,6 +443,29 @@ def test_acquisition_fidelity_fails_closed_on_missing_or_ambiguous_records() -> 
         task_id=DAM_W01_ACQUISITION_TASK_ID,
         trial_id=acquisition_step.trial.trial_id,
     )
+    malformed = make_trial_record(
+        task_id=DAM_W01_ACQUISITION_TASK_ID,
+        trial_id=acquisition_step.trial.trial_id,
+        evaluation=EvaluationResult(
+            reward=1.0,
+            validity=ValidityCheck(output_parseable=True, schema_valid=True, verifier_completed=True),
+            breakdown={
+                "response_correct": 1,
+                "evidence_complete": True,
+                "selected_response": "engineering-review",
+            },
+        ),
+    )
+    malformed_result = build_w01_acquisition_fidelity(
+        plan=plan,
+        execution=LearningStudyExecution(
+            study_run_id=plan.study_run_id,
+            arm_runs=(arm_result((malformed,)),),
+        ),
+    )
+    assert malformed_result[arm_run.arm_run_id].response_correct is None
+    assert malformed_result[arm_run.arm_run_id].acquisition_successful is False
+
     with pytest.raises(ValueError, match="acquisition-fidelity-ambiguous"):
         build_w01_acquisition_fidelity(
             plan=plan,
