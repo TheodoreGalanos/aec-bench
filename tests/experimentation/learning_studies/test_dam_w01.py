@@ -16,19 +16,25 @@ from aec_bench.contracts.agent_output import AgentOutput, AgentOutputStatus
 from aec_bench.contracts.evaluation_result import EvaluationResult, ValidityCheck
 from aec_bench.contracts.experiment_manifest import AgentConfig, ComputeConfig
 from aec_bench.contracts.learning_study_assessment import LearningComparisonValidity
-from aec_bench.contracts.trial_record import EvaluationStatus, TrialOutput
+from aec_bench.contracts.trial_record import EvaluationStatus, TrialOutput, TrialRecord
 from aec_bench.experimentation.learning_studies.dam_w01 import (
     DAM_W01_ACQUISITION_TASK_ID,
     DAM_W01_CONSOLIDATION_OPERATION_ID,
     DAM_W01_PROBE_TASK_ID,
     DAM_W01_STUDY_ID,
+    build_w01_acquisition_fidelity,
     compile_w01_dam_study,
     load_w01_dam_protocol,
     run_w01_dam_study_sync,
     w01_dam_outcome_projections,
 )
-from aec_bench.experimentation.learning_studies.planning import CompiledFeedbackStep
-from aec_bench.experimentation.learning_studies.runtime import ArmRunStatus, ReleaseFeedbackRequest
+from aec_bench.experimentation.learning_studies.planning import CompiledExperienceStep, CompiledFeedbackStep
+from aec_bench.experimentation.learning_studies.runtime import (
+    ArmRunExecutionResult,
+    ArmRunStatus,
+    LearningStudyExecution,
+    ReleaseFeedbackRequest,
+)
 from aec_bench.experimentation.learning_studies.worlds import (
     WorldConsolidationContext,
     WorldLearningExecutionCondition,
@@ -400,6 +406,59 @@ def test_required_w01_projections_are_bounded_and_missing_evidence_is_ineligible
         )
         if projection_id != "world.canonical-reward":
             assert no_submission.eligible is False and no_submission.value is None
+
+
+def test_acquisition_fidelity_fails_closed_on_missing_or_ambiguous_records() -> None:
+    agent = AgentConfig(name="prime", adapter="prime-agent", model="anthropic/test", parameters={})
+    plan = compile_w01_dam_study(study_run_id="w01-fidelity-inputs", agent=agent, compute=_COMPUTE)
+    arm_run = next(item for item in plan.arm_runs if item.arm_id == "structured-memory")
+    acquisition_step = next(
+        item
+        for item in arm_run.steps
+        if isinstance(item, CompiledExperienceStep) and item.role.value == "acquisition"
+    )
+
+    def arm_result(records: tuple[TrialRecord, ...]) -> ArmRunExecutionResult[object]:
+        return ArmRunExecutionResult(
+            arm_run_id=arm_run.arm_run_id,
+            status=ArmRunStatus.COMPLETED,
+            initial_state_id="initial",
+            completed_steps=(),
+            trial_records=records,
+            final_state_id="final",
+            failure=None,
+        )
+
+    missing = build_w01_acquisition_fidelity(
+        plan=plan,
+        execution=LearningStudyExecution(
+            study_run_id=plan.study_run_id,
+            arm_runs=(arm_result(()),),
+        ),
+    )
+    assert missing[arm_run.arm_run_id].trial_record_present is False
+    assert missing[arm_run.arm_run_id].acquisition_successful is False
+
+    record = make_trial_record(
+        task_id=DAM_W01_ACQUISITION_TASK_ID,
+        trial_id=acquisition_step.trial.trial_id,
+    )
+    with pytest.raises(ValueError, match="acquisition-fidelity-ambiguous"):
+        build_w01_acquisition_fidelity(
+            plan=plan,
+            execution=LearningStudyExecution(
+                study_run_id=plan.study_run_id,
+                arm_runs=(arm_result((record, record)),),
+            ),
+        )
+    with pytest.raises(ValueError, match="acquisition-fidelity-ambiguous"):
+        build_w01_acquisition_fidelity(
+            plan=plan,
+            execution=LearningStudyExecution(
+                study_run_id=plan.study_run_id,
+                arm_runs=(arm_result((record,)), arm_result((record,))),
+            ),
+        )
 
 
 @pytest.mark.skipif(

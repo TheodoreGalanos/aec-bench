@@ -285,7 +285,11 @@ def build_w01_acquisition_fidelity(
     if plan.spec.study_id != DAM_W01_STUDY_ID or execution.study_run_id != plan.study_run_id:
         raise ValueError("acquisition-fidelity-incomplete: inputs do not identify W01")
 
-    execution_by_arm = {item.arm_run_id: item for item in execution.arm_runs}
+    execution_by_arm: dict[str, ArmRunExecutionResult[WorldFeedback]] = {}
+    for item in execution.arm_runs:
+        if item.arm_run_id in execution_by_arm:
+            raise ValueError(f"acquisition-fidelity-ambiguous: duplicate arm result: {item.arm_run_id}")
+        execution_by_arm[item.arm_run_id] = item
     fidelity: dict[str, W01AcquisitionFidelity] = {}
     for arm_run in plan.arm_runs:
         acquisition_steps = tuple(
@@ -300,18 +304,18 @@ def build_w01_acquisition_fidelity(
 
         step = acquisition_steps[0]
         arm_result = execution_by_arm.get(arm_run.arm_run_id)
-        record = (
-            None
+        matching_records = (
+            ()
             if arm_result is None
-            else next(
-                (
-                    item
-                    for item in arm_result.trial_records
-                    if item.trial_id == step.trial.trial_id and item.task_id == DAM_W01_ACQUISITION_TASK_ID
-                ),
-                None,
+            else tuple(
+                item
+                for item in arm_result.trial_records
+                if item.trial_id == step.trial.trial_id and item.task_id == DAM_W01_ACQUISITION_TASK_ID
             )
         )
+        if len(matching_records) > 1:
+            raise ValueError(f"acquisition-fidelity-ambiguous: expected one acquisition: {arm_run.arm_run_id}")
+        record = matching_records[0] if matching_records else None
         if record is None:
             fidelity[arm_run.arm_run_id] = W01AcquisitionFidelity(
                 arm_run_id=arm_run.arm_run_id,

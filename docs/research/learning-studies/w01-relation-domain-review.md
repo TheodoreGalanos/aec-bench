@@ -8,6 +8,12 @@
 | Relation | `unreliable-instrument-escalation-to-reliable-routine-surveillance` |
 | Scope | Independent dam-monitoring domain review required by W01 §3 and §22 before `relations_reviewed=true` |
 
+## Historical record: initial review — 2026-08-24 (pre-fix, `e6213582`)
+
+The findings, invariant verdicts, defect analysis, and overall rejection below
+are preserved from the original independent review. They describe the
+pre-fix implementation and are not silently replaced by the re-review.
+
 ## Reviewer identity and standing
 
 This review was performed by an AI reviewer (a GPT-5.6 Luna agent instance,
@@ -391,7 +397,7 @@ conclusion. A secondary floor/selection risk is that malformed or
 replay-invalid episodes are ineligible for the named projections rather than
 counted as generic failure, potentially reducing the analysed sample.
 
-## Overall recommendation
+## Historical overall recommendation (pre-fix)
 
 **REJECTED for `relations_reviewed=true` in the current state.**
 
@@ -435,7 +441,193 @@ After these conditions are met and the programme owner accepts the reviewer
 standing, `relations_reviewed=true` may be considered. This document does not
 authorise it for the current implementation.
 
-## Commands used
+## Post-fix re-review — 2026-08-24
+
+### Reviewer standing
+
+This is a fresh GPT-5.6 Luna AI reviewer instance, independent of both
+implementation agents and not involved in either the original review or the
+fixes. It re-read the W01 protocol, family/study TOMLs, world sources,
+`dam_w01.py`, `dam_seepage_trial.py`, and the relevant tests, then verified the
+claims by executing the public API, live world transitions, projections, and
+the deterministic W01 test.
+
+### Condition 1 — observation leakage: **MET**
+
+Both profiles loaded successfully through `aec_bench.worlds.task()` and
+`aec_bench.worlds.load_profile()`. The opening `observe()` values were equal:
+
+| Opening field | Acquisition and probe |
+| --- | --- |
+| `profile_id` | `SEEP-WEIR-02` |
+| `monitoring_point_id` | `SEEP-WEIR-02` |
+| `instrument_condition` | `None` |
+| released readings | one reading, `19.5` L/min, `flow_status=expected`, downstream `None` |
+| `scheduled_readings_remaining` | `3` |
+| objective | identical shared prose, including both response options |
+| baseline note | identical site-specific synthetic-limit caveat |
+
+The serialised `DamSeepageEpisodeHost.observe()` view was also identical. A
+live `CHECK_MEASUREMENT_SYSTEM` release returned `unreliable` for the
+acquisition and `serviceable` for the probe; the release receipt was
+`released the task-owned measurement-system check`. The generic objective,
+baseline note, below-alert readings, and visual-alert vocabulary do not name a
+profile answer. The post-check release is the first actor-visible condition.
+
+The harness composition path was executed with and without ordinary
+read-only context. The captured actor instructions contained neither
+`unreliable-instrument-escalation` nor `reliable-routine-surveillance` in
+either case. The slugs remain in the internal `trial.task_id` used for harness
+identity/dispatch, but `dam_seepage_trial.py` does not compose that identity
+into actor instructions or observations.
+
+### Condition 2 — matched profiles and declared dimensions: **MET**
+
+The loaded scenario field diff was exactly
+`['instrument_condition', 'profile_id']`; after excluding the retained
+harness-identity field, the only difference was `instrument_condition`.
+`monitoring_point_id` was `SEEP-WEIR-02` for both profiles. All four readings
+were equal, with measured flows `[19.5, 20.0, 20.2, 20.1]` L/min. The
+canonical SHA-256 of the readings payload was
+`fad14f0994caba6cc7e6cb1dd2d1996fee377984dfa2545b188d6177758d9f57` for both
+profiles.
+
+The world's own `requires_engineering_review()` returned `True` for the
+acquisition (`ENGINEERING_REVIEW`) and `False` for the probe
+(`ROUTINE_SURVEILLANCE`). The family overlay now declares
+`monitoring_point_pattern` and `reading_pattern` invariant, and
+`instrument_reliability` plus `response_applicability` changed; the member
+values agree. The differing `profile_id` is explicitly retained for
+harness/task identity and is neutralised from the actor surface, not an
+undeclared scenario parameter.
+
+### Condition 3 — acquisition fidelity: **MET after an additional guard**
+
+`build_w01_acquisition_fidelity()` derives its facts from the acquisition
+`TrialRecord` selected by the compiled acquisition step and exact task/trial
+identity. It requires completed execution/evaluation, replay validity,
+boolean `response_correct`, boolean `evidence_complete`, and the exact
+`engineering-review` selected response. The deterministic W01 E2E assertions
+ran all three arms, persisted five records, and required both acquisition
+arms to have:
+
+```text
+trial_record_present=True
+replay_valid=True
+response_correct=True
+evidence_complete=True
+escalation_selected=True
+acquisition_successful=True
+fidelity_satisfied=True
+```
+
+Missing records fail closed (`trial_record_present=False`,
+`acquisition_successful=False`). During this re-review, an adversarial
+duplicate matching `TrialRecord` exposed a new defect: the pre-review
+implementation used `next()` and accepted the first duplicate. The
+implementation now rejects duplicate matching records and duplicate arm
+results with `acquisition-fidelity-ambiguous`; malformed or non-boolean
+breakdown values are not coerced into success. The new regression test covers
+both missing and ambiguous inputs. This was a review-found defect, fixed on
+this branch before the verdict.
+
+### Condition 4 — regression of prior positives: **MET**
+
+The fixed probe replay reproduced the original diagnostic:
+
+| Sequence | Required response | Selected response | Response correct | Evidence complete | Successful | `world.canonical-reward` | `dam.response-correct` | `dam.evidence-complete` | `dam.inappropriate-escalation` |
+| --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Copycat: check, escalate | `routine-surveillance` | `engineering-review` | 0 | 0 | 0 | 0.0 | 0.0 | 0.0 | **1.0** |
+| Gold: check, 3 readings, inspect latest, routine | `routine-surveillance` | `routine-surveillance` | 1 | 1 | 1 | 1.0 | 1.0 | 1.0 | 0.0 |
+| Lazy: immediate routine | `routine-surveillance` | `routine-surveillance` | 1 | 0 | 0 | 0.0 | 1.0 | 0.0 | 0.0 |
+
+The acquisition feedback payload validated successfully and contained no
+`required_response`, `instrument_condition`, or
+`reliable-routine-surveillance` marker. Its selected response and general
+monitoring principles are declared public treatment content; no unrevealed
+probe condition was added.
+
+### Condition 5 — ceiling/headroom: **pilot-time obligation remains**
+
+The profile-identity leak and data mismatch no longer create the earlier
+implementation ceiling. A headroom risk nevertheless remains: a cold agent
+may still select routine surveillance from the benign surface pattern without
+checking the instrument, and the existing evidence contract measures an
+aggregate `evidence_complete` outcome. A pilot must monitor
+`dam.inappropriate-escalation`, `dam.response-correct`, and
+`dam.evidence-complete`; if relevant arms are at ceiling, W01 §19.2/§20
+prohibits a learning claim. The visual-evidence interpretation caveat also
+remains: routine evidence requires the latest downstream inspection and all
+readings, not a separately recorded inspection of every historical visual
+condition.
+
+### Updated verdicts on the W01 invariant claims
+
+| Claim | Historical verdict | Post-fix verdict |
+| --- | --- | --- |
+| Same monitoring point type, action set, and prose objective | QUALIFIED | **CONFIRMED** (same actor-visible point/action/objective; profile IDs remain internal identity) |
+| Response follows measurement-system evidence and flow/visual pattern, with nothing else | QUALIFIED | **CONFIRMED** at the world/evidence contract |
+| Acquisition flow/visual pattern alone does not require escalation | CONFIRMED | **CONFIRMED** |
+| Probe has the same flow/visual pattern; only instrument condition differs | REJECTED | **CONFIRMED** after identity exclusion and byte-identical reading check |
+| A checked, evidence-governed learner reaches two individually correct conclusions | QUALIFIED | **CONFIRMED**, subject to pilot evidence/headroom checks |
+
+The contract audit therefore changes “only declared dimensions differ” from
+**REJECTED** to **CONFIRMED** for actor-visible scenario semantics, and
+“evidence-governed escalation is the same discipline” from **QUALIFIED** to
+**CONFIRMED**. The retained task/profile identity is not released as semantic
+observation data.
+
+## Overall recommendation
+
+**ACCEPTED for `relations_reviewed=true`, subject to the remaining pilot-time
+conditions.**
+
+The post-fix evidence meets the three implementation conditions that blocked
+the original review: opening observations are neutral and indistinguishable,
+the profiles match on all actor-visible surface data, and acquisition fidelity
+is now derived from authoritative records with fail-closed missing/ambiguity
+handling. The prior positive copycat/gold/lazy diagnostics still hold.
+
+This is approval of the relation review gate, not an unconditional learning
+claim. Before interpreting a W01 result, the programme must:
+
+1. apply the pilot headroom/ceiling rule and withhold claims when outcomes are
+   uniform at ceiling;
+2. gate or stratify transfer analysis on the recorded successful,
+   evidence-complete acquisition with the intended escalation selected; and
+3. resolve the programme owner's standing decision on AI versus credentialed
+   human dam-safety sign-off, and document the intended historical visual
+   evidence contract.
+
+## Post-fix commands and executed evidence
+
+The following checks were run from this worktree. No scratch artifacts remain.
+
+```bash
+uv run python - <<'PY'  # public profile loading, observations, releases, field diff
+...
+PY
+
+uv run python - <<'PY'  # harness instruction composition
+...
+PY
+
+uv run python - <<'PY'  # copycat/gold/lazy replay and feedback projection
+...
+PY
+
+uv run python - <<'PY'  # adversarial missing/duplicate acquisition records
+...
+PY
+
+uv run pytest tests/experimentation/learning_studies/test_dam_w01.py -q
+```
+
+The test module result was `6 passed in 5.96s` after the ambiguity guard
+(including the Darwin deterministic E2E). The documentation-ownership check
+then passed with `11 passed in 0.16s`.
+
+## Historical commands used
 
 The following commands were run from the W01 worktree. The Python probes wrote
 only short evidence files under the repository during projection checks and
