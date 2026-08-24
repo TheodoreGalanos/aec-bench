@@ -22,7 +22,7 @@ from aec_bench.contracts.learning_study_evidence import (
     StudyStepReceipt,
     StudyStepStatus,
 )
-from aec_bench.contracts.trial_record import TrialRecord
+from aec_bench.contracts.trial_record import EvaluationStatus, ExecutionStatus, TrialRecord
 from aec_bench.experimentation.learning_studies.assessment import (
     AssessmentArmEvidence,
     OutcomeProjection,
@@ -68,7 +68,7 @@ from aec_bench.worlds.monitoring.dam_seepage.dam_learning import (
     dam_response_correct,
     validate_dam_escalation_boundary_feedback,
 )
-from aec_bench.worlds.monitoring.dam_seepage.world import DAM_SEEPAGE_TASK_WORLD_ID
+from aec_bench.worlds.monitoring.dam_seepage.world import DAM_SEEPAGE_TASK_WORLD_ID, SeepageResponse
 
 DAM_W01_PROTOCOL_ID = "w01-dam-escalation-applicability-boundary"
 DAM_W01_STUDY_ID = "w01-dam-escalation-applicability-boundary"
@@ -104,8 +104,29 @@ class W01DamRun:
     plan: CompiledLearningStudy
     execution: LearningStudyExecution[WorldFeedback]
     arm_evidence: Mapping[str, AssessmentArmEvidence]
+    acquisition_fidelity: Mapping[str, W01AcquisitionFidelity]
     unreviewed_assessment: LearningStudyAssessment
     reviewed_assessment: LearningStudyAssessment
+
+
+@dataclass(frozen=True, slots=True)
+class W01AcquisitionFidelity:
+    """Truthful acquisition facts derived from the arm's persisted TrialRecord."""
+
+    arm_run_id: str
+    trial_id: str | None
+    trial_record_present: bool
+    replay_valid: bool | None
+    response_correct: bool | None
+    evidence_complete: bool | None
+    escalation_selected: bool | None
+    acquisition_successful: bool
+
+    @property
+    def fidelity_satisfied(self) -> bool:
+        """Return whether the acquisition supports a transfer claim."""
+
+        return self.acquisition_successful
 
 
 def load_w01_dam_protocol(
@@ -220,6 +241,7 @@ async def run_w01_dam_study(
         execution=execution,
         adapter_id=execution_condition.adapter_id,
     )
+    acquisition_fidelity = build_w01_acquisition_fidelity(plan=plan, execution=execution)
     projections = w01_dam_outcome_projections()
     assessment_execution = cast(LearningStudyExecution[object], execution)
     return W01DamRun(
@@ -227,6 +249,7 @@ async def run_w01_dam_study(
         plan=plan,
         execution=execution,
         arm_evidence=arm_evidence,
+        acquisition_fidelity=acquisition_fidelity,
         unreviewed_assessment=assess_learning_study(
             spec=plan.spec,
             plan=plan,
@@ -250,6 +273,95 @@ def run_w01_dam_study_sync(**kwargs: Any) -> W01DamRun:
     """Run W01 from synchronous research and test entry points."""
 
     return asyncio.run(run_w01_dam_study(**kwargs))
+
+
+def build_w01_acquisition_fidelity(
+    *,
+    plan: CompiledLearningStudy,
+    execution: LearningStudyExecution[WorldFeedback],
+) -> dict[str, W01AcquisitionFidelity]:
+    """Derive acquisition fidelity from the real TrialRecords in each acquisition arm."""
+
+    if plan.spec.study_id != DAM_W01_STUDY_ID or execution.study_run_id != plan.study_run_id:
+        raise ValueError("acquisition-fidelity-incomplete: inputs do not identify W01")
+
+    execution_by_arm: dict[str, ArmRunExecutionResult[WorldFeedback]] = {}
+    for item in execution.arm_runs:
+        if item.arm_run_id in execution_by_arm:
+            raise ValueError(f"acquisition-fidelity-ambiguous: duplicate arm result: {item.arm_run_id}")
+        execution_by_arm[item.arm_run_id] = item
+    fidelity: dict[str, W01AcquisitionFidelity] = {}
+    for arm_run in plan.arm_runs:
+        acquisition_steps = tuple(
+            step
+            for step in arm_run.steps
+            if isinstance(step, CompiledExperienceStep) and step.role is ExperienceRole.ACQUISITION
+        )
+        if not acquisition_steps:
+            continue
+        if len(acquisition_steps) != 1:
+            raise ValueError(f"acquisition-fidelity-incomplete: expected one acquisition: {arm_run.arm_run_id}")
+
+        step = acquisition_steps[0]
+        arm_result = execution_by_arm.get(arm_run.arm_run_id)
+        matching_records = (
+            ()
+            if arm_result is None
+            else tuple(
+                item
+                for item in arm_result.trial_records
+                if item.trial_id == step.trial.trial_id and item.task_id == DAM_W01_ACQUISITION_TASK_ID
+            )
+        )
+        if len(matching_records) > 1:
+            raise ValueError(f"acquisition-fidelity-ambiguous: expected one acquisition: {arm_run.arm_run_id}")
+        record = matching_records[0] if matching_records else None
+        if record is None:
+            fidelity[arm_run.arm_run_id] = W01AcquisitionFidelity(
+                arm_run_id=arm_run.arm_run_id,
+                trial_id=None,
+                trial_record_present=False,
+                replay_valid=None,
+                response_correct=None,
+                evidence_complete=None,
+                escalation_selected=None,
+                acquisition_successful=False,
+            )
+            continue
+
+        evaluation = record.evaluation if record.evaluation_status is EvaluationStatus.COMPLETED else None
+        breakdown = None if evaluation is None else evaluation.breakdown
+        breakdown = breakdown if isinstance(breakdown, dict) else None
+        response_correct = _optional_bool(breakdown, "response_correct")
+        evidence_complete = _optional_bool(breakdown, "evidence_complete")
+        selected_response = None if breakdown is None else breakdown.get("selected_response")
+        escalation_selected = (
+            selected_response == SeepageResponse.ENGINEERING_REVIEW.value
+            if isinstance(selected_response, str)
+            else None
+        )
+        replay_valid = None if evaluation is None else evaluation.validity.verifier_completed
+        execution_completed = record.execution_status is ExecutionStatus.COMPLETED
+        evaluation_completed = record.evaluation_status is EvaluationStatus.COMPLETED
+        acquisition_successful = (
+            execution_completed
+            and evaluation_completed
+            and replay_valid is True
+            and response_correct is True
+            and evidence_complete is True
+            and escalation_selected is True
+        )
+        fidelity[arm_run.arm_run_id] = W01AcquisitionFidelity(
+            arm_run_id=arm_run.arm_run_id,
+            trial_id=record.trial_id,
+            trial_record_present=True,
+            replay_valid=replay_valid,
+            response_correct=response_correct,
+            evidence_complete=evidence_complete,
+            escalation_selected=escalation_selected,
+            acquisition_successful=acquisition_successful,
+        )
+    return fidelity
 
 
 def build_w01_assessment_arm_evidence(
@@ -469,6 +581,13 @@ def _hidden_evaluation_absent(root: Path, arm_run: PlannedArmRun) -> bool:
         return False
 
 
+def _optional_bool(breakdown: dict[str, Any] | None, field: str) -> bool | None:
+    if breakdown is None:
+        return None
+    value = breakdown.get(field)
+    return value if isinstance(value, bool) else None
+
+
 def _read_model(path: Path, model_type: type[ModelT]) -> ModelT:
     return model_type.model_validate_json(path.read_text(encoding="utf-8"))
 
@@ -479,7 +598,9 @@ __all__ = (
     "DAM_W01_PROBE_TASK_ID",
     "DAM_W01_PROTOCOL_ID",
     "DAM_W01_STUDY_ID",
+    "W01AcquisitionFidelity",
     "W01DamRun",
+    "build_w01_acquisition_fidelity",
     "build_w01_assessment_arm_evidence",
     "build_w01_dam_binding",
     "compile_w01_dam_study",

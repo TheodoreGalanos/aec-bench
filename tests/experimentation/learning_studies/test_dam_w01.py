@@ -6,7 +6,9 @@ from __future__ import annotations
 import json
 import os
 import sys
+from dataclasses import replace
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -14,19 +16,25 @@ from aec_bench.contracts.agent_output import AgentOutput, AgentOutputStatus
 from aec_bench.contracts.evaluation_result import EvaluationResult, ValidityCheck
 from aec_bench.contracts.experiment_manifest import AgentConfig, ComputeConfig
 from aec_bench.contracts.learning_study_assessment import LearningComparisonValidity
-from aec_bench.contracts.trial_record import EvaluationStatus, TrialOutput
+from aec_bench.contracts.trial_record import EvaluationStatus, TrialOutput, TrialRecord
 from aec_bench.experimentation.learning_studies.dam_w01 import (
     DAM_W01_ACQUISITION_TASK_ID,
     DAM_W01_CONSOLIDATION_OPERATION_ID,
     DAM_W01_PROBE_TASK_ID,
     DAM_W01_STUDY_ID,
+    build_w01_acquisition_fidelity,
     compile_w01_dam_study,
     load_w01_dam_protocol,
     run_w01_dam_study_sync,
     w01_dam_outcome_projections,
 )
-from aec_bench.experimentation.learning_studies.planning import CompiledFeedbackStep
-from aec_bench.experimentation.learning_studies.runtime import ArmRunStatus, ReleaseFeedbackRequest
+from aec_bench.experimentation.learning_studies.planning import CompiledExperienceStep, CompiledFeedbackStep
+from aec_bench.experimentation.learning_studies.runtime import (
+    ArmRunExecutionResult,
+    ArmRunStatus,
+    LearningStudyExecution,
+    ReleaseFeedbackRequest,
+)
 from aec_bench.experimentation.learning_studies.worlds import (
     WorldConsolidationContext,
     WorldLearningExecutionCondition,
@@ -56,6 +64,33 @@ _ROUTINE_ACTIONS = [
     {"action_name": SeepageAction.INSPECT_DOWNSTREAM_AREA.value, "arguments": {}, "request_id": "inspect"},
     {"action_name": SeepageAction.CONTINUE_ROUTINE_SURVEILLANCE.value, "arguments": {}, "request_id": "submit"},
 ]
+_ACQUISITION_ACTIONS = [
+    {"action_name": SeepageAction.CHECK_MEASUREMENT_SYSTEM.value, "arguments": {}, "request_id": "check"},
+    {
+        "action_name": SeepageAction.ESCALATE_FOR_ENGINEERING_REVIEW.value,
+        "arguments": {},
+        "request_id": "escalate",
+    },
+]
+
+
+async def _instrument_aware_actor_session(**kwargs: Any):  # noqa: ANN202
+    trial = kwargs["trial"]
+    actions = _ACQUISITION_ACTIONS if trial.task_id == DAM_W01_ACQUISITION_TASK_ID else _ROUTINE_ACTIONS
+    environment = {
+        **trial.agent.parameters["environment"],
+        "FAKE_WORLD_ACTIONS": json.dumps(actions),
+    }
+    agent = trial.agent.model_copy(update={"parameters": {**trial.agent.parameters, "environment": environment}})
+    return await run_prime_world_actor_session(**{**kwargs, "trial": replace(trial, agent=agent)})
+
+
+_INSTRUMENT_AWARE_CONDITION = WorldLearningExecutionCondition(
+    actor=_instrument_aware_actor_session,
+    actor_binding_label=_CONDITION.actor_binding_label,
+)
+
+
 _PROJECTION_IDS = {
     "world.canonical-reward",
     "dam.response-correct",
@@ -64,7 +99,11 @@ _PROJECTION_IDS = {
 }
 
 
-def _agent(tmp_path: Path, *, isolation: str = "development_same_user") -> AgentConfig:
+def _agent(
+    tmp_path: Path,
+    *,
+    isolation: str = "development_same_user",
+) -> AgentConfig:
     from tests.prime_agent.test_acp import _fake_prime_agent
 
     return AgentConfig(
@@ -369,6 +408,82 @@ def test_required_w01_projections_are_bounded_and_missing_evidence_is_ineligible
             assert no_submission.eligible is False and no_submission.value is None
 
 
+def test_acquisition_fidelity_fails_closed_on_missing_or_ambiguous_records() -> None:
+    agent = AgentConfig(name="prime", adapter="prime-agent", model="anthropic/test", parameters={})
+    plan = compile_w01_dam_study(study_run_id="w01-fidelity-inputs", agent=agent, compute=_COMPUTE)
+    arm_run = next(item for item in plan.arm_runs if item.arm_id == "structured-memory")
+    acquisition_step = next(
+        item
+        for item in arm_run.steps
+        if isinstance(item, CompiledExperienceStep) and item.role.value == "acquisition"
+    )
+
+    def arm_result(records: tuple[TrialRecord, ...]) -> ArmRunExecutionResult[object]:
+        return ArmRunExecutionResult(
+            arm_run_id=arm_run.arm_run_id,
+            status=ArmRunStatus.COMPLETED,
+            initial_state_id="initial",
+            completed_steps=(),
+            trial_records=records,
+            final_state_id="final",
+            failure=None,
+        )
+
+    missing = build_w01_acquisition_fidelity(
+        plan=plan,
+        execution=LearningStudyExecution(
+            study_run_id=plan.study_run_id,
+            arm_runs=(arm_result(()),),
+        ),
+    )
+    assert missing[arm_run.arm_run_id].trial_record_present is False
+    assert missing[arm_run.arm_run_id].acquisition_successful is False
+
+    record = make_trial_record(
+        task_id=DAM_W01_ACQUISITION_TASK_ID,
+        trial_id=acquisition_step.trial.trial_id,
+    )
+    malformed = make_trial_record(
+        task_id=DAM_W01_ACQUISITION_TASK_ID,
+        trial_id=acquisition_step.trial.trial_id,
+        evaluation=EvaluationResult(
+            reward=1.0,
+            validity=ValidityCheck(output_parseable=True, schema_valid=True, verifier_completed=True),
+            breakdown={
+                "response_correct": 1,
+                "evidence_complete": True,
+                "selected_response": "engineering-review",
+            },
+        ),
+    )
+    malformed_result = build_w01_acquisition_fidelity(
+        plan=plan,
+        execution=LearningStudyExecution(
+            study_run_id=plan.study_run_id,
+            arm_runs=(arm_result((malformed,)),),
+        ),
+    )
+    assert malformed_result[arm_run.arm_run_id].response_correct is None
+    assert malformed_result[arm_run.arm_run_id].acquisition_successful is False
+
+    with pytest.raises(ValueError, match="acquisition-fidelity-ambiguous"):
+        build_w01_acquisition_fidelity(
+            plan=plan,
+            execution=LearningStudyExecution(
+                study_run_id=plan.study_run_id,
+                arm_runs=(arm_result((record, record)),),
+            ),
+        )
+    with pytest.raises(ValueError, match="acquisition-fidelity-ambiguous"):
+        build_w01_acquisition_fidelity(
+            plan=plan,
+            execution=LearningStudyExecution(
+                study_run_id=plan.study_run_id,
+                arm_runs=(arm_result((record,)), arm_result((record,))),
+            ),
+        )
+
+
 @pytest.mark.skipif(
     sys.platform != "darwin",
     reason="execution_status is only benchmark-complete under the macOS Seatbelt boundary",
@@ -383,7 +498,7 @@ def test_deterministic_w01_runs_all_arms_and_builds_truthful_assessment_evidence
         study_run_id="w01-deterministic",
         agent=agent,
         compute=_COMPUTE,
-        execution_condition=_CONDITION,
+        execution_condition=_INSTRUMENT_AWARE_CONDITION,
         consolidation_operation=consolidator,
     )
 
@@ -396,6 +511,19 @@ def test_deterministic_w01_runs_all_arms_and_builds_truthful_assessment_evidence
     assert all(item.probe_feedback_hidden for item in result.arm_evidence.values())
     assert all(item.probe_state_discarded for item in result.arm_evidence.values())
     assert all(not item.hidden_evaluation_leaked for item in result.arm_evidence.values())
+    assert set(result.acquisition_fidelity) == {
+        arm.arm_run_id for arm in result.plan.arm_runs if arm.arm_id in {"reset-after-acquisition", "structured-memory"}
+    }
+    assert all(
+        item.trial_record_present
+        and item.replay_valid is True
+        and item.response_correct is True
+        and item.evidence_complete is True
+        and item.escalation_selected is True
+        and item.acquisition_successful
+        and item.fidelity_satisfied
+        for item in result.acquisition_fidelity.values()
+    )
 
     assert all(
         measurement.validity is LearningComparisonValidity.DESCRIPTIVE_ONLY

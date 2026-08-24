@@ -175,7 +175,9 @@ def observe(state: SeepageState) -> SeepageObservation:
         for index, reading in enumerate(state.scenario.readings[: state.reading_index + 1])
     )
     return SeepageObservation(
-        profile_id=state.scenario.profile_id,
+        # Preserve the observation wire shape while keeping the registered
+        # profile identity out of the actor-visible view.
+        profile_id=state.scenario.monitoring_point_id,
         monitoring_point_id=state.scenario.monitoring_point_id,
         objective=state.scenario.objective,
         baseline_note=state.scenario.baseline_note,

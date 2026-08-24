@@ -54,6 +54,8 @@ def test_dam_episode_host_preserves_exact_retry_stale_decision_and_external_eval
     assert catalogue.task_world_id == "dam-seepage-monitoring"
     assert {action.name for action in catalogue.actions} == {action.value for action in SeepageAction}
     assert all(action.input_schema["additionalProperties"] is False for action in catalogue.actions)
+    assert opening.view["profile_id"] == opening.view["monitoring_point_id"] == "SEEP-WEIR-01"
+    assert opening.view["instrument_condition"] is None
     assert "required_response" not in opening.view
 
     checked_request = WorldActorActionRequest(
