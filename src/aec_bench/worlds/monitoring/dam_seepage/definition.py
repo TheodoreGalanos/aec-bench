@@ -150,4 +150,3 @@ def dam_seepage_world_definition() -> InteractiveWorldDefinition:
         ),
         profile_loader=_load_profile,
     )
-

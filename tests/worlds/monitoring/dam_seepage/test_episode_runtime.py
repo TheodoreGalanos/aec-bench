@@ -18,7 +18,6 @@ from aec_bench.worlds.monitoring.dam_seepage.episode_runtime import DamSeepageEp
 from aec_bench.worlds.monitoring.dam_seepage.world import SeepageAction, evaluate
 from aec_bench.worlds.runtime.episode import EpisodeStatus
 
-
 _BASE_PROFILE_ID = "synthetic-rising-seepage"
 
 
