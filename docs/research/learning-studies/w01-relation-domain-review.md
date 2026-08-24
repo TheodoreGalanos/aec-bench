@@ -599,6 +599,13 @@ claim. Before interpreting a W01 result, the programme must:
    human dam-safety sign-off, and document the intended historical visual
    evidence contract.
 
+**Programme-owner decision (24 August 2026):** the programme owner accepted
+this AI-performed review and re-review as satisfying the W01 independent
+domain review requirement, consistent with the decision recorded for L01 in
+`l01-relation-domain-review.md`. `relations_reviewed=true` may be supplied
+for claim-bearing W01 runs subject to the pilot-time conditions above
+(headroom/ceiling rule and acquisition-fidelity gating).
+
 ## Post-fix commands and executed evidence
 
 The following checks were run from this worktree. No scratch artifacts remain.
