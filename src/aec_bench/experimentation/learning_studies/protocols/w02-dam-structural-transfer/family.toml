@@ -1,0 +1,81 @@
+family_id = "dam-seepage-structural-transfer"
+title = "Dam-seepage structural transfer"
+description = "Tests whether experience with unreliable-instrument escalation transfers to a surface-varied probe where the same causal driver applies but monitoring point, reading magnitudes, timing, and objective wording differ. Independent domain review is required before a claim-bearing run."
+
+[[dimensions]]
+dimension_id = "instrument_reliability"
+kind = "causal"
+description = "Whether the measurement instrument is reliable or unreliable, and when this is released to the learner (only after CHECK_MEASUREMENT_SYSTEM)"
+
+[[dimensions]]
+dimension_id = "response_applicability"
+kind = "applicability"
+description = "Whether escalation is the response the currently released evidence supports"
+
+[[dimensions]]
+dimension_id = "evidence_gating"
+kind = "causal"
+description = "The epistemic-action requirement: instrument condition is released only after CHECK_MEASUREMENT_SYSTEM in both profiles"
+
+[[dimensions]]
+dimension_id = "monitoring_point_identity"
+kind = "surface"
+description = "The monitoring point identifier presented to the learner"
+
+[[dimensions]]
+dimension_id = "reading_magnitudes"
+kind = "surface"
+description = "The expected, alert, and measured flow values plus reservoir levels across readings"
+
+[[dimensions]]
+dimension_id = "timing_cadence"
+kind = "surface"
+description = "The elapsed-hours spacing between successive readings"
+
+[[dimensions]]
+dimension_id = "objective_wording"
+kind = "surface"
+description = "The prose objective text presented to the learner at scenario start"
+
+[[members]]
+member_id = "unreliable-instrument-escalation-acquisition"
+task_id = "world/dam-seepage-monitoring/unreliable-instrument-escalation"
+description = "The measurement instrument is unreliable; no visual alert condition or flow-threshold breach occurs; escalation is justified solely by instrument distrust"
+probe_only = false
+[members.dimension_values]
+instrument_reliability = "unreliable, released only after CHECK_MEASUREMENT_SYSTEM"
+response_applicability = "engineering-review escalation is the only response the released evidence supports"
+evidence_gating = "instrument condition hidden until CHECK_MEASUREMENT_SYSTEM"
+monitoring_point_identity = "SEEP-WEIR-02"
+reading_magnitudes = "expected 20.0, alert 27.0, measured 19.5–20.2 l/min; reservoir 100.0–100.1 m"
+timing_cadence = "6-hour intervals: 0, 6, 12, 18 hours"
+objective_wording = "Review the seepage event, gather enough measurement and visual evidence for the current response, and submit either engineering-review escalation or continued routine surveillance."
+
+[[members]]
+member_id = "unreliable-instrument-surface-transfer-probe"
+task_id = "world/dam-seepage-monitoring/unreliable-instrument-surface-transfer"
+description = "The measurement instrument is unreliable at a different monitoring point with different magnitudes and timing; escalation is justified solely by instrument distrust"
+probe_only = true
+[members.dimension_values]
+instrument_reliability = "unreliable, released only after CHECK_MEASUREMENT_SYSTEM"
+response_applicability = "engineering-review escalation is the only response the released evidence supports"
+evidence_gating = "instrument condition hidden until CHECK_MEASUREMENT_SYSTEM"
+monitoring_point_identity = "SEEP-WEIR-07"
+reading_magnitudes = "expected 18.0, alert 24.0, measured 15.8–16.2 l/min; reservoir 95.1–95.3 m"
+timing_cadence = "8-hour intervals: 0, 8, 16, 24 hours"
+objective_wording = "Assess the seepage monitoring data, obtain sufficient measurement and visual evidence to determine the appropriate response, and submit either engineering-review escalation or continued routine surveillance."
+
+[[relations]]
+relation_id = "unreliable-instrument-escalation-to-surface-transfer"
+purpose = "transfer"
+source_member_ids = ["unreliable-instrument-escalation-acquisition"]
+target_member_id = "unreliable-instrument-surface-transfer-probe"
+invariant_dimensions = ["instrument_reliability", "response_applicability", "evidence_gating"]
+invariant_claims = [
+  "Both profiles have instrument_condition: unreliable. The causal driver of the correct response is identical.",
+  "Both profiles require ENGINEERING_REVIEW as the correct terminal response. The correct action is identical.",
+  "In both profiles, instrument condition is released only after CHECK_MEASUREMENT_SYSTEM. The epistemic-action requirement is identical.",
+  "In both profiles, no reading trips flow-alert thresholds and no downstream condition triggers a visual alert. Escalation is justified solely by instrument distrust.",
+]
+changed_dimensions = ["monitoring_point_identity", "reading_magnitudes", "timing_cadence", "objective_wording"]
+rationale = "The acquisition teaches a valid escalation conditioned on instrument distrust. The probe changes every surface detail (monitoring point, reading magnitudes, timing, objective wording) while preserving the same causal condition. A learner that extracted the conditional rule should check the instrument and correctly escalate; a learner that memorised surface patterns will find no match. A domain reviewer and benchmark reviewer must approve this relation before a claim-bearing campaign."
