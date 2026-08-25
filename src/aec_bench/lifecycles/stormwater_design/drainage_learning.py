@@ -8,8 +8,11 @@ import math
 from pathlib import Path
 from typing import Any
 
+from pydantic import Field, ValidationError
+
 from aec_bench.contracts.evaluation_result import EvaluationResult
 from aec_bench.contracts.trial_record import EvaluationStatus, ExecutionStatus, TrialRecord
+from aec_bench.contracts.validators import NonEmptyStr, StrictModel
 from aec_bench.lifecycles.runtime.lifecycle import load_validated_lifecycle_submissions
 from aec_bench.lifecycles.stormwater_design.drainage_model import CHECKPOINT_IDS, GATE_IDS, TEMPLATE_ID
 
@@ -53,6 +56,165 @@ _TOP_LEVEL_FIELDS = {
     "checkpoint_submissions",
     "review_principles",
 }
+_DRAINAGE_SUBMISSION_FIELDS = {
+    "checkpoint_id",
+    "evidence_refs",
+    "review_matrix",
+    "transition_decision",
+    "findings",
+    "closure_evidence_requests",
+    "accepted_decisions",
+    "readiness_decision",
+    "claim_boundary_statement",
+}
+
+
+class DrainagePhaseEvidence(StrictModel):
+    phase_id: NonEmptyStr
+    checkpoint_ids: tuple[NonEmptyStr, ...]
+    phase_outcome: NonEmptyStr
+    evidence_requested: int | None = Field(default=None, ge=0)
+    evidence_released: int | None = Field(default=None, ge=0)
+    submissions_accepted: int | None = Field(default=None, ge=0)
+    submissions_rejected: int | None = Field(default=None, ge=0)
+    constraints_satisfied: int | None = Field(default=None, ge=0)
+    rework_events: int | None = Field(default=None, ge=0)
+    revisited_decisions: int | None = Field(default=None, ge=0)
+    recovery_actions: int | None = Field(default=None, ge=0)
+
+
+class DrainageLearningEvidence(StrictModel):
+    evidence_schema: str = "aec-bench/lifecycle/drainage/learning-evidence/1"
+    lifecycle_template_id: NonEmptyStr
+    variant_id: NonEmptyStr
+    phase_records: tuple[DrainagePhaseEvidence, ...]
+
+
+def extract_drainage_learning_evidence(record: TrialRecord) -> DrainageLearningEvidence | None:
+    """Extract phase evidence from one completed drainage lifecycle record.
+
+    The current drainage runtime does not record rejection, rework, or recovery
+    events. Those fields therefore remain explicitly unavailable rather than
+    being represented as fabricated zero counts.
+    """
+
+    try:
+        if not record.task_id.startswith(_DRAINAGE_TASK_PREFIX):
+            return None
+        evaluation = _completed_evaluation(record, category="phase-evidence-extraction-failed")
+        gates = _phase_evidence_gates(evaluation)
+        submissions = _phase_evidence_submissions(record)
+        variant_id = record.task_id.removeprefix(_DRAINAGE_TASK_PREFIX)
+        if not variant_id:
+            return None
+        phase_records = (
+            _drainage_phase(
+                phase_id="evidence_assessment",
+                checkpoint_ids=("initial_review",),
+                submissions=submissions,
+                gate_values=gates,
+                gate_ids=("checkpoint_contract", "staged_disclosure"),
+            ),
+            _drainage_phase(
+                phase_id="response_and_closeout",
+                checkpoint_ids=("response_review", "closeout_review"),
+                submissions=submissions,
+                gate_values=gates,
+                gate_ids=GATE_IDS,
+            ),
+        )
+        return DrainageLearningEvidence(
+            lifecycle_template_id=TEMPLATE_ID,
+            variant_id=variant_id,
+            phase_records=phase_records,
+        )
+    except (TypeError, ValueError, KeyError, ValidationError):
+        return None
+
+
+def _drainage_phase(
+    *,
+    phase_id: str,
+    checkpoint_ids: tuple[str, ...],
+    submissions: dict[str, dict[str, Any]],
+    gate_values: dict[str, dict[str, Any]],
+    gate_ids: tuple[str, ...],
+) -> DrainagePhaseEvidence:
+    selected = [submissions[checkpoint_id] for checkpoint_id in checkpoint_ids]
+    review_matrices = [submission["review_matrix"] for submission in selected]
+    if any(
+        not isinstance(matrix, dict) or any(not isinstance(value, str) for value in matrix.values())
+        for matrix in review_matrices
+    ):
+        raise ValueError("phase-evidence-extraction-failed: drainage review matrix is malformed")
+    accepted_decisions = [
+        decision
+        for submission in selected
+        for decision in submission["accepted_decisions"]
+        if isinstance(decision, dict) and isinstance(decision.get("decision_id"), str)
+    ]
+    decision_ids = [decision["decision_id"] for decision in accepted_decisions]
+    repeated_decisions = len(decision_ids) - len(set(decision_ids))
+    gate_complete = all(gate_values[gate_id]["passed"] for gate_id in gate_ids)
+    return DrainagePhaseEvidence(
+        phase_id=phase_id,
+        checkpoint_ids=checkpoint_ids,
+        phase_outcome="complete" if gate_complete else "incomplete",
+        evidence_requested=sum(len(submission["closure_evidence_requests"]) for submission in selected),
+        # The current TrialRecord retains cited references, not release-event
+        # counts, so this field remains explicitly unavailable.
+        evidence_released=None,
+        submissions_accepted=len(selected),
+        submissions_rejected=None,
+        constraints_satisfied=sum(sum(value == "pass" for value in matrix.values()) for matrix in review_matrices),
+        rework_events=None,
+        revisited_decisions=repeated_decisions,
+        recovery_actions=None,
+    )
+
+
+def _phase_evidence_gates(evaluation: EvaluationResult) -> dict[str, dict[str, Any]]:
+    breakdown = evaluation.breakdown
+    if not isinstance(breakdown, dict) or not isinstance(breakdown.get("lifecycle_gates"), dict):
+        raise ValueError("phase-evidence-extraction-failed: lifecycle gates are unavailable")
+    gates = breakdown["lifecycle_gates"]
+    selected: dict[str, dict[str, Any]] = {}
+    for gate_id in GATE_IDS:
+        gate = gates.get(gate_id)
+        if not isinstance(gate, dict) or not isinstance(gate.get("passed"), bool):
+            raise ValueError("phase-evidence-extraction-failed: lifecycle gate is malformed")
+        _bounded_number(gate.get("score"), category="phase-evidence-extraction-failed", label=gate_id)
+        selected[gate_id] = gate
+    return selected
+
+
+def _phase_evidence_submissions(record: TrialRecord) -> dict[str, dict[str, Any]]:
+    output = record.output
+    agent_output = None if output is None else output.agent_output
+    if agent_output is None:
+        raise ValueError("phase-evidence-extraction-failed: lifecycle run is unavailable")
+    run_dir = Path(agent_output.output_path)
+    if not run_dir.is_absolute() or not run_dir.is_dir() or run_dir.is_symlink():
+        raise ValueError("phase-evidence-extraction-failed: lifecycle run is unavailable")
+    run_dir = run_dir.resolve(strict=True)
+    submissions: dict[str, dict[str, Any]] = {}
+    for checkpoint_id in CHECKPOINT_IDS:
+        path = run_dir / "episodes" / checkpoint_id / "submission.json"
+        if not path.is_file() or path.is_symlink():
+            raise ValueError("phase-evidence-extraction-failed: checkpoint submission is unavailable")
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        if (
+            not isinstance(payload, dict)
+            or payload.get("checkpoint_id") != checkpoint_id
+            or not _DRAINAGE_SUBMISSION_FIELDS.issubset(payload)
+            or not isinstance(payload.get("evidence_refs"), list)
+            or any(not isinstance(item, str) for item in payload["evidence_refs"])
+            or not isinstance(payload.get("closure_evidence_requests"), list)
+            or not isinstance(payload.get("accepted_decisions"), list)
+        ):
+            raise ValueError("phase-evidence-extraction-failed: checkpoint submission is malformed")
+        submissions[checkpoint_id] = payload
+    return submissions
 
 
 def drainage_staged_review_feedback(record: TrialRecord) -> bytes:
