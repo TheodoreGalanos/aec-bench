@@ -458,6 +458,19 @@ _VARIANTS = {
             closeout_events=(DrainageEvidenceEvent.PROPAGATE_MEMO,),
         ),
         _variant(
+            "staged_full_correction_guided",
+            "A corrected staged review with guided evidence-seeking checklists, constraint verification, "
+            "and worked examples.",
+            response_events=(DrainageEvidenceEvent.RELEASE_CORRECTED_MODEL_CHAIN,),
+            closeout_events=(DrainageEvidenceEvent.PROPAGATE_MEMO,),
+        ),
+        _variant(
+            "staged_full_correction_reduced",
+            "A corrected staged review with brief evidence-seeking prompts after guided scaffolding is withdrawn.",
+            response_events=(DrainageEvidenceEvent.RELEASE_CORRECTED_MODEL_CHAIN,),
+            closeout_events=(DrainageEvidenceEvent.PROPAGATE_MEMO,),
+        ),
+        _variant(
             "semantic_no_op_release",
             "An unrelated administrative note arrives before the full corrected chain is released at closeout.",
             response_events=(DrainageEvidenceEvent.SEMANTIC_NO_OP,),

@@ -120,7 +120,7 @@ def materialize_drainage_model_lifecycle(
     (output / "README.md").parent.mkdir(parents=True, exist_ok=True)
     (output / "README.md").write_text(_readme(), encoding="utf-8")
 
-    for checkpoint_id, instruction in _instructions().items():
+    for checkpoint_id, instruction in _instructions(variant.variant_id).items():
         path = output / "instructions" / f"{checkpoint_id}.md"
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(instruction, encoding="utf-8")
@@ -566,15 +566,31 @@ def _record_atoms(
             atoms[f"{prefix}.{field}"] = record.get(field)
 
 
-def _instructions() -> dict[str, str]:
-    return {
-        checkpoint_id: _instruction(checkpoint_id, purpose)
-        for checkpoint_id, purpose in {
-            "initial_review": "Review the initial registered model evidence and establish the cumulative review state.",
-            "response_review": "Review the newly released response evidence against the prior checkpoint state.",
-            "closeout_review": "Review the newly released closeout evidence and determine final readiness.",
-        }.items()
+def _instructions(variant_id: str = "staged_full_correction") -> dict[str, str]:
+    base = {
+        "initial_review": "Review the initial registered model evidence and establish the cumulative review state.",
+        "response_review": "Review the newly released response evidence against the prior checkpoint state.",
+        "closeout_review": "Review the newly released closeout evidence and determine final readiness.",
     }
+    if variant_id == "staged_full_correction_guided":
+        addition = (
+            "\n\nGuided evidence-seeking checklist:\n"
+            "- Identify each registered source before relying on a claim.\n"
+            "- Verify the governing constraint and its current value.\n"
+            "- Check that every transition is supported by the released evidence.\n"
+            "Constraint verification steps: confirm the source, constraint, and downstream consequence.\n"
+            "Worked-example excerpt: a corrected model chain supports a transition only when its manifest, "
+            "rerun, and report are traceable together.\n"
+        )
+    elif variant_id == "staged_full_correction_reduced":
+        addition = (
+            "\n\nEvidence-seeking prompts:\n"
+            "- Which registered evidence supports this decision?\n"
+            "- Which governing constraint must be verified before changing state?\n"
+        )
+    else:
+        addition = ""
+    return {checkpoint_id: _instruction(checkpoint_id, purpose) + addition for checkpoint_id, purpose in base.items()}
 
 
 def _instruction(checkpoint_id: str, purpose: str) -> str:
