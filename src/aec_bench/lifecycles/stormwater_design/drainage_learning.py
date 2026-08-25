@@ -17,6 +17,9 @@ from aec_bench.lifecycles.runtime.lifecycle import load_validated_lifecycle_subm
 from aec_bench.lifecycles.stormwater_design.drainage_model import CHECKPOINT_IDS, GATE_IDS, TEMPLATE_ID
 
 DRAINAGE_STAGED_REVIEW_FEEDBACK_VIEW_ID = "drainage-staged-review-public-feedback"
+DRAINAGE_CHECKPOINT_DETAILED_FEEDBACK_VIEW_ID = "drainage-checkpoint-detailed-feedback"
+DRAINAGE_PHASE_SUMMARY_FEEDBACK_VIEW_ID = "drainage-phase-summary-feedback"
+DRAINAGE_TERMINAL_FEEDBACK_VIEW_ID = "drainage-terminal-feedback"
 DRAINAGE_ACQUISITION_TASK_ID = f"lifecycle/{TEMPLATE_ID}/staged_full_correction"
 DRAINAGE_PROBE_TASK_ID = f"lifecycle/{TEMPLATE_ID}/semantic_no_op_release"
 
@@ -67,6 +70,9 @@ _DRAINAGE_SUBMISSION_FIELDS = {
     "readiness_decision",
     "claim_boundary_statement",
 }
+_REVIEW_MATRIX_IDS = tuple(f"PRV-0{index}" for index in range(1, 10))
+_REVIEW_MATRIX_STATUSES = frozenset({"pass", "fail", "not_applicable", "insufficient_data"})
+_DRAINAGE_PHASE_IDS = ("evidence_assessment", "response_and_closeout")
 
 
 class DrainagePhaseEvidence(StrictModel):
@@ -252,6 +258,273 @@ def drainage_staged_review_feedback(record: TrialRecord) -> bytes:
     data = (json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False) + "\n").encode()
     validate_drainage_staged_review_feedback(data)
     return data
+
+
+def drainage_checkpoint_detailed_feedback(record: TrialRecord) -> bytes:
+    """Return safe per-checkpoint review detail for one completed acquisition."""
+
+    _require_completed_acquisition(record)
+    submissions = _archived_submissions(record)
+    checkpoints: dict[str, Any] = {}
+    for checkpoint_id in CHECKPOINT_IDS:
+        matrix = _public_review_matrix(submissions[checkpoint_id])
+        checkpoints[checkpoint_id] = {
+            "passed": all(status == "pass" for status in matrix.values()),
+            "gate_scores": {
+                gate_id: {"passed": status == "pass", "score": 1.0 if status == "pass" else 0.0}
+                for gate_id, status in matrix.items()
+            },
+            "review_matrix": matrix,
+        }
+    payload = {
+        "feedback_view_id": DRAINAGE_CHECKPOINT_DETAILED_FEEDBACK_VIEW_ID,
+        "trial_id": record.trial_id,
+        "task_id": record.task_id,
+        "execution_status": record.execution_status.value,
+        "checkpoints": checkpoints,
+        "overall_gates": {
+            gate_id: _public_gate(record, gate_id, category="feedback-projection-failed")
+            for gate_id in _SELECTED_FEEDBACK_GATE_IDS
+        },
+    }
+    data = _canonical_feedback_bytes(payload)
+    validate_drainage_checkpoint_detailed_feedback(data)
+    return data
+
+
+def validate_drainage_checkpoint_detailed_feedback(data: bytes) -> dict[str, Any]:
+    """Validate the bounded per-checkpoint drainage feedback projection."""
+
+    payload = _decode_feedback_object(data)
+    expected_fields = {"feedback_view_id", "trial_id", "task_id", "execution_status", "checkpoints", "overall_gates"}
+    if set(payload) != expected_fields:
+        raise ValueError("feedback-projection-unsafe: checkpoint feedback fields do not match the public view")
+    _validate_feedback_identity(
+        payload,
+        view_id=DRAINAGE_CHECKPOINT_DETAILED_FEEDBACK_VIEW_ID,
+        error_label="checkpoint feedback",
+    )
+    checkpoints = payload["checkpoints"]
+    if not isinstance(checkpoints, dict) or tuple(checkpoints) != tuple(sorted(CHECKPOINT_IDS)):
+        raise ValueError("feedback-projection-unsafe: checkpoint feedback checkpoint allowlist does not match")
+    for checkpoint_id in CHECKPOINT_IDS:
+        checkpoint = checkpoints[checkpoint_id]
+        if not isinstance(checkpoint, dict) or set(checkpoint) != {"passed", "gate_scores", "review_matrix"}:
+            raise ValueError(f"feedback-projection-unsafe: checkpoint feedback shape is invalid: {checkpoint_id}")
+        if not isinstance(checkpoint["passed"], bool):
+            raise ValueError(f"feedback-projection-unsafe: checkpoint status is invalid: {checkpoint_id}")
+        matrix = _validate_public_review_matrix(checkpoint["review_matrix"], checkpoint_id)
+        scores = checkpoint["gate_scores"]
+        if not isinstance(scores, dict) or tuple(scores) != _REVIEW_MATRIX_IDS:
+            raise ValueError(f"feedback-projection-unsafe: checkpoint gate allowlist is invalid: {checkpoint_id}")
+        for gate_id in _REVIEW_MATRIX_IDS:
+            score = scores[gate_id]
+            if (
+                not isinstance(score, dict)
+                or set(score) != {"passed", "score"}
+                or not isinstance(score["passed"], bool)
+            ):
+                raise ValueError(f"feedback-projection-unsafe: checkpoint gate shape is invalid: {gate_id}")
+            _bounded_number(score["score"], category="feedback-projection-unsafe", label=f"checkpoint gate {gate_id}")
+            if score["passed"] != (matrix[gate_id] == "pass"):
+                raise ValueError(f"feedback-projection-unsafe: checkpoint gate status is inconsistent: {gate_id}")
+        if checkpoint["passed"] != all(status == "pass" for status in matrix.values()):
+            raise ValueError(f"feedback-projection-unsafe: checkpoint status is inconsistent: {checkpoint_id}")
+    _validate_public_overall_gates(payload["overall_gates"])
+    return payload
+
+
+def drainage_phase_summary_feedback(record: TrialRecord) -> bytes:
+    """Return safe phase-level drainage feedback without checkpoint submissions."""
+
+    _require_completed_acquisition(record)
+    evidence = extract_drainage_learning_evidence(record)
+    if evidence is None:
+        raise ValueError("feedback-source-phase-evidence-missing: drainage phase evidence is unavailable")
+    phases = {phase.phase_id: phase.model_dump(mode="json") for phase in evidence.phase_records}
+    payload = {
+        "feedback_view_id": DRAINAGE_PHASE_SUMMARY_FEEDBACK_VIEW_ID,
+        "trial_id": record.trial_id,
+        "task_id": record.task_id,
+        "execution_status": record.execution_status.value,
+        "phases": phases,
+    }
+    data = _canonical_feedback_bytes(payload)
+    validate_drainage_phase_summary_feedback(data)
+    return data
+
+
+def validate_drainage_phase_summary_feedback(data: bytes) -> dict[str, Any]:
+    """Validate the bounded phase-summary drainage feedback projection."""
+
+    payload = _decode_feedback_object(data)
+    expected_fields = {"feedback_view_id", "trial_id", "task_id", "execution_status", "phases"}
+    if set(payload) != expected_fields:
+        raise ValueError("feedback-projection-unsafe: phase feedback fields do not match the public view")
+    _validate_feedback_identity(
+        payload,
+        view_id=DRAINAGE_PHASE_SUMMARY_FEEDBACK_VIEW_ID,
+        error_label="phase feedback",
+    )
+    phases = payload["phases"]
+    if not isinstance(phases, dict) or tuple(phases) != _DRAINAGE_PHASE_IDS:
+        raise ValueError("feedback-projection-unsafe: phase feedback phase allowlist does not match")
+    for phase_id, phase in phases.items():
+        if not isinstance(phase, dict):
+            raise ValueError(f"feedback-projection-unsafe: phase summary is invalid: {phase_id}")
+        expected = {
+            "phase_id",
+            "checkpoint_ids",
+            "phase_outcome",
+            "evidence_requested",
+            "evidence_released",
+            "submissions_accepted",
+            "submissions_rejected",
+            "constraints_satisfied",
+            "rework_events",
+            "revisited_decisions",
+            "recovery_actions",
+        }
+        if set(phase) != expected or phase["phase_id"] != phase_id:
+            raise ValueError(f"feedback-projection-unsafe: phase summary fields are invalid: {phase_id}")
+        if (
+            not isinstance(phase["checkpoint_ids"], list)
+            or any(not isinstance(item, str) or not item for item in phase["checkpoint_ids"])
+            or not isinstance(phase["phase_outcome"], str)
+            or not phase["phase_outcome"]
+        ):
+            raise ValueError(f"feedback-projection-unsafe: phase summary identity is invalid: {phase_id}")
+        for field in expected - {"phase_id", "checkpoint_ids", "phase_outcome"}:
+            value = phase[field]
+            if value is not None and (isinstance(value, bool) or not isinstance(value, int) or value < 0):
+                raise ValueError(f"feedback-projection-unsafe: phase summary count is invalid: {field}")
+    return payload
+
+
+def drainage_terminal_feedback(record: TrialRecord) -> bytes:
+    """Return terminal-only drainage feedback for a completed acquisition."""
+
+    _require_completed_acquisition(record)
+    evaluation = _completed_evaluation(record, category="feedback-source-evaluation-missing")
+    validity = evaluation.validity
+    payload = {
+        "feedback_view_id": DRAINAGE_TERMINAL_FEEDBACK_VIEW_ID,
+        "trial_id": record.trial_id,
+        "task_id": record.task_id,
+        "execution_status": record.execution_status.value,
+        "terminal_outcome": {
+            "canonical_reward": _bounded_number(
+                evaluation.reward,
+                category="feedback-projection-failed",
+                label="reward",
+            ),
+            "completion_status": record.execution_status.value,
+            "validity": {
+                "output_parseable": validity.output_parseable,
+                "schema_valid": validity.schema_valid,
+                "verifier_completed": validity.verifier_completed,
+            },
+        },
+        "overall_gates": {
+            gate_id: _public_gate(record, gate_id, category="feedback-projection-failed")
+            for gate_id in _SELECTED_FEEDBACK_GATE_IDS
+        },
+    }
+    data = _canonical_feedback_bytes(payload)
+    validate_drainage_terminal_feedback(data)
+    return data
+
+
+def validate_drainage_terminal_feedback(data: bytes) -> dict[str, Any]:
+    """Validate the bounded terminal-only drainage feedback projection."""
+
+    payload = _decode_feedback_object(data)
+    expected_fields = {
+        "feedback_view_id",
+        "trial_id",
+        "task_id",
+        "execution_status",
+        "terminal_outcome",
+        "overall_gates",
+    }
+    if set(payload) != expected_fields:
+        raise ValueError("feedback-projection-unsafe: terminal feedback fields do not match the public view")
+    _validate_feedback_identity(
+        payload,
+        view_id=DRAINAGE_TERMINAL_FEEDBACK_VIEW_ID,
+        error_label="terminal feedback",
+    )
+    terminal = payload["terminal_outcome"]
+    if not isinstance(terminal, dict) or set(terminal) != {"canonical_reward", "completion_status", "validity"}:
+        raise ValueError("feedback-projection-unsafe: terminal outcome fields do not match the public view")
+    _bounded_number(terminal["canonical_reward"], category="feedback-projection-unsafe", label="reward")
+    if terminal["completion_status"] != ExecutionStatus.COMPLETED.value:
+        raise ValueError("feedback-source-trial-missing: terminal feedback source is not complete")
+    validity = terminal["validity"]
+    if (
+        not isinstance(validity, dict)
+        or set(validity) != set(_PUBLIC_VALIDITY_FIELDS)
+        or any(not isinstance(validity[field], bool) for field in _PUBLIC_VALIDITY_FIELDS)
+    ):
+        raise ValueError("feedback-projection-unsafe: public validity fields are invalid")
+    _validate_public_overall_gates(payload["overall_gates"])
+    return payload
+
+
+def _require_completed_acquisition(record: TrialRecord) -> None:
+    if record.task_id != DRAINAGE_ACQUISITION_TASK_ID:
+        raise ValueError(f"feedback-source-task-mismatch: {record.task_id}")
+    if record.execution_status is not ExecutionStatus.COMPLETED:
+        raise ValueError("feedback-source-trial-missing: lifecycle execution is not complete")
+
+
+def _canonical_feedback_bytes(payload: dict[str, Any]) -> bytes:
+    return (json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False) + "\n").encode()
+
+
+def _decode_feedback_object(data: bytes) -> dict[str, Any]:
+    if not isinstance(data, bytes) or not data:
+        raise ValueError("feedback-projection-invalid-json: drainage feedback is not non-empty bytes")
+    try:
+        payload = json.loads(data.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise ValueError("feedback-projection-invalid-json: drainage feedback is not UTF-8 JSON") from error
+    if not isinstance(payload, dict):
+        raise ValueError("feedback-projection-invalid-json: drainage feedback must be a JSON object")
+    return payload
+
+
+def _validate_feedback_identity(payload: dict[str, Any], *, view_id: str, error_label: str) -> None:
+    if payload["feedback_view_id"] != view_id:
+        raise ValueError(f"feedback-projection-unsafe: {error_label} view identity does not match")
+    if payload["task_id"] != DRAINAGE_ACQUISITION_TASK_ID:
+        raise ValueError(f"feedback-source-task-mismatch: {error_label} source is not the acquisition task")
+    if payload["execution_status"] != ExecutionStatus.COMPLETED.value:
+        raise ValueError(f"feedback-source-trial-missing: {error_label} source is not complete")
+    if not isinstance(payload["trial_id"], str) or not payload["trial_id"]:
+        raise ValueError(f"feedback-projection-unsafe: {error_label} trial identity is missing")
+
+
+def _public_review_matrix(submission: dict[str, Any]) -> dict[str, str]:
+    matrix = submission.get("review_matrix")
+    return _validate_public_review_matrix(matrix, "checkpoint")
+
+
+def _validate_public_review_matrix(value: object, checkpoint_id: str) -> dict[str, str]:
+    if not isinstance(value, dict) or tuple(value) != _REVIEW_MATRIX_IDS:
+        raise ValueError(f"feedback-projection-unsafe: review matrix allowlist is invalid: {checkpoint_id}")
+    if any(not isinstance(status, str) or status not in _REVIEW_MATRIX_STATUSES for status in value.values()):
+        raise ValueError(f"feedback-projection-unsafe: review matrix status is invalid: {checkpoint_id}")
+    return dict(value)
+
+
+def _validate_public_overall_gates(value: object) -> None:
+    if not isinstance(value, dict) or tuple(value) != tuple(sorted(_SELECTED_FEEDBACK_GATE_IDS)):
+        raise ValueError("feedback-projection-unsafe: drainage feedback gate allowlist does not match")
+    for gate_id, gate in value.items():
+        if not isinstance(gate, dict) or set(gate) != {"passed", "score"} or not isinstance(gate["passed"], bool):
+            raise ValueError(f"feedback-projection-unsafe: public gate shape is invalid: {gate_id}")
+        _bounded_number(gate["score"], category="feedback-projection-unsafe", label=f"gate {gate_id}")
 
 
 def validate_drainage_staged_review_feedback(data: bytes) -> dict[str, Any]:
@@ -463,13 +736,22 @@ def _bounded_number(value: object, *, category: str, label: str) -> float:
 
 __all__ = (
     "DRAINAGE_ACQUISITION_TASK_ID",
+    "DRAINAGE_CHECKPOINT_DETAILED_FEEDBACK_VIEW_ID",
     "DRAINAGE_MEMO_CLOSURE_FAILURE_TOKENS",
     "DRAINAGE_MEMO_CLOSURE_REQUEST_ID",
     "DRAINAGE_MEMO_FINDING_ID",
+    "DRAINAGE_PHASE_SUMMARY_FEEDBACK_VIEW_ID",
     "DRAINAGE_PROBE_TASK_ID",
     "DRAINAGE_STAGED_REVIEW_FEEDBACK_VIEW_ID",
+    "DRAINAGE_TERMINAL_FEEDBACK_VIEW_ID",
+    "drainage_checkpoint_detailed_feedback",
     "drainage_gate_score",
     "drainage_inappropriate_memo_closure",
+    "drainage_phase_summary_feedback",
     "drainage_staged_review_feedback",
+    "drainage_terminal_feedback",
+    "validate_drainage_checkpoint_detailed_feedback",
+    "validate_drainage_phase_summary_feedback",
     "validate_drainage_staged_review_feedback",
+    "validate_drainage_terminal_feedback",
 )
