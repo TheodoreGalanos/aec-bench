@@ -1,0 +1,196 @@
+study_id = "l02-drainage-correction-applicability-boundary"
+title = "Drainage correction applicability boundary"
+research_question = "Does public feedback from a valid staged correction cause raw-history or structured-memory learners to apply memo-backed closeout on a probe where the corrected model chain is present but the required design memo is missing?"
+relation_ids = ["staged-correction-to-memo-closeout-missing"]
+
+[[experiences]]
+experience_id = "staged-full-correction-acquisition"
+family_member_id = "staged-full-correction-acquisition"
+role = "acquisition"
+
+[[experiences]]
+experience_id = "memo-closeout-missing-probe"
+family_member_id = "memo-closeout-missing-probe"
+role = "probe"
+
+[[measurements]]
+measurement_id = "raw-history-canonical-reward-gain"
+projection_id = "lifecycle.canonical-reward"
+direction = "higher"
+target_experience_id = "memo-closeout-missing-probe"
+focal_arm_id = "raw-history"
+comparator_arm_id = "cold-reset"
+
+[[measurements]]
+measurement_id = "raw-history-closure-evidence-gain"
+projection_id = "drainage.closure-evidence"
+direction = "higher"
+target_experience_id = "memo-closeout-missing-probe"
+focal_arm_id = "raw-history"
+comparator_arm_id = "cold-reset"
+
+[[measurements]]
+measurement_id = "raw-history-accepted-decision-preservation-gain"
+projection_id = "drainage.accepted-decision-preservation"
+direction = "higher"
+target_experience_id = "memo-closeout-missing-probe"
+focal_arm_id = "raw-history"
+comparator_arm_id = "cold-reset"
+
+[[measurements]]
+measurement_id = "raw-history-claim-boundary-gain"
+projection_id = "drainage.claim-boundary"
+direction = "higher"
+target_experience_id = "memo-closeout-missing-probe"
+focal_arm_id = "raw-history"
+comparator_arm_id = "cold-reset"
+
+[[measurements]]
+measurement_id = "raw-history-inappropriate-memo-closure-effect"
+projection_id = "drainage.inappropriate-memo-closure"
+direction = "lower"
+target_experience_id = "memo-closeout-missing-probe"
+focal_arm_id = "raw-history"
+comparator_arm_id = "cold-reset"
+
+[[measurements]]
+measurement_id = "structured-memory-canonical-reward-gain"
+projection_id = "lifecycle.canonical-reward"
+direction = "higher"
+target_experience_id = "memo-closeout-missing-probe"
+focal_arm_id = "structured-memory"
+comparator_arm_id = "cold-reset"
+
+[[measurements]]
+measurement_id = "structured-memory-staged-disclosure-gain"
+projection_id = "drainage.staged-disclosure"
+direction = "higher"
+target_experience_id = "memo-closeout-missing-probe"
+focal_arm_id = "structured-memory"
+comparator_arm_id = "cold-reset"
+
+[[measurements]]
+measurement_id = "structured-memory-finding-continuity-gain"
+projection_id = "drainage.finding-continuity"
+direction = "higher"
+target_experience_id = "memo-closeout-missing-probe"
+focal_arm_id = "structured-memory"
+comparator_arm_id = "cold-reset"
+
+[[measurements]]
+measurement_id = "structured-memory-closure-evidence-gain"
+projection_id = "drainage.closure-evidence"
+direction = "higher"
+target_experience_id = "memo-closeout-missing-probe"
+focal_arm_id = "structured-memory"
+comparator_arm_id = "cold-reset"
+
+[[measurements]]
+measurement_id = "structured-memory-accepted-decision-preservation-gain"
+projection_id = "drainage.accepted-decision-preservation"
+direction = "higher"
+target_experience_id = "memo-closeout-missing-probe"
+focal_arm_id = "structured-memory"
+comparator_arm_id = "cold-reset"
+
+[[measurements]]
+measurement_id = "structured-memory-claim-boundary-gain"
+projection_id = "drainage.claim-boundary"
+direction = "higher"
+target_experience_id = "memo-closeout-missing-probe"
+focal_arm_id = "structured-memory"
+comparator_arm_id = "cold-reset"
+
+[[measurements]]
+measurement_id = "structured-memory-inappropriate-memo-closure-effect"
+projection_id = "drainage.inappropriate-memo-closure"
+direction = "lower"
+target_experience_id = "memo-closeout-missing-probe"
+focal_arm_id = "structured-memory"
+comparator_arm_id = "cold-reset"
+
+[[measurements]]
+measurement_id = "reset-after-acquisition-inappropriate-memo-closure-effect"
+projection_id = "drainage.inappropriate-memo-closure"
+direction = "lower"
+target_experience_id = "memo-closeout-missing-probe"
+focal_arm_id = "reset-after-acquisition"
+comparator_arm_id = "cold-reset"
+
+[[measurements]]
+measurement_id = "structured-memory-versus-raw-history-inappropriate-closure"
+projection_id = "drainage.inappropriate-memo-closure"
+direction = "lower"
+target_experience_id = "memo-closeout-missing-probe"
+focal_arm_id = "structured-memory"
+comparator_arm_id = "raw-history"
+
+[[arms]]
+arm_id = "cold-reset"
+role = "control"
+treatment_id = "reset"
+[[arms.steps]]
+kind = "run_experience"
+step_id = "cold-probe"
+experience_id = "memo-closeout-missing-probe"
+commit_post_state = false
+
+[[arms]]
+arm_id = "reset-after-acquisition"
+role = "control"
+treatment_id = "reset"
+[[arms.steps]]
+kind = "run_experience"
+step_id = "reset-acquisition"
+experience_id = "staged-full-correction-acquisition"
+commit_post_state = true
+[[arms.steps]]
+kind = "run_experience"
+step_id = "reset-probe"
+experience_id = "memo-closeout-missing-probe"
+commit_post_state = false
+
+[[arms]]
+arm_id = "raw-history"
+role = "exposure"
+treatment_id = "raw-history"
+[[arms.steps]]
+kind = "run_experience"
+step_id = "raw-acquisition"
+experience_id = "staged-full-correction-acquisition"
+commit_post_state = true
+[[arms.steps]]
+kind = "release_feedback"
+step_id = "raw-release"
+source_experience_id = "staged-full-correction-acquisition"
+feedback_view_id = "drainage-staged-review-public-feedback"
+[[arms.steps]]
+kind = "run_experience"
+step_id = "raw-probe"
+experience_id = "memo-closeout-missing-probe"
+commit_post_state = false
+
+[[arms]]
+arm_id = "structured-memory"
+role = "exposure"
+treatment_id = "structured-memory"
+[[arms.steps]]
+kind = "run_experience"
+step_id = "structured-acquisition"
+experience_id = "staged-full-correction-acquisition"
+commit_post_state = true
+[[arms.steps]]
+kind = "release_feedback"
+step_id = "structured-release"
+source_experience_id = "staged-full-correction-acquisition"
+feedback_view_id = "drainage-staged-review-public-feedback"
+[[arms.steps]]
+kind = "consolidate"
+step_id = "structured-consolidation"
+feedback_step_ids = ["structured-release"]
+operation_id = "update-lifecycle-review-memory"
+[[arms.steps]]
+kind = "run_experience"
+step_id = "structured-probe"
+experience_id = "memo-closeout-missing-probe"
+commit_post_state = false
