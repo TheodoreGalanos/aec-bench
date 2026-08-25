@@ -1,0 +1,52 @@
+{
+  "task_world_id": "dam-seepage-monitoring",
+  "profile_id": "unreliable-instrument-surface-transfer",
+  "monitoring_point_id": "SEEP-WEIR-07",
+  "objective": "Assess the seepage monitoring data, obtain sufficient measurement and visual evidence to determine the appropriate response, and submit either engineering-review escalation or continued routine surveillance.",
+  "baseline_note": "Expected and alert flows are site-specific values from this task-owned synthetic monitoring plan. They are not general dam-safety limits.",
+  "required_consecutive_alert_readings": 2,
+  "visual_alert_conditions": [
+    "cloudy",
+    "sediment-observed",
+    "new-seep"
+  ],
+  "instrument_condition": "unreliable",
+  "readings": [
+    {
+      "elapsed_hours": 0,
+      "reservoir_level_m": 95.2,
+      "recent_rainfall_mm": 0.0,
+      "expected_flow_l_min": 18.0,
+      "alert_flow_l_min": 24.0,
+      "measured_flow_l_min": 15.8,
+      "downstream_condition": "clear"
+    },
+    {
+      "elapsed_hours": 8,
+      "reservoir_level_m": 95.3,
+      "recent_rainfall_mm": 0.0,
+      "expected_flow_l_min": 18.0,
+      "alert_flow_l_min": 24.0,
+      "measured_flow_l_min": 16.2,
+      "downstream_condition": "clear"
+    },
+    {
+      "elapsed_hours": 16,
+      "reservoir_level_m": 95.2,
+      "recent_rainfall_mm": 0.0,
+      "expected_flow_l_min": 18.0,
+      "alert_flow_l_min": 24.0,
+      "measured_flow_l_min": 16.0,
+      "downstream_condition": "clear"
+    },
+    {
+      "elapsed_hours": 24,
+      "reservoir_level_m": 95.1,
+      "recent_rainfall_mm": 0.0,
+      "expected_flow_l_min": 18.0,
+      "alert_flow_l_min": 24.0,
+      "measured_flow_l_min": 15.9,
+      "downstream_condition": "clear"
+    }
+  ]
+}

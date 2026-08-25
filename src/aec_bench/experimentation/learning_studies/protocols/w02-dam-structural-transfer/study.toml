@@ -1,0 +1,111 @@
+study_id = "w02-dam-structural-transfer"
+title = "Dam-seepage structural transfer"
+research_question = "Does declared public feedback and explicit structured memory from an instrument-unreliability-justified escalation cause correct escalation transfer to a surface-varied probe where the same causal driver applies?"
+relation_ids = ["unreliable-instrument-escalation-to-surface-transfer"]
+
+[[experiences]]
+experience_id = "unreliable-instrument-escalation-acquisition"
+family_member_id = "unreliable-instrument-escalation-acquisition"
+role = "acquisition"
+
+[[experiences]]
+experience_id = "unreliable-instrument-surface-transfer-probe"
+family_member_id = "unreliable-instrument-surface-transfer-probe"
+role = "probe"
+
+[[measurements]]
+measurement_id = "structured-memory-response-correct-gain"
+projection_id = "dam.response-correct"
+direction = "higher"
+target_experience_id = "unreliable-instrument-surface-transfer-probe"
+focal_arm_id = "structured-memory"
+comparator_arm_id = "cold-reset"
+
+[[measurements]]
+measurement_id = "structured-memory-evidence-complete-gain"
+projection_id = "dam.evidence-complete"
+direction = "higher"
+target_experience_id = "unreliable-instrument-surface-transfer-probe"
+focal_arm_id = "structured-memory"
+comparator_arm_id = "cold-reset"
+
+[[measurements]]
+measurement_id = "structured-memory-canonical-reward-gain"
+projection_id = "world.canonical-reward"
+direction = "higher"
+target_experience_id = "unreliable-instrument-surface-transfer-probe"
+focal_arm_id = "structured-memory"
+comparator_arm_id = "cold-reset"
+
+[[measurements]]
+measurement_id = "reset-after-acquisition-response-correct-gain"
+projection_id = "dam.response-correct"
+direction = "higher"
+target_experience_id = "unreliable-instrument-surface-transfer-probe"
+focal_arm_id = "reset-after-acquisition"
+comparator_arm_id = "cold-reset"
+
+[[measurements]]
+measurement_id = "reset-after-acquisition-evidence-complete-gain"
+projection_id = "dam.evidence-complete"
+direction = "higher"
+target_experience_id = "unreliable-instrument-surface-transfer-probe"
+focal_arm_id = "reset-after-acquisition"
+comparator_arm_id = "cold-reset"
+
+[[arms]]
+arm_id = "cold-reset"
+role = "control"
+treatment_id = "reset"
+
+[[arms.steps]]
+kind = "run_experience"
+step_id = "cold-probe"
+experience_id = "unreliable-instrument-surface-transfer-probe"
+commit_post_state = false
+
+[[arms]]
+arm_id = "reset-after-acquisition"
+role = "control"
+treatment_id = "reset"
+
+[[arms.steps]]
+kind = "run_experience"
+step_id = "reset-acquisition"
+experience_id = "unreliable-instrument-escalation-acquisition"
+commit_post_state = true
+
+[[arms.steps]]
+kind = "run_experience"
+step_id = "reset-probe"
+experience_id = "unreliable-instrument-surface-transfer-probe"
+commit_post_state = false
+
+[[arms]]
+arm_id = "structured-memory"
+role = "exposure"
+treatment_id = "structured-memory"
+
+[[arms.steps]]
+kind = "run_experience"
+step_id = "structured-acquisition"
+experience_id = "unreliable-instrument-escalation-acquisition"
+commit_post_state = true
+
+[[arms.steps]]
+kind = "release_feedback"
+step_id = "release-acquisition-feedback"
+source_experience_id = "unreliable-instrument-escalation-acquisition"
+feedback_view_id = "dam-escalation-boundary-public-feedback"
+
+[[arms.steps]]
+kind = "consolidate"
+step_id = "consolidate-monitoring-method"
+feedback_step_ids = ["release-acquisition-feedback"]
+operation_id = "update-dam-monitoring-memory"
+
+[[arms.steps]]
+kind = "run_experience"
+step_id = "structured-probe"
+experience_id = "unreliable-instrument-surface-transfer-probe"
+commit_post_state = false

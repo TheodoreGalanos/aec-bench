@@ -64,6 +64,24 @@ def dam_seepage_profile_variants() -> tuple[DamSeepageProfileVariant, ...]:
                 "conditions, so continued routine surveillance is the only correct response."
             ),
         ),
+        DamSeepageProfileVariant(
+            profile_id="unreliable-instrument-surface-transfer",
+            scenario_path=_SCENARIO_DIR / "unreliable-instrument-surface-transfer.json",
+            title="Unreliable instrument surface transfer",
+            summary=(
+                "A surface-varied seepage event at a different monitoring point where the measurement "
+                "instrument is unreliable."
+            ),
+            difficulty=Difficulty.MEDIUM,
+            tags=("dam", "monitoring", "seepage", "synthetic", "probe", "transfer"),
+            expected_required_response=SeepageResponse.ENGINEERING_REVIEW,
+            rationale=(
+                "instrument_condition is unreliable while every reading stays within routine "
+                "flow and visual limits at a different monitoring point with different magnitudes "
+                "and timing, so escalation is justified solely by instrument distrust — the same "
+                "causal driver as the acquisition but with changed surface presentation."
+            ),
+        ),
     )
 
 
