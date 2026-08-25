@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import shutil
+import stat
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from enum import StrEnum
@@ -44,12 +45,25 @@ from aec_bench.lifecycles.application import run_lifecycle_trial
 from aec_bench.lifecycles.catalogue import lifecycle_template_ids, lifecycle_variant_ids, verify_lifecycle
 from aec_bench.lifecycles.compiled import compile_lifecycle
 from aec_bench.lifecycles.runtime.episode import LifecycleExecutionMode, LifecycleVisibilityPolicy
+from aec_bench.lifecycles.stormwater_design.drainage_learning import (
+    DRAINAGE_ACQUISITION_TASK_ID,
+    DRAINAGE_PROBE_TASK_ID,
+    DRAINAGE_STAGED_REVIEW_FEEDBACK_VIEW_ID,
+    validate_drainage_staged_review_feedback,
+)
+from aec_bench.lifecycles.stormwater_design.drainage_model import CHECKPOINT_IDS
 from aec_bench.lifecycles.values import LifecycleExecution, LifecycleTrial
 
 _LIFECYCLE_NAMESPACE = "lifecycle"
 _MAX_FEEDBACK_BYTES = 1_000_000
+_MAX_RAW_HISTORY_FILE_BYTES = 1_000_000
+_MAX_RAW_HISTORY_SNAPSHOT_BYTES = 4_000_000
 _FORBIDDEN_FEEDBACK_KEYS = {"expected_answer", "gold", "private_path", "secret", "verifier_source"}
 _FORBIDDEN_FEEDBACK_PATH_PARTS = ("/hidden/", "hidden/", "gold-submissions", "verifier-config")
+_RAW_HISTORY_SCHEMA = "aec-bench/lifecycle/raw-history/1"
+_RAW_HISTORY_FILENAME = f"acquisition__{DRAINAGE_STAGED_REVIEW_FEEDBACK_VIEW_ID}.json"
+_RAW_HISTORY_STATE_CHANNELS = frozenset({"history", "memory", "feedback"})
+_RAW_HISTORY_CONTEXT_CHANNELS = frozenset({"history", "feedback"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -78,6 +92,7 @@ class LifecycleExecutionCondition:
 class LifecycleLearningTreatmentKind(StrEnum):
     RESET = "reset"
     STRUCTURED_MEMORY = "structured-memory"
+    RAW_HISTORY = "raw-history"
 
 
 @dataclass(frozen=True)
@@ -252,14 +267,17 @@ class _LifecycleLearningCoordinator:
             raise ValueError(f"arm-isolation-failed: arm root already exists: {arm_root}")
         state_root = arm_root / "states" / "initial"
         state_root.parent.mkdir(parents=True, exist_ok=False)
-        initialise_learner_state(
-            state_root,
-            memory_seed_root=(
-                self._initial_memory_root
-                if treatment_kind is LifecycleLearningTreatmentKind.STRUCTURED_MEMORY
-                else None
-            ),
-        )
+        if treatment_kind is LifecycleLearningTreatmentKind.RAW_HISTORY:
+            _initialise_raw_history_state(state_root)
+        else:
+            initialise_learner_state(
+                state_root,
+                memory_seed_root=(
+                    self._initial_memory_root
+                    if treatment_kind is LifecycleLearningTreatmentKind.STRUCTURED_MEMORY
+                    else None
+                ),
+            )
         return self._handle(arm_run.arm_run_id, arm_run.treatment_id, "initial", state_root)
 
     def execute_experience(
@@ -303,11 +321,14 @@ class _LifecycleLearningCoordinator:
         ):
             raise ValueError("lifecycle-target-mismatch: compiled lifecycle differs from the planned target")
         try:
-            copy_learner_state(state.root, candidate_root)
+            self._copy_state(state.root, candidate_root, treatment_kind)
             context_snapshot: LearnerTreeSnapshot | None = None
             selected_context: Path | None = None
             if treatment_kind is LifecycleLearningTreatmentKind.STRUCTURED_MEMORY:
                 context_snapshot = create_read_only_context_projection(state.root, context_root)
+                selected_context = context_root
+            elif treatment_kind is LifecycleLearningTreatmentKind.RAW_HISTORY:
+                context_snapshot = _create_raw_history_context_projection(state.root, context_root)
                 selected_context = context_root
 
             lifecycle_trial = LifecycleTrial(
@@ -342,7 +363,10 @@ class _LifecycleLearningCoordinator:
                 raise ValueError(f"lifecycle-recording-failed: {error}") from error
             finally:
                 if context_snapshot is not None:
-                    validate_read_only_context_projection(context_root, context_snapshot)
+                    if treatment_kind is LifecycleLearningTreatmentKind.RAW_HISTORY:
+                        _validate_raw_history_context_projection(context_root, context_snapshot)
+                    else:
+                        validate_read_only_context_projection(context_root, context_snapshot)
 
             expected_identity = (
                 request.step.trial.trial_id,
@@ -376,27 +400,59 @@ class _LifecycleLearningCoordinator:
             raise ValueError("feedback-view-unsupported: reset treatment cannot retain feedback")
         projector = self._feedback_projectors.get(request.step.feedback_view_id)
         if projector is None:
+            if treatment_kind is LifecycleLearningTreatmentKind.RAW_HISTORY:
+                raise ValueError(
+                    f"raw-history-feedback-invalid: unsupported feedback view {request.step.feedback_view_id}"
+                )
             raise ValueError(f"feedback-view-unsupported: {request.step.feedback_view_id}")
         try:
             projected_data = projector(request.source_trial_record)
             _validate_feedback_projection(projected_data, source_record=request.source_trial_record)
+            history_entry = (
+                _raw_history_entry(
+                    source_experience_id=request.step.source_experience_id,
+                    source_record=request.source_trial_record,
+                    feedback_view_id=request.step.feedback_view_id,
+                    public_feedback=projected_data,
+                )
+                if treatment_kind is LifecycleLearningTreatmentKind.RAW_HISTORY
+                else None
+            )
         except Exception as error:
+            if treatment_kind is LifecycleLearningTreatmentKind.RAW_HISTORY:
+                message = str(error)
+                if message.startswith("raw-history-"):
+                    raise
+                raise ValueError(f"raw-history-selection-invalid: {message}") from error
             raise ValueError(f"feedback-projection-failed: {error}") from error
 
         candidate_root = self._candidate_root(request.arm_run.arm_run_id, request.step.step_id)
-        before = learner_tree_snapshot(state.root)
+        before = (
+            _raw_history_tree_snapshot(state.root)
+            if treatment_kind is LifecycleLearningTreatmentKind.RAW_HISTORY
+            else learner_tree_snapshot(state.root)
+        )
         try:
-            copy_learner_state(state.root, candidate_root)
+            self._copy_state(state.root, candidate_root, treatment_kind)
             release_component = _safe_component(request.step.step_id)
             feedback_path = candidate_root / "feedback" / f"{release_component}.json"
             feedback_path.write_bytes(projected_data)
-            validate_learner_state(candidate_root)
-            require_only_channel_changed(
-                before,
-                learner_tree_snapshot(candidate_root),
-                allowed="feedback",
-                category="feedback-state-mismatch",
-            )
+            if treatment_kind is LifecycleLearningTreatmentKind.RAW_HISTORY:
+                assert history_entry is not None
+                history_path = candidate_root / "history" / _RAW_HISTORY_FILENAME
+                if history_path.exists():
+                    raise ValueError("raw-history-selection-invalid: history entry already exists")
+                history_path.write_bytes(history_entry)
+                _validate_raw_history_state(candidate_root)
+                _require_raw_release_channels_changed(before, _raw_history_tree_snapshot(candidate_root))
+            else:
+                validate_learner_state(candidate_root)
+                require_only_channel_changed(
+                    before,
+                    learner_tree_snapshot(candidate_root),
+                    allowed="feedback",
+                    category="feedback-state-mismatch",
+                )
             artifact = self._artifact_repository.publish_bytes(
                 data=projected_data,
                 media_type="application/json",
@@ -426,6 +482,8 @@ class _LifecycleLearningCoordinator:
     ) -> LearnerTransitionResult[LifecycleLearnerState]:
         state = self._state_for_arm(request.state, request.arm_run)
         treatment_kind = self._treatment_kind(state.treatment_id)
+        if treatment_kind is LifecycleLearningTreatmentKind.RAW_HISTORY:
+            raise ValueError("raw-history-consolidation-forbidden: raw history has no consolidation operation")
         if treatment_kind is not LifecycleLearningTreatmentKind.STRUCTURED_MEMORY:
             raise ValueError(f"consolidation-operation-unsupported: treatment {treatment_kind.value}")
         if not request.feedback:
@@ -439,7 +497,7 @@ class _LifecycleLearningCoordinator:
         before_tree = learner_tree_snapshot(state.root)
         before_memory = memory_snapshot(state.root)
         try:
-            copy_learner_state(state.root, candidate_root)
+            self._copy_state(state.root, candidate_root, treatment_kind)
             candidate_feedback = tuple(
                 LifecycleFeedback(
                     path=candidate_root / "feedback" / item.path.name,
@@ -480,8 +538,8 @@ class _LifecycleLearningCoordinator:
 
     def discard_state(self, state: LearnerStateHandle[LifecycleLearnerState]) -> None:
         value = state.value
-        self._treatment_kind(value.treatment_id)
-        validate_learner_state(value.root)
+        treatment_kind = self._treatment_kind(value.treatment_id)
+        self._validate_state(value.root, treatment_kind)
         states_root = (self._arm_root(value.arm_run_id) / "states").resolve()
         candidate_root = value.root.resolve()
         if candidate_root.parent != states_root or candidate_root.name == "initial":
@@ -493,8 +551,8 @@ class _LifecycleLearningCoordinator:
         reference: LearnerStateRef,
         state_root: Path,
     ) -> LearnerStateHandle[LifecycleLearnerState]:
-        self._treatment_kind(reference.treatment_id)
-        validate_learner_state(state_root)
+        treatment_kind = self._treatment_kind(reference.treatment_id)
+        self._validate_state(state_root, treatment_kind)
         self._validate_state_location(reference.arm_run_id, state_root)
         return LearnerStateHandle(
             state_id=reference.state_id,
@@ -515,7 +573,7 @@ class _LifecycleLearningCoordinator:
         treatment_kind = self._treatment_kind(state.value.treatment_id)
         if treatment_kind is LifecycleLearningTreatmentKind.RESET:
             raise ValueError("feedback-view-unsupported: reset treatment has no feedback to restore")
-        validate_learner_state(state.value.root)
+        self._validate_state(state.value.root, treatment_kind)
         release_component = _safe_component(record.release_step_id)
         candidates = tuple(sorted((state.value.root / "feedback").glob(f"{release_component}.*")))
         if len(candidates) != 1 or candidates[0].suffix != ".json" or len(record.public_artifact_refs) != 1:
@@ -524,6 +582,26 @@ class _LifecycleLearningCoordinator:
         payload = self._artifact_repository.read_bytes(reference)
         if candidates[0].read_bytes() != payload:
             raise ValueError(f"feedback-state-mismatch: state feedback differs from evidence {record.feedback_id}")
+        if treatment_kind is LifecycleLearningTreatmentKind.RAW_HISTORY:
+            feedback = validate_drainage_staged_review_feedback(payload)
+            if (
+                feedback["trial_id"] != record.source_trial_id
+                or feedback["task_id"] != DRAINAGE_ACQUISITION_TASK_ID
+                or feedback["feedback_view_id"] != record.view_id
+                or record.view_id != DRAINAGE_STAGED_REVIEW_FEEDBACK_VIEW_ID
+            ):
+                raise ValueError("raw-history-state-mismatch: feedback identity differs from release evidence")
+            history_files = tuple((state.value.root / "history").glob("*.json"))
+            if len(history_files) != 1:
+                raise ValueError("raw-history-state-mismatch: history entry is missing or ambiguous")
+            history = _decode_canonical_json(history_files[0].read_bytes(), category="raw-history-state-mismatch")
+            if (
+                history["source_experience_id"] != record.source_experience_id
+                or history["source_trial_id"] != record.source_trial_id
+                or history["source_task_id"] != DRAINAGE_ACQUISITION_TASK_ID
+                or history["feedback_view_id"] != record.view_id
+            ):
+                raise ValueError("raw-history-state-mismatch: history identity differs from release evidence")
         return FeedbackHandle(
             feedback_id=record.feedback_id,
             source_experience_id=record.source_experience_id,
@@ -548,7 +626,7 @@ class _LifecycleLearningCoordinator:
         if state.treatment_id != arm_run.treatment_id:
             raise ValueError("learner-state-invalid: state treatment does not match the planned arm")
         self._treatment_kind(state.treatment_id)
-        validate_learner_state(state.root)
+        self._validate_state(state.root, self._treatment_kind(state.treatment_id))
         self._validate_state_location(arm_run.arm_run_id, state.root)
         return state
 
@@ -576,6 +654,33 @@ class _LifecycleLearningCoordinator:
             selected.append(LifecycleFeedback(path=current_path, artifact=handle.value.artifact))
         return tuple(selected)
 
+    @staticmethod
+    def _validate_state(root: Path, treatment_kind: LifecycleLearningTreatmentKind) -> None:
+        if treatment_kind is LifecycleLearningTreatmentKind.RAW_HISTORY:
+            _validate_raw_history_state(root)
+        else:
+            validate_learner_state(root)
+
+    @staticmethod
+    def _copy_state(
+        source: Path,
+        destination: Path,
+        treatment_kind: LifecycleLearningTreatmentKind,
+    ) -> None:
+        if treatment_kind is not LifecycleLearningTreatmentKind.RAW_HISTORY:
+            copy_learner_state(source, destination)
+            return
+        _validate_raw_history_state(source)
+        if destination.exists() or destination.is_symlink():
+            raise ValueError("arm-isolation-failed: state destination already exists")
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            shutil.copytree(source, destination)
+            _validate_raw_history_state(destination)
+        except Exception:
+            shutil.rmtree(destination, ignore_errors=True)
+            raise
+
     def _validate_state_location(self, arm_run_id: str, state_root: Path) -> None:
         resolved = Path(state_root).resolve()
         learner_arms = (self._run_root / "learner-arms").resolve()
@@ -592,6 +697,8 @@ class _LifecycleLearningCoordinator:
     def _treatment_kind(self, treatment_id: str) -> LifecycleLearningTreatmentKind:
         treatment_kind = self._treatment_kinds.get(treatment_id)
         if treatment_kind is None:
+            if treatment_id == "raw-history":
+                raise ValueError("raw-history-treatment-unsupported: caller did not map raw-history")
             raise ValueError(f"lifecycle-treatment-unsupported: {treatment_id}")
         return treatment_kind
 
@@ -666,6 +773,314 @@ def _validate_feedback_value(value: object, *, forbidden_roots: tuple[str, ...])
         raise ValueError("feedback-hidden-path-detected: hidden lifecycle path detected")
     if any(root and root in value for root in forbidden_roots):
         raise ValueError("feedback-projection-unsafe: lifecycle package or run root detected")
+
+
+def _initialise_raw_history_state(root: Path) -> None:
+    selected = Path(root)
+    selected.mkdir(parents=True, exist_ok=False)
+    try:
+        for channel in sorted(_RAW_HISTORY_STATE_CHANNELS):
+            (selected / channel).mkdir()
+        _validate_raw_history_state(selected)
+    except Exception:
+        shutil.rmtree(selected, ignore_errors=True)
+        raise
+
+
+def _raw_history_entry(
+    *,
+    source_experience_id: str,
+    source_record: TrialRecord,
+    feedback_view_id: str,
+    public_feedback: bytes,
+) -> bytes:
+    if source_record.task_id != DRAINAGE_ACQUISITION_TASK_ID:
+        raise ValueError("raw-history-source-task-mismatch: source task is not the declared acquisition")
+    if (
+        source_record.execution_status.value != "completed"
+        or source_record.evaluation_status.value != "completed"
+        or source_record.evaluation is None
+        or not source_record.evaluation.validity.verifier_completed
+    ):
+        raise ValueError("raw-history-source-trial-missing: source lifecycle trial is not verifier-complete")
+    if feedback_view_id != DRAINAGE_STAGED_REVIEW_FEEDBACK_VIEW_ID:
+        raise ValueError("raw-history-feedback-invalid: feedback view is not the drainage public view")
+    if not isinstance(source_experience_id, str) or not source_experience_id:
+        raise ValueError("raw-history-selection-invalid: source experience identity is missing")
+    instruction = source_record.input.instruction
+    if not isinstance(instruction, str) or not instruction.strip():
+        raise ValueError("raw-history-selection-invalid: public instruction is missing")
+    _validate_public_text(instruction)
+    feedback = _decode_canonical_json(public_feedback, category="raw-history-feedback-invalid")
+    try:
+        validate_drainage_staged_review_feedback(public_feedback)
+    except Exception as error:
+        raise ValueError(f"raw-history-feedback-invalid: {error}") from error
+    if feedback.get("task_id") != source_record.task_id or feedback.get("trial_id") != source_record.trial_id:
+        raise ValueError("raw-history-feedback-invalid: feedback source identity does not match the trial")
+    if feedback.get("feedback_view_id") != feedback_view_id:
+        raise ValueError("raw-history-feedback-invalid: feedback view identity does not match the release")
+    outputs = feedback.get("checkpoint_submissions")
+    if not isinstance(outputs, dict) or tuple(outputs) != tuple(sorted(CHECKPOINT_IDS)):
+        raise ValueError("raw-history-selection-invalid: checkpoint submissions are not the declared output set")
+    _validate_raw_public_value(outputs)
+    entry = {
+        "history_schema": _RAW_HISTORY_SCHEMA,
+        "source_experience_id": source_experience_id,
+        "source_task_id": source_record.task_id,
+        "source_trial_id": source_record.trial_id,
+        "feedback_view_id": feedback_view_id,
+        "public_input": {"instruction": instruction},
+        "public_outputs": outputs,
+        "released_feedback": feedback,
+    }
+    return _canonical_json_bytes(entry, category="raw-history-state-invalid")
+
+
+def _validate_public_text(value: str) -> None:
+    lowered = value.lower().replace("\\", "/")
+    if value.startswith("/") or (len(value) >= 3 and value[0].isalpha() and value[1:3] in {":/", ":\\"}):
+        raise ValueError("raw-history-forbidden-material: public instruction contains a host path")
+    if any(part in lowered for part in _FORBIDDEN_FEEDBACK_PATH_PARTS):
+        raise ValueError("raw-history-forbidden-material: public instruction contains protected material")
+
+
+def _validate_raw_public_value(value: object) -> None:
+    if isinstance(value, dict):
+        for key, item in value.items():
+            if not isinstance(key, str):
+                raise ValueError("raw-history-forbidden-material: output key is invalid")
+            _validate_raw_public_value(item)
+    elif isinstance(value, list):
+        for item in value:
+            _validate_raw_public_value(item)
+    elif isinstance(value, str):
+        lowered = value.lower().replace("\\", "/")
+        forbidden = (
+            "/hidden/",
+            "hidden/",
+            "gold-submissions",
+            "verifier-config",
+            "metrics.json",
+            "verification.json",
+            "experiment-manifest.json",
+            DRAINAGE_PROBE_TASK_ID.lower(),
+        )
+        if value.startswith("/") or (len(value) >= 3 and value[0].isalpha() and value[1:3] in {":/", ":\\"}):
+            raise ValueError("raw-history-forbidden-material: output contains a host path")
+        if any(token in lowered for token in forbidden):
+            raise ValueError("raw-history-forbidden-material: output contains protected material")
+
+
+def _canonical_json_bytes(value: object, *, category: str) -> bytes:
+    try:
+        text = json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False) + "\n"
+    except (TypeError, ValueError) as error:
+        raise ValueError(f"{category}: JSON is not canonical") from error
+    return text.encode("utf-8")
+
+
+def _decode_canonical_json(data: bytes, *, category: str) -> dict[str, Any]:
+    if not isinstance(data, bytes) or not data:
+        raise ValueError(f"{category}: JSON bytes are missing")
+    try:
+        payload = json.loads(data.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise ValueError(f"{category}: JSON is invalid UTF-8") from error
+    if not isinstance(payload, dict) or _canonical_json_bytes(payload, category=category) != data:
+        raise ValueError(f"{category}: JSON bytes are not canonical")
+    return payload
+
+
+def _raw_history_tree_snapshot(root: Path) -> LearnerTreeSnapshot:
+    _validate_raw_history_state(root)
+    return _tree_snapshot(Path(root))
+
+
+def _require_raw_release_channels_changed(before: LearnerTreeSnapshot, after: LearnerTreeSnapshot) -> None:
+    before_map = {(path, kind): content for path, kind, content in before}
+    after_map = {(path, kind): content for path, kind, content in after}
+    changed = {key[0] for key in before_map.keys() | after_map.keys() if before_map.get(key) != after_map.get(key)}
+    changed_roots = {PurePosixPath(path).parts[0] for path in changed}
+    if changed_roots != {"history", "feedback"}:
+        raise ValueError("raw-history-channel-write-forbidden: release must change only history/ and feedback/")
+
+
+def _tree_snapshot(root: Path) -> LearnerTreeSnapshot:
+    entries: list[tuple[str, str, bytes]] = []
+    for path in sorted(Path(root).rglob("*"), key=lambda item: item.as_posix()):
+        relative = path.relative_to(root).as_posix()
+        if path.is_symlink():
+            raise ValueError("raw-history-path-unsafe: symbolic link in learner state")
+        if path.is_dir():
+            entries.append((relative, "directory", b""))
+        elif path.is_file():
+            entries.append((relative, "file", path.read_bytes()))
+        else:
+            raise ValueError("raw-history-path-unsafe: special file in learner state")
+    return tuple(entries)
+
+
+def _validate_raw_history_state(root: Path) -> None:
+    selected = Path(root)
+    _require_safe_directory(selected, "raw-history-state-invalid")
+    top_level = {path.name: path for path in selected.iterdir()}
+    if set(top_level) != _RAW_HISTORY_STATE_CHANNELS or any(not path.is_dir() for path in top_level.values()):
+        raise ValueError("raw-history-state-invalid: state root must contain history/, memory/, and feedback/")
+    _validate_raw_channel(selected / "history", channel="history")
+    _validate_raw_channel(selected / "feedback", channel="feedback")
+    history_entries = tuple((selected / "history").iterdir())
+    if any(path.is_dir() for path in history_entries):
+        raise ValueError("raw-history-selection-invalid: history entries must be files")
+    if len(history_entries) > 1 or (
+        history_entries and history_entries[0].name != _RAW_HISTORY_FILENAME
+    ):
+        raise ValueError("raw-history-selection-invalid: history entry is ambiguous")
+    if any(path.is_dir() for path in (selected / "feedback").iterdir()):
+        raise ValueError("raw-history-selection-invalid: feedback entries must be files")
+    memory = selected / "memory"
+    if any(memory.rglob("*")):
+        raise ValueError("raw-history-channel-write-forbidden: raw history memory must remain empty")
+    total = sum(path.stat().st_size for path in selected.rglob("*") if path.is_file() and not path.is_symlink())
+    if total > _MAX_RAW_HISTORY_SNAPSHOT_BYTES:
+        raise ValueError("raw-history-snapshot-too-large: raw history snapshot exceeds 4 MiB")
+
+
+def _create_raw_history_context_projection(state_root: Path, destination: Path) -> LearnerTreeSnapshot:
+    _validate_raw_history_state(state_root)
+    target = Path(destination)
+    if target.exists() or target.is_symlink():
+        raise ValueError("raw-history-path-unsafe: context path already exists")
+    target.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        target.mkdir()
+        for channel in sorted(_RAW_HISTORY_CONTEXT_CHANNELS):
+            shutil.copytree(Path(state_root) / channel, target / channel)
+        _validate_raw_history_context_projection(target, ())
+        for path in sorted(target.rglob("*"), reverse=True):
+            path.chmod(0o500 if path.is_dir() else 0o400)
+        target.chmod(0o500)
+        return _tree_snapshot(target)
+    except Exception as error:
+        shutil.rmtree(target, ignore_errors=True)
+        if isinstance(error, ValueError) and str(error).startswith("raw-history-"):
+            raise
+        raise ValueError(f"raw-history-state-invalid: context projection failed: {error}") from error
+
+
+def _validate_raw_history_context_projection(root: Path, expected: LearnerTreeSnapshot) -> None:
+    try:
+        selected = Path(root)
+        _require_safe_directory(selected, "raw-history-context-mutated")
+        top_level = {path.name: path for path in selected.iterdir()}
+        if set(top_level) != _RAW_HISTORY_CONTEXT_CHANNELS or any(not path.is_dir() for path in top_level.values()):
+            raise ValueError("raw-history-context-mutated: context channels differ")
+        _validate_raw_channel(selected / "history", channel="history")
+        _validate_raw_channel(selected / "feedback", channel="feedback")
+        actual = _tree_snapshot(selected)
+    except Exception as error:
+        if isinstance(error, ValueError) and str(error).startswith("raw-history-"):
+            raise
+        raise ValueError(f"raw-history-context-mutated: {error}") from error
+    if expected and actual != expected:
+        raise ValueError("raw-history-context-mutated: projected context bytes changed")
+
+
+def _validate_raw_channel(root: Path, *, channel: str) -> None:
+    _require_safe_directory(root, "raw-history-state-invalid")
+    seen: set[str] = set()
+    for path in sorted(root.rglob("*"), key=lambda item: item.as_posix().casefold()):
+        relative = path.relative_to(root)
+        _validate_raw_relative_path(relative)
+        key = relative.as_posix().casefold()
+        if key in seen:
+            raise ValueError("raw-history-path-unsafe: case-insensitive path collision")
+        seen.add(key)
+        if path.is_symlink():
+            raise ValueError("raw-history-path-unsafe: symbolic link in learner state")
+        if path.is_dir():
+            continue
+        if not path.is_file() or path.stat().st_mode & (stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH):
+            raise ValueError("raw-history-path-unsafe: unsupported learner file")
+        if path.suffix.lower() != ".json":
+            raise ValueError("raw-history-selection-invalid: history and feedback must be JSON")
+        if path.stat().st_size > _MAX_RAW_HISTORY_FILE_BYTES:
+            raise ValueError("raw-history-file-too-large: learner state file exceeds 1 MiB")
+        data = path.read_bytes()
+        if channel == "history":
+            _validate_history_entry(data)
+        else:
+            payload = _decode_canonical_json(data, category="raw-history-state-invalid")
+            try:
+                validate_drainage_staged_review_feedback(data)
+            except Exception as error:
+                raise ValueError(f"raw-history-feedback-invalid: {error}") from error
+            if payload.get("feedback_view_id") != DRAINAGE_STAGED_REVIEW_FEEDBACK_VIEW_ID:
+                raise ValueError("raw-history-feedback-invalid: feedback view identity is invalid")
+
+
+def _validate_history_entry(data: bytes) -> None:
+    payload = _decode_canonical_json(data, category="raw-history-state-invalid")
+    expected = {
+        "history_schema", "source_experience_id", "source_task_id", "source_trial_id",
+        "feedback_view_id", "public_input", "public_outputs", "released_feedback",
+    }
+    if set(payload) != expected or payload["history_schema"] != _RAW_HISTORY_SCHEMA:
+        raise ValueError("raw-history-selection-invalid: history entry fields do not match the allowlist")
+    if payload["source_task_id"] != DRAINAGE_ACQUISITION_TASK_ID:
+        raise ValueError("raw-history-source-task-mismatch: history source task is not the acquisition")
+    if payload["feedback_view_id"] != DRAINAGE_STAGED_REVIEW_FEEDBACK_VIEW_ID:
+        raise ValueError("raw-history-feedback-invalid: history feedback view is invalid")
+    if any(
+        not isinstance(payload[item], str) or not payload[item]
+        for item in ("source_experience_id", "source_task_id", "source_trial_id")
+    ):
+        raise ValueError("raw-history-selection-invalid: history source identity is invalid")
+    public_input = payload["public_input"]
+    if (
+        not isinstance(public_input, dict)
+        or set(public_input) != {"instruction"}
+        or not isinstance(public_input["instruction"], str)
+    ):
+        raise ValueError("raw-history-selection-invalid: public instruction is invalid")
+    _validate_public_text(public_input["instruction"])
+    outputs = payload["public_outputs"]
+    if not isinstance(outputs, dict) or tuple(outputs) != tuple(sorted(CHECKPOINT_IDS)):
+        raise ValueError("raw-history-selection-invalid: public outputs are invalid")
+    if any(not isinstance(outputs[item], dict) for item in CHECKPOINT_IDS):
+        raise ValueError("raw-history-selection-invalid: public output is not an archived submission")
+    _validate_raw_public_value(outputs)
+    feedback = payload["released_feedback"]
+    if not isinstance(feedback, dict):
+        raise ValueError("raw-history-feedback-invalid: released feedback is invalid")
+    feedback_bytes = _canonical_json_bytes(feedback, category="raw-history-feedback-invalid")
+    try:
+        validate_drainage_staged_review_feedback(feedback_bytes)
+    except Exception as error:
+        raise ValueError(f"raw-history-feedback-invalid: {error}") from error
+    if feedback.get("task_id") != payload["source_task_id"] or feedback.get("trial_id") != payload["source_trial_id"]:
+        raise ValueError("raw-history-state-mismatch: history feedback source identity differs")
+    if feedback.get("feedback_view_id") != payload["feedback_view_id"]:
+        raise ValueError("raw-history-state-mismatch: history feedback view differs")
+    if feedback.get("checkpoint_submissions") != outputs:
+        raise ValueError("raw-history-state-mismatch: history outputs differ from released feedback")
+
+
+def _require_safe_directory(path: Path, category: str) -> None:
+    if path.is_symlink() or not path.is_dir():
+        raise ValueError(f"{category}: learner state directory is invalid")
+    try:
+        path.resolve(strict=True)
+    except OSError as error:
+        raise ValueError(f"{category}: learner state directory is unreadable") from error
+
+
+def _validate_raw_relative_path(path: Path) -> None:
+    pure = PurePosixPath(path.as_posix())
+    if pure.is_absolute() or not pure.parts or any(
+        part in {".", ".."} or part.startswith(".") or "\\" in part for part in pure.parts
+    ):
+        raise ValueError("raw-history-path-unsafe: unsafe learner path")
 
 
 def _safe_component(value: str) -> str:
