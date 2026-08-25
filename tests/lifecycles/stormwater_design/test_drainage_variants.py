@@ -29,6 +29,8 @@ EXPECTED_VARIANTS = (
     "response_assertion_only",
     "semantic_no_op_release",
     "staged_full_correction",
+    "staged_full_correction_guided",
+    "staged_full_correction_reduced",
 )
 CHECKPOINT_IDS = ("initial_review", "response_review", "closeout_review")
 
@@ -145,6 +147,8 @@ def test_drainage_model_variants_materialize_deterministically_and_golden_state_
     ("variant_id", "expected_failures", "expected_readiness"),
     [
         ("staged_full_correction", ("PRV-03", "PRV-06", None), "ready_to_issue"),
+        ("staged_full_correction_guided", ("PRV-03", "PRV-06", None), "ready_to_issue"),
+        ("staged_full_correction_reduced", ("PRV-03", "PRV-06", None), "ready_to_issue"),
         ("semantic_no_op_release", ("PRV-03", "PRV-03", None), "ready_to_issue"),
         ("response_assertion_only", ("PRV-03", "PRV-03", None), "ready_to_issue"),
         ("memo_closeout_missing", ("PRV-03", "PRV-06", "PRV-06"), "not_ready_to_issue"),
@@ -471,6 +475,58 @@ def test_variant_packages_have_distinct_host_side_hashes(tmp_path: Path) -> None
     }
 
     assert len(digests) == len(EXPECTED_VARIANTS)
+
+
+def test_staged_scaffolding_variants_preserve_topology_and_gold(tmp_path: Path) -> None:
+    specs = [
+        get_drainage_model_variant(variant_id)
+        for variant_id in ("staged_full_correction", "staged_full_correction_guided", "staged_full_correction_reduced")
+    ]
+    assert [tuple(checkpoint.events for checkpoint in spec.checkpoints) for spec in specs] == [
+        tuple(checkpoint.events for checkpoint in specs[0].checkpoints)
+    ] * 3
+    packages = {
+        variant_id: materialize_lifecycle(
+            "drainage-model-evidence-lifecycle-review",
+            tmp_path / variant_id,
+            variant_id=variant_id,
+        )
+        for variant_id in ("staged_full_correction", "staged_full_correction_guided", "staged_full_correction_reduced")
+    }
+    gold = [_load_json(package / "hidden" / "gold-submissions.json") for package in packages.values()]
+    assert gold[0] == gold[1] == gold[2]
+    assert [_load_json(package / "hidden" / "variant.json")["variant_id"] for package in packages.values()] == list(
+        packages
+    )
+    for checkpoint_id in CHECKPOINT_IDS:
+        assert (
+            _instruction_without_scaffolding(
+                (packages["staged_full_correction_guided"] / "instructions" / f"{checkpoint_id}.md").read_text()
+            )
+            == (packages["staged_full_correction"] / "instructions" / f"{checkpoint_id}.md").read_text()
+        )
+        assert (
+            _instruction_without_scaffolding(
+                (packages["staged_full_correction_reduced"] / "instructions" / f"{checkpoint_id}.md").read_text()
+            )
+            == (packages["staged_full_correction"] / "instructions" / f"{checkpoint_id}.md").read_text()
+        )
+    assert _package_files(packages["staged_full_correction"]) != _package_files(
+        packages["staged_full_correction_guided"]
+    )
+    for root in ("releases",):
+        for path in (packages["staged_full_correction"] / root).rglob("*"):
+            if path.is_file():
+                relative = path.relative_to(packages["staged_full_correction"])
+                assert path.read_bytes() == (packages["staged_full_correction_guided"] / relative).read_bytes()
+                assert path.read_bytes() == (packages["staged_full_correction_reduced"] / relative).read_bytes()
+
+
+def _instruction_without_scaffolding(text: str) -> str:
+    for marker in ("\n\nGuided evidence-seeking checklist:", "\n\nEvidence-seeking prompts:"):
+        if marker in text:
+            return text.split(marker, 1)[0].rstrip() + "\n"
+    return text
 
 
 @pytest.mark.parametrize("variant_id", EXPECTED_VARIANTS)

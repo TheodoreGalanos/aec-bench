@@ -1,0 +1,253 @@
+# Maintained L03 study data. Keep this file aligned with the current study
+# schema and existing treatment, feedback, and projection identifiers.
+study_id = "l03-drainage-scaffolding-transfer"
+title = "Drainage scaffolding transfer"
+research_question = "Does guided scaffolding (structured checklists, worked examples) at acquisition transfer to independent performance after scaffold withdrawal, compared to a matched cold independent probe?"
+relation_ids = ["scaffolding-guided-to-independent"]
+
+[[experiences]]
+experience_id = "guided-acquisition"
+family_member_id = "guided-acquisition"
+role = "acquisition"
+
+[[experiences]]
+experience_id = "reduced-practice"
+family_member_id = "reduced-practice"
+role = "practice"
+
+[[experiences]]
+experience_id = "independent-acquisition"
+task_id = "lifecycle/drainage-model-evidence-lifecycle-review/staged_full_correction"
+role = "acquisition"
+
+[[experiences]]
+experience_id = "independent-practice"
+task_id = "lifecycle/drainage-model-evidence-lifecycle-review/staged_full_correction"
+role = "practice"
+
+[[experiences]]
+experience_id = "independent-probe"
+family_member_id = "independent-probe"
+role = "probe"
+
+[[measurements]]
+measurement_id = "scaffolded-withdrawal-canonical-reward-gain"
+projection_id = "lifecycle.canonical-reward"
+direction = "higher"
+target_experience_id = "independent-probe"
+focal_arm_id = "scaffolded-withdrawal"
+comparator_arm_id = "cold-independent"
+
+[[measurements]]
+measurement_id = "scaffolded-withdrawal-phase-completion-gain"
+projection_id = "drainage.phase-completion"
+direction = "higher"
+target_experience_id = "independent-probe"
+focal_arm_id = "scaffolded-withdrawal"
+comparator_arm_id = "cold-independent"
+
+[[measurements]]
+measurement_id = "scaffolded-withdrawal-finding-continuity-gain"
+projection_id = "drainage.finding-continuity"
+direction = "higher"
+target_experience_id = "independent-probe"
+focal_arm_id = "scaffolded-withdrawal"
+comparator_arm_id = "cold-independent"
+
+[[measurements]]
+measurement_id = "scaffolded-withdrawal-closure-evidence-gain"
+projection_id = "drainage.closure-evidence"
+direction = "higher"
+target_experience_id = "independent-probe"
+focal_arm_id = "scaffolded-withdrawal"
+comparator_arm_id = "cold-independent"
+
+[[measurements]]
+measurement_id = "scaffolded-withdrawal-claim-boundary-gain"
+projection_id = "drainage.claim-boundary"
+direction = "higher"
+target_experience_id = "independent-probe"
+focal_arm_id = "scaffolded-withdrawal"
+comparator_arm_id = "cold-independent"
+
+[[measurements]]
+measurement_id = "guided-only-canonical-reward-gain"
+projection_id = "lifecycle.canonical-reward"
+direction = "higher"
+target_experience_id = "independent-probe"
+focal_arm_id = "guided-only"
+comparator_arm_id = "cold-independent"
+
+[[measurements]]
+measurement_id = "guided-only-phase-completion-gain"
+projection_id = "drainage.phase-completion"
+direction = "higher"
+target_experience_id = "independent-probe"
+focal_arm_id = "guided-only"
+comparator_arm_id = "cold-independent"
+
+[[measurements]]
+measurement_id = "unscaffolded-practice-canonical-reward-gain"
+projection_id = "lifecycle.canonical-reward"
+direction = "higher"
+target_experience_id = "independent-probe"
+focal_arm_id = "unscaffolded-practice"
+comparator_arm_id = "cold-independent"
+
+[[measurements]]
+measurement_id = "scaffolded-versus-unscaffolded-canonical-reward"
+projection_id = "lifecycle.canonical-reward"
+direction = "higher"
+target_experience_id = "independent-probe"
+focal_arm_id = "scaffolded-withdrawal"
+comparator_arm_id = "unscaffolded-practice"
+
+[[measurements]]
+measurement_id = "scaffolded-versus-unscaffolded-phase-completion"
+projection_id = "drainage.phase-completion"
+direction = "higher"
+target_experience_id = "independent-probe"
+focal_arm_id = "scaffolded-withdrawal"
+comparator_arm_id = "unscaffolded-practice"
+
+[[measurements]]
+measurement_id = "scaffolded-versus-guided-only-canonical-reward"
+projection_id = "lifecycle.canonical-reward"
+direction = "higher"
+target_experience_id = "independent-probe"
+focal_arm_id = "scaffolded-withdrawal"
+comparator_arm_id = "guided-only"
+
+[[arms]]
+arm_id = "cold-independent"
+role = "control"
+treatment_id = "reset"
+
+[[arms.steps]]
+kind = "run_experience"
+step_id = "cold-probe"
+experience_id = "independent-probe"
+commit_post_state = false
+
+[[arms]]
+arm_id = "scaffolded-withdrawal"
+role = "exposure"
+treatment_id = "structured-memory"
+
+[[arms.steps]]
+kind = "run_experience"
+step_id = "guided-acq"
+experience_id = "guided-acquisition"
+commit_post_state = true
+
+[[arms.steps]]
+kind = "release_feedback"
+step_id = "guided-release"
+source_experience_id = "guided-acquisition"
+feedback_view_id = "drainage-checkpoint-detailed-feedback"
+
+[[arms.steps]]
+kind = "consolidate"
+step_id = "guided-consolidation"
+feedback_step_ids = ["guided-release"]
+operation_id = "update-lifecycle-review-memory"
+
+[[arms.steps]]
+kind = "run_experience"
+step_id = "reduced-prac"
+experience_id = "reduced-practice"
+commit_post_state = true
+
+[[arms.steps]]
+kind = "release_feedback"
+step_id = "reduced-release"
+source_experience_id = "reduced-practice"
+feedback_view_id = "drainage-checkpoint-detailed-feedback"
+
+[[arms.steps]]
+kind = "consolidate"
+step_id = "reduced-consolidation"
+feedback_step_ids = ["reduced-release"]
+operation_id = "update-lifecycle-review-memory"
+
+[[arms.steps]]
+kind = "run_experience"
+step_id = "scaffolded-probe"
+experience_id = "independent-probe"
+commit_post_state = false
+
+[[arms]]
+arm_id = "guided-only"
+role = "exposure"
+treatment_id = "structured-memory"
+
+[[arms.steps]]
+kind = "run_experience"
+step_id = "guided-only-acq"
+experience_id = "guided-acquisition"
+commit_post_state = true
+
+[[arms.steps]]
+kind = "release_feedback"
+step_id = "guided-only-release"
+source_experience_id = "guided-acquisition"
+feedback_view_id = "drainage-checkpoint-detailed-feedback"
+
+[[arms.steps]]
+kind = "consolidate"
+step_id = "guided-only-consolidation"
+feedback_step_ids = ["guided-only-release"]
+operation_id = "update-lifecycle-review-memory"
+
+[[arms.steps]]
+kind = "run_experience"
+step_id = "guided-only-probe"
+experience_id = "independent-probe"
+commit_post_state = false
+
+[[arms]]
+arm_id = "unscaffolded-practice"
+role = "exposure"
+treatment_id = "structured-memory"
+
+[[arms.steps]]
+kind = "run_experience"
+step_id = "unscaffolded-acq"
+experience_id = "independent-acquisition"
+commit_post_state = true
+
+[[arms.steps]]
+kind = "release_feedback"
+step_id = "unscaffolded-release-1"
+source_experience_id = "independent-acquisition"
+feedback_view_id = "drainage-checkpoint-detailed-feedback"
+
+[[arms.steps]]
+kind = "consolidate"
+step_id = "unscaffolded-consolidation-1"
+feedback_step_ids = ["unscaffolded-release-1"]
+operation_id = "update-lifecycle-review-memory"
+
+[[arms.steps]]
+kind = "run_experience"
+step_id = "unscaffolded-prac"
+experience_id = "independent-practice"
+commit_post_state = true
+
+[[arms.steps]]
+kind = "release_feedback"
+step_id = "unscaffolded-release-2"
+source_experience_id = "independent-practice"
+feedback_view_id = "drainage-checkpoint-detailed-feedback"
+
+[[arms.steps]]
+kind = "consolidate"
+step_id = "unscaffolded-consolidation-2"
+feedback_step_ids = ["unscaffolded-release-2"]
+operation_id = "update-lifecycle-review-memory"
+
+[[arms.steps]]
+kind = "run_experience"
+step_id = "unscaffolded-probe"
+experience_id = "independent-probe"
+commit_post_state = false

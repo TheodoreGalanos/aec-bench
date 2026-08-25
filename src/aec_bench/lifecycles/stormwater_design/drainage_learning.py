@@ -13,8 +13,10 @@ from pydantic import Field, ValidationError
 from aec_bench.contracts.evaluation_result import EvaluationResult
 from aec_bench.contracts.trial_record import EvaluationStatus, ExecutionStatus, TrialRecord
 from aec_bench.contracts.validators import NonEmptyStr, StrictModel
+from aec_bench.experimentation.learning_studies.assessment import ProjectionResult
 from aec_bench.lifecycles.runtime.lifecycle import load_validated_lifecycle_submissions
 from aec_bench.lifecycles.stormwater_design.drainage_model import CHECKPOINT_IDS, GATE_IDS, TEMPLATE_ID
+from aec_bench.lifecycles.stormwater_design.drainage_variants import get_drainage_model_variant
 
 DRAINAGE_STAGED_REVIEW_FEEDBACK_VIEW_ID = "drainage-staged-review-public-feedback"
 DRAINAGE_CHECKPOINT_DETAILED_FEEDBACK_VIEW_ID = "drainage-checkpoint-detailed-feedback"
@@ -22,8 +24,12 @@ DRAINAGE_PHASE_SUMMARY_FEEDBACK_VIEW_ID = "drainage-phase-summary-feedback"
 DRAINAGE_TERMINAL_FEEDBACK_VIEW_ID = "drainage-terminal-feedback"
 DRAINAGE_ACQUISITION_TASK_ID = f"lifecycle/{TEMPLATE_ID}/staged_full_correction"
 DRAINAGE_PROBE_TASK_ID = f"lifecycle/{TEMPLATE_ID}/semantic_no_op_release"
+_DRAINAGE_SCAFFOLDING_ACQUISITION_VARIANTS = frozenset(
+    {"staged_full_correction", "staged_full_correction_guided", "staged_full_correction_reduced"}
+)
 
 _DRAINAGE_TASK_PREFIX = f"lifecycle/{TEMPLATE_ID}/"
+_PHASE_EVIDENCE_EXTENSION_KIND = "lifecycle_learning_evidence"
 _SELECTED_FEEDBACK_GATE_IDS = (
     "checkpoint_contract",
     "staged_disclosure",
@@ -113,6 +119,7 @@ def extract_drainage_learning_evidence(record: TrialRecord) -> DrainageLearningE
         variant_id = record.task_id.removeprefix(_DRAINAGE_TASK_PREFIX)
         if not variant_id:
             return None
+        get_drainage_model_variant(variant_id)
         phase_records = (
             _drainage_phase(
                 phase_id="evidence_assessment",
@@ -136,6 +143,47 @@ def extract_drainage_learning_evidence(record: TrialRecord) -> DrainageLearningE
         )
     except (TypeError, ValueError, KeyError, ValidationError):
         return None
+
+
+def drainage_phase_completion(record: TrialRecord) -> ProjectionResult:
+    """Project completed drainage phase outcomes without scoring reflection text.
+
+    This is currently computable only for a record retained in the process that
+    executed the lifecycle. D1 deliberately does not register
+    ``lifecycle_learning_evidence`` in ``ledger.reader``'s typed-extension
+    hydration map, so a reloaded record has no pending extension value and
+    fails closed rather than fabricating a zero.
+    """
+
+    if not record.task_id.startswith(_DRAINAGE_TASK_PREFIX):
+        return ProjectionResult(eligible=False, value=None, reason=f"projection-task-mismatch: {record.task_id}")
+    if record.execution_status is not ExecutionStatus.COMPLETED:
+        return ProjectionResult(eligible=False, value=None, reason="phase-evidence-missing")
+    try:
+        _completed_evaluation(record, category="phase-evidence-parse-failed")
+    except ValueError as error:
+        return ProjectionResult(eligible=False, value=None, reason=str(error))
+    attached = record.pending_extensions.get(_PHASE_EVIDENCE_EXTENSION_KIND)
+    if attached is None:
+        return ProjectionResult(eligible=False, value=None, reason="phase-evidence-missing")
+    try:
+        evidence = (
+            attached
+            if isinstance(attached, DrainageLearningEvidence)
+            else DrainageLearningEvidence.model_validate(attached)
+        )
+        if evidence.lifecycle_template_id != TEMPLATE_ID or evidence.variant_id != record.task_id.removeprefix(
+            _DRAINAGE_TASK_PREFIX
+        ):
+            raise ValueError("phase evidence identity does not match the trial")
+        get_drainage_model_variant(evidence.variant_id)
+    except (TypeError, ValueError, ValidationError, KeyError):
+        return ProjectionResult(eligible=False, value=None, reason="phase-evidence-parse-failed")
+    if not evidence.phase_records:
+        return ProjectionResult(eligible=False, value=None, reason="no-phase-records")
+    completed = sum(phase.phase_outcome != "incomplete" for phase in evidence.phase_records)
+    value = completed / len(evidence.phase_records)
+    return ProjectionResult(eligible=True, value=value, lower_bound=0.0, upper_bound=1.0)
 
 
 def _drainage_phase(
@@ -226,7 +274,7 @@ def _phase_evidence_submissions(record: TrialRecord) -> dict[str, dict[str, Any]
 def drainage_staged_review_feedback(record: TrialRecord) -> bytes:
     """Return the declared public feedback view for one completed acquisition."""
 
-    if record.task_id != DRAINAGE_ACQUISITION_TASK_ID:
+    if not _is_acquisition_task(record.task_id):
         raise ValueError(f"feedback-source-task-mismatch: {record.task_id}")
     if record.execution_status is not ExecutionStatus.COMPLETED:
         raise ValueError("feedback-source-trial-missing: lifecycle execution is not complete")
@@ -472,7 +520,7 @@ def validate_drainage_terminal_feedback(data: bytes) -> dict[str, Any]:
 
 
 def _require_completed_acquisition(record: TrialRecord) -> None:
-    if record.task_id != DRAINAGE_ACQUISITION_TASK_ID:
+    if not _is_acquisition_task(record.task_id):
         raise ValueError(f"feedback-source-task-mismatch: {record.task_id}")
     if record.execution_status is not ExecutionStatus.COMPLETED:
         raise ValueError("feedback-source-trial-missing: lifecycle execution is not complete")
@@ -497,7 +545,7 @@ def _decode_feedback_object(data: bytes) -> dict[str, Any]:
 def _validate_feedback_identity(payload: dict[str, Any], *, view_id: str, error_label: str) -> None:
     if payload["feedback_view_id"] != view_id:
         raise ValueError(f"feedback-projection-unsafe: {error_label} view identity does not match")
-    if payload["task_id"] != DRAINAGE_ACQUISITION_TASK_ID:
+    if not _is_acquisition_task(payload["task_id"]):
         raise ValueError(f"feedback-source-task-mismatch: {error_label} source is not the acquisition task")
     if payload["execution_status"] != ExecutionStatus.COMPLETED.value:
         raise ValueError(f"feedback-source-trial-missing: {error_label} source is not complete")
@@ -538,7 +586,7 @@ def validate_drainage_staged_review_feedback(data: bytes) -> dict[str, Any]:
         raise ValueError("feedback-projection-unsafe: drainage feedback fields do not match the public view")
     if payload["feedback_view_id"] != DRAINAGE_STAGED_REVIEW_FEEDBACK_VIEW_ID:
         raise ValueError("feedback-projection-unsafe: drainage feedback view identity does not match")
-    if payload["task_id"] != DRAINAGE_ACQUISITION_TASK_ID:
+    if not _is_acquisition_task(payload["task_id"]):
         raise ValueError("feedback-source-task-mismatch: drainage feedback source is not the acquisition task")
     if payload["execution_status"] != ExecutionStatus.COMPLETED.value:
         raise ValueError("feedback-source-trial-missing: drainage feedback source is not complete")
@@ -725,6 +773,14 @@ def _require_drainage_task(record: TrialRecord, *, category: str) -> None:
         raise ValueError(f"{category}: {record.task_id}")
 
 
+def _is_acquisition_task(task_id: object) -> bool:
+    return (
+        isinstance(task_id, str)
+        and task_id.startswith(_DRAINAGE_TASK_PREFIX)
+        and task_id.removeprefix(_DRAINAGE_TASK_PREFIX) in _DRAINAGE_SCAFFOLDING_ACQUISITION_VARIANTS
+    )
+
+
 def _bounded_number(value: object, *, category: str, label: str) -> float:
     if isinstance(value, bool) or not isinstance(value, int | float) or not math.isfinite(value):
         raise ValueError(f"{category}-invalid: {label} must be finite")
@@ -747,6 +803,7 @@ __all__ = (
     "drainage_checkpoint_detailed_feedback",
     "drainage_gate_score",
     "drainage_inappropriate_memo_closure",
+    "drainage_phase_completion",
     "drainage_phase_summary_feedback",
     "drainage_staged_review_feedback",
     "drainage_terminal_feedback",

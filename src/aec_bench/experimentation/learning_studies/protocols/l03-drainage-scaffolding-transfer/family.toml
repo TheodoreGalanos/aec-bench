@@ -1,0 +1,75 @@
+# Maintained L03 family data. Keep this file aligned with the Learning Studies
+# family schema and the reviewed scaffolding-transfer relation.
+family_id = "drainage-lifecycle-scaffolding-transfer"
+title = "Drainage scaffolding transfer"
+description = "Tests whether structured scaffolding (checklists, worked examples) at acquisition transfers to independent performance after scaffold withdrawal. Independent drainage-domain review is required before a claim-bearing run."
+
+[[dimensions]]
+dimension_id = "review_contract"
+kind = "surface"
+description = "The three-checkpoint drainage review contract, stable finding and decision identities, readiness, and claim-boundary fields"
+
+[[dimensions]]
+dimension_id = "event_topology"
+kind = "surface"
+description = "The exact checkpoint event sequence: no controlled event at initial_review, release_corrected_model_chain at response_review, propagate_memo at closeout_review"
+
+[[dimensions]]
+dimension_id = "scaffolding_level"
+kind = "causal"
+description = "The level of instructional scaffolding: guided (full checklist and worked examples), reduced (brief prompts only), or independent (no additions)"
+
+[[dimensions]]
+dimension_id = "instructional_detail"
+kind = "parameter"
+description = "The amount of additional checkpoint instruction text beyond the base instruction"
+
+[[members]]
+member_id = "guided-acquisition"
+task_id = "lifecycle/drainage-model-evidence-lifecycle-review/staged_full_correction_guided"
+description = "Guided scaffolding: structured evidence-seeking checklist, explicit constraint verification, worked-example excerpts at each checkpoint"
+probe_only = false
+
+[members.dimension_values]
+review_contract = "initial_review, response_review, and closeout_review with cumulative evidence-backed submissions"
+event_topology = "no controlled event, release_corrected_model_chain, propagate_memo"
+scaffolding_level = "guided: full evidence-seeking checklist, constraint verification steps, and worked-example excerpts"
+instructional_detail = "full scaffolding additions appended to base checkpoint instructions"
+
+[[members]]
+member_id = "reduced-practice"
+task_id = "lifecycle/drainage-model-evidence-lifecycle-review/staged_full_correction_reduced"
+description = "Reduced guidance: brief evidence-seeking prompts only, no checklist or worked examples"
+probe_only = false
+
+[members.dimension_values]
+review_contract = "initial_review, response_review, and closeout_review with cumulative evidence-backed submissions"
+event_topology = "no controlled event, release_corrected_model_chain, propagate_memo"
+scaffolding_level = "reduced: brief evidence-seeking prompts only"
+instructional_detail = "minimal scaffolding additions appended to base checkpoint instructions"
+
+[[members]]
+member_id = "independent-probe"
+task_id = "lifecycle/drainage-model-evidence-lifecycle-review/staged_full_correction"
+description = "Independent: unmodified base instructions with no scaffolding additions"
+probe_only = true
+
+[members.dimension_values]
+review_contract = "initial_review, response_review, and closeout_review with cumulative evidence-backed submissions"
+event_topology = "no controlled event, release_corrected_model_chain, propagate_memo"
+scaffolding_level = "independent: no scaffolding additions"
+instructional_detail = "base checkpoint instructions only"
+
+[[relations]]
+relation_id = "scaffolding-guided-to-independent"
+purpose = "transfer"
+source_member_ids = ["guided-acquisition"]
+target_member_id = "independent-probe"
+invariant_dimensions = ["review_contract", "event_topology"]
+invariant_claims = [
+  "All members use the same three-checkpoint review contract, finding identities, accepted-decision identities, readiness vocabulary, and claim-boundary statement.",
+  "All members share the exact same event topology with no controlled event at initial_review, release_corrected_model_chain at response_review, and propagate_memo at closeout_review.",
+  "All members use the same gold expectations, verification gates, and claim-boundary requirements.",
+]
+changed_dimensions = ["scaffolding_level", "instructional_detail"]
+rationale = "The guided acquisition provides structured evidence-seeking scaffolding. The independent probe removes all scaffolding. Transfer is measured by whether the scaffolded learner outperforms a cold independent baseline on the unscaffolded probe."
