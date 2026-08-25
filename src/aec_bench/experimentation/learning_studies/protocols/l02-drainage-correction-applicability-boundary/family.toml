@@ -1,0 +1,73 @@
+family_id = "drainage-lifecycle-correction-boundary"
+title = "Drainage correction applicability boundary"
+description = "Tests whether a valid staged correction is applied to a closeout-only memo boundary where the required memo evidence is absent. Independent drainage-domain review is required before a claim-bearing run."
+
+[[dimensions]]
+dimension_id = "review_contract"
+kind = "surface"
+description = "The three-checkpoint drainage review contract, stable finding and decision identities, readiness, and claim-boundary fields"
+
+[[dimensions]]
+dimension_id = "evidence_governance"
+kind = "causal"
+description = "Current registered evidence, rather than assertions or unrelated releases, governs finding, closure, and readiness transitions"
+
+[[dimensions]]
+dimension_id = "response_release_form"
+kind = "surface"
+description = "The corrected model chain released at response_review"
+
+[[dimensions]]
+dimension_id = "closeout_release_form"
+kind = "surface"
+description = "A propagated design memo versus a memo-closure assertion without the revised memo"
+
+[[dimensions]]
+dimension_id = "closeout_evidence_applicability"
+kind = "applicability"
+description = "Whether the current closeout release supports closing the memo-governed finding and decision"
+
+[[dimensions]]
+dimension_id = "closeout_transition_timing"
+kind = "parameter"
+description = "The point at which memo evidence is available to the lifecycle review"
+
+[[members]]
+member_id = "staged-full-correction-acquisition"
+task_id = "lifecycle/drainage-model-evidence-lifecycle-review/staged_full_correction"
+description = "The corrected model chain arrives at response_review and the propagated design memo arrives at closeout_review"
+probe_only = false
+[members.dimension_values]
+review_contract = "initial_review, response_review, and closeout_review with cumulative evidence-backed submissions"
+evidence_governance = "current registered evidence and stable identities govern every status transition"
+response_release_form = "corrected manifest, rerun register, and model report"
+closeout_release_form = "propagated design memo"
+closeout_evidence_applicability = "memo-backed closure is applicable at closeout"
+closeout_transition_timing = "corrected chain at response; memo at closeout"
+
+[[members]]
+member_id = "memo-closeout-missing-probe"
+task_id = "lifecycle/drainage-model-evidence-lifecycle-review/memo_closeout_missing"
+description = "The corrected model chain still arrives at response_review, but closeout asserts memo closure without releasing the revised design memo"
+probe_only = true
+[members.dimension_values]
+review_contract = "initial_review, response_review, and closeout_review with cumulative evidence-backed submissions"
+evidence_governance = "current registered evidence and stable identities govern every status transition"
+response_release_form = "corrected manifest, rerun register, and model report"
+closeout_release_form = "memo-closure assertion without propagated design memo"
+closeout_evidence_applicability = "memo-backed closure is not applicable at closeout"
+closeout_transition_timing = "corrected chain at response; memo remains absent at closeout"
+
+[[relations]]
+relation_id = "staged-correction-to-memo-closeout-missing"
+purpose = "boundary"
+source_member_ids = ["staged-full-correction-acquisition"]
+target_member_id = "memo-closeout-missing-probe"
+invariant_dimensions = ["review_contract", "evidence_governance", "response_release_form"]
+invariant_claims = [
+  "Both members use the same three-checkpoint review contract, finding identities, accepted-decision identities, readiness vocabulary, and claim-boundary statement.",
+  "Both members require current registered evidence and stable identities for status transitions; assertions do not substitute for evidence.",
+  "Both members release the corrected model chain at response_review, with common response surfaces byte-identical unless a declared difference is recorded.",
+]
+changed_dimensions = ["closeout_release_form", "closeout_evidence_applicability", "closeout_transition_timing"]
+rationale = "The acquisition teaches a valid staged correction and memo-backed closeout. The probe preserves the corrected response chain but removes the closeout memo evidence, so repeating the acquisition closeout is inappropriate. The relation must be approved by an independent drainage-domain reviewer and a benchmark reviewer before a claim-bearing campaign."
