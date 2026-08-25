@@ -12,6 +12,8 @@ from enum import StrEnum
 from pathlib import Path, PurePosixPath
 from typing import Any
 
+from pydantic import BaseModel
+
 from aec_bench.contracts.artifacts import ArtifactRef
 from aec_bench.contracts.learning_study_evidence import FeedbackReleaseRecord, LearnerStateRef
 from aec_bench.contracts.trial_record import TrialRecord
@@ -116,6 +118,7 @@ class LifecycleConsolidationContext:
 
 
 type LifecycleFeedbackProjector = Callable[[TrialRecord], bytes]
+type LifecyclePhaseEvidenceExtractor = Callable[[TrialRecord], BaseModel | None]
 type LifecycleConsolidationOperation = Callable[[LifecycleConsolidationContext], None]
 
 
@@ -184,6 +187,7 @@ def build_lifecycle_learning_operations(
     execution_condition: LifecycleExecutionCondition,
     treatment_kinds: Mapping[str, LifecycleLearningTreatmentKind],
     feedback_projectors: Mapping[str, LifecycleFeedbackProjector] | None = None,
+    phase_evidence_extractors: Mapping[str, Callable[[TrialRecord], BaseModel | None]] | None = None,
     consolidation_operations: Mapping[str, LifecycleConsolidationOperation] | None = None,
     initial_memory_root: Path | None = None,
     adapter_builder: Callable[..., Any] | None = None,
@@ -212,6 +216,7 @@ def build_lifecycle_learning_operations(
         execution_condition=execution_condition,
         treatment_kinds=treatment_kinds,
         feedback_projectors=feedback_projectors or {},
+        phase_evidence_extractors=phase_evidence_extractors or {},
         consolidation_operations=consolidation_operations or {},
         initial_memory_root=initial_memory_root,
         adapter_builder=adapter_builder,
@@ -239,6 +244,7 @@ class _LifecycleLearningCoordinator:
         execution_condition: LifecycleExecutionCondition,
         treatment_kinds: Mapping[str, LifecycleLearningTreatmentKind],
         feedback_projectors: Mapping[str, LifecycleFeedbackProjector],
+        phase_evidence_extractors: Mapping[str, LifecyclePhaseEvidenceExtractor],
         consolidation_operations: Mapping[str, LifecycleConsolidationOperation],
         initial_memory_root: Path | None,
         adapter_builder: Callable[..., Any] | None,
@@ -247,6 +253,7 @@ class _LifecycleLearningCoordinator:
         self._execution_condition = execution_condition
         self._treatment_kinds = dict(treatment_kinds)
         self._feedback_projectors = dict(feedback_projectors)
+        self._phase_evidence_extractors = dict(phase_evidence_extractors)
         self._consolidation_operations = dict(consolidation_operations)
         self._initial_memory_root = None if initial_memory_root is None else Path(initial_memory_root).resolve()
         self._adapter_builder = adapter_builder
@@ -367,6 +374,15 @@ class _LifecycleLearningCoordinator:
                         _validate_raw_history_context_projection(context_root, context_snapshot)
                     else:
                         validate_read_only_context_projection(context_root, context_snapshot)
+
+            extractor = self._phase_evidence_extractors.get(target.template_id)
+            if extractor is not None:
+                try:
+                    evidence = extractor(record)
+                except Exception:
+                    evidence = None
+                if evidence is not None:
+                    record.attach_extension("lifecycle_learning_evidence", evidence)
 
             expected_identity = (
                 request.step.trial.trial_id,

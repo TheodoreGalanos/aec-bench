@@ -16,6 +16,7 @@ from aec_bench.contracts.evidence_lifecycle import (
     LifecycleTaskMetadata,
 )
 from aec_bench.contracts.lifecycle_evaluation import LifecycleGateResult, LifecycleVerificationResult
+from aec_bench.contracts.trial_record import TrialRecord
 from aec_bench.contracts.validators import NonEmptyStr, StrictModel
 from aec_bench.lifecycles.runtime.lifecycle import load_validated_lifecycle_submissions
 from aec_bench.templates.builtin.structural.facade_submittal_source_policy_package import (
@@ -130,6 +131,118 @@ class FacadeReviewSubmission(StrictModel):
         if len(finding_ids) != len(set(finding_ids)):
             raise ValueError("finding ids must be unique")
         return value
+
+
+class FacadePhaseEvidence(StrictModel):
+    phase_id: NonEmptyStr
+    checkpoint_ids: tuple[NonEmptyStr, ...]
+    phase_outcome: NonEmptyStr
+    evidence_refs_cited: int = Field(ge=0)
+    evidence_refs_expected: int | None = Field(default=None, ge=0)
+    metric_accuracy_pass: bool
+    finding_continuity_pass: bool
+    review_decision_correct: bool
+
+
+class FacadeLearningEvidence(StrictModel):
+    evidence_schema: str = "aec-bench/lifecycle/facade/learning-evidence/1"
+    lifecycle_template_id: NonEmptyStr
+    phase_records: tuple[FacadePhaseEvidence, ...]
+
+
+def extract_facade_learning_evidence(record: TrialRecord) -> FacadeLearningEvidence | None:
+    """Extract phase evidence from one completed facade lifecycle record."""
+
+    try:
+        if record.task_id != f"lifecycle/{TEMPLATE_ID}":
+            return None
+        if record.evaluation is None or not record.evaluation.validity.verifier_completed:
+            return None
+        gates = _facade_phase_evidence_gates(record.evaluation.breakdown)
+        submissions = _facade_phase_evidence_submissions(record)
+        phase_records = (
+            _facade_phase(
+                phase_id="source_assessment",
+                checkpoint_ids=("source_review",),
+                submissions=submissions,
+                gates=gates,
+                gate_ids=("checkpoint_contract", "evidence_use", "metric_accuracy"),
+            ),
+            _facade_phase(
+                phase_id="review_and_response",
+                checkpoint_ids=("comment_review", "response_review"),
+                submissions=submissions,
+                gates=gates,
+                gate_ids=("finding_continuity", "review_decision", "claim_boundary"),
+            ),
+        )
+        return FacadeLearningEvidence(
+            lifecycle_template_id=TEMPLATE_ID,
+            phase_records=phase_records,
+        )
+    except (TypeError, ValueError, KeyError, ValidationError, json.JSONDecodeError):
+        return None
+
+
+def _facade_phase(
+    *,
+    phase_id: str,
+    checkpoint_ids: tuple[str, ...],
+    submissions: dict[str, FacadeReviewSubmission],
+    gates: dict[str, dict[str, Any]],
+    gate_ids: tuple[str, ...],
+) -> FacadePhaseEvidence:
+    phase_gates = {gate_id: gates[gate_id]["passed"] for gate_id in gate_ids}
+    return FacadePhaseEvidence(
+        phase_id=phase_id,
+        checkpoint_ids=checkpoint_ids,
+        phase_outcome="complete" if all(phase_gates.values()) else "incomplete",
+        evidence_refs_cited=sum(len(submissions[checkpoint_id].evidence_refs) for checkpoint_id in checkpoint_ids),
+        # The facade verifier does not retain expected reference counts in the
+        # TrialRecord; leaving this optional is the fail-closed representation.
+        evidence_refs_expected=None,
+        metric_accuracy_pass=gates["metric_accuracy"]["passed"],
+        finding_continuity_pass=gates["finding_continuity"]["passed"],
+        review_decision_correct=gates["review_decision"]["passed"],
+    )
+
+
+def _facade_phase_evidence_gates(breakdown: dict[str, Any] | None) -> dict[str, dict[str, Any]]:
+    if not isinstance(breakdown, dict) or not isinstance(breakdown.get("lifecycle_gates"), dict):
+        raise ValueError("phase-evidence-extraction-failed: lifecycle gates are unavailable")
+    gates = breakdown["lifecycle_gates"]
+    selected: dict[str, dict[str, Any]] = {}
+    for gate_id in GATE_IDS:
+        gate = gates.get(gate_id)
+        if not isinstance(gate, dict) or not isinstance(gate.get("passed"), bool):
+            raise ValueError("phase-evidence-extraction-failed: lifecycle gate is malformed")
+        score = gate.get("score")
+        if isinstance(score, bool) or not isinstance(score, int | float) or not 0 <= score <= 1:
+            raise ValueError("phase-evidence-extraction-failed: lifecycle gate score is malformed")
+        selected[gate_id] = gate
+    return selected
+
+
+def _facade_phase_evidence_submissions(record: TrialRecord) -> dict[str, FacadeReviewSubmission]:
+    output = record.output
+    agent_output = None if output is None else output.agent_output
+    if agent_output is None:
+        raise ValueError("phase-evidence-extraction-failed: lifecycle run is unavailable")
+    run_dir = Path(agent_output.output_path)
+    if not run_dir.is_absolute() or not run_dir.is_dir() or run_dir.is_symlink():
+        raise ValueError("phase-evidence-extraction-failed: lifecycle run is unavailable")
+    run_dir = run_dir.resolve(strict=True)
+    submissions: dict[str, FacadeReviewSubmission] = {}
+    for checkpoint_id in CHECKPOINT_IDS:
+        path = run_dir / "episodes" / checkpoint_id / "submission.json"
+        if not path.is_file() or path.is_symlink():
+            raise ValueError("phase-evidence-extraction-failed: checkpoint submission is unavailable")
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        submission = FacadeReviewSubmission.model_validate(payload)
+        if submission.checkpoint_id != checkpoint_id:
+            raise ValueError("phase-evidence-extraction-failed: checkpoint identity is invalid")
+        submissions[checkpoint_id] = submission
+    return submissions
 
 
 def materialize_facade_submittal_lifecycle(output_dir: Path) -> Path:

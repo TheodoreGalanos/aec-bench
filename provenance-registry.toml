@@ -2178,6 +2178,48 @@ artifact_boundary = "one immutable regular file below the descriptor-confined by
 read_verification = "ImmutableByteStore re-reads and rehashes the confined file and raises ImmutableArtifactIntegrityError on mismatch"
 
 [[field]]
+symbol = "aec_bench.lifecycles.stormwater_design.drainage_learning.DrainageLearningEvidence.evidence_schema"
+surface = "pydantic_model"
+wire_name = "evidence_schema"
+category = "compatibility"
+domain_owner = "stormwater_design"
+authority = "drainage_learning_evidence_protocol"
+authoritative = true
+exposure = "persisted"
+status = "current"
+payload_contract = "aec-bench/lifecycle/drainage/learning-evidence/1"
+canonicalization = "fixed schema literal serialized in the lifecycle learning evidence artefact"
+consumer = "phase evidence grouping and drainage learning-study analysis"
+validation_behavior = "Pydantic emits the fixed schema literal; lifecycle-owned readers reject malformed evidence payloads"
+mismatch_behavior = "reject_phase_evidence"
+retention = "trial_record_extension_lifetime"
+rationale = "The schema literal identifies the drainage-owned phase-evidence payload without promoting its fields to a common contract."
+duplication = "unique"
+compatibility_behavior = "reject unsupported drainage phase-evidence schemas"
+compatibility_kind = "external_schema"
+
+[[field]]
+symbol = "aec_bench.lifecycles.structural_review.facade_submittal.FacadeLearningEvidence.evidence_schema"
+surface = "pydantic_model"
+wire_name = "evidence_schema"
+category = "compatibility"
+domain_owner = "structural_review"
+authority = "facade_learning_evidence_protocol"
+authoritative = true
+exposure = "persisted"
+status = "current"
+payload_contract = "aec-bench/lifecycle/facade/learning-evidence/1"
+canonicalization = "fixed schema literal serialized in the lifecycle learning evidence artefact"
+consumer = "phase evidence grouping and facade learning-study analysis"
+validation_behavior = "Pydantic emits the fixed schema literal; lifecycle-owned readers reject malformed evidence payloads"
+mismatch_behavior = "reject_phase_evidence"
+retention = "trial_record_extension_lifetime"
+rationale = "The schema literal identifies the facade-owned phase-evidence payload without promoting its fields to a common contract."
+duplication = "unique"
+compatibility_behavior = "reject unsupported facade phase-evidence schemas"
+compatibility_kind = "external_schema"
+
+[[field]]
 symbol = "aec_bench.lifecycles.values.LifecycleExecution.tool_schema"
 surface = "dataclass"
 wire_name = "tool_schema"
