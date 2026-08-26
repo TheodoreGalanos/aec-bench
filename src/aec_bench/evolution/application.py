@@ -36,6 +36,7 @@ from aec_bench.evolution.core import (
     VariationStatus,
     assessment_score,
     decide_candidate,
+    rebase_evolution_state_for_parent,
     reduce_evolution_state,
 )
 from aec_bench.evolution.enrichment import enrich_observations
@@ -79,8 +80,7 @@ def run_evolution(
 
     Evaluation is planned once per cycle and both candidates use that exact
     plan. The canonical workspace is changed only after an accepted child.
-    ``engine`` supplies the existing classifier implementation; its lifecycle
-    method is deliberately not called here.
+    Observation enrichment and variation are explicit application dependencies.
     """
     workspace.init_versioning()
     now = clock or (lambda: datetime.now(tz=UTC))
@@ -88,7 +88,6 @@ def run_evolution(
     make_candidate_id = candidate_id_factory or (lambda current_run, cycle: f"{current_run}:{cycle}")
     graveyard = MutationGraveyard.load(workspace.root / "graveyard.json")
     history: list[EvolutionCycleRecord] = []
-    cycle_scores: list[float] = []
     snapshots: dict[str, WorkspaceSnapshot] = {"baseline": workspace.export_snapshot("baseline")}
     state: EvolutionState | None = None
     pending_selection: SelectionPlan | None = None
@@ -108,6 +107,11 @@ def run_evolution(
         parent = _enrich_candidate(parent, batch, enrich)
         if state is None:
             state = EvolutionState.from_baseline(parent, structural_weight=config.structural_weight)
+        state = rebase_evolution_state_for_parent(
+            state,
+            parent,
+            structural_weight=config.structural_weight,
+        )
 
         analysis = _build_analysis(parent, state)
         inspirations = tuple(
@@ -183,13 +187,13 @@ def run_evolution(
         history.append(record)
         active_candidate = child if decision.decision is GateDecision.ACCEPTED and child is not None else parent
         cycle_score = assessment_score(active_candidate.assessment, structural_weight=config.structural_weight)
-        cycle_scores.append(cycle_score)
+        score_history = _project_score_history(history, config)
         _notify_strategy(
             strategy,
             outcome=outcome,
             cycle_record=record,
             snapshot=child.snapshot if decision.decision is GateDecision.ACCEPTED and child else parent.snapshot,
-            score_history=cycle_scores,
+            score_history=score_history,
             graveyard=graveyard,
             run_id=resolved_run_id,
         )
@@ -215,10 +219,10 @@ def run_evolution(
         run_id=resolved_run_id,
         workspace_name=workspace.manifest.name,
         cycles_completed=len(history),
-        final_score=cycle_scores[-1] if cycle_scores else state.best_score,
+        final_score=_project_score_history(history, config)[-1] if history else state.best_score,
         best_score=state.best_score,
         best_candidate_id=state.best_candidate_id,
-        score_history=cycle_scores,
+        score_history=_project_score_history(history, config),
         converged=_is_converged(state, config),
         total_trials=sum(len(record.parent_assessment.trial_ids) for record in history)
         + sum(len(record.child_assessment.trial_ids) for record in history if record.child_assessment is not None),
@@ -419,6 +423,22 @@ def _graveyard_entry(outcome: CycleOutcome, run_id: str, timestamp: datetime) ->
 
 def _candidate_summary(cycle: int, child: EvaluatedCandidate, selection: SelectionPlan) -> str:
     return f"cycle {cycle}: score {child.assessment.batch_score:.3f} [{selection.strategy.value}]"
+
+
+def _project_score_history(
+    records: Sequence[EvolutionCycleRecord],
+    config: EvolutionConfig,
+) -> list[float]:
+    """Project active-candidate scores from exact completed cycle records."""
+    return [
+        assessment_score(
+            record.child_assessment
+            if record.gate_decision is GateDecision.ACCEPTED and record.child_assessment is not None
+            else record.parent_assessment,
+            structural_weight=config.structural_weight,
+        )
+        for record in records
+    ]
 
 
 def _is_converged(state: EvolutionState, config: EvolutionConfig) -> bool:

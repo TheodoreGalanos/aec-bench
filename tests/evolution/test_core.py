@@ -27,6 +27,7 @@ from aec_bench.evolution.core import (
     VariationStatus,
     assessment_score,
     decide_candidate,
+    rebase_evolution_state_for_parent,
     reduce_evolution_state,
 )
 from aec_bench.evolution.evaluation import bind_evaluated_candidate
@@ -245,6 +246,49 @@ class TestFunctionalEvolutionValues:
 
 
 class TestPureEvolutionPolicy:
+    def test_decision_compares_current_paired_parent_not_stale_best_score(self) -> None:
+        parent = _candidate("parent")
+        parent = bind_evaluated_candidate(
+            parent.snapshot,
+            parent.observations,
+            parent.assessment.model_copy(update={"batch_score": 0.80}),
+        )
+        child = bind_evaluated_candidate(
+            WorkspaceSnapshot(system_prompt="Child.", candidate_id="child"),
+            (_observation("child", "trial-1"),),
+            _assessment("child").model_copy(update={"batch_score": 0.85}),
+        )
+        variation = VariationResult(
+            VariationStatus.SUBMITTED,
+            child.snapshot,
+            MutationSummary(prompt_modified=True),
+            "submitted",
+            0.1,
+        )
+        stale_state = EvolutionState(
+            cycle=2,
+            active_candidate_id="parent",
+            best_candidate_id="old-best",
+            best_score=0.95,
+            cycles_without_improvement=0,
+            best_score_history=(0.95,),
+        )
+        current_state = rebase_evolution_state_for_parent(
+            stale_state,
+            parent,
+            structural_weight=0.0,
+        )
+        decision = decide_candidate(
+            parent=parent,
+            child=child,
+            variation=variation,
+            state=current_state,
+            config=_GateConfig(),  # type: ignore[arg-type]
+        )
+
+        assert decision.improved is True
+        assert decision.effective_score == pytest.approx(0.835)
+
     def test_assessment_score_preserves_structural_weighting(self) -> None:
         assert assessment_score(_assessment("candidate-1"), structural_weight=0.3) == pytest.approx(0.765)
         state = EvolutionState.from_baseline(_candidate(), structural_weight=0.3)

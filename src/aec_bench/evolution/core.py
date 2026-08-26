@@ -318,8 +318,9 @@ def decide_candidate(
             cycles_without_improvement=count,
         )
 
+    parent_score = assessment_score(parent.assessment, structural_weight=config.structural_weight)
     score = assessment_score(child.assessment, structural_weight=config.structural_weight)
-    improved = score > state.best_score + config.improvement_threshold
+    improved = score > parent_score + config.improvement_threshold
     stagnation_count = 0 if improved else state.cycles_without_improvement + 1
     if stagnation_count >= config.stagnation_window:
         return GateResult(
@@ -335,6 +336,23 @@ def decide_candidate(
         effective_score=score,
         improved=improved,
         cycles_without_improvement=stagnation_count,
+    )
+
+
+def rebase_evolution_state_for_parent(
+    state: EvolutionState,
+    parent: EvaluatedCandidate,
+    *,
+    structural_weight: float,
+) -> EvolutionState:
+    """Use the selected parent's fresh paired score for the next decision."""
+    return EvolutionState(
+        cycle=state.cycle,
+        active_candidate_id=state.active_candidate_id,
+        best_candidate_id=parent.snapshot.candidate_id,
+        best_score=assessment_score(parent.assessment, structural_weight=structural_weight),
+        cycles_without_improvement=state.cycles_without_improvement,
+        best_score_history=state.best_score_history,
     )
 
 
