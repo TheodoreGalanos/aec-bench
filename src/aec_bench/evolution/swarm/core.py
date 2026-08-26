@@ -452,7 +452,15 @@ def reduce_swarm_outcome(
         recent_scores = (*recent_scores, score)[-_RECENT_WINDOW:]
         recent_descriptors = (*recent_descriptors, *current_descriptors)[-_RECENT_WINDOW:]
 
-        improved_global = best_score is None or score > best_score
+        # Only a valid child that entered or improved an archive cell is an
+        # accepted candidate source. Evaluation evidence alone must not make
+        # an invalid or non-inserted child the swarm best.
+        accepted = (
+            evaluated_candidate.assessment.valid
+            and outcome.archive_outcome is not None
+            and outcome.archive_outcome.added
+        )
+        improved_global = accepted and (best_score is None or score > best_score)
         if improved_global:
             best_candidate_id = evaluated_candidate.snapshot.candidate_id
             best_score = score

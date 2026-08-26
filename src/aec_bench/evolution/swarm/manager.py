@@ -4,18 +4,21 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import time
 import uuid
+from collections.abc import Callable, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Protocol, runtime_checkable
+from typing import Protocol, runtime_checkable
 
 from aec_bench.contracts.evolution import (
-    BehaviourDescriptor,
+    AgentStatus,
     ConsolidationReport,
     LineageNarrative,
     LineageRecord,
+    MutationStrategy,
     SwarmAgentState,
     SwarmEvent,
     SwarmEventType,
@@ -23,13 +26,34 @@ from aec_bench.contracts.evolution import (
     SwarmResult,
     WorkspaceSnapshot,
 )
+from aec_bench.contracts.trial_record import TrialRecord
 from aec_bench.evolution.archive import QDArchive
-from aec_bench.evolution.swarm.agent_task import AgentContext, run_agent_loop
+from aec_bench.evolution.behaviour import extract_behaviour_descriptor
+from aec_bench.evolution.core import SelectionPlan, VariationStatus, assessment_score
+from aec_bench.evolution.evaluation import CandidateBatchPlanner, CandidateEvaluator
+from aec_bench.evolution.swarm.agent_task import AgentContext, Evolver, run_agent_loop
 from aec_bench.evolution.swarm.budget import BudgetLedger
 from aec_bench.evolution.swarm.config import SwarmConfig
+from aec_bench.evolution.swarm.core import (
+    AgentBudget,
+    AgentPivotState,
+    BudgetSnapshot,
+    PivotState,
+    SwarmAgentResult,
+    SwarmAssignment,
+    SwarmState,
+    reduce_swarm_outcome,
+)
 from aec_bench.evolution.swarm.events import SwarmEventWriter
+from aec_bench.evolution.swarm.evolver import SwarmEvolverFactory
 from aec_bench.evolution.swarm.lineage import LineageTracker
 from aec_bench.evolution.swarm.notes import NoteStore
+from aec_bench.evolution.swarm.processing import (
+    ObservationEnricher,
+    SwarmEvaluation,
+    evaluate_swarm_result,
+    finalize_swarm_evaluation,
+)
 from aec_bench.evolution.swarm.shared_graveyard import SharedGraveyard
 
 logger = logging.getLogger(__name__)
@@ -43,12 +67,30 @@ class EvolverFactory(Protocol):
         self,
         agent_id: str,
         model_override: str | None = None,
-    ) -> Any: ...
+    ) -> Evolver: ...
 
 
-def _now_iso() -> str:
-    """UTC ISO-8601 timestamp string."""
-    return datetime.now(tz=UTC).isoformat()
+AssignmentIdFactory = Callable[[str, int], str]
+RunIdFactory = Callable[[], str]
+WallClock = Callable[[], datetime]
+MonotonicClock = Callable[[], float]
+
+
+def _default_run_id() -> str:
+    return uuid.uuid4().hex[:12]
+
+
+def _default_assignment_id(agent_id: str, cycle: int) -> str:
+    return f"{agent_id}:assignment:{cycle}"
+
+
+def _trial_cost(record: object) -> float:
+    """Read the explicit trial cost projection used for evaluation spend."""
+    if not isinstance(record, TrialRecord) or record.cost is None:
+        return 0.0
+    if record.cost.estimated_cost_usd is not None:
+        return float(record.cost.estimated_cost_usd)
+    return 0.0
 
 
 class SwarmManager:
@@ -67,11 +109,36 @@ class SwarmManager:
         config: SwarmConfig,
         state_dir: Path,
         evolver_factory: EvolverFactory,
+        *,
+        batch_planner: CandidateBatchPlanner | None = None,
+        evaluator: CandidateEvaluator | None = None,
+        enricher: ObservationEnricher | None = None,
+        run_id: str | None = None,
+        run_id_factory: RunIdFactory | None = None,
+        wall_clock: WallClock | None = None,
+        monotonic_clock: MonotonicClock | None = None,
+        assignment_id_factory: AssignmentIdFactory | None = None,
+        initial_snapshot: WorkspaceSnapshot | None = None,
     ) -> None:
         self._config = config
         self._state_dir = state_dir
         self._factory = evolver_factory
-        self._run_id = uuid.uuid4().hex[:12]
+        if run_id is not None and run_id_factory is not None:
+            raise ValueError("provide run_id or run_id_factory, not both")
+        self._run_id = run_id or (run_id_factory or _default_run_id)()
+        self._wall_clock = wall_clock or (lambda: datetime.now(tz=UTC))
+        self._monotonic_clock = monotonic_clock or time.monotonic
+        self._assignment_id_factory = assignment_id_factory or _default_assignment_id
+        self._initial_snapshot = initial_snapshot
+        if isinstance(evolver_factory, SwarmEvolverFactory):
+            batch_planner = batch_planner or evolver_factory.plan_batch
+            evaluator = evaluator or evolver_factory.evaluate
+            enricher = enricher or evolver_factory.enrich
+        if batch_planner is None or evaluator is None or enricher is None:
+            raise ValueError("host batch_planner, evaluator, and enricher are required")
+        self._batch_planner = batch_planner
+        self._evaluator = evaluator
+        self._enricher = enricher
 
         # Shared infrastructure
         self._budget = BudgetLedger(
@@ -88,46 +155,29 @@ class SwarmManager:
 
         # Protects shared state mutations from concurrent agent tasks
         self._lock = asyncio.Lock()
-
-        # Accumulator for the global best score seen across all agents
-        self._global_best_score: float = 0.0
-
-        # Per-agent tracking for pivot detection
-        self._agent_best_scores: dict[str, float] = {}
-        self._agent_non_improving: dict[str, int] = {}
-        self._agent_pivot_cooldown: dict[str, int] = {}
-        self._pivot_after = config.heartbeat.pivot_after
-
-        # Per-agent score history and BD focus tracking
-        self._agent_recent_scores: dict[str, list[float]] = {}
-        self._agent_recent_bds: dict[str, list[BehaviourDescriptor]] = {}
-        _BD_FOCUS_WINDOW = 5
-        self._bd_focus_window = _BD_FOCUS_WINDOW
-
-        # Reflect heartbeat tracking
-        self._reflect_every = config.heartbeat.reflect_every
-        self._agent_eval_counts: dict[str, int] = {}
-
-        # Per-agent nudge hints (resolved at spawn, stored for context injection)
-        self._agent_nudges: dict[str, str | None] = {}
-
-        # Restart with backoff tracking
-        self._max_restarts = config.agents.max_restarts
-        self._agent_consecutive_errors: dict[str, int] = {}
-
-        # Consolidation heartbeat
-        self._consolidate_every = config.heartbeat.consolidate_every
-        self._last_consolidation_at: int = 0
-        self._latest_report: ConsolidationReport | None = None
-
-        # Live status tracking
-        self._total_evals = 0
         self._start_time: float = 0.0
-        self._global_best_candidate_id: str = ""
+        self._agent_cycles: dict[str, int] = {}
+        self._agent_consecutive_errors: dict[str, int] = {}
+        self._agent_nudges: dict[str, str | None] = {}
+        self._candidate_snapshots: dict[str, WorkspaceSnapshot] = {}
+        self._initial_candidate_id: str | None = None
+        self._state = SwarmState(
+            run_id=self._run_id,
+            total_evaluations=0,
+            best_candidate_id=None,
+            best_score=None,
+            agent_states=(),
+            recent_scores=(),
+            recent_descriptors=(),
+            pivot_state=PivotState(),
+            stopped=False,
+            stop_reason=None,
+        )
+        self._latest_report: ConsolidationReport | None = None
 
     def _print_event(self, message: str) -> None:
         """Print a key event line to stderr (above the status line)."""
-        elapsed = time.monotonic() - self._start_time
+        elapsed = self._monotonic_clock() - self._start_time
         mins, secs = divmod(int(elapsed), 60)
         import sys
 
@@ -143,9 +193,9 @@ class SwarmManager:
         import sys
 
         print(
-            f"  evals: {self._total_evals} "
+            f"  evals: {self._state.total_evaluations} "
             f"| archive: {cov_pct}% ({occupied}/{total}) "
-            f"| best: {self._global_best_score:.2f} "
+            f"| best: {self._state.best_score or 0.0:.2f} "
             f"| budget: {bud_pct}% "
             f"| {agent_id} → {score:.2f}",
             file=sys.stderr,
@@ -156,194 +206,138 @@ class SwarmManager:
         self,
         event_type: SwarmEventType,
         agent_id: str | None = None,
-        payload: dict[str, Any] | None = None,
+        payload: dict[str, object] | None = None,
     ) -> None:
         """Emit a SwarmEvent to the JSONL log."""
         event = SwarmEvent(
             event_type=event_type,
-            occurred_at=_now_iso(),
+            occurred_at=self._wall_clock().isoformat(),
             agent_id=agent_id,
             payload=payload or {},
         )
         self._event_writer.emit(event)
 
-    async def _on_eval_complete(self, agent_id: str, result: Any) -> bool:
-        """Callback invoked after each successful eval step.
-
-        Updates budget, archive, and emits events.
-        Returns False to signal the agent should stop.
-        """
-        score = getattr(result, "score", 0.0)
-        cost = getattr(result, "cost_usd", 0.0)
-        candidate_id = getattr(result, "candidate_id", "")
-        bd: BehaviourDescriptor | None = getattr(result, "bd", None)
+    async def _on_result(self, assignment: SwarmAssignment, result: SwarmAgentResult) -> bool:
+        """Evaluate and reduce one typed result; model work stays outside the lock."""
+        if result.variation.status is VariationStatus.SUBMITTED:
+            batch = self._batch_planner(self._config.evolution.batch_size, self._agent_cycles[assignment.agent_id] - 1)
+            evaluated = evaluate_swarm_result(
+                assignment=assignment,
+                agent_result=result,
+                batch=batch,
+                evaluate=self._evaluator,
+                enrich=self._enricher,
+                run_id=self._run_id,
+                cycle=self._agent_cycles[assignment.agent_id],
+                now=self._wall_clock(),
+            )
+        else:
+            evaluated = SwarmEvaluation(assignment, result, parent=None, child=None)
 
         async with self._lock:
-            # Record spend and eval count — successful eval resets error streak
-            self._budget.record_agent_spend(agent_id, cost)
-            self._total_evals += 1
-            self._agent_consecutive_errors[agent_id] = 0
-
-            # Track recent scores (for context injection)
-            if agent_id not in self._agent_recent_scores:
-                self._agent_recent_scores[agent_id] = []
-            self._agent_recent_scores[agent_id].append(score)
-
-            # Track recent BDs for dynamic focus derivation (rolling window)
-            if bd is not None:
-                if agent_id not in self._agent_recent_bds:
-                    self._agent_recent_bds[agent_id] = []
-                bds = self._agent_recent_bds[agent_id]
-                bds.append(bd)
-                if len(bds) > self._bd_focus_window:
-                    self._agent_recent_bds[agent_id] = bds[-self._bd_focus_window :]
-
-            # Update QD archive — requires a BehaviourDescriptor
-            inserted = False
-            if bd is not None:
-                snapshot = WorkspaceSnapshot(
-                    system_prompt="swarm-generated",
-                    skills=(),
-                    candidate_id=candidate_id,
+            current_parent = self._candidate_snapshots.get(assignment.parent.candidate_id)
+            if current_parent != assignment.parent:
+                raise ValueError(f"assignment parent {assignment.parent.candidate_id!r} is no longer available")
+            outcome = finalize_swarm_evaluation(
+                evaluated=evaluated,
+                archive=self._archive,
+                graveyard=self._graveyard,
+                run_id=self._run_id,
+                cycle=self._agent_cycles[assignment.agent_id],
+                now=self._wall_clock(),
+            )
+            if outcome.evaluated_candidate is not None:
+                child = outcome.evaluated_candidate
+                self._candidate_snapshots[child.snapshot.candidate_id] = child.snapshot
+                self._budget.record_eval_spend(sum(_trial_cost(obs.trial) for obs in child.observations))
+            self._budget.record_agent_spend(assignment.agent_id, result.agent_cost_usd)
+            self._agent_consecutive_errors[assignment.agent_id] = 0
+            budget = BudgetSnapshot(
+                self._budget.max_cost_usd,
+                self._budget.total_agent_spend,
+                self._budget.eval_budget_usd,
+                self._budget.eval_spend,
+            )
+            self._state, decision = reduce_swarm_outcome(
+                state=self._state, outcome=outcome, budget=budget, config=self._config, now=self._wall_clock()
+            )
+            score = (
+                assessment_score(
+                    outcome.evaluated_candidate.assessment,
+                    structural_weight=self._config.evolution.structural_weight,
                 )
-                insertion_result = self._archive.insert(
-                    bd=bd,
-                    snapshot=snapshot,
-                    run_id=agent_id,
-                )
-                inserted = insertion_result.added
-
-            # Track global best
-            if score > self._global_best_score:
-                self._global_best_score = score
-                self._global_best_candidate_id = candidate_id
-
-            # Track per-agent improvement for pivot detection
-            agent_best = self._agent_best_scores.get(agent_id, 0.0)
-            if score > agent_best:
-                self._agent_best_scores[agent_id] = score
-                self._agent_non_improving[agent_id] = 0
-            else:
-                self._agent_non_improving[agent_id] = self._agent_non_improving.get(agent_id, 0) + 1
-
-            # Pivot detection — fire when consecutive non-improving exceeds threshold
-            cooldown = self._agent_pivot_cooldown.get(agent_id, 0)
-            non_improving = self._agent_non_improving.get(agent_id, 0)
-            if cooldown > 0:
-                self._agent_pivot_cooldown[agent_id] = cooldown - 1
-            elif non_improving >= self._pivot_after:
-                self._emit(
-                    SwarmEventType.AGENT_PIVOTING,
-                    agent_id=agent_id,
-                    payload={"consecutive_non_improving": non_improving},
-                )
-                # Cooldown: don't pivot again for 3 evals
-                self._agent_pivot_cooldown[agent_id] = 3
-
-            # Emit eval event with rich observability data
-            eval_payload: dict[str, Any] = {
-                "score": score,
-                "cost_usd": cost,
-                "candidate_id": candidate_id,
-                "inserted": inserted,
-                "agent_best": self._agent_best_scores.get(agent_id, 0.0),
-                "non_improving": non_improving,
-                "budget_phase": self._budget.phase,
-                "budget_pct": round(self._budget.spend_percentage, 3),
-            }
-            if bd is not None:
-                eval_payload["bd"] = {
-                    "token_cost": bd.token_cost,
-                    "verification_depth": bd.verification_depth,
-                    "reward": bd.reward,
-                }
+                if outcome.evaluated_candidate is not None
+                else None
+            )
+            inserted = outcome.archive_outcome.added if outcome.archive_outcome is not None else False
+            candidate_id = outcome.evaluated_candidate.snapshot.candidate_id if outcome.evaluated_candidate else None
             self._emit(
                 SwarmEventType.EVAL_COMPLETED,
-                agent_id=agent_id,
-                payload=eval_payload,
+                assignment.agent_id,
+                {
+                    "assignment_id": assignment.assignment_id,
+                    "candidate_id": candidate_id,
+                    "agent_cost_usd": result.agent_cost_usd,
+                    "inserted": inserted,
+                    "budget_phase": self._budget.phase,
+                    "score": score,
+                },
             )
-
-            if inserted:
+            if decision.pivot is not None:
+                self._emit(
+                    SwarmEventType.AGENT_PIVOTING,
+                    assignment.agent_id,
+                    {"reason": decision.pivot.reason},
+                )
+            if inserted and outcome.evaluated_candidate is not None:
+                child = outcome.evaluated_candidate
+                descriptor = extract_behaviour_descriptor(child.observations[0])
                 self._emit(
                     SwarmEventType.ARCHIVE_UPDATED,
-                    agent_id=agent_id,
-                    payload={"candidate_id": candidate_id, "score": score},
+                    assignment.agent_id,
+                    {"candidate_id": candidate_id, "score": score or 0.0},
                 )
-
-                # Record lineage with parent provenance and surprise detection
-                parent_candidate_id = getattr(result, "parent_candidate_id", "") or None
-                is_surprise = False
-                if parent_candidate_id and bd is not None:
-                    parent_entry = self._archive.get_entry_by_candidate_id(parent_candidate_id)
-                    if parent_entry is not None:
-                        is_surprise = self._lineage.is_surprise(parent_entry.bd, bd)
-
-                lineage_record = LineageRecord(
-                    entry_candidate_id=candidate_id,
-                    parent_candidate_id=parent_candidate_id,
-                    source_agent_id=agent_id,
-                    cross_agent=False,
-                    cross_agent_source=None,
-                    mutation_type="evolution_cycle",
-                    bd_region_targeted=bd,
-                    surprise=is_surprise,
-                    recorded_at=_now_iso(),
+                parent_entry = self._archive.get_entry_by_candidate_id(assignment.parent.candidate_id)
+                self._lineage.record(
+                    LineageRecord(
+                        entry_candidate_id=child.snapshot.candidate_id,
+                        parent_candidate_id=assignment.parent.candidate_id,
+                        source_agent_id=assignment.agent_id,
+                        mutation_type="evolution_cycle",
+                        bd_region_targeted=descriptor,
+                        surprise=parent_entry is not None and self._lineage.is_surprise(parent_entry.bd, descriptor),
+                        recorded_at=self._wall_clock().isoformat(),
+                    )
                 )
-                self._lineage.record(lineage_record)
-
-                # Attach freeform narrative with structured reasoning context
-                narrative = LineageNarrative(
-                    entry_candidate_id=candidate_id,
-                    agent_reasoning=(
-                        f"Score {score:.2f} achieved via evolution_cycle. "
-                        f"Agent {agent_id} eval #{self._agent_eval_counts.get(agent_id, 0) + 1}."
-                    ),
-                    investigation_context=(
-                        f"Budget spent: ${self._budget.total_agent_spend:.2f}/"
-                        f"${self._budget.max_cost_usd:.2f}. "
-                        f"Archive coverage: {self._archive.coverage_report().get('coverage', 0):.0%}."
-                    ),
+                self._lineage.attach_narrative(
+                    LineageNarrative(
+                        entry_candidate_id=child.snapshot.candidate_id,
+                        agent_reasoning=result.variation.reasoning,
+                        investigation_context=f"Assignment {assignment.assignment_id}.",
+                    )
                 )
-                self._lineage.attach_narrative(narrative)
-
-                self._emit(
-                    SwarmEventType.LINEAGE_RECORDED,
-                    agent_id=agent_id,
-                    payload={"candidate_id": candidate_id},
-                )
-
-            # Reflect heartbeat — create a structured note from eval data
-            agent_evals = self._agent_eval_counts.get(agent_id, 0) + 1
-            self._agent_eval_counts[agent_id] = agent_evals
-            if self._reflect_every > 0 and agent_evals % self._reflect_every == 0:
-                gate = "accepted" if inserted else "no change"
-                note_content = (
-                    f"Eval {agent_evals}: score {score:.2f} ({gate}). Cost ${cost:.2f}. Candidate {candidate_id}."
-                )
-                if non_improving > 0:
-                    note_content += f" Non-improving streak: {non_improving}."
-
+                self._emit(SwarmEventType.LINEAGE_RECORDED, assignment.agent_id, {"candidate_id": candidate_id})
+            if (
+                outcome.evaluated_candidate is not None
+                and self._config.heartbeat.reflect_every > 0
+                and self._state.total_evaluations % self._config.heartbeat.reflect_every == 0
+            ):
                 note = SwarmNote(
-                    note_id=f"{agent_id}-reflect-{agent_evals}",
-                    agent_id=agent_id,
-                    authored_at=_now_iso(),
-                    bd_region=bd,
-                    title=f"Eval {agent_evals} reflection",
-                    content=note_content,
+                    note_id=f"{assignment.agent_id}-reflect-{self._state.total_evaluations}",
+                    agent_id=assignment.agent_id,
+                    authored_at=self._wall_clock().isoformat(),
+                    bd_region=extract_behaviour_descriptor(outcome.evaluated_candidate.observations[0]),
+                    title=f"Eval {self._state.total_evaluations} reflection",
+                    content=f"Host evaluation recorded for candidate {candidate_id}.",
                     tags=("reflect",),
                 )
                 self._notes.insert(note)
                 self._emit(
                     SwarmEventType.NOTE_WRITTEN,
-                    agent_id=agent_id,
-                    payload={"note_id": note.note_id, "title": note.title},
+                    assignment.agent_id,
+                    {"note_id": note.note_id, "title": note.title},
                 )
-
-            # Consolidation heartbeat — run analyst every N global evals
-            if (
-                self._consolidate_every > 0
-                and self._total_evals - self._last_consolidation_at >= self._consolidate_every
-            ):
+            if decision.consolidate:
                 from aec_bench.evolution.swarm.analyst import produce_consolidation_report
 
                 self._latest_report = produce_consolidation_report(
@@ -351,46 +345,16 @@ class SwarmManager:
                     graveyard=self._graveyard,
                     lineage=self._lineage,
                     notes=self._notes,
-                    total_evals=self._total_evals,
+                    total_evals=self._state.total_evaluations,
                 )
-                self._last_consolidation_at = self._total_evals
                 self._emit(
                     SwarmEventType.CONSOLIDATION_PRODUCED,
-                    payload={
-                        "report_id": self._latest_report.report_id,
-                        "coverage_pct": self._latest_report.archive_coverage_pct,
-                        "patterns": len(self._latest_report.cross_agent_patterns),
-                        "recommendations": len(self._latest_report.strategy_recommendations),
-                    },
+                    payload={"report_id": self._latest_report.report_id},
                 )
-                self._print_event(
-                    f"Consolidation: {self._latest_report.archive_coverage_pct:.0f}% coverage, "
-                    f"{len(self._latest_report.cross_agent_patterns)} patterns, "
-                    f"{len(self._latest_report.strategy_recommendations)} recommendations"
-                )
-
-            # Print live status to terminal
-            if inserted:
-                self._print_event(f"{agent_id} new archive entry: {score:.2f} ({candidate_id})")
-            if non_improving >= self._pivot_after and cooldown <= 0:
-                self._print_event(f"{agent_id} PIVOTING — {non_improving} non-improving evals")
-            self._print_status(agent_id, score)
-
-            # Save shared state after every eval — cycles take minutes,
-            # writing a few JSON files is negligible and prevents data loss.
             self._save_state()
-
-            # Check budget — return False to stop the agent
-            if self._budget.phase == "exhausted":
-                logger.info("Budget exhausted — retiring agent %s", agent_id)
-                self._emit(
-                    SwarmEventType.AGENT_RETIRED,
-                    agent_id=agent_id,
-                    payload={"reason": "budget_exhausted"},
-                )
-                return False
-
-            return True
+            if decision.stop:
+                self._emit(SwarmEventType.AGENT_RETIRED, assignment.agent_id, {"reason": decision.reason})
+            return decision.continue_agent
 
     async def _on_error(self, agent_id: str, exc: Exception) -> bool:
         """Callback invoked when an agent step raises an exception.
@@ -403,7 +367,7 @@ class SwarmManager:
             consecutive = self._agent_consecutive_errors.get(agent_id, 0) + 1
             self._agent_consecutive_errors[agent_id] = consecutive
 
-            if consecutive > self._max_restarts:
+            if consecutive > self._config.agents.max_restarts:
                 self._emit(
                     SwarmEventType.AGENT_RETIRED,
                     agent_id=agent_id,
@@ -420,31 +384,13 @@ class SwarmManager:
                 payload={"error": str(exc), "consecutive_errors": consecutive, "backoff_seconds": backoff_seconds},
             )
             self._print_event(
-                f"{agent_id} error #{consecutive}/{self._max_restarts} — restarting in {backoff_seconds}s"
+                f"{agent_id} error #{consecutive}/{self._config.agents.max_restarts} — restarting in {backoff_seconds}s"
             )
 
         if backoff_seconds > 0:
             await asyncio.sleep(backoff_seconds)
 
         return True
-
-    def _compute_bd_focus(self, agent_id: str) -> BehaviourDescriptor | None:
-        """Compute the agent's current BD focus from its recent evaluations.
-
-        Returns the centroid (mean) of the last N BDs, or None if no BDs tracked yet.
-        """
-        bds = self._agent_recent_bds.get(agent_id, [])
-        if not bds:
-            return None
-        n = len(bds)
-        return BehaviourDescriptor(
-            token_cost=sum(b.token_cost for b in bds) / n,
-            verification_depth=sum(b.verification_depth for b in bds) / n,
-            tool_density=sum(b.tool_density for b in bds) / n,
-            exploration_ratio=sum(b.exploration_ratio for b in bds) / n,
-            deliberation_ratio=sum(b.deliberation_ratio for b in bds) / n,
-            reward=sum(b.reward for b in bds) / n,
-        )
 
     def _resolve_agent_nudge(self, agent_index: int) -> str | None:
         """Resolve the nudge hint for a specific agent.
@@ -470,26 +416,86 @@ class SwarmManager:
             return models[agent_index]
         return self._config.agents.default_model
 
+    async def _next_assignment(self, agent_id: str) -> SwarmAssignment:
+        """Create an assignment from exact candidate sources under the lock."""
+        async with self._lock:
+            cycle = self._agent_cycles.get(agent_id, 0) + 1
+            self._agent_cycles[agent_id] = cycle
+            parent_id = self._state.best_candidate_id or self._initial_candidate_id
+            if parent_id is None:
+                raise ValueError("an exact initial candidate has not been registered")
+            parent = self._candidate_snapshots.get(parent_id)
+            if parent is None:
+                raise ValueError(f"selected candidate {parent_id!r} has no available snapshot")
+            inspiration_ids = tuple(
+                entry.snapshot.candidate_id
+                for entry in self._archive.view().top_k(5)
+                if entry.snapshot.candidate_id != parent_id
+            )
+            unresolved = [
+                candidate_id for candidate_id in inspiration_ids if candidate_id not in self._candidate_snapshots
+            ]
+            if unresolved:
+                raise ValueError(f"inspiration candidates have no available snapshots: {unresolved}")
+            inspirations = tuple(self._candidate_snapshots[candidate_id] for candidate_id in inspiration_ids)
+            selection = SelectionPlan(
+                parent_candidate_id=parent_id,
+                inspiration_candidate_ids=tuple(snapshot.candidate_id for snapshot in inspirations),
+                strategy=MutationStrategy.CONSERVATIVE,
+                goal="Improve the selected candidate against the configured evaluation batch.",
+                reasoning=f"Manager selected exact candidate source {parent_id}.",
+            )
+            return SwarmAssignment(
+                assignment_id=self._assignment_id_factory(agent_id, cycle),
+                agent_id=agent_id,
+                selection=selection,
+                parent=parent,
+                inspirations=inspirations,
+                budget=AgentBudget(
+                    max_cost_usd=max(0.0, min(self._budget.remaining, self._budget.eval_budget_remaining))
+                ),
+                issued_at=self._wall_clock(),
+            )
+
     def _build_agent_context(self, agent_id: str, agent_index: int) -> AgentContext:
-        """Build an AgentContext for a single agent."""
+        """Build an agent context with explicit assignment and result callbacks."""
         model = self._resolve_agent_model(agent_index)
         nudge = self._resolve_agent_nudge(agent_index)
         self._agent_nudges[agent_id] = nudge
         # Create evolver with per-agent model override if configured
         model_override = model if model != self._config.agents.default_model else None
         evolver = self._factory.create(agent_id, model_override=model_override)
-        # Inject shared swarm state via the proper setter
-        if hasattr(evolver, "set_shared_state"):
-            evolver.set_shared_state(
-                graveyard=self._graveyard,
-            )
         return AgentContext(
             agent_id=agent_id,
             evolver=evolver,
-            on_eval_complete=lambda result: self._on_eval_complete(agent_id, result),
+            next_assignment=lambda: self._next_assignment(agent_id),
+            on_eval_complete=self._on_result,
             on_error=lambda exc: self._on_error(agent_id, exc),
             model=model,
             worktree_branch=f"coral/{agent_id}",
+        )
+
+    def _set_initial_agent_states(self, contexts: Sequence[AgentContext]) -> None:
+        """Install the immutable initial pool state before agents start."""
+        self._state = SwarmState(
+            run_id=self._state.run_id,
+            total_evaluations=self._state.total_evaluations,
+            best_candidate_id=self._state.best_candidate_id,
+            best_score=self._state.best_score,
+            agent_states=tuple(
+                SwarmAgentState(
+                    agent_id=context.agent_id,
+                    model=context.model or "unknown",
+                    status=AgentStatus.ACTIVE,
+                    worktree_branch=context.worktree_branch,
+                )
+                for context in contexts
+            ),
+            recent_scores=self._state.recent_scores,
+            recent_descriptors=self._state.recent_descriptors,
+            pivot_state=PivotState(tuple(AgentPivotState(context.agent_id) for context in contexts)),
+            stopped=self._state.stopped,
+            stop_reason=self._state.stop_reason,
         )
 
     def _save_state(self) -> None:
@@ -499,10 +505,28 @@ class SwarmManager:
         self._graveyard.save(self._state_dir / "graveyard.json")
         self._lineage.save(self._state_dir / "lineage.json")
         self._notes.save(self._state_dir / "notes.json")
+        (self._state_dir / "budget.json").write_text(
+            json.dumps(
+                {"agent_spend": dict(self._budget.agent_spend), "eval_spend": self._budget.eval_spend},
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
+        state_payload = {
+            "run_id": self._state.run_id,
+            "total_evaluations": self._state.total_evaluations,
+            "best_candidate_id": self._state.best_candidate_id,
+            "best_score": self._state.best_score,
+            "agent_states": [agent.model_dump(mode="json") for agent in self._state.agent_states],
+            "recent_scores": self._state.recent_scores,
+            "recent_descriptors": [descriptor.model_dump(mode="json") for descriptor in self._state.recent_descriptors],
+            "pivot_state": {"agent_states": [pivot.__dict__ for pivot in self._state.pivot_state.agent_states]},
+            "stopped": self._state.stopped,
+            "stop_reason": self._state.stop_reason,
+        }
+        (self._state_dir / "swarm_state.json").write_text(json.dumps(state_payload, indent=2), encoding="utf-8")
         # Persist latest consolidation report if available
         if self._latest_report is not None:
-            import json
-
             report_path = self._state_dir / "consolidation.json"
             report_path.write_text(
                 json.dumps(self._latest_report.model_dump(), indent=2),
@@ -552,7 +576,7 @@ class SwarmManager:
     async def run(self) -> SwarmResult:
         """Execute the swarm run — spawn agents, wait for completion, collect results."""
         self._state_dir.mkdir(parents=True, exist_ok=True)
-        self._start_time = time.monotonic()
+        self._start_time = self._monotonic_clock()
         agent_count = self._config.agents.count
 
         logger.info("Starting swarm run %s with %d agents", self._run_id, agent_count)
@@ -564,6 +588,15 @@ class SwarmManager:
                 "max_cost_usd": self._config.budget.max_cost_usd,
             },
         )
+
+        # Register exact source material before issuing any assignment.
+        baseline = self._initial_snapshot
+        if baseline is None and isinstance(self._factory, SwarmEvolverFactory):
+            baseline = self._factory.baseline_snapshot()
+        if baseline is None:
+            raise ValueError("an exact initial_snapshot is required for swarm assignments")
+        self._candidate_snapshots[baseline.candidate_id] = baseline
+        self._initial_candidate_id = baseline.candidate_id
 
         # Build agent contexts and emit spawn events
         contexts: list[AgentContext] = []
@@ -577,16 +610,31 @@ class SwarmManager:
                 payload={"model": ctx.model, "nudge": self._agent_nudges.get(agent_id, "")},
             )
 
-        # Run all agents concurrently
-        agent_states: list[SwarmAgentState] = await asyncio.gather(*(run_agent_loop(ctx) for ctx in contexts))
+        self._set_initial_agent_states(contexts)
+        # Run all agents concurrently. The explicit SwarmState is authoritative.
+        statuses: list[AgentStatus] = await asyncio.gather(*(run_agent_loop(ctx) for ctx in contexts))
 
-        elapsed = time.monotonic() - self._start_time
-        total_evals = sum(s.eval_count for s in agent_states)
+        elapsed = self._monotonic_clock() - self._start_time
+        self._state = SwarmState(
+            run_id=self._state.run_id,
+            total_evaluations=self._state.total_evaluations,
+            best_candidate_id=self._state.best_candidate_id,
+            best_score=self._state.best_score,
+            agent_states=tuple(
+                agent.model_copy(update={"status": statuses[index]})
+                for index, agent in enumerate(self._state.agent_states)
+            ),
+            recent_scores=self._state.recent_scores,
+            recent_descriptors=self._state.recent_descriptors,
+            pivot_state=self._state.pivot_state,
+            stopped=self._state.stopped,
+            stop_reason=self._state.stop_reason,
+        )
 
         # Persist shared state
         self._save_state()
 
-        best_candidate_id = self._global_best_candidate_id or "none"
+        best_candidate_id = self._state.best_candidate_id or "none"
 
         # Emit completion event with rich summary
         archive_summary = self._archive.to_summary()
@@ -594,14 +642,14 @@ class SwarmManager:
             SwarmEventType.SWARM_COMPLETED,
             payload={
                 "run_id": self._run_id,
-                "total_evals": total_evals,
+                "total_evals": self._state.total_evaluations,
                 "total_cost_usd": self._budget.total_agent_spend,
-                "best_score": self._global_best_score,
+                "best_score": self._state.best_score or 0.0,
                 "best_candidate_id": best_candidate_id,
                 "elapsed_seconds": elapsed,
                 "archive_size": archive_summary.get("size", 0),
                 "archive_coverage": archive_summary.get("coverage", 0.0),
-                "lineage_records": len(self._lineage.all_records()),
+                "lineage_records": self._lineage.size,
                 "notes": self._notes.size,
                 "budget_phase": self._budget.phase,
             },
@@ -610,16 +658,16 @@ class SwarmManager:
         result = SwarmResult(
             run_id=self._run_id,
             workspace_name=self._config.task.workspace,
-            agents=agent_states,
+            agents=list(self._state.agent_states),
             archive_summary=archive_summary,
-            total_evals=total_evals,
+            total_evals=self._state.total_evaluations,
             total_cost_usd=self._budget.total_agent_spend,
             eval_cost_usd=self._budget.eval_spend,
             elapsed_seconds=elapsed,
-            best_score=self._global_best_score,
+            best_score=self._state.best_score or 0.0,
             best_candidate_id=best_candidate_id,
             converged=False,
-            lineage_record_count=len(self._lineage.all_records()),
+            lineage_record_count=self._lineage.size,
             event_count=self._event_writer.next_sequence,
         )
 
