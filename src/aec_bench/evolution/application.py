@@ -30,6 +30,7 @@ from aec_bench.evolution.analysis import (
 from aec_bench.evolution.archive import ArchiveBatchOutcome, ArchiveView, QDArchive
 from aec_bench.evolution.archive_agent import run_archive_selection
 from aec_bench.evolution.core import (
+    AVOBudget,
     CycleOutcome,
     EvaluatedCandidate,
     EvolutionState,
@@ -52,6 +53,7 @@ from aec_bench.evolution.evaluation import (
     build_candidate_assessment,
 )
 from aec_bench.evolution.graveyard import GraveyardEntry, MutationGraveyard
+from aec_bench.evolution.model_provider import build_pydantic_model
 from aec_bench.evolution.selection import (
     CellSelectionStat,
     CellSelectionState,
@@ -62,7 +64,7 @@ from aec_bench.evolution.selection import (
     update_cell_selection_state,
     update_strategy_bandit_state,
 )
-from aec_bench.evolution.variation import run_structured_variation
+from aec_bench.evolution.variation_operator import build_agentic_variation_operator
 from aec_bench.evolution.workspace import Workspace
 from aec_bench.generation.application import generate_template_instances, resolve_template
 
@@ -132,6 +134,7 @@ def _execute_evolution_cycle(
         scope=analysis.scope,
         history=tuple(history),
         graveyard=tuple(graveyard.browse(limit=graveyard.size)),
+        cycle=cycle,
     )
     child_candidate_id = candidate_id_factory(run_id, cycle)
     variation_result = variation(request, workspace, child_candidate_id)
@@ -410,7 +413,7 @@ def run_evolution_from_config(
     from aec_bench.evolution.llm import build_evolution_llm_clients
 
     workspace = Workspace(Path(config.workspace_path))
-    classifier_llm, evolver_llm = build_evolution_llm_clients(config.models)
+    classifier_llm, _evolver_llm = build_evolution_llm_clients(config.models)
     task_dirs: list[Path] = []
     if config.generate is not None:
         generation = config.generate
@@ -429,6 +432,7 @@ def run_evolution_from_config(
     model = config.solver.model if config.solver is not None else config.models.evolver
     adapter = config.solver.adapter if config.solver is not None else "rlm"
     experiment_id = f"evo-{workspace.manifest.name}"
+    development_experiment_id = f"{experiment_id}-development"
     if config.backend == "local" and task_dirs:
         batch_planner = make_local_candidate_batch_planner(
             task_dirs=task_dirs,
@@ -438,34 +442,52 @@ def run_evolution_from_config(
             timeout=config.timeout,
         )
         evaluate = make_local_candidate_evaluator(workspace_root=workspace.root)
+        development_batch_planner = make_local_candidate_batch_planner(
+            task_dirs=task_dirs,
+            model=model,
+            experiment_id=development_experiment_id,
+            adapter=adapter,
+            timeout=config.timeout,
+        )
+        development_evaluate = make_local_candidate_evaluator(
+            workspace_root=workspace.root,
+            candidate_identity=False,
+        )
     elif config.backend in ("modal", "morph") and config.solver is not None and task_dirs:
         batch_planner, evaluate = _build_harbor_candidate_runtime(
             config=config,
             task_dirs=task_dirs,
             experiment_id=experiment_id,
         )
+        development_batch_planner, development_evaluate = _build_harbor_candidate_runtime(
+            config=config,
+            task_dirs=task_dirs,
+            experiment_id=development_experiment_id,
+        )
     else:
         if config.backend in ("modal", "morph"):
             logger.warning("backend=%r requires solver and tasks; using provider-free stubs", config.backend)
         batch_planner = _empty_batch_planner
         evaluate = make_stub_candidate_evaluator(())
+        development_batch_planner = _empty_batch_planner
+        development_evaluate = make_stub_candidate_evaluator(())
 
-    def vary(request: VariationRequest, source: Workspace, child_id: str) -> VariationResult:
-        return run_structured_variation(
-            request,
-            source,
-            child_id,
-            evolver_model_name=config.models.evolver,
-            evolver_llm=evolver_llm,
-            compaction_llm=classifier_llm,
-        )
+    variation = build_agentic_variation_operator(
+        agent_model=build_pydantic_model(config.models.evolver),
+        development_batch_planner=development_batch_planner,
+        development_evaluator=development_evaluate,
+        development_batch_size=config.batch_size,
+        development_experiment_prefix=development_experiment_id,
+        budget=AVOBudget(),
+        compaction_llm=classifier_llm,
+    )
 
     return run_evolution(
         workspace=workspace,
         config=config,
         evaluate=evaluate,
         batch_planner=batch_planner,
-        variation=vary,
+        variation=variation,
         enrich=lambda observations: enrich_observations(observations, classifier_llm=classifier_llm),
         report_writer=report_writer,
         clock=clock,

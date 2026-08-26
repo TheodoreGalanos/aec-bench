@@ -222,10 +222,12 @@ class VariationRequest:
     scope: GraduatedScope
     history: tuple[EvolutionCycleRecord, ...]
     graveyard: tuple[GraveyardEntry, ...]
+    cycle: int = 1
 
     def __post_init__(self) -> None:
         if self.parent.snapshot.candidate_id != self.selection.parent_candidate_id:
             raise ValueError("variation parent must match the selection parent_candidate_id")
+        _require_positive_integer(self.cycle, "variation cycle")
         object.__setattr__(self, "inspirations", tuple(self.inspirations))
         inspiration_ids = tuple(snapshot.candidate_id for snapshot in self.inspirations)
         if inspiration_ids != self.selection.inspiration_candidate_ids:

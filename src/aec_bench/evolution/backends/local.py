@@ -95,20 +95,35 @@ def make_local_candidate_batch_planner(
 def make_local_candidate_evaluator(
     *,
     workspace_root: Path | None = None,
+    candidate_identity: bool = True,
 ) -> CandidateEvaluator:
-    """Execute an exact planned batch through the local artifact runtime."""
+    """Execute an exact planned batch through the local artifact runtime.
+
+    Host evaluation namespaces both experiment and trial identities by
+    candidate. Development evaluation can keep the planned development
+    experiment identity when ``candidate_identity`` is false; its composition
+    supplies unique revision trial IDs.
+    """
 
     def solve(snapshot: WorkspaceSnapshot, batch: CandidateEvaluationBatch) -> tuple[TrialRecord, ...]:
         snapshot_prompt = serialise_snapshot(snapshot)
         trials = tuple(
             replace(
                 trial,
-                experiment_id=f"{trial.experiment_id}--candidate-{snapshot.candidate_id}",
-                trial_id=build_trial_id(
-                    experiment_id=f"{trial.experiment_id}--candidate-{snapshot.candidate_id}",
-                    task_id=trial.task_id,
-                    agent_name=trial.agent.name,
-                    repetition=trial.repetition,
+                experiment_id=(
+                    trial.experiment_id
+                    if not candidate_identity
+                    else f"{trial.experiment_id}--candidate-{snapshot.candidate_id}"
+                ),
+                trial_id=(
+                    trial.trial_id
+                    if not candidate_identity
+                    else build_trial_id(
+                        experiment_id=f"{trial.experiment_id}--candidate-{snapshot.candidate_id}",
+                        task_id=trial.task_id,
+                        agent_name=trial.agent.name,
+                        repetition=trial.repetition,
+                    )
                 ),
                 agent=trial.agent.model_copy(update={"system_prompt": snapshot_prompt}),
             )

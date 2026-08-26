@@ -7,6 +7,7 @@ import json
 from datetime import UTC, datetime
 from pathlib import Path
 
+import pytest
 import yaml
 
 from aec_bench.contracts.evolution import (
@@ -16,11 +17,21 @@ from aec_bench.contracts.evolution import (
     WorkspaceSnapshot,
 )
 from aec_bench.contracts.experiment_manifest import AgentConfig, ComputeConfig, TaskSelector
+from aec_bench.evolution import agent_loop
+from aec_bench.evolution.agent_protocol import AgentCommand, AgentToolName
 from aec_bench.evolution.application import run_evolution
 from aec_bench.evolution.archive import QDArchive
-from aec_bench.evolution.core import SelectionPlan, VariationResult, VariationStatus
+from aec_bench.evolution.core import (
+    DevelopmentAttempt,
+    EvaluatedCandidate,
+    SelectionPlan,
+    VariationResult,
+    VariationStatus,
+    VariationUsage,
+)
 from aec_bench.evolution.evaluation import CandidateEvaluationBatch
 from aec_bench.evolution.selection import CellSelectionState, shortlist_cells
+from aec_bench.evolution.variation_operator import build_agentic_variation_operator
 from aec_bench.evolution.workspace import Workspace
 from aec_bench.tasks.instance import resolve_instance_paths
 from aec_bench.trials import PlannedTrial
@@ -120,12 +131,31 @@ def _variation(*, prompt: str, seen: list[object] | None = None):
     def submit(request, _source, child_id):
         if seen is not None:
             seen.append(request)
+        child = request.parent.snapshot.model_copy(update={"candidate_id": child_id, "system_prompt": prompt})
+        mutation = MutationSummary(prompt_modified=True)
+        evaluated = EvaluatedCandidate(
+            snapshot=child,
+            observations=tuple(
+                observation.model_copy(update={"candidate_id": child.candidate_id})
+                for observation in request.parent.observations
+            ),
+            assessment=request.parent.assessment.model_copy(update={"candidate_id": child.candidate_id}),
+        )
+        attempt = DevelopmentAttempt(
+            attempt_id=f"{child.candidate_id}-attempt",
+            revision=1,
+            evaluated=evaluated,
+            mutation=mutation,
+            hypothesis="The test mutation improves the candidate.",
+            usage_after=VariationUsage(development_evaluations=1),
+        )
         return VariationResult(
             status=VariationStatus.SUBMITTED,
-            child=request.parent.snapshot.model_copy(update={"candidate_id": child_id, "system_prompt": prompt}),
-            mutation=MutationSummary(prompt_modified=True),
+            child=child,
+            mutation=mutation,
             reasoning="test mutation",
-            model_cost_usd=0.0,
+            usage=VariationUsage(),
+            attempt=attempt,
         )
 
     return submit
@@ -137,7 +167,7 @@ def _abstain(request, _source, _child_id):
         child=None,
         mutation=None,
         reasoning="test abstention",
-        model_cost_usd=0.0,
+        usage=VariationUsage(),
     )
 
 
@@ -330,6 +360,86 @@ def test_feedback_is_single_counted_and_abstention_has_no_feedback(tmp_path: Pat
     state2 = json.loads((workspace2.root / "qd_state.json").read_text(encoding="utf-8"))
     assert state2["strategy_bandit"] == []
     assert all(item["selection_count"] == 0 for item in state2["cell_selection"])
+
+
+def test_qd_uses_the_shared_variation_seam_and_hosts_only_the_final_child(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from pydantic_ai.models.test import TestModel
+
+    workspace, batch = _setup(tmp_path)
+    calls: list[dict[str, object]] = []
+    host_evaluated_ids: list[str] = []
+
+    def development_evaluate(snapshot, attempt_batch):
+        return tuple(
+            make_trial_record(
+                experiment_id=trial.experiment_id,
+                trial_id=trial.trial_id,
+                task_id=trial.task_id,
+                task={"task_id": trial.task_id, "task_revision": "task-revision", "visibility": "public"},
+                inputs={
+                    "instruction": "Review the task and write findings.",
+                    "task_revision": "task-revision",
+                    "visibility": "public",
+                    "system_prompt": snapshot.system_prompt,
+                },
+                evaluation={
+                    "reward": 0.6,
+                    "validity": {"output_parseable": True, "schema_valid": True, "verifier_completed": True},
+                },
+            )
+            for trial in attempt_batch.trials
+        )
+
+    commands = iter(
+        (
+            AgentCommand(
+                tool=AgentToolName.APPLY_MUTATION,
+                arguments={"mutation": {"type": "modify_prompt", "content": "qd child"}},
+            ),
+            AgentCommand(
+                tool=AgentToolName.EVALUATE_CURRENT_REVISION,
+                arguments={"hypothesis": "The prompt gives a clearer verification step."},
+            ),
+            AgentCommand(
+                tool=AgentToolName.SUBMIT_CURRENT_REVISION,
+                arguments={"reasoning": "Submit the evaluated child."},
+            ),
+        )
+    )
+
+    def next_command(_runner, _context):
+        return next(commands)
+
+    monkeypatch.setattr(agent_loop.PydanticAIStructuredRunner, "__call__", next_command)
+    operator = build_agentic_variation_operator(
+        agent_model=TestModel(),
+        development_batch_planner=lambda _size, _cycle: batch,
+        development_evaluator=development_evaluate,
+        development_batch_size=1,
+        development_experiment_prefix="qd-development",
+    )
+
+    def host_evaluate(snapshot, current_batch):
+        host_evaluated_ids.append(snapshot.candidate_id)
+        reward = 0.9 if snapshot.candidate_id != "baseline" else 0.5
+        return _records(current_batch, snapshot.candidate_id, reward)
+
+    result = _run(
+        workspace,
+        batch,
+        _config(workspace.root),
+        evaluate=host_evaluate,
+        variation=operator,
+        calls=calls,
+    )
+
+    assert host_evaluated_ids == ["baseline", "run-fixed:1"]
+    assert result.cycle_records[0].child_assessment is not None
+    assert result.cycle_records[0].child_assessment.candidate_id == "run-fixed:1"
+    state = json.loads((workspace.root / "qd_state.json").read_text(encoding="utf-8"))
+    assert state["strategy_bandit"][0]["successes"] == 1
 
 
 def test_fixed_seed_selection_and_resume_numbering_are_reproducible(tmp_path: Path) -> None:

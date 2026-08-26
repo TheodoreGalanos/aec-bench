@@ -5,9 +5,9 @@ from __future__ import annotations
 
 import pytest
 
+from aec_bench.evolution.model_provider import build_pydantic_model
 from aec_bench.evolution.structured_evolver import (
     _SCOPE_ACTION_LIMITS,
-    _build_pydantic_model,
     call_structured_evolver_with_tools,
 )
 
@@ -35,7 +35,7 @@ class TestBuildPydanticModel:
     ) -> None:
         monkeypatch.setenv("TOGETHER_API_KEY", "tog-key")
 
-        model = _build_pydantic_model("together:Qwen/Qwen3.7-Max")
+        model = build_pydantic_model("together:Qwen/Qwen3.7-Max")
 
         assert str(model.base_url).rstrip("/") == "https://api.together.ai/v1"
         assert model.model_name == "Qwen/Qwen3.7-Max"
