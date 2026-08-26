@@ -3,62 +3,69 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+from dataclasses import replace
 from pathlib import Path
 
 from aec_bench.contracts.evolution import WorkspaceSnapshot
 from aec_bench.contracts.experiment_manifest import AgentConfig, ComputeConfig, ExperimentManifest, TaskSelector
 from aec_bench.contracts.trial_record import TrialRecord
-from aec_bench.evolution.application import CandidateEvaluator
+from aec_bench.evolution.core import (
+    CandidateBatchPlanner,
+    CandidateEvaluationBatch,
+    CandidateEvaluator,
+    validate_trial_records,
+)
 from aec_bench.evolution.snapshot import serialise_snapshot
 from aec_bench.harness.artifact_tasks import LocalTaskRuntime, run_experiment, single_attempt
 from aec_bench.tasks.instance import ResolvedTaskInstance, resolve_instance_paths
 from aec_bench.tasks.loader import load_task_definition
-from aec_bench.trials import plan_trials
+from aec_bench.trials import build_trial_id, plan_trials
 
 
-def make_stub_candidate_evaluator(records: list[TrialRecord]) -> CandidateEvaluator:
-    """Return fixed records for deterministic evolution tests."""
+def make_stub_candidate_evaluator(records: Sequence[TrialRecord]) -> CandidateEvaluator:
+    """Return fixed records for deterministic evaluation against a planned batch."""
+    fixed_records = tuple(records)
 
-    def solve(_snapshot: WorkspaceSnapshot, batch_size: int) -> list[TrialRecord]:
-        return records[:batch_size]
+    def solve(_snapshot: WorkspaceSnapshot, batch: CandidateEvaluationBatch) -> tuple[TrialRecord, ...]:
+        if len(fixed_records) != len(batch.trials):
+            raise ValueError("stub evaluation records must match the evaluation batch cardinality")
+        validate_trial_records(fixed_records, batch)
+        return fixed_records
 
     return solve
 
 
-def make_local_candidate_evaluator(
+def make_local_candidate_batch_planner(
     *,
-    task_dirs: list[Path],
+    task_dirs: Sequence[Path],
     model: str,
     experiment_id: str,
     adapter: str = "rlm",
     timeout: int = 1800,
-    workspace_root: Path | None = None,
-) -> CandidateEvaluator:
-    """Compose each evolution fitness batch through planning and run_experiment()."""
-
-    task_cursor = 0
-    call_count = 0
+) -> CandidateBatchPlanner:
+    """Resolve tasks once and plan one candidate-independent batch per cycle."""
     resolved_tasks: list[ResolvedTaskInstance] | None = None
 
-    def solve(snapshot: WorkspaceSnapshot, batch_size: int) -> list[TrialRecord]:
-        nonlocal call_count, resolved_tasks, task_cursor
-        if not task_dirs:
-            return []
+    def plan(batch_size: int, cycle: int) -> CandidateEvaluationBatch:
+        nonlocal resolved_tasks
+        if batch_size < 1:
+            raise ValueError("evaluation batch size must be positive")
+        if cycle < 0:
+            raise ValueError("evaluation batch cycle must be non-negative")
         if resolved_tasks is None:
             resolved_tasks = _resolve_task_directories(task_dirs)
-        selected = _select_task_batch(resolved_tasks, batch_size=batch_size, start_index=task_cursor)
-        if not selected:
-            return []
-        task_cursor = (task_cursor + len(selected)) % len(resolved_tasks)
-        agent = AgentConfig(
-            name="evolution-agent",
-            adapter=adapter,
-            model=model,
-            system_prompt=serialise_snapshot(snapshot),
+        selected = _select_task_batch(
+            resolved_tasks,
+            batch_size=batch_size,
+            start_index=cycle * batch_size,
         )
+        if not selected:
+            raise ValueError("evaluation batch requires at least one resolved task")
+        agent = AgentConfig(name="evolution-agent", adapter=adapter, model=model)
         manifest = ExperimentManifest(
-            experiment_id=f"{experiment_id}-cycle-{call_count}",
-            name=f"Evolution fitness cycle {call_count}",
+            experiment_id=f"{experiment_id}-cycle-{cycle}",
+            name=f"Evolution fitness cycle {cycle}",
             tasks=TaskSelector(include_patterns=[task.task.task_id for task in selected]),
             agents=[agent],
             compute=ComputeConfig(backend="local", timeout_override=timeout),
@@ -71,19 +78,54 @@ def make_local_candidate_evaluator(
             compute=manifest.compute,
             repetitions=manifest.repetitions,
         )
+        return CandidateEvaluationBatch(
+            tasks=tuple(selected),
+            trials=tuple(trials),
+            evaluation_case_ids=tuple(
+                f"{trial.task_id}::agent={trial.agent.name}::attempt={trial.repetition}" for trial in trials
+            ),
+            cycle=cycle,
+        )
+
+    return plan
+
+
+def make_local_candidate_evaluator(
+    *,
+    workspace_root: Path | None = None,
+) -> CandidateEvaluator:
+    """Execute an exact planned batch through the local artifact runtime."""
+
+    def solve(snapshot: WorkspaceSnapshot, batch: CandidateEvaluationBatch) -> tuple[TrialRecord, ...]:
+        snapshot_prompt = serialise_snapshot(snapshot)
+        trials = tuple(
+            replace(
+                trial,
+                experiment_id=f"{trial.experiment_id}--candidate-{snapshot.candidate_id}",
+                trial_id=build_trial_id(
+                    experiment_id=f"{trial.experiment_id}--candidate-{snapshot.candidate_id}",
+                    task_id=trial.task_id,
+                    agent_name=trial.agent.name,
+                    repetition=trial.repetition,
+                ),
+                agent=trial.agent.model_copy(update={"system_prompt": snapshot_prompt}),
+            )
+            for trial in batch.trials
+        )
         runtime = LocalTaskRuntime(agent_files=_agent_files(workspace_root))
-        call_count += 1
-        return run_experiment(
+        records = run_experiment(
             runtime=runtime,
-            tasks=selected,
+            tasks=batch.tasks,
             trials=trials,
             recipe=single_attempt(),
         )
+        validate_trial_records(records, batch)
+        return tuple(records)
 
     return solve
 
 
-def _resolve_task_directories(task_dirs: list[Path]) -> list[ResolvedTaskInstance]:
+def _resolve_task_directories(task_dirs: Sequence[Path]) -> list[ResolvedTaskInstance]:
     resolved: list[ResolvedTaskInstance] = []
     for task_dir in task_dirs:
         tasks_root = _find_tasks_root(task_dir)
@@ -122,4 +164,8 @@ def _agent_files(workspace_root: Path | None) -> dict[str, Path]:
     return {"tool_loop.toml": config} if config.is_file() else {}
 
 
-__all__ = ("make_local_candidate_evaluator", "make_stub_candidate_evaluator")
+__all__ = (
+    "make_local_candidate_batch_planner",
+    "make_local_candidate_evaluator",
+    "make_stub_candidate_evaluator",
+)
