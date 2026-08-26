@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import threading
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -46,8 +47,6 @@ class FakeEvolverFactory:
         self._state_dir = state_dir or Path("/private/tmp/aec-bench-swarm-test")
         self._scores = scores_per_agent
         self._scores_by_candidate: dict[str, float] = {}
-        self.lock_probe: asyncio.Lock | None = None
-        self.lock_probe_states: list[bool] = []
 
     def create(self, agent_id: str, model_override: str | None = None):
         scores = self._scores.get(agent_id, [0.5])
@@ -94,8 +93,6 @@ class FakeEvolverFactory:
         return CandidateEvaluationBatch((resolved,), (planned,), (f"case-{cycle}",), cycle=cycle)
 
     def evaluate(self, snapshot: WorkspaceSnapshot, batch: CandidateEvaluationBatch):
-        if self.lock_probe is not None:
-            self.lock_probe_states.append(self.lock_probe.locked())
         score = self._scores_by_candidate.get(snapshot.candidate_id, 0.5)
         return tuple(
             make_trial_record(
@@ -136,13 +133,10 @@ async def test_concurrent_completions_reduce_without_lost_state(tmp_path: Path) 
     config = _make_config(agent_count=2, max_cost=1.0)
     factory = FakeEvolverFactory({"agent-0": [0.6], "agent-1": [0.7]})
     manager = SwarmManager(config=config, state_dir=tmp_path, evolver_factory=factory)
-    factory.lock_probe = manager._lock
     result = await manager.run()
 
     assert result.total_evals >= 2
     assert result.total_cost_usd == pytest.approx(result.total_evals * 0.5)
-    assert len(factory.lock_probe_states) == result.total_evals * 2
-    assert not any(factory.lock_probe_states)
     eval_events = [
         event
         for event in SwarmEventReader(tmp_path / "events.jsonl").read_all()
@@ -151,6 +145,35 @@ async def test_concurrent_completions_reduce_without_lost_state(tmp_path: Path) 
     assert len(eval_events) == result.total_evals
     persisted = json.loads((tmp_path / "swarm_state.json").read_text())
     assert persisted["total_evaluations"] == result.total_evals
+
+
+@pytest.mark.asyncio
+async def test_host_evaluation_does_not_hold_shared_state_lock(tmp_path: Path) -> None:
+    evaluation_started = threading.Event()
+    release_evaluation = threading.Event()
+
+    class BlockingEvaluationFactory(FakeEvolverFactory):
+        def evaluate(self, snapshot: WorkspaceSnapshot, batch: CandidateEvaluationBatch):
+            evaluation_started.set()
+            if not release_evaluation.wait(timeout=5):
+                raise TimeoutError("test did not release host evaluation")
+            return super().evaluate(snapshot, batch)
+
+    factory = BlockingEvaluationFactory({"agent-0": [0.6]})
+    manager = SwarmManager(
+        config=_make_config(agent_count=1, max_cost=0.5),
+        state_dir=tmp_path,
+        evolver_factory=factory,
+    )
+    run_task = asyncio.create_task(manager.run())
+    try:
+        started = await asyncio.wait_for(asyncio.to_thread(evaluation_started.wait, 5), timeout=6)
+        assert started
+        await asyncio.wait_for(manager._lock.acquire(), timeout=1)
+        manager._lock.release()
+    finally:
+        release_evaluation.set()
+    await run_task
 
 
 @pytest.mark.asyncio
