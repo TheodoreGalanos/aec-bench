@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import math
+from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
 from typing import Any, Literal
@@ -19,6 +20,60 @@ from aec_bench.contracts.validators import (
     ensure_non_empty_string,
     resolve_env_ref,
 )
+
+
+def _require_usage_integer(value: int, field_name: str) -> None:
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        raise ValueError(f"{field_name} must be a non-negative integer")
+
+
+def _require_usage_number(value: float, field_name: str) -> None:
+    if isinstance(value, bool) or not isinstance(value, int | float) or not math.isfinite(value) or value < 0:
+        raise ValueError(f"{field_name} must be a finite non-negative number")
+
+
+@dataclass(frozen=True)
+class VariationUsage:
+    """Exact usage consumed by one variation call.
+
+    Cost is optional because a provider or evaluator can report usage without
+    reporting a price. An explicit zero cost is known free usage; ``None`` is
+    reserved for an unavailable price.
+    """
+
+    model_requests: int = 0
+    tool_calls: int = 0
+    development_evaluations: int = 0
+    supervisor_interventions: int = 0
+    model_cost_usd: float | None = None
+    development_evaluation_cost_usd: float | None = None
+    elapsed_seconds: float = 0.0
+
+    def __post_init__(self) -> None:
+        for field_name in (
+            "model_requests",
+            "tool_calls",
+            "development_evaluations",
+            "supervisor_interventions",
+        ):
+            _require_usage_integer(getattr(self, field_name), field_name)
+        _require_usage_number(self.elapsed_seconds, "elapsed_seconds")
+        for field_name in ("model_cost_usd", "development_evaluation_cost_usd"):
+            cost = getattr(self, field_name)
+            if cost is not None:
+                if isinstance(cost, bool) or not isinstance(cost, int | float) or not math.isfinite(cost):
+                    raise ValueError(f"{field_name} must be finite")
+                if cost < 0:
+                    raise ValueError(f"{field_name} must be non-negative")
+
+    @property
+    def total_cost_usd(self) -> float | None:
+        """Return total cost when every used cost plane is known."""
+        model_cost = 0.0 if self.model_requests == 0 else self.model_cost_usd
+        evaluation_cost = 0.0 if self.development_evaluations == 0 else self.development_evaluation_cost_usd
+        if model_cost is None or evaluation_cost is None:
+            return None
+        return model_cost + evaluation_cost
 
 
 class FailureCategory(StrEnum):
@@ -375,14 +430,7 @@ class EvolutionCycleRecord(StrictModel):
     active_candidate_id_after: NonEmptyStr
     best_candidate_id_after: NonEmptyStr
     timestamp: datetime
-    evolver_cost_usd: float
-
-    @field_validator("evolver_cost_usd")
-    @classmethod
-    def validate_evolver_cost(cls, value: float) -> float:
-        if not math.isfinite(value) or value < 0:
-            raise ValueError("evolver_cost_usd must be a finite non-negative number")
-        return value
+    evolver_usage: VariationUsage
 
     @field_validator("timestamp")
     @classmethod

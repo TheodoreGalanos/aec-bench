@@ -14,6 +14,7 @@ from aec_bench.contracts.evolution import (
     ObservationEnrichment,
     SelectionRecord,
     TraceDigest,
+    VariationUsage,
 )
 from aec_bench.contracts.trial_record import TrialRecord
 from aec_bench.evolution.analysis import GraduatedScope
@@ -121,7 +122,7 @@ def _make_cycle_record(
         active_candidate_id_after=f"run:{cycle}",
         best_candidate_id_after=f"run:{cycle}",
         timestamp=datetime(2026, 2, 1, 12, 0, 0, tzinfo=UTC),
-        evolver_cost_usd=0.0,
+        evolver_usage=VariationUsage(),
     )
 
 

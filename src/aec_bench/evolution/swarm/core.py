@@ -8,10 +8,15 @@ from dataclasses import dataclass
 from datetime import datetime
 from statistics import fmean
 
-from aec_bench.contracts.evolution import BehaviourDescriptor, SwarmAgentState, WorkspaceSnapshot
+from aec_bench.contracts.evolution import BehaviourDescriptor, SwarmAgentState, VariationUsage, WorkspaceSnapshot
 from aec_bench.evolution.archive import ArchiveBatchOutcome
 from aec_bench.evolution.behaviour import extract_behaviour_descriptor
-from aec_bench.evolution.core import EvaluatedCandidate, SelectionPlan, VariationResult, assessment_score
+from aec_bench.evolution.core import (
+    EvaluatedCandidate,
+    SelectionPlan,
+    VariationResult,
+    assessment_score,
+)
 from aec_bench.evolution.swarm.config import SwarmConfig
 
 
@@ -151,14 +156,15 @@ class SwarmAgentResult:
     agent_id: str
     assignment_id: str
     variation: VariationResult
-    agent_cost_usd: float
+    agent_usage: VariationUsage
 
     def __post_init__(self) -> None:
         _require_text(self.agent_id, "agent_id")
         _require_text(self.assignment_id, "assignment_id")
         if not isinstance(self.variation, VariationResult):
             raise TypeError("variation must be a VariationResult")
-        _require_finite_non_negative(self.agent_cost_usd, "agent_cost_usd")
+        if not isinstance(self.agent_usage, VariationUsage):
+            raise TypeError("agent_usage must be a VariationUsage")
 
 
 def _validate_descriptor(descriptor: BehaviourDescriptor) -> None:
@@ -427,10 +433,13 @@ def reduce_swarm_outcome(
     if evaluated_candidate is not None and child is None:
         raise ValueError("evaluated candidate requires a submitted variation child")
 
+    agent_cost = result.agent_usage.total_cost_usd
+    if agent_cost is None:
+        raise ValueError("swarm agent usage has unknown cost and cannot be applied to a USD budget")
     agent_states = _replace_agent_state(
         state.agent_states,
         agent_id,
-        budget_consumed_usd=current_agent.budget_consumed_usd + result.agent_cost_usd,
+        budget_consumed_usd=current_agent.budget_consumed_usd + agent_cost,
     )
     total_evaluations = state.total_evaluations
     best_candidate_id = state.best_candidate_id

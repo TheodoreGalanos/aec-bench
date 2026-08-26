@@ -108,6 +108,14 @@ def _trial_cost(record: object) -> float:
     return 0.0
 
 
+def _agent_cost(result: SwarmAgentResult) -> float:
+    """Return exact agent cost or fail closed when the provider reports none."""
+    cost = result.agent_usage.total_cost_usd
+    if cost is None:
+        raise ValueError("swarm agent usage has unknown cost and cannot be applied to a USD budget")
+    return cost
+
+
 class SwarmManager:
     """Orchestrates a multi-agent swarm run.
 
@@ -276,7 +284,8 @@ class SwarmManager:
                 if evaluated.parent is not None:
                     eval_cost += sum(_trial_cost(obs.trial) for obs in evaluated.parent.observations)
                 self._budget.record_eval_spend(eval_cost)
-            self._budget.record_agent_spend(assignment.agent_id, result.agent_cost_usd)
+            agent_cost = _agent_cost(result)
+            self._budget.record_agent_spend(assignment.agent_id, agent_cost)
             self._agent_consecutive_errors[assignment.agent_id] = 0
             budget = BudgetSnapshot(
                 self._budget.max_cost_usd,
@@ -308,7 +317,7 @@ class SwarmManager:
                 {
                     "assignment_id": assignment.assignment_id,
                     "candidate_id": candidate_id,
-                    "agent_cost_usd": result.agent_cost_usd,
+                    "agent_cost_usd": agent_cost,
                     "inserted": inserted,
                     "budget_phase": self._budget.phase,
                     "score": score,

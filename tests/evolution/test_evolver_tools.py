@@ -13,6 +13,7 @@ from aec_bench.contracts.evolution import (
     ObservationEnrichment,
     SelectionRecord,
     TraceDigest,
+    VariationUsage,
 )
 from aec_bench.evolution.evolver_tools import build_evolver_toolset
 from tests.support.trial_record_factories import make_trial_record
@@ -96,7 +97,7 @@ def _make_cycle_record(
         active_candidate_id_after=parent_id,
         best_candidate_id_after=parent_id,
         timestamp=datetime(2026, 1, cycle, 12, 0, 0, tzinfo=UTC),
-        evolver_cost_usd=0.0,
+        evolver_usage=VariationUsage(),
     )
 
 

@@ -19,6 +19,7 @@ from aec_bench.contracts.evolution import (
     MutationStrategy,
     MutationSummary,
     SelectionRecord,
+    VariationUsage,
     WorkspaceSnapshot,
 )
 from aec_bench.evolution.analysis import EvolutionAnalysis, GraduatedScope
@@ -28,6 +29,58 @@ from aec_bench.evolution.graveyard import GraveyardEntry
 def _require_text(value: str, field_name: str) -> None:
     if not isinstance(value, str) or not value.strip():
         raise ValueError(f"{field_name} must not be blank")
+
+
+def _require_non_negative_integer(value: int, field_name: str) -> None:
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        raise ValueError(f"{field_name} must be a non-negative integer")
+
+
+def _require_positive_integer(value: int, field_name: str) -> None:
+    if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+        raise ValueError(f"{field_name} must be a positive integer")
+
+
+def _require_finite_non_negative(value: float, field_name: str) -> None:
+    if isinstance(value, bool) or not isinstance(value, int | float) or not math.isfinite(value) or value < 0:
+        raise ValueError(f"{field_name} must be a finite non-negative number")
+
+
+def _require_finite_positive(value: float, field_name: str) -> None:
+    if isinstance(value, bool) or not isinstance(value, int | float) or not math.isfinite(value) or value <= 0:
+        raise ValueError(f"{field_name} must be a finite positive number")
+
+
+def _same_workspace_material(left: WorkspaceSnapshot, right: WorkspaceSnapshot) -> bool:
+    return left.system_prompt == right.system_prompt and left.skills == right.skills
+
+
+@dataclass(frozen=True)
+class AVOBudget:
+    """Hard limits for one bounded agentic variation call."""
+
+    max_model_requests: int = 12
+    max_tool_calls: int = 40
+    max_development_evaluations: int = 7
+    max_elapsed_seconds: float = 1800.0
+    max_consecutive_evaluation_errors: int = 2
+    max_stagnant_evaluations: int = 3
+    max_supervisor_interventions: int = 0
+    max_cost_usd: float | None = None
+
+    def __post_init__(self) -> None:
+        for field_name in (
+            "max_model_requests",
+            "max_tool_calls",
+            "max_development_evaluations",
+            "max_consecutive_evaluation_errors",
+            "max_stagnant_evaluations",
+        ):
+            _require_positive_integer(getattr(self, field_name), field_name)
+        _require_finite_positive(self.max_elapsed_seconds, "max_elapsed_seconds")
+        _require_non_negative_integer(self.max_supervisor_interventions, "max_supervisor_interventions")
+        if self.max_cost_usd is not None:
+            _require_finite_positive(self.max_cost_usd, "max_cost_usd")
 
 
 def _extension_candidate_ids(value: Any) -> tuple[str, ...]:
@@ -75,6 +128,31 @@ class EvaluatedCandidate:
             raise ValueError("evaluated candidate trial IDs must be unique")
         if tuple(observation_trial_ids) != self.assessment.trial_ids:
             raise ValueError("assessment trial_ids must match the evidence order exactly")
+
+
+@dataclass(frozen=True)
+class DevelopmentAttempt:
+    """One exact scratch revision and its development evaluation evidence."""
+
+    attempt_id: str
+    revision: int
+    evaluated: EvaluatedCandidate
+    mutation: MutationSummary
+    hypothesis: str
+    usage_after: VariationUsage
+
+    def __post_init__(self) -> None:
+        _require_text(self.attempt_id, "attempt_id")
+        _require_non_negative_integer(self.revision, "revision")
+        if not isinstance(self.evaluated, EvaluatedCandidate):
+            raise TypeError("evaluated must be an EvaluatedCandidate")
+        if not isinstance(self.mutation, MutationSummary):
+            raise TypeError("mutation must be a MutationSummary")
+        _require_text(self.hypothesis, "hypothesis")
+        if not isinstance(self.usage_after, VariationUsage):
+            raise TypeError("usage_after must be a VariationUsage")
+        if self.usage_after.development_evaluations < 1:
+            raise ValueError("development attempt usage must include one development evaluation")
 
 
 @dataclass(frozen=True)
@@ -165,24 +243,156 @@ class VariationStatus(StrEnum):
 
 
 @dataclass(frozen=True)
+class AVOState:
+    """Explicit state for one bounded agentic variation call."""
+
+    variation_id: str
+    parent_candidate_id: str
+    child_candidate_id: str
+    current_revision: int
+    attempts: tuple[DevelopmentAttempt, ...] = ()
+    best_attempt_id: str | None = None
+    consecutive_without_progress: int = 0
+    consecutive_evaluation_errors: int = 0
+    usage: VariationUsage = VariationUsage()
+    terminal_status: VariationStatus | None = None
+    parent_snapshot: WorkspaceSnapshot | None = None
+
+    def __post_init__(self) -> None:
+        for field_name in ("variation_id", "parent_candidate_id", "child_candidate_id"):
+            _require_text(getattr(self, field_name), field_name)
+        _require_non_negative_integer(self.current_revision, "current_revision")
+        _require_non_negative_integer(self.consecutive_without_progress, "consecutive_without_progress")
+        _require_non_negative_integer(self.consecutive_evaluation_errors, "consecutive_evaluation_errors")
+        attempts = tuple(self.attempts)
+        if any(not isinstance(attempt, DevelopmentAttempt) for attempt in attempts):
+            raise TypeError("attempts must contain DevelopmentAttempt values")
+        attempt_ids = tuple(attempt.attempt_id for attempt in attempts)
+        if len(attempt_ids) != len(set(attempt_ids)):
+            raise ValueError("attempt IDs must be unique")
+        revisions = tuple(attempt.revision for attempt in attempts)
+        if len(revisions) != len(set(revisions)):
+            raise ValueError("attempt revisions must be unique")
+        if revisions and max(revisions) > self.current_revision:
+            raise ValueError("attempt revision cannot exceed current_revision")
+        snapshot_ids = tuple(attempt.evaluated.snapshot.candidate_id for attempt in attempts)
+        if len(snapshot_ids) != len(set(snapshot_ids)):
+            raise ValueError("development attempt snapshot IDs must be unique")
+        trial_ids = tuple(
+            observation.trial.trial_id for attempt in attempts for observation in attempt.evaluated.observations
+        )
+        if len(trial_ids) != len(set(trial_ids)):
+            raise ValueError("development attempt trial IDs must be unique")
+        if self.best_attempt_id is not None and self.best_attempt_id not in attempt_ids:
+            raise ValueError("best_attempt_id must reference an attempt")
+        if not isinstance(self.usage, VariationUsage):
+            raise TypeError("usage must be a VariationUsage")
+        if self.parent_snapshot is not None:
+            if not isinstance(self.parent_snapshot, WorkspaceSnapshot):
+                raise TypeError("parent_snapshot must be a WorkspaceSnapshot")
+            if self.parent_snapshot.candidate_id != self.parent_candidate_id:
+                raise ValueError("parent_snapshot must match parent_candidate_id")
+        object.__setattr__(self, "attempts", attempts)
+
+
+def is_revision_valid(
+    state: AVOState,
+    revision: int,
+    snapshot: WorkspaceSnapshot | None = None,
+    *,
+    parent_snapshot: WorkspaceSnapshot | None = None,
+) -> bool:
+    """Return whether an evaluated revision can be submitted now.
+
+    A revision is eligible only when it is current, has exact development
+    evidence, and is not the host-selected parent material.
+    """
+    if not isinstance(state, AVOState):
+        raise TypeError("state must be an AVOState")
+    if isinstance(revision, bool) or not isinstance(revision, int):
+        raise TypeError("revision must be an integer")
+    attempt = next((item for item in state.attempts if item.revision == revision), None)
+    if attempt is None or revision != state.current_revision:
+        return False
+    evaluated_snapshot = attempt.evaluated.snapshot
+    exact_parent = parent_snapshot or state.parent_snapshot
+    if exact_parent is None:
+        raise ValueError("exact parent_snapshot is required to validate revision material")
+    if not isinstance(exact_parent, WorkspaceSnapshot):
+        raise TypeError("parent_snapshot must be a WorkspaceSnapshot")
+    if exact_parent.candidate_id != state.parent_candidate_id:
+        raise ValueError("parent_snapshot must match parent_candidate_id")
+    if _same_workspace_material(evaluated_snapshot, exact_parent):
+        return False
+    return snapshot is None or _same_workspace_material(evaluated_snapshot, snapshot)
+
+
+def budget_exhaustion_reason(budget: AVOBudget, state: AVOState) -> str | None:
+    """Return the first hard limit reached by usage, or ``None``."""
+    if not isinstance(budget, AVOBudget):
+        raise TypeError("budget must be an AVOBudget")
+    if not isinstance(state, AVOState):
+        raise TypeError("state must be an AVOState")
+    usage = state.usage
+    limits = (
+        ("max_model_requests", usage.model_requests, budget.max_model_requests),
+        ("max_tool_calls", usage.tool_calls, budget.max_tool_calls),
+        ("max_development_evaluations", usage.development_evaluations, budget.max_development_evaluations),
+        ("max_elapsed_seconds", usage.elapsed_seconds, budget.max_elapsed_seconds),
+        (
+            "max_consecutive_evaluation_errors",
+            state.consecutive_evaluation_errors,
+            budget.max_consecutive_evaluation_errors,
+        ),
+        (
+            "max_stagnant_evaluations",
+            state.consecutive_without_progress,
+            budget.max_stagnant_evaluations,
+        ),
+        ("max_supervisor_interventions", usage.supervisor_interventions, budget.max_supervisor_interventions),
+    )
+    for name, observed, limit in limits:
+        if limit > 0 and observed >= limit:
+            return name
+    if budget.max_cost_usd is not None:
+        total_cost = usage.total_cost_usd
+        if total_cost is None:
+            return "max_cost_usd_unknown"
+        if total_cost >= budget.max_cost_usd:
+            return "max_cost_usd"
+    return None
+
+
+def budget_exhausted(budget: AVOBudget, state: AVOState) -> bool:
+    """Return whether one of the configured hard limits has been reached."""
+    return budget_exhaustion_reason(budget, state) is not None
+
+
+@dataclass(frozen=True)
 class VariationResult:
-    """One submitted child or an explicit variation abstention."""
+    """One submitted child or an explicit variation non-submission."""
 
     status: VariationStatus
     child: WorkspaceSnapshot | None
     mutation: MutationSummary | None
     reasoning: str
-    model_cost_usd: float
+    usage: VariationUsage
+    attempt: DevelopmentAttempt | None = None
 
     def __post_init__(self) -> None:
         status = VariationStatus(self.status)
         object.__setattr__(self, "status", status)
-        if not math.isfinite(self.model_cost_usd) or self.model_cost_usd < 0:
-            raise ValueError("model_cost_usd must be a finite non-negative number")
-        if status == VariationStatus.SUBMITTED and (self.child is None or self.mutation is None):
-            raise ValueError("submitted variation requires a child and mutation summary")
-        if status == VariationStatus.ABSTAINED and self.child is not None:
-            raise ValueError("abstained variation must not contain a child")
+        _require_text(self.reasoning, "reasoning")
+        if not isinstance(self.usage, VariationUsage):
+            raise TypeError("usage must be a VariationUsage")
+        if status is VariationStatus.SUBMITTED:
+            if self.child is None or self.mutation is None or self.attempt is None:
+                raise ValueError("submitted variation requires a child, mutation summary, and evaluated attempt")
+            if not _same_workspace_material(self.attempt.evaluated.snapshot, self.child):
+                raise ValueError("submitted child must match the exact evaluated attempt snapshot")
+            return
+        if self.child is not None or self.mutation is not None or self.attempt is not None:
+            raise ValueError(f"{status.value} variation must not contain child, mutation, or attempt")
 
 
 @dataclass(frozen=True)
@@ -286,7 +496,7 @@ class CycleOutcome:
             active_candidate_id_after=self.active_candidate_id_after,
             best_candidate_id_after=self.best_candidate_id_after,
             timestamp=timestamp,
-            evolver_cost_usd=self.variation.model_cost_usd,
+            evolver_usage=self.variation.usage,
         )
 
 

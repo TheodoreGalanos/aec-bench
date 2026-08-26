@@ -20,7 +20,7 @@ from aec_bench.contracts.evolution import (
     MutationStrategy,
     WorkspaceSnapshot,
 )
-from aec_bench.contracts.trial_record import TrialRecord
+from aec_bench.contracts.trial_record import CostRecord, TrialRecord
 from aec_bench.evolution.analysis import (
     EvolutionAnalysis,
     compute_discipline_scores,
@@ -386,6 +386,7 @@ def run_evolution(
         converged=_is_converged(state, config),
         total_trials=sum(len(record.parent_assessment.trial_ids) for record in history)
         + sum(len(record.child_assessment.trial_ids) for record in history if record.child_assessment is not None),
+        total_evolver_cost=_project_total_evolver_cost(history),
         cycle_records=history,
         archive_summary=archive_summary,
     )
@@ -699,6 +700,19 @@ def _project_score_history(
         )
         for record in records
     ]
+
+
+def _project_total_evolver_cost(records: Sequence[EvolutionCycleRecord]) -> CostRecord | None:
+    """Project exact model usage and known variation cost across completed cycles."""
+    if not records:
+        return None
+    usage = tuple(record.evolver_usage for record in records)
+    known_costs = tuple(item.total_cost_usd for item in usage)
+    total_cost = sum(known_cost for known_cost in known_costs if known_cost is not None)
+    return CostRecord(
+        model_calls=sum(item.model_requests for item in usage),
+        estimated_cost_usd=total_cost if all(cost is not None for cost in known_costs) else None,
+    )
 
 
 def _is_converged(state: EvolutionState, config: EvolutionConfig) -> bool:

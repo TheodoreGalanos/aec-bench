@@ -15,6 +15,7 @@ from aec_bench.contracts.evolution import (
     EvolutionCycleRecord,
     EvolutionObservation,
     EvolverModelConfig,
+    VariationUsage,
     WorkspaceSnapshot,
 )
 from aec_bench.contracts.experiment_manifest import AgentConfig, TaskSelector
@@ -105,16 +106,41 @@ class SwarmAgentEvolver:
             evolver_llm=self._evolver_llm,
             compaction_llm=self._classifier_llm,
         )
-        parent_cost = sum(
-            float(observation.trial.cost.estimated_cost_usd)
+        parent_costs = tuple(
+            None
+            if observation.trial.cost is None or observation.trial.cost.estimated_cost_usd is None
+            else float(observation.trial.cost.estimated_cost_usd)
             for observation in parent.observations
-            if observation.trial.cost is not None and observation.trial.cost.estimated_cost_usd is not None
+        )
+        parent_cost = sum(cost for cost in parent_costs if cost is not None)
+        if any(cost is None for cost in parent_costs) or parent_cost == 0:
+            parent_cost_value: float | None = None
+        else:
+            parent_cost_value = parent_cost
+        variation_usage = variation.usage
+        development_cost = variation_usage.development_evaluation_cost_usd
+        if variation_usage.development_evaluations and development_cost is None:
+            combined_development_cost = None
+        elif parent_cost_value is None:
+            combined_development_cost = None
+        else:
+            combined_development_cost = (development_cost or 0.0) + parent_cost_value
+            if combined_development_cost == 0:
+                combined_development_cost = None
+        agent_usage = VariationUsage(
+            model_requests=variation_usage.model_requests,
+            tool_calls=variation_usage.tool_calls,
+            development_evaluations=variation_usage.development_evaluations + 1,
+            supervisor_interventions=variation_usage.supervisor_interventions,
+            model_cost_usd=variation_usage.model_cost_usd,
+            development_evaluation_cost_usd=combined_development_cost,
+            elapsed_seconds=variation_usage.elapsed_seconds,
         )
         return SwarmAgentResult(
             agent_id=assignment.agent_id,
             assignment_id=assignment.assignment_id,
             variation=variation,
-            agent_cost_usd=parent_cost + variation.model_cost_usd,
+            agent_usage=agent_usage,
         )
 
 
