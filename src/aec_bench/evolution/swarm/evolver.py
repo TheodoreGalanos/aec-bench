@@ -7,7 +7,7 @@ import asyncio
 import logging
 import shutil
 import tempfile
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from pathlib import Path
 
 from aec_bench.contracts.evolution import (
@@ -23,15 +23,18 @@ from aec_bench.contracts.trial_record import TrialRecord
 from aec_bench.evaluation.behavioral import BehavioralLLMClient
 from aec_bench.evolution.application import CandidateEvaluator, _build_analysis, _enrich_candidate
 from aec_bench.evolution.backends.local import make_local_candidate_batch_planner, make_local_candidate_evaluator
-from aec_bench.evolution.core import EvolutionState, VariationRequest
+from aec_bench.evolution.core import AVOBudget, EvolutionState, VariationRequest, VariationResult
 from aec_bench.evolution.enrichment import enrich_observations
 from aec_bench.evolution.evaluation import CandidateBatchPlanner, CandidateEvaluationBatch, bind_candidate_evaluation
 from aec_bench.evolution.graveyard import MutationGraveyard
+from aec_bench.evolution.model_provider import build_pydantic_model
 from aec_bench.evolution.swarm.core import SwarmAgentResult, SwarmAssignment
-from aec_bench.evolution.variation import run_structured_variation
+from aec_bench.evolution.variation_operator import build_agentic_variation_operator
 from aec_bench.evolution.workspace import Workspace
 
 _log = logging.getLogger(__name__)
+
+VariationOperator = Callable[[VariationRequest, Workspace, str], VariationResult]
 
 
 class SwarmAgentEvolver:
@@ -44,16 +47,14 @@ class SwarmAgentEvolver:
         batch_planner: CandidateBatchPlanner,
         solve_fn: CandidateEvaluator,
         classifier_llm: BehavioralLLMClient,
-        evolver_llm: BehavioralLLMClient,
-        evolver_model_name: str,
+        variation_operator: VariationOperator,
     ) -> None:
         self._workspace = workspace
         self._config = config
         self._batch_planner = batch_planner
         self._solve_fn = solve_fn
         self._classifier_llm = classifier_llm
-        self._evolver_llm = evolver_llm
-        self._evolver_model_name = evolver_model_name
+        self._variation_operator = variation_operator
         self._cycle = 0
         self._history: list[EvolutionCycleRecord] = []
         self._graveyard = MutationGraveyard()
@@ -97,15 +98,9 @@ class SwarmAgentEvolver:
             scope=analysis.scope,
             history=tuple(self._history),
             graveyard=tuple(self._graveyard.browse(limit=self._graveyard.size)),
+            cycle=self._cycle,
         )
-        variation = run_structured_variation(
-            request,
-            self._workspace,
-            assignment.assignment_id,
-            evolver_model_name=self._evolver_model_name,
-            evolver_llm=self._evolver_llm,
-            compaction_llm=self._classifier_llm,
-        )
+        variation = self._variation_operator(request, self._workspace, assignment.assignment_id)
         parent_costs = tuple(
             None
             if observation.trial.cost is None or observation.trial.cost.estimated_cost_usd is None
@@ -113,7 +108,7 @@ class SwarmAgentEvolver:
             for observation in parent.observations
         )
         parent_cost = sum(cost for cost in parent_costs if cost is not None)
-        if any(cost is None for cost in parent_costs) or parent_cost == 0:
+        if any(cost is None for cost in parent_costs):
             parent_cost_value: float | None = None
         else:
             parent_cost_value = parent_cost
@@ -125,8 +120,6 @@ class SwarmAgentEvolver:
             combined_development_cost = None
         else:
             combined_development_cost = (development_cost or 0.0) + parent_cost_value
-            if combined_development_cost == 0:
-                combined_development_cost = None
         agent_usage = VariationUsage(
             model_requests=variation_usage.model_requests,
             tool_calls=variation_usage.tool_calls,
@@ -160,8 +153,6 @@ class SwarmEvolverFactory:
         workspace_source: Path,
         task_dirs: list[Path],
         classifier_llm: BehavioralLLMClient,
-        evolver_llm: BehavioralLLMClient,
-        evolver_model_name: str,
         model: str,
         adapter: str = "rlm",
         timeout: int = 1800,
@@ -173,8 +164,6 @@ class SwarmEvolverFactory:
         self._workspace_source = workspace_source
         self._task_dirs = task_dirs
         self._classifier_llm = classifier_llm
-        self._evolver_llm = evolver_llm
-        self._evolver_model_name = evolver_model_name
         self._model = model
         self._adapter = adapter
         self._timeout = timeout
@@ -202,19 +191,16 @@ class SwarmEvolverFactory:
 
         # 3. Build LLM clients — per-agent override or factory default
         classifier_llm: BehavioralLLMClient
-        evolver_llm: BehavioralLLMClient
         if model_override and model_override != self._model:
             from aec_bench.providers.behavioral_llm import build_behavioral_llm_client
 
             classifier_llm = build_behavioral_llm_client(model=model_override)
-            evolver_llm = build_behavioral_llm_client(model=model_override)
             evolver_model_name = model_override
             solver_model = model_override
             _log.info("Agent %s using model override: %s", agent_id, model_override)
         else:
             classifier_llm = self._classifier_llm
-            evolver_llm = self._evolver_llm
-            evolver_model_name = self._evolver_model_name
+            evolver_model_name = self._model
             solver_model = self._model
 
         # 4. Compose the candidate-independent plan and evaluator.
@@ -228,6 +214,27 @@ class SwarmEvolverFactory:
         )
         solve_fn = make_local_candidate_evaluator(
             workspace_root=agent_ws_path,
+        )
+        development_experiment_id = f"{experiment_id}-development"
+        development_batch_planner = make_local_candidate_batch_planner(
+            task_dirs=self._task_dirs,
+            model=solver_model,
+            experiment_id=development_experiment_id,
+            adapter=self._adapter,
+            timeout=self._timeout,
+        )
+        development_evaluator = make_local_candidate_evaluator(
+            workspace_root=agent_ws_path,
+            candidate_identity=False,
+        )
+        variation_operator = build_agentic_variation_operator(
+            agent_model=build_pydantic_model(evolver_model_name),
+            development_batch_planner=development_batch_planner,
+            development_evaluator=development_evaluator,
+            development_batch_size=self._batch_size,
+            development_experiment_prefix=development_experiment_id,
+            budget=AVOBudget(),
+            compaction_llm=classifier_llm,
         )
         config = EvolutionConfig(
             workspace_path=str(agent_ws_path),
@@ -247,8 +254,7 @@ class SwarmEvolverFactory:
             batch_planner=batch_planner,
             solve_fn=solve_fn,
             classifier_llm=classifier_llm,
-            evolver_llm=evolver_llm,
-            evolver_model_name=evolver_model_name,
+            variation_operator=variation_operator,
         )
 
     def plan_batch(self, batch_size: int, cycle: int) -> CandidateEvaluationBatch:

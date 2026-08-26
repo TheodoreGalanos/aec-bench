@@ -7,7 +7,7 @@ from datetime import UTC, datetime
 
 import pytest
 
-from aec_bench.contracts.evolution import AgentStatus, MutationStrategy, WorkspaceSnapshot
+from aec_bench.contracts.evolution import AgentStatus, MutationStrategy, VariationUsage, WorkspaceSnapshot
 from aec_bench.evolution.core import SelectionPlan, VariationResult, VariationStatus
 from aec_bench.evolution.swarm.agent_task import AgentContext, run_agent_loop
 from aec_bench.evolution.swarm.core import AgentBudget, SwarmAgentResult, SwarmAssignment
@@ -34,8 +34,9 @@ class FakeEvolver:
     async def step(self, assignment: SwarmAssignment) -> SwarmAgentResult:
         self._index += 1
         cost = self._scores[(self._index - 1) % len(self._scores)]
-        variation = VariationResult(VariationStatus.ABSTAINED, None, None, "No child", cost)
-        return SwarmAgentResult("agent-1", assignment.assignment_id, variation, cost)
+        usage = VariationUsage(model_requests=1, model_cost_usd=cost)
+        variation = VariationResult(VariationStatus.ABSTAINED, None, None, "No child", usage)
+        return SwarmAgentResult("agent-1", assignment.assignment_id, variation, usage)
 
 
 @pytest.mark.asyncio
@@ -81,7 +82,7 @@ async def test_agent_loop_forwards_exact_typed_result() -> None:
         "assignment-2",
         "assignment-3",
     ]
-    assert [result.agent_cost_usd for result in results] == [0.3, 0.8, 0.5]
+    assert [result.agent_usage.total_cost_usd for result in results] == [0.3, 0.8, 0.5]
     assert state is AgentStatus.RETIRED
 
 

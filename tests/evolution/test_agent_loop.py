@@ -8,8 +8,17 @@ from dataclasses import replace
 from pathlib import Path
 
 import pytest
+import yaml
 
 from aec_bench.contracts.evaluation_result import EvaluationResult, ValidityCheck
+from aec_bench.contracts.evolution import (
+    CandidateAssessment,
+    EvolutionObservation,
+    FieldScore,
+    MutationStrategy,
+    ObservationEnrichment,
+    WorkspaceSnapshot,
+)
 from aec_bench.evolution.agent_loop import (
     AgentCommand,
     AgentContext,
@@ -18,11 +27,83 @@ from aec_bench.evolution.agent_loop import (
     PydanticAIStructuredRunner,
     run_agentic_variation,
 )
-from aec_bench.evolution.analysis import GraduatedScope
-from aec_bench.evolution.core import AVOBudget, VariationStatus
+from aec_bench.evolution.analysis import BehavioralPattern, EvolutionAnalysis, GraduatedScope
+from aec_bench.evolution.core import AVOBudget, EvaluatedCandidate, SelectionPlan, VariationRequest, VariationStatus
 from aec_bench.evolution.development import DevelopmentEvaluationBoundary
+from aec_bench.evolution.workspace import Workspace
 from tests.evolution.test_development import _batch, _record
-from tests.evolution.test_variation import _request, _workspace
+from tests.support.trial_record_factories import make_trial_record
+
+
+def _workspace(root: Path) -> Workspace:
+    root.mkdir(parents=True)
+    (root / "manifest.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "schema_version": 1,
+                "name": "agent-loop-test",
+                "agent_adapter": "tool_loop",
+                "evolvable_layers": ["prompts", "skills"],
+            }
+        )
+    )
+    (root / "prompts").mkdir()
+    (root / "prompts" / "system.md").write_text("Canonical prompt")
+    return Workspace(root)
+
+
+def _request(
+    workspace: Workspace,
+    *,
+    patterns: tuple[BehavioralPattern, ...] = (),
+    parent_id: str = "parent",
+    inspiration: WorkspaceSnapshot | None = None,
+) -> VariationRequest:
+    trial = make_trial_record(
+        trial_id="trial-1",
+        evaluation={
+            "reward": 0.4,
+            "validity": {"output_parseable": True, "schema_valid": True, "verifier_completed": True},
+        },
+    )
+    observation = EvolutionObservation(
+        trial=trial,
+        enrichment=ObservationEnrichment(
+            field_scores=[FieldScore(field_name="voltage", reward=0.0, expected="1", actual="2")]
+        ),
+        candidate_id=parent_id,
+        discipline="electrical",
+    )
+    assessment = CandidateAssessment(
+        candidate_id=parent_id,
+        batch_score=0.4,
+        structural_score=None,
+        discipline_scores={"electrical": 0.4},
+        trial_ids=("trial-1",),
+        evaluation_case_ids=("case-1",),
+        valid=True,
+    )
+    parent = EvaluatedCandidate(
+        snapshot=workspace.export_snapshot(parent_id),
+        observations=(observation,),
+        assessment=assessment,
+    )
+    return VariationRequest(
+        selection=SelectionPlan(
+            parent_id,
+            () if inspiration is None else (inspiration.candidate_id,),
+            MutationStrategy.CONSERVATIVE,
+            "Improve checks",
+            "test",
+        ),
+        parent=parent,
+        inspirations=() if inspiration is None else (inspiration,),
+        analysis=EvolutionAnalysis([], list(patterns), GraduatedScope.TARGETED, None, 0.4),
+        scope=GraduatedScope.TARGETED,
+        history=(),
+        graveyard=(),
+        cycle=1,
+    )
 
 
 def _boundary(tmp_path: Path, *, invalid: bool = False) -> DevelopmentEvaluationBoundary:

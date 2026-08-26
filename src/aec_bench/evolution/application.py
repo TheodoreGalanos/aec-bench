@@ -410,10 +410,10 @@ def run_evolution_from_config(
         make_stub_candidate_evaluator,
     )
     from aec_bench.evolution.config_loader import resolve_task_dirs
-    from aec_bench.evolution.llm import build_evolution_llm_clients
+    from aec_bench.providers.behavioral_llm import build_behavioral_llm_client
 
     workspace = Workspace(Path(config.workspace_path))
-    classifier_llm, _evolver_llm = build_evolution_llm_clients(config.models)
+    classifier_llm = build_behavioral_llm_client(model=config.models.classifier)
     task_dirs: list[Path] = []
     if config.generate is not None:
         generation = config.generate

@@ -406,3 +406,10 @@ def test_agentic_operator_creates_one_development_boundary_per_variation_call(tm
     assert all(boundary.role.value == "development" for boundary in boundaries)
     assert all(boundary.host_experiment_id == "experiment-001" for boundary in boundaries)
     assert all(boundary.experiment_id != boundary.host_experiment_id for boundary in boundaries)
+    assert all(boundary.experiment_id.startswith("functional-development-cycle-") for boundary in boundaries)
+    assert all(
+        trial.experiment_id == boundary.experiment_id for boundary in boundaries for trial in boundary.batch.trials
+    )
+    assert all(
+        trial.trial_id not in boundary.host_trial_ids for boundary in boundaries for trial in boundary.batch.trials
+    )

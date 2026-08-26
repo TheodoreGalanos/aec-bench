@@ -245,6 +245,10 @@ class SwarmManager:
 
     async def _on_result(self, assignment: SwarmAssignment, result: SwarmAgentResult) -> bool:
         """Evaluate and reduce one typed result; model work stays outside the lock."""
+        # Resolve the provider cost before entering the effectful section. An
+        # unknown USD cost must not allow archive, graveyard, candidate, or
+        # budget state to change before the manager fails closed.
+        agent_cost = _agent_cost(result)
         if result.variation.status is VariationStatus.SUBMITTED:
             batch = await asyncio.to_thread(
                 self._batch_planner,
@@ -284,7 +288,6 @@ class SwarmManager:
                 if evaluated.parent is not None:
                     eval_cost += sum(_trial_cost(obs.trial) for obs in evaluated.parent.observations)
                 self._budget.record_eval_spend(eval_cost)
-            agent_cost = _agent_cost(result)
             self._budget.record_agent_spend(assignment.agent_id, agent_cost)
             self._agent_consecutive_errors[assignment.agent_id] = 0
             budget = BudgetSnapshot(

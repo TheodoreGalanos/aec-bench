@@ -7,22 +7,39 @@ import asyncio
 import json
 import threading
 from collections.abc import Sequence
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
 
 from aec_bench.contracts.evaluation_result import EvaluationResult, ValidityCheck
-from aec_bench.contracts.evolution import EvolutionObservation, MutationSummary, SwarmEventType, WorkspaceSnapshot
+from aec_bench.contracts.evolution import (
+    CandidateAssessment,
+    EvolutionObservation,
+    MutationSummary,
+    ObservationEnrichment,
+    SwarmAgentState,
+    SwarmEventType,
+    VariationUsage,
+    WorkspaceSnapshot,
+)
 from aec_bench.contracts.experiment_manifest import AgentConfig, ComputeConfig
-from aec_bench.evolution.core import VariationResult, VariationStatus
-from aec_bench.evolution.evaluation import CandidateEvaluationBatch
+from aec_bench.evolution.core import DevelopmentAttempt, SelectionPlan, VariationResult, VariationStatus
+from aec_bench.evolution.evaluation import CandidateEvaluationBatch, bind_evaluated_candidate
 from aec_bench.evolution.swarm.config import (
     SwarmAgentConfig,
     SwarmBudgetConfig,
     SwarmConfig,
     SwarmTaskConfig,
 )
-from aec_bench.evolution.swarm.core import SwarmAgentResult
+from aec_bench.evolution.swarm.core import (
+    AgentBudget,
+    AgentPivotState,
+    PivotState,
+    SwarmAgentResult,
+    SwarmAssignment,
+    SwarmState,
+)
 from aec_bench.evolution.swarm.events import SwarmEventReader
 from aec_bench.evolution.swarm.manager import SwarmManager
 from aec_bench.evolution.swarm.resume import load_resumed_state
@@ -60,17 +77,53 @@ class FakeEvolverFactory:
                 self._i += 1
                 candidate_id = f"{agent_id}-child-{self._i}"
                 self._factory._scores_by_candidate[candidate_id] = s
+                usage = VariationUsage(
+                    model_requests=1,
+                    development_evaluations=1,
+                    model_cost_usd=0.5,
+                    development_evaluation_cost_usd=0.0,
+                )
+                development_trial = make_trial_record(trial_id=f"{candidate_id}-development-trial")
+                development_observation = EvolutionObservation(
+                    trial=development_trial,
+                    enrichment=ObservationEnrichment(),
+                    candidate_id=candidate_id,
+                    discipline="structural",
+                )
+                development_assessment = CandidateAssessment(
+                    candidate_id=candidate_id,
+                    batch_score=s,
+                    structural_score=None,
+                    discipline_scores={"structural": s},
+                    trial_ids=(development_trial.trial_id,),
+                    evaluation_case_ids=("development-case",),
+                    valid=True,
+                )
+                development_candidate = bind_evaluated_candidate(
+                    WorkspaceSnapshot(system_prompt=f"{candidate_id} prompt", candidate_id=candidate_id),
+                    (development_observation,),
+                    development_assessment,
+                )
+                attempt = DevelopmentAttempt(
+                    attempt_id=f"{assignment.assignment_id}:attempt-1",
+                    revision=1,
+                    evaluated=development_candidate,
+                    mutation=MutationSummary(prompt_modified=True),
+                    hypothesis="Apply exact host-evaluated mutation",
+                    usage_after=usage,
+                )
                 return SwarmAgentResult(
                     agent_id=agent_id,
                     assignment_id=assignment.assignment_id,
                     variation=VariationResult(
                         VariationStatus.SUBMITTED,
-                        WorkspaceSnapshot(system_prompt=f"{candidate_id} prompt", candidate_id=candidate_id),
+                        development_candidate.snapshot,
                         MutationSummary(prompt_modified=True),
                         "Apply exact host-evaluated mutation",
-                        0.5,
+                        usage,
+                        attempt,
                     ),
-                    agent_cost_usd=0.5,
+                    agent_usage=usage,
                 )
 
         evolver = _FakeEvolver()
@@ -114,6 +167,76 @@ class FakeEvolverFactory:
 
     def cleanup(self) -> None:
         return None
+
+
+@pytest.mark.asyncio
+async def test_unknown_agent_cost_has_no_host_effects(tmp_path: Path) -> None:
+    """An unknown USD cost is rejected before any shared result effect."""
+    factory = FakeEvolverFactory({"agent-0": [0.5]})
+    host_evaluations = 0
+
+    def evaluate(snapshot: WorkspaceSnapshot, batch: CandidateEvaluationBatch):
+        nonlocal host_evaluations
+        host_evaluations += 1
+        return factory.evaluate(snapshot, batch)
+
+    manager = SwarmManager(
+        config=_make_config(agent_count=1),
+        state_dir=tmp_path,
+        evolver_factory=factory,
+        evaluator=evaluate,
+    )
+    parent = factory.baseline_snapshot()
+    manager._candidate_snapshots[parent.candidate_id] = parent
+    manager._initial_candidate_id = parent.candidate_id
+    manager._agent_cycles["agent-0"] = 1
+    initial_state = SwarmState(
+        run_id=manager._run_id,
+        total_evaluations=0,
+        best_candidate_id=None,
+        best_score=None,
+        agent_states=(SwarmAgentState(agent_id="agent-0", model="test-model", status="active"),),
+        recent_scores=(),
+        recent_descriptors=(),
+        pivot_state=PivotState((AgentPivotState("agent-0"),)),
+        stopped=False,
+        stop_reason=None,
+    )
+    manager._state = initial_state
+    assignment = SwarmAssignment(
+        assignment_id="assignment-1",
+        agent_id="agent-0",
+        selection=SelectionPlan("baseline", (), "conservative", "Improve", "Use exact material"),
+        parent=parent,
+        inspirations=(),
+        budget=AgentBudget(1.0),
+        issued_at=datetime.now(UTC),
+    )
+    known_result = await factory.create("agent-0").step(assignment)
+    unknown_usage = VariationUsage(
+        model_requests=known_result.agent_usage.model_requests,
+        development_evaluations=known_result.agent_usage.development_evaluations,
+    )
+    result = SwarmAgentResult(
+        agent_id="agent-0",
+        assignment_id="assignment-1",
+        variation=known_result.variation,
+        agent_usage=unknown_usage,
+    )
+    before_snapshots = dict(manager._candidate_snapshots)
+    before_agent_spend = dict(manager._budget.agent_spend)
+
+    with pytest.raises(ValueError, match="unknown cost"):
+        await manager._on_result(assignment, result)
+
+    assert manager._state == initial_state
+    assert manager._candidate_snapshots == before_snapshots
+    assert manager._archive.size == 0
+    assert manager._graveyard.size == 0
+    assert manager._budget.total_agent_spend == 0.0
+    assert manager._budget.eval_spend == 0.0
+    assert manager._budget.agent_spend == before_agent_spend
+    assert host_evaluations == 0
 
 
 @pytest.mark.asyncio
