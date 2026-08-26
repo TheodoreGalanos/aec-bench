@@ -187,9 +187,3 @@ def load_resumed_state(state_dir: Path) -> ResumedState:
         initial_candidate_id,
         next_sequence,
     )
-
-
-def rebuild_state(state_path: Path) -> ResumedState:
-    """Load explicit state for callers that historically passed an event path."""
-    state_dir = state_path if state_path.is_dir() else state_path.parent
-    return load_resumed_state(state_dir)

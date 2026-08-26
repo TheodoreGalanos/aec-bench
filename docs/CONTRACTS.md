@@ -36,6 +36,7 @@ readable.
 | Experiment manifest | Experiment orchestration | User configuration becomes an executable plan | Internal, except documented CLI/config behavior | [`ExperimentManifest`](../src/aec_bench/contracts/experiment_manifest.py) | Persisted configuration |
 | Learning Study design and evidence | Experimentation | An authored protocol composes exact task members and family relations, then compiles to existing trials; committed state and explicit comparison-validity evidence stay outside `TrialRecord` | Internal Release A persisted contracts | [`LearningStudyProtocolSpec`, `LearningStudySpec`](../src/aec_bench/contracts/learning_study.py), [`LearningFamilySpec`](../src/aec_bench/contracts/learning_family.py), [`learning_study_evidence.py`](../src/aec_bench/contracts/learning_study_evidence.py), [`learning_study_assessment.py`](../src/aec_bench/contracts/learning_study_assessment.py), and the [Gate A decision](adr/learning-studies-gate-a.md) | Maintained or caller-selected protocol directory, compiled plan, append-only receipts and sequenced events, ordinary trial ledger, and pair-level paired-difference assessment |
 | Evolution workspace candidate lineage | Experimentation and feedback | Mutable workspace files become exact Git source and explicit candidate lineage | Workspace manifest schema 1; legacy labels require an explicit migration plan | [`WorkspaceCandidateVersion`, `WorkspaceManifest`, and `WorkspaceMigrationPlan`](../src/aec_bench/contracts/evolution.py) plus [`Workspace`](../src/aec_bench/evolution/workspace.py) | Persisted workspace Git metadata and manifest |
+| Evolution functional search and swarm coordination | Evolution application and swarm manager | Exact candidate material is paired with its own evaluation evidence before policy or shared effects use it | Internal pre-1.0 values; no new public schema promise | [`EvaluatedCandidate`, `CandidateEvaluationBatch`, `VariationResult`, `SwarmAssignment`, `SwarmAgentResult`, and `SwarmState`](../src/aec_bench/evolution/core.py), [`evaluation.py`](../src/aec_bench/evolution/evaluation.py), and [`swarm/core.py`](../src/aec_bench/evolution/swarm/core.py) | In-process functional values and swarm state outputs |
 | Run plan and published run package | Harness and ledger | One internal execution plan and its trial records become one portable retained package | Internal `RunPlan`; published package schema 1 | [`RunPlan` and `PublishedRunPackage`](../src/aec_bench/contracts/run_bundle.py), [`TaskSnapshotRef`](../src/aec_bench/contracts/task_snapshot.py), and [`run_package.py`](../src/aec_bench/ledger/run_package.py) | Internal plan; persisted and exportable package |
 | Trial and episode record | Harness and ledger | Execution, verifier, and authority evidence becomes reportable benchmark evidence | Protected schema 2; no historical reader | [`RunManifest` and `TrialRecord`](../src/aec_bench/contracts/trial_record.py) plus the owning episode or world protocol | Persisted and exportable |
 | Evaluation regime | Evaluation | Observable evaluation policy becomes one independently published compatibility identity | Envelope schema 1; legacy component plans migrate only when all inputs resolve | [`EvaluationRegimeEnvelope`](../src/aec_bench/contracts/evaluation_plane.py), `EvaluationRegimeRef`, and [`regime.py`](../src/aec_bench/evaluation/regime.py) | Persisted and independently publishable |
@@ -428,6 +429,39 @@ moved label, an unknown parent, duplicate source assignment, or a missing
 confirmed revision. It also replaces legacy label fields in `archive.json` and
 `graveyard.json`. It registers no candidate and writes no sidecar when the plan
 is ambiguous.
+
+## Evolution candidate and evidence contracts
+
+`WorkspaceSnapshot.candidate_id` identifies one exact candidate material. It is
+distinct from `trial_id` and from an attempt ID. A `CandidateEvaluationBatch`
+contains the candidate-independent task and planned trial cases for one cycle.
+The evaluator returns `TrialRecord` values for that exact batch. The evolution
+application binds those records to the snapshot as one `EvaluatedCandidate`,
+whose `CandidateAssessment` is an evolution-owned projection of the evidence.
+
+Parent and child are separate `EvaluatedCandidate` values. They MUST use the
+same ordered `evaluation_case_ids` for comparison, and a parent record MUST NOT
+be used as child evidence or vice versa. `TrialRecord` remains the evidence
+authority for execution and evaluation facts; `CandidateAssessment` does not
+replace it.
+
+Variation changes scratch material only. A submitted `VariationResult` carries
+the exact child snapshot and mutation summary, or an explicit abstention carries
+no child. The application applies a canonical workspace commit only after the
+trusted search policy accepts the evaluated child. QD archive entries and
+graveyard entries MUST resolve to the exact candidate snapshot they name.
+Archive insertion distinguishes a new cell, an improved cell, and rejection.
+The archive agent and strategy bandit are search-policy inputs and feedback;
+they do not own candidate scores or evaluation validity.
+
+`SwarmAssignment` contains exact parent and inspiration snapshots. A swarm
+agent returns `SwarmAgentResult` with variation and agent cost only. The host
+evaluates both parent and submitted child and binds the resulting `TrialRecord`
+values before archive, graveyard, budget, or reducer effects. `SwarmState` is
+immutable decision state. The manager owns concurrency and effect application;
+the event log is a report of those effects, not an alternative state authority.
+These internal selector and swarm values are not new public compatibility
+promises.
 
 ## Provider request and result envelopes
 

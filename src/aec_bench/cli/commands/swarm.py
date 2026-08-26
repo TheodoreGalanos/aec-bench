@@ -1,4 +1,4 @@
-# ABOUTME: CLI commands for multi-agent swarm evolution — run, resume, stop, status, history.
+# ABOUTME: CLI commands for multi-agent swarm evolution — run, status, and history.
 # ABOUTME: Manages swarm lifecycle via the SwarmManager.
 
 from __future__ import annotations
@@ -126,42 +126,27 @@ def swarm_run(
         factory.cleanup()
 
 
-@app.command("resume")
-def swarm_resume(
-    run_id: str = typer.Argument(help="Run ID to resume"),
-    state_dir: str = typer.Option(".", "--state-dir", help="Directory containing swarm state"),
-) -> None:
-    """Resume a swarm run from its event log."""
-    require_optional_extra("Swarm execution support", "evolution,local-agents", ("numpy", "ribs", "pydantic_ai"))
-    event_log = Path(state_dir) / run_id / "events.jsonl"
-    if not event_log.exists():
-        print_error(f"Event log not found: {event_log}")
-        raise typer.Exit(1)
-    console.print(f"[bold green]Resuming swarm:[/bold green] {run_id}")
-
-
-@app.command("stop")
-def swarm_stop(
-    run_id: str = typer.Argument(help="Run ID to stop"),
-) -> None:
-    """Gracefully stop a running swarm (agents finish current eval)."""
-    console.print(f"[yellow]Stopping swarm:[/yellow] {run_id}")
-
-
 @app.command("status")
 def swarm_status(
     run_id: str = typer.Argument(help="Run ID to check"),
     state_dir: str = typer.Option(".", "--state-dir", help="Directory containing swarm state"),
 ) -> None:
     """Show current status of a swarm run."""
-    event_log = Path(state_dir) / "events.jsonl"
-    if not event_log.exists():
+    run_path = Path(state_dir)
+    if not (run_path / "swarm_state.json").is_file():
         print_error(f"No swarm state found for {run_id}")
         raise typer.Exit(1)
 
-    from aec_bench.evolution.swarm.resume import rebuild_state
+    from aec_bench.evolution.swarm.resume import load_resumed_state
 
-    state = rebuild_state(event_log)
+    try:
+        state = load_resumed_state(run_path)
+    except ValueError as exc:
+        print_error(str(exc))
+        raise typer.Exit(1) from exc
+    if state.run_id != run_id:
+        print_error(f"Swarm state run ID is {state.run_id!r}, not {run_id!r}")
+        raise typer.Exit(1)
     console.print(f"[bold]Run:[/bold] {state.run_id}")
     console.print(f"  Evals: {state.total_evals}")
     console.print(f"  Best score: {state.best_score:.2f}")
@@ -175,10 +160,13 @@ def swarm_history(
     """List past swarm runs."""
     state_path = Path(state_dir)
     runs: list[dict[str, Any]] = []
-    for event_file in sorted(state_path.glob("**/events.jsonl")):
-        from aec_bench.evolution.swarm.resume import rebuild_state
+    for run_path in sorted(path for path in state_path.glob("**/swarm_state.json") if path.is_file()):
+        try:
+            from aec_bench.evolution.swarm.resume import load_resumed_state
 
-        state = rebuild_state(event_file)
+            state = load_resumed_state(run_path.parent)
+        except ValueError:
+            continue
         if state.run_id:
             runs.append(
                 {
