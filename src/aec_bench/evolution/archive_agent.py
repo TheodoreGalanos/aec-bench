@@ -404,7 +404,7 @@ def run_archive_selection(
     from pydantic_ai import Agent, UsageLimitExceeded, UsageLimits
     from pydantic_ai.tools import Tool
 
-    from aec_bench.evolution.structured_evolver import _build_pydantic_model
+    from aec_bench.evolution.model_provider import build_pydantic_model
 
     _require_inspiration_limit(inspiration_limit)
     if not shortlist:
@@ -413,7 +413,7 @@ def run_archive_selection(
     tools_dict = build_archive_tools(archive, graveyard)
     tools: list[Tool[None]] = [Tool[None](fn, name=name) for name, fn in tools_dict.items()]
 
-    model = _build_pydantic_model(model_name)
+    model = build_pydantic_model(model_name)
 
     agent: Agent[None, str] = Agent(
         model,

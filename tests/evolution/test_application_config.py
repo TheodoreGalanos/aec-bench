@@ -64,6 +64,34 @@ def _capture_run(monkeypatch: pytest.MonkeyPatch) -> tuple[dict[str, Any], Evolu
 
 
 class TestRunEvolutionFromConfig:
+    def test_composes_one_agentic_variation_operator_with_development_runtime(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        observed, expected = _capture_run(monkeypatch)
+        ws_root = _scaffold_workspace(tmp_path / "ws")
+        builder: dict[str, Any] = {}
+
+        def fake_builder(**kwargs: Any):
+            builder.update(kwargs)
+            return lambda _request, _source, _child_id: None
+
+        monkeypatch.setattr(application, "build_agentic_variation_operator", fake_builder)
+        config = EvolutionConfig(
+            workspace_path=str(ws_root),
+            models=EvolverModelConfig(classifier="haiku", evolver="sonnet"),
+            task_selector=TaskSelector(),
+        )
+
+        result = run_evolution_from_config(config=config)
+
+        assert result is expected
+        assert builder["agent_model"] == "sonnet"
+        assert builder["development_batch_size"] == config.batch_size
+        assert callable(builder["development_batch_planner"])
+        assert callable(builder["development_evaluator"])
+        assert builder["budget"].max_model_requests == 12
+        assert callable(observed["variation"])
+
     def test_runs_from_config_with_solver(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         observed, expected = _capture_run(monkeypatch)
         ws_root = _scaffold_workspace(tmp_path / "ws")

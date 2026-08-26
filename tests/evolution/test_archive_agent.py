@@ -325,7 +325,7 @@ def test_run_archive_selection_passes_host_context_and_real_graveyard(monkeypatc
 
     monkeypatch.setattr("aec_bench.evolution.archive_agent.build_archive_tools", fake_build_tools)
     monkeypatch.setattr("pydantic_ai.Agent", FakeAgent)
-    monkeypatch.setattr("aec_bench.evolution.structured_evolver._build_pydantic_model", lambda _name: object())
+    monkeypatch.setattr("aec_bench.evolution.model_provider.build_pydantic_model", lambda _name: object())
 
     result = run_archive_selection(
         "test-model",

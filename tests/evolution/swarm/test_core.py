@@ -6,8 +6,24 @@ from datetime import UTC, datetime
 
 import pytest
 
-from aec_bench.contracts.evolution import MutationStrategy, MutationSummary, SwarmAgentState, WorkspaceSnapshot
-from aec_bench.evolution.core import SelectionPlan, VariationResult, VariationStatus
+from aec_bench.contracts.evolution import (
+    CandidateAssessment,
+    EvolutionObservation,
+    MutationStrategy,
+    MutationSummary,
+    ObservationEnrichment,
+    SwarmAgentState,
+    VariationUsage,
+    WorkspaceSnapshot,
+)
+from aec_bench.evolution.core import (
+    DevelopmentAttempt,
+    EvaluatedCandidate,
+    SelectionPlan,
+    VariationResult,
+    VariationStatus,
+)
+from aec_bench.evolution.evaluation import bind_evaluated_candidate
 from aec_bench.evolution.swarm.core import (
     AgentBudget,
     AgentPivotState,
@@ -19,6 +35,7 @@ from aec_bench.evolution.swarm.core import (
     SwarmOutcome,
     SwarmState,
 )
+from tests.support.trial_record_factories import make_trial_record
 
 
 def _assignment() -> SwarmAssignment:
@@ -40,13 +57,51 @@ def _assignment() -> SwarmAssignment:
     )
 
 
+def _candidate(candidate_id: str) -> EvaluatedCandidate:
+    observation = EvolutionObservation(
+        trial=make_trial_record(trial_id=f"{candidate_id}-trial"),
+        enrichment=ObservationEnrichment(),
+        candidate_id=candidate_id,
+        discipline="structural",
+    )
+    assessment = CandidateAssessment(
+        candidate_id=candidate_id,
+        batch_score=0.5,
+        structural_score=None,
+        discipline_scores={"structural": 0.5},
+        trial_ids=(f"{candidate_id}-trial",),
+        evaluation_case_ids=(f"{candidate_id}-case",),
+        valid=True,
+    )
+    return bind_evaluated_candidate(
+        WorkspaceSnapshot(system_prompt="Candidate prompt", candidate_id=candidate_id),
+        (observation,),
+        assessment,
+    )
+
+
+def _usage() -> VariationUsage:
+    return VariationUsage(model_requests=1, model_cost_usd=0.1)
+
+
+def _attempt(candidate: EvaluatedCandidate) -> DevelopmentAttempt:
+    return DevelopmentAttempt(
+        attempt_id="attempt-1",
+        revision=1,
+        evaluated=candidate,
+        mutation=MutationSummary(prompt_modified=True),
+        hypothesis="Try a changed prompt.",
+        usage_after=VariationUsage(development_evaluations=1, development_evaluation_cost_usd=0.1),
+    )
+
+
 def _result(assignment: SwarmAssignment | None = None) -> SwarmAgentResult:
     assignment = assignment or _assignment()
     return SwarmAgentResult(
         agent_id=assignment.agent_id,
         assignment_id=assignment.assignment_id,
-        variation=VariationResult(VariationStatus.ABSTAINED, None, None, "No child", 0.1),
-        agent_cost_usd=0.1,
+        variation=VariationResult(VariationStatus.ABSTAINED, None, None, "No child", _usage()),
+        agent_usage=_usage(),
     )
 
 
@@ -95,7 +150,7 @@ def test_agent_result_has_only_variation_and_cost() -> None:
             agent_id="agent-1",
             assignment_id="assignment-1",
             variation=result.variation,
-            agent_cost_usd=0.1,
+            agent_usage=result.agent_usage,
             score=0.8,  # type: ignore[call-arg]
         )
 
@@ -153,7 +208,7 @@ def test_outcome_requires_assignment_and_result_identity() -> None:
         agent_id="agent-2",
         assignment_id=assignment.assignment_id,
         variation=result.variation,
-        agent_cost_usd=0.1,
+        agent_usage=result.agent_usage,
     )
     with pytest.raises(ValueError, match="agent_id"):
         SwarmOutcome(assignment, mismatched, None, None)
@@ -161,18 +216,20 @@ def test_outcome_requires_assignment_and_result_identity() -> None:
 
 def test_outcome_requires_host_evaluation_for_submitted_child() -> None:
     assignment = _assignment()
-    child = WorkspaceSnapshot(system_prompt="Child prompt", candidate_id="child")
+    attempt = _attempt(_candidate("internal-snapshot"))
+    child = attempt.evaluated.snapshot.model_copy(update={"candidate_id": "child"})
     result = SwarmAgentResult(
         agent_id=assignment.agent_id,
         assignment_id=assignment.assignment_id,
         variation=VariationResult(
-            VariationStatus.SUBMITTED,
-            child,
-            MutationSummary(prompt_modified=True),
-            "Child",
-            0.1,
+            status=VariationStatus.SUBMITTED,
+            child=child,
+            mutation=attempt.mutation,
+            reasoning="Child",
+            usage=_usage(),
+            attempt=attempt,
         ),
-        agent_cost_usd=0.1,
+        agent_usage=_usage(),
     )
     with pytest.raises(ValueError, match="requires an evaluated candidate"):
         SwarmOutcome(

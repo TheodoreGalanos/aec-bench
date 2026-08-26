@@ -13,10 +13,11 @@ from aec_bench.contracts.evolution import (
     ObservationEnrichment,
     SwarmAgentState,
     TraceDigest,
+    VariationUsage,
     WorkspaceSnapshot,
 )
 from aec_bench.evolution.archive import ArchiveBatchOutcome, ArchiveInsertionResult, ArchiveInsertionStatus
-from aec_bench.evolution.core import SelectionPlan, VariationResult, VariationStatus
+from aec_bench.evolution.core import DevelopmentAttempt, SelectionPlan, VariationResult, VariationStatus
 from aec_bench.evolution.evaluation import bind_evaluated_candidate
 from aec_bench.evolution.swarm.config import SwarmConfig
 from aec_bench.evolution.swarm.core import (
@@ -95,15 +96,52 @@ def _outcome(
 ) -> SwarmOutcome:
     assignment = _assignment(agent_id, assignment_id)
     if candidate_id is None:
+        usage = VariationUsage(model_requests=1, model_cost_usd=cost)
         result = SwarmAgentResult(
             agent_id=agent_id,
             assignment_id=assignment_id,
-            variation=VariationResult(VariationStatus.ABSTAINED, None, None, "No child", cost),
-            agent_cost_usd=cost,
+            variation=VariationResult(VariationStatus.ABSTAINED, None, None, "No child", usage),
+            agent_usage=usage,
         )
         return SwarmOutcome(assignment, result, None, None)
 
     child = WorkspaceSnapshot(system_prompt="Child material", candidate_id=candidate_id)
+    usage = VariationUsage(
+        model_requests=1,
+        development_evaluations=1,
+        model_cost_usd=cost,
+        development_evaluation_cost_usd=0.0,
+    )
+    development_trial = make_trial_record(trial_id=f"{candidate_id}-development-trial")
+    development_observation = EvolutionObservation(
+        trial=development_trial,
+        enrichment=ObservationEnrichment(),
+        candidate_id=candidate_id,
+        discipline="structural",
+    )
+    development_assessment = CandidateAssessment(
+        candidate_id=candidate_id,
+        batch_score=score,
+        structural_score=structural_score,
+        discipline_scores={"structural": score},
+        trial_ids=(development_trial.trial_id,),
+        evaluation_case_ids=("development-case",),
+        valid=valid,
+        invalid_reasons=() if valid else ("invalid candidate",),
+    )
+    development_candidate = bind_evaluated_candidate(
+        child,
+        (development_observation,),
+        development_assessment,
+    )
+    attempt = DevelopmentAttempt(
+        attempt_id=f"{assignment_id}:attempt-1",
+        revision=1,
+        evaluated=development_candidate,
+        mutation=MutationSummary(prompt_modified=True),
+        hypothesis="Submitted test child",
+        usage_after=usage,
+    )
     result = SwarmAgentResult(
         agent_id=agent_id,
         assignment_id=assignment_id,
@@ -112,9 +150,10 @@ def _outcome(
             child,
             MutationSummary(prompt_modified=True),
             "Submitted child",
-            cost,
+            usage,
+            attempt,
         ),
-        agent_cost_usd=cost,
+        agent_usage=usage,
     )
     observations = tuple(
         EvolutionObservation(

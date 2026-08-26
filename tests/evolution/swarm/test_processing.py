@@ -11,15 +11,19 @@ import pytest
 from aec_bench.contracts.evaluation_result import EvaluationResult, ValidityCheck
 from aec_bench.contracts.evolution import (
     BehaviourDescriptor,
+    CandidateAssessment,
+    EvolutionObservation,
     MutationStrategy,
     MutationSummary,
+    ObservationEnrichment,
     SkillEntry,
+    VariationUsage,
     WorkspaceSnapshot,
 )
 from aec_bench.contracts.experiment_manifest import AgentConfig, ComputeConfig
 from aec_bench.evolution.archive import ArchiveInsertionStatus, QDArchive
-from aec_bench.evolution.core import SelectionPlan, VariationResult, VariationStatus
-from aec_bench.evolution.evaluation import CandidateEvaluationBatch
+from aec_bench.evolution.core import DevelopmentAttempt, SelectionPlan, VariationResult, VariationStatus
+from aec_bench.evolution.evaluation import CandidateEvaluationBatch, bind_evaluated_candidate
 from aec_bench.evolution.swarm.core import AgentBudget, SwarmAgentResult, SwarmAssignment
 from aec_bench.evolution.swarm.processing import (
     evaluate_swarm_result,
@@ -80,18 +84,52 @@ def _assignment(parent: WorkspaceSnapshot | None = None) -> SwarmAssignment:
 
 
 def _result(assignment: SwarmAssignment, child: WorkspaceSnapshot | None) -> SwarmAgentResult:
+    usage = VariationUsage(
+        model_requests=1,
+        development_evaluations=1 if child is not None else 0,
+        model_cost_usd=0.1,
+        development_evaluation_cost_usd=0.1 if child is not None else None,
+    )
+    attempt = None
+    if child is not None:
+        trial = make_trial_record(trial_id=f"{child.candidate_id}-development-trial")
+        observation = EvolutionObservation(
+            trial=trial,
+            enrichment=ObservationEnrichment(),
+            candidate_id=child.candidate_id,
+            discipline="structural",
+        )
+        assessment = CandidateAssessment(
+            candidate_id=child.candidate_id,
+            batch_score=0.5,
+            structural_score=None,
+            discipline_scores={"structural": 0.5},
+            trial_ids=(trial.trial_id,),
+            evaluation_case_ids=("case-0",),
+            valid=True,
+        )
+        evaluated = bind_evaluated_candidate(child, (observation,), assessment)
+        attempt = DevelopmentAttempt(
+            attempt_id=f"{assignment.assignment_id}:attempt-1",
+            revision=1,
+            evaluated=evaluated,
+            mutation=MutationSummary(prompt_modified=True),
+            hypothesis="Apply the proposed prompt change",
+            usage_after=usage,
+        )
     variation = VariationResult(
         status=VariationStatus.SUBMITTED if child is not None else VariationStatus.ABSTAINED,
         child=child,
         mutation=MutationSummary(prompt_modified=True) if child is not None else None,
         reasoning="Apply the proposed prompt change",
-        model_cost_usd=0.1,
+        usage=usage,
+        attempt=attempt,
     )
     return SwarmAgentResult(
         agent_id=assignment.agent_id,
         assignment_id=assignment.assignment_id,
         variation=variation,
-        agent_cost_usd=0.1,
+        agent_usage=usage,
     )
 
 
@@ -168,7 +206,7 @@ def test_identity_mismatch_fails_before_evaluation_or_effects(tmp_path: Path) ->
         agent_id=assignment.agent_id,
         assignment_id="other-assignment",
         variation=_result(assignment, None).variation,
-        agent_cost_usd=0.1,
+        agent_usage=_result(assignment, None).agent_usage,
     )
     calls: list[str] = []
     archive = QDArchive(n_centroids=20)
@@ -194,17 +232,20 @@ def test_identity_mismatch_fails_before_evaluation_or_effects(tmp_path: Path) ->
 def test_child_with_non_submitted_status_fails_before_effects(tmp_path: Path) -> None:
     assignment = _assignment()
     child = WorkspaceSnapshot(system_prompt="Child", candidate_id="child")
+    # Construct a malformed boundary value to keep the host-side validation
+    # regression. Normal VariationResult construction rejects this shape.
+    variation = object.__new__(VariationResult)
+    object.__setattr__(variation, "status", VariationStatus.BUDGET_EXHAUSTED)
+    object.__setattr__(variation, "child", child)
+    object.__setattr__(variation, "mutation", None)
+    object.__setattr__(variation, "reasoning", "Budget ended after material was returned")
+    object.__setattr__(variation, "usage", VariationUsage(model_requests=1, model_cost_usd=0.1))
+    object.__setattr__(variation, "attempt", None)
     result = SwarmAgentResult(
         agent_id=assignment.agent_id,
         assignment_id=assignment.assignment_id,
-        variation=VariationResult(
-            status=VariationStatus.BUDGET_EXHAUSTED,
-            child=child,
-            mutation=None,
-            reasoning="Budget ended after material was returned",
-            model_cost_usd=0.1,
-        ),
-        agent_cost_usd=0.1,
+        variation=variation,
+        agent_usage=variation.usage,
     )
     archive = QDArchive(n_centroids=20)
     graveyard = SharedGraveyard()

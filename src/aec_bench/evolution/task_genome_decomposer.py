@@ -81,9 +81,9 @@ def decompose_task_genome(
 
     from pydantic_ai import Agent
 
-    from aec_bench.evolution.structured_evolver import _build_pydantic_model
+    from aec_bench.evolution.model_provider import build_pydantic_model
 
-    model = _build_pydantic_model(model_name)
+    model = build_pydantic_model(model_name)
     agent: Agent[None, TaskGenomeManifest] = Agent(
         model,
         system_prompt=_DECOMPOSITION_SYSTEM,

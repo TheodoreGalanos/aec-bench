@@ -15,9 +15,18 @@ from aec_bench.contracts.evolution import (
     WorkspaceSnapshot,
 )
 from aec_bench.contracts.experiment_manifest import AgentConfig, ComputeConfig, TaskSelector
+from aec_bench.evolution import variation_operator
 from aec_bench.evolution.application import run_evolution
-from aec_bench.evolution.core import SelectionPlan, VariationResult, VariationStatus
+from aec_bench.evolution.core import (
+    DevelopmentAttempt,
+    EvaluatedCandidate,
+    SelectionPlan,
+    VariationResult,
+    VariationStatus,
+    VariationUsage,
+)
 from aec_bench.evolution.evaluation import CandidateEvaluationBatch
+from aec_bench.evolution.variation_operator import build_agentic_variation_operator
 from aec_bench.evolution.workspace import Workspace
 from aec_bench.tasks.instance import resolve_instance_paths
 from aec_bench.trials import PlannedTrial
@@ -80,6 +89,34 @@ def _record(candidate_id: str, reward: float):
     )
 
 
+def _submitted_result(request, child: WorkspaceSnapshot, mutation: MutationSummary) -> VariationResult:
+    observations = tuple(
+        observation.model_copy(update={"candidate_id": child.candidate_id})
+        for observation in request.parent.observations
+    )
+    evaluated = EvaluatedCandidate(
+        snapshot=child,
+        observations=observations,
+        assessment=request.parent.assessment.model_copy(update={"candidate_id": child.candidate_id}),
+    )
+    attempt = DevelopmentAttempt(
+        attempt_id=f"{child.candidate_id}-attempt",
+        revision=1,
+        evaluated=evaluated,
+        mutation=mutation,
+        hypothesis="The test mutation improves the candidate.",
+        usage_after=VariationUsage(development_evaluations=1),
+    )
+    return VariationResult(
+        status=VariationStatus.SUBMITTED,
+        child=child,
+        mutation=mutation,
+        reasoning="test child",
+        usage=VariationUsage(),
+        attempt=attempt,
+    )
+
+
 def _run(
     workspace: Workspace,
     batch: CandidateEvaluationBatch,
@@ -123,12 +160,10 @@ def test_child_is_evaluated_before_commit_and_both_evidence_sets_persist(tmp_pat
     candidates_seen_during_eval: list[str] = []
 
     def submit(request, _source, child_id):
-        return VariationResult(
-            status=VariationStatus.SUBMITTED,
-            child=request.parent.snapshot.model_copy(update={"candidate_id": child_id, "system_prompt": "child"}),
-            mutation=MutationSummary(prompt_modified=True),
-            reasoning="test child",
-            model_cost_usd=0.0,
+        return _submitted_result(
+            request,
+            request.parent.snapshot.model_copy(update={"candidate_id": child_id, "system_prompt": "child"}),
+            MutationSummary(prompt_modified=True),
         )
 
     result = _run(
@@ -153,12 +188,10 @@ def test_rejected_child_keeps_canonical_workspace_and_exact_graveyard_snapshot(t
     workspace, batch = _setup(tmp_path)
 
     def submit(request, _source, child_id):
-        return VariationResult(
-            status=VariationStatus.SUBMITTED,
-            child=request.parent.snapshot.model_copy(update={"candidate_id": child_id, "system_prompt": "rejected"}),
-            mutation=MutationSummary(prompt_modified=True),
-            reasoning="rejected test child",
-            model_cost_usd=0.0,
+        return _submitted_result(
+            request,
+            request.parent.snapshot.model_copy(update={"candidate_id": child_id, "system_prompt": "rejected"}),
+            MutationSummary(prompt_modified=True),
         )
 
     result = _run(
@@ -190,7 +223,7 @@ def test_abstention_creates_no_child_version(tmp_path: Path) -> None:
             child=None,
             mutation=None,
             reasoning="no change",
-            model_cost_usd=0.0,
+            usage=VariationUsage(),
         )
 
     result = _run(
@@ -210,12 +243,10 @@ def test_runs_configured_multi_cycle_count_and_projects_best_and_final_scores(tm
     workspace, batch = _setup(tmp_path)
 
     def submit(request, _source, child_id):
-        return VariationResult(
-            status=VariationStatus.SUBMITTED,
-            child=request.parent.snapshot.model_copy(update={"candidate_id": child_id}),
-            mutation=MutationSummary(prompt_modified=True),
-            reasoning="test child",
-            model_cost_usd=0.0,
+        return _submitted_result(
+            request,
+            request.parent.snapshot.model_copy(update={"candidate_id": child_id}),
+            MutationSummary(prompt_modified=True),
         )
 
     result = _run(
@@ -236,12 +267,10 @@ def test_stagnation_converges_before_configured_limit(tmp_path: Path) -> None:
     workspace, batch = _setup(tmp_path)
 
     def submit(request, _source, child_id):
-        return VariationResult(
-            status=VariationStatus.SUBMITTED,
-            child=request.parent.snapshot.model_copy(update={"candidate_id": child_id}),
-            mutation=MutationSummary(prompt_modified=True),
-            reasoning="unchanged score",
-            model_cost_usd=0.0,
+        return _submitted_result(
+            request,
+            request.parent.snapshot.model_copy(update={"candidate_id": child_id}),
+            MutationSummary(prompt_modified=True),
         )
 
     result = _run(
@@ -279,7 +308,7 @@ def test_graveyard_loads_and_saves_existing_entries(tmp_path: Path) -> None:
             child=None,
             mutation=None,
             reasoning="no change",
-            model_cost_usd=0.0,
+            usage=VariationUsage(),
         ),
         config=_config(workspace.root),
     )
@@ -300,7 +329,7 @@ def test_qd_strategy_persists_archive_summary_on_functional_path(tmp_path: Path)
             child=None,
             mutation=None,
             reasoning="no change",
-            model_cost_usd=0.0,
+            usage=VariationUsage(),
         ),
         config=_config(workspace.root, strategy="qd"),
     )
@@ -311,3 +340,76 @@ def test_qd_strategy_persists_archive_summary_on_functional_path(tmp_path: Path)
     assert {entry["snapshot"]["candidate_id"] for entry in archive["entries"]} == {"baseline"}
     qd_state = json.loads((workspace.root / "qd_state.json").read_text(encoding="utf-8"))
     assert qd_state["cycle"] == 1
+
+
+def test_agentic_operator_creates_one_development_boundary_per_variation_call(tmp_path: Path, monkeypatch) -> None:
+    from pydantic_ai.models.test import TestModel
+
+    workspace, batch = _setup(tmp_path)
+    planned_cycles: list[int] = []
+    boundaries = []
+
+    def development_plan(_size: int, cycle: int) -> CandidateEvaluationBatch:
+        planned_cycles.append(cycle)
+        return batch
+
+    def development_evaluate(snapshot: WorkspaceSnapshot, attempt_batch: CandidateEvaluationBatch):
+        trial = attempt_batch.trials[0]
+        return (
+            make_trial_record(
+                experiment_id=trial.experiment_id,
+                trial_id=trial.trial_id,
+                task_id=trial.task_id,
+                task={"task_id": trial.task_id, "task_revision": "task-revision", "visibility": "public"},
+                inputs={
+                    "instruction": "Review the task and write output.",
+                    "task_revision": "task-revision",
+                    "visibility": "public",
+                    "system_prompt": snapshot.system_prompt,
+                },
+            ),
+        )
+
+    original_run = variation_operator.run_agentic_variation
+
+    def capture(*args, **kwargs):
+        boundaries.append(kwargs["development_boundary"])
+        return original_run(*args, **kwargs)
+
+    monkeypatch.setattr(variation_operator, "run_agentic_variation", capture)
+    operator = build_agentic_variation_operator(
+        agent_model=TestModel(custom_output_args={"tool": "abstain", "arguments": {"reasoning": "No safe change."}}),
+        development_batch_planner=development_plan,
+        development_evaluator=development_evaluate,
+        development_batch_size=1,
+        development_experiment_prefix="functional-development",
+    )
+
+    def host_evaluate(snapshot: WorkspaceSnapshot, _batch: CandidateEvaluationBatch):
+        return (_record(snapshot.candidate_id, 0.5),)
+
+    result = run_evolution(
+        workspace=workspace,
+        config=_config(workspace.root, max_cycles=2),
+        evaluate=host_evaluate,
+        batch_planner=lambda _size, _cycle: batch,
+        variation=operator,
+        enrich=lambda observations: observations,
+        run_id="run-fixed",
+        clock=lambda: datetime(2026, 1, 1, tzinfo=UTC),
+    )
+
+    assert result.cycles_completed == 2
+    assert planned_cycles == [0, 1]
+    assert len(boundaries) == 2
+    assert boundaries[0] is not boundaries[1]
+    assert all(boundary.role.value == "development" for boundary in boundaries)
+    assert all(boundary.host_experiment_id == "experiment-001" for boundary in boundaries)
+    assert all(boundary.experiment_id != boundary.host_experiment_id for boundary in boundaries)
+    assert all(boundary.experiment_id.startswith("functional-development-cycle-") for boundary in boundaries)
+    assert all(
+        trial.experiment_id == boundary.experiment_id for boundary in boundaries for trial in boundary.batch.trials
+    )
+    assert all(
+        trial.trial_id not in boundary.host_trial_ids for boundary in boundaries for trial in boundary.batch.trials
+    )

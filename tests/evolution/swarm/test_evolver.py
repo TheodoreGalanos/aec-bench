@@ -9,10 +9,15 @@ from pathlib import Path
 
 import yaml
 
-from aec_bench.contracts.evolution import EvolutionConfig, MutationSummary
+from aec_bench.contracts.evolution import (
+    EvolutionConfig,
+    MutationSummary,
+    VariationUsage,
+)
 from aec_bench.contracts.experiment_manifest import AgentConfig, ComputeConfig, TaskSelector
-from aec_bench.evolution.core import SelectionPlan, VariationResult, VariationStatus
-from aec_bench.evolution.evaluation import CandidateEvaluationBatch
+from aec_bench.contracts.trial_record import CostRecord
+from aec_bench.evolution.core import DevelopmentAttempt, SelectionPlan, VariationResult, VariationStatus
+from aec_bench.evolution.evaluation import CandidateEvaluationBatch, bind_evaluated_candidate
 from aec_bench.evolution.swarm.core import AgentBudget, SwarmAgentResult, SwarmAssignment
 from aec_bench.evolution.swarm.evolver import (
     SwarmAgentEvolver,
@@ -34,18 +39,6 @@ class StubClassifierLLM:
 
     def complete(self, prompt: str, *, temperature: float = 0.0, max_tokens: int = 4000) -> str:
         return json.dumps([{"turn_index": 0, "bond_type": "E", "confidence": 0.9, "rationale": "execution"}])
-
-
-class StubEvolverLLM:
-    """Returns a no-op mutation response."""
-
-    def complete(self, prompt: str, *, temperature: float = 0.7, max_tokens: int = 16384) -> str:
-        return json.dumps(
-            {
-                "reasoning": "No changes needed at this time.",
-                "actions": [],
-            }
-        )
 
 
 # ---------------------------------------------------------------------------
@@ -116,12 +109,41 @@ def _setup_evolution_inputs(tmp_path: Path) -> tuple[Workspace, CandidateEvaluat
     )
 
 
+def _submitted_variation(request, child_id: str, prompt: str, cost: float) -> VariationResult:
+    child = request.parent.snapshot.model_copy(update={"candidate_id": child_id, "system_prompt": prompt})
+    usage = VariationUsage(
+        model_requests=1,
+        model_cost_usd=cost,
+        development_evaluations=1,
+        development_evaluation_cost_usd=0.0,
+    )
+    observations = tuple(item.model_copy(update={"candidate_id": child_id}) for item in request.parent.observations)
+    assessment = request.parent.assessment.model_copy(update={"candidate_id": child_id})
+    evaluated = bind_evaluated_candidate(child, observations, assessment)
+    attempt = DevelopmentAttempt(
+        attempt_id=f"{request.parent.snapshot.candidate_id}:attempt-1",
+        revision=1,
+        evaluated=evaluated,
+        mutation=MutationSummary(prompt_modified=True),
+        hypothesis="Submitted test child",
+        usage_after=usage,
+    )
+    return VariationResult(
+        status=VariationStatus.SUBMITTED,
+        child=child,
+        mutation=attempt.mutation,
+        reasoning="submitted test child",
+        usage=usage,
+        attempt=attempt,
+    )
+
+
 # ---------------------------------------------------------------------------
 # Swarm assignment/result contract
 # ---------------------------------------------------------------------------
 
 
-def test_evolver_returns_exact_assignment_result_without_host_evidence(tmp_path: Path, monkeypatch) -> None:
+def test_evolver_returns_exact_assignment_result_without_host_evidence(tmp_path: Path) -> None:
     workspace, batch = _setup_evolution_inputs(tmp_path)
     config = EvolutionConfig(
         workspace_path=str(workspace.root),
@@ -154,29 +176,22 @@ def test_evolver_returns_exact_assignment_result_without_host_evidence(tmp_path:
                         "verifier_completed": True,
                     },
                 },
+                cost=CostRecord(estimated_cost_usd=0.0),
             ),
         )
 
     def submit(request, _source, child_id, **_kwargs):
         assert request.selection == assignment.selection
         assert request.parent.snapshot.candidate_id == assignment.parent.candidate_id
-        return VariationResult(
-            status=VariationStatus.SUBMITTED,
-            child=assignment.parent.model_copy(update={"candidate_id": child_id, "system_prompt": "child prompt"}),
-            mutation=MutationSummary(prompt_modified=True),
-            reasoning="submitted test child",
-            model_cost_usd=0.25,
-        )
+        return _submitted_variation(request, child_id, "child prompt", 0.25)
 
-    monkeypatch.setattr("aec_bench.evolution.swarm.evolver.run_structured_variation", submit)
     evolver = SwarmAgentEvolver(
         workspace=workspace,
         config=config,
         batch_planner=lambda _size, _cycle: batch,
         solve_fn=evaluate,
         classifier_llm=StubClassifierLLM(),
-        evolver_llm=StubEvolverLLM(),
-        evolver_model_name="test",
+        variation_operator=submit,
     )
 
     result = evolver._sync_step(assignment)
@@ -187,7 +202,7 @@ def test_evolver_returns_exact_assignment_result_without_host_evidence(tmp_path:
     assert result.variation.status is VariationStatus.SUBMITTED
     assert result.variation.child is not None
     assert result.variation.child.candidate_id == assignment.assignment_id
-    assert result.agent_cost_usd == 0.25
+    assert result.agent_usage.total_cost_usd == 0.25
     assert not hasattr(result, "score")
     assert not hasattr(result, "bd")
     assert workspace.read_prompt() == parent.system_prompt
@@ -206,8 +221,6 @@ def test_factory_creates_evolver(tmp_path: Path) -> None:
         workspace_source=ws,
         task_dirs=[task_dir],
         classifier_llm=StubClassifierLLM(),
-        evolver_llm=StubEvolverLLM(),
-        evolver_model_name="test-model",
         model="test-model",
     )
 
@@ -224,8 +237,6 @@ def test_factory_creates_independent_workspaces(tmp_path: Path) -> None:
         workspace_source=ws,
         task_dirs=[task_dir],
         classifier_llm=StubClassifierLLM(),
-        evolver_llm=StubEvolverLLM(),
-        evolver_model_name="test-model",
         model="test-model",
     )
 
@@ -237,7 +248,7 @@ def test_factory_creates_independent_workspaces(tmp_path: Path) -> None:
     factory.cleanup()
 
 
-def test_evolver_returns_submitted_child_without_mutating_canonical_workspace(tmp_path: Path, monkeypatch) -> None:
+def test_evolver_returns_submitted_child_without_mutating_canonical_workspace(tmp_path: Path) -> None:
     workspace, batch = _setup_evolution_inputs(tmp_path)
     config = EvolutionConfig(
         workspace_path=str(workspace.root),
@@ -262,25 +273,16 @@ def test_evolver_returns_submitted_child_without_mutating_canonical_workspace(tm
         )
 
     def submit(request, _source, child_id, **_kwargs):
-        return VariationResult(
-            status=VariationStatus.SUBMITTED,
-            child=request.parent.snapshot.model_copy(
-                update={"candidate_id": child_id, "system_prompt": "accepted prompt"}
-            ),
-            mutation=MutationSummary(prompt_modified=True),
-            reasoning="accepted test child",
-            model_cost_usd=0.0,
-        )
+        result = _submitted_variation(request, child_id, "accepted prompt", 0.0)
+        return result
 
-    monkeypatch.setattr("aec_bench.evolution.swarm.evolver.run_structured_variation", submit)
     evolver = SwarmAgentEvolver(
         workspace=workspace,
         config=config,
         batch_planner=lambda _size, _cycle: batch,
         solve_fn=evaluate,
         classifier_llm=StubClassifierLLM(),
-        evolver_llm=StubEvolverLLM(),
-        evolver_model_name="test",
+        variation_operator=submit,
     )
 
     assignment = SwarmAssignment(

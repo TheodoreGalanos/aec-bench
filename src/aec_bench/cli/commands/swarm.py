@@ -75,23 +75,16 @@ def swarm_run(
     adapter = adapter_value if isinstance(adapter_value, str) else "rlm"
     console.print(f"  Adapter: {adapter}")
 
-    # Build LLM clients
-    from aec_bench.contracts.evolution import EvolverModelConfig
-    from aec_bench.evolution.llm import build_evolution_llm_clients
+    # Build the classifier client used for enrichment and compaction.
+    from aec_bench.providers.behavioral_llm import build_behavioral_llm_client
 
-    models = EvolverModelConfig(
-        classifier=config.agents.default_model,
-        evolver=config.agents.default_model,
-    )
-    classifier_llm, evolver_llm = build_evolution_llm_clients(models)
+    classifier_llm = build_behavioral_llm_client(model=config.agents.default_model)
 
     # Build evolver factory
     factory = SwarmEvolverFactory(
         workspace_source=workspace_path,
         task_dirs=task_dirs,
         classifier_llm=classifier_llm,
-        evolver_llm=evolver_llm,
-        evolver_model_name=config.agents.default_model,
         model=config.agents.default_model,
         adapter=adapter,
         timeout=config.evaluation.timeout,

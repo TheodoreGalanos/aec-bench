@@ -17,7 +17,10 @@ from aec_bench.contracts.evolution import (
 from aec_bench.evolution.analysis import EvolutionAnalysis, GraduatedScope
 from aec_bench.evolution.convergence import is_converged
 from aec_bench.evolution.core import (
+    AVOBudget,
+    AVOState,
     CycleOutcome,
+    DevelopmentAttempt,
     EvaluatedCandidate,
     EvolutionState,
     GateResult,
@@ -25,8 +28,12 @@ from aec_bench.evolution.core import (
     VariationRequest,
     VariationResult,
     VariationStatus,
+    VariationUsage,
     assessment_score,
+    budget_exhausted,
+    budget_exhaustion_reason,
     decide_candidate,
+    is_revision_valid,
     rebase_evolution_state_for_parent,
     reduce_evolution_state,
 )
@@ -63,12 +70,34 @@ def _assessment(
     )
 
 
-def _candidate(candidate_id: str = "candidate-1") -> EvaluatedCandidate:
-    observations = (_observation(candidate_id, "trial-1"),)
+def _candidate(candidate_id: str = "candidate-1", *, trial_id: str = "trial-1") -> EvaluatedCandidate:
+    observations = (_observation(candidate_id, trial_id),)
     return bind_evaluated_candidate(
         WorkspaceSnapshot(system_prompt="Use engineering checks.", candidate_id=candidate_id),
         observations,
-        _assessment(candidate_id),
+        _assessment(candidate_id, trial_ids=(trial_id,)),
+    )
+
+
+def _usage() -> VariationUsage:
+    return VariationUsage(
+        model_requests=1,
+        tool_calls=2,
+        development_evaluations=1,
+        model_cost_usd=0.1,
+        development_evaluation_cost_usd=0.02,
+        elapsed_seconds=0.5,
+    )
+
+
+def _attempt(candidate: EvaluatedCandidate, revision: int = 1) -> DevelopmentAttempt:
+    return DevelopmentAttempt(
+        attempt_id=f"attempt-{revision}",
+        revision=revision,
+        evaluated=candidate,
+        mutation=MutationSummary(prompt_modified=True),
+        hypothesis="Improve the candidate prompt.",
+        usage_after=_usage(),
     )
 
 
@@ -154,6 +183,281 @@ class TestEvaluatedCandidate:
             candidate.snapshot = candidate.snapshot  # type: ignore[misc]
 
 
+class TestAVOContracts:
+    def test_budget_defaults_are_bounded(self) -> None:
+        budget = AVOBudget()
+
+        assert budget.max_model_requests == 12
+        assert budget.max_tool_calls == 40
+        assert budget.max_development_evaluations == 7
+        assert budget.max_elapsed_seconds == 1800.0
+        assert budget.max_supervisor_interventions == 0
+
+    @pytest.mark.parametrize(
+        "field_name",
+        [
+            "max_model_requests",
+            "max_tool_calls",
+            "max_development_evaluations",
+            "max_consecutive_evaluation_errors",
+            "max_stagnant_evaluations",
+        ],
+    )
+    def test_budget_rejects_non_positive_or_boolean_active_limits(self, field_name: str) -> None:
+        with pytest.raises(ValueError, match="positive integer"):
+            AVOBudget(**{field_name: -1})
+        with pytest.raises(ValueError, match="positive integer"):
+            AVOBudget(**{field_name: True})
+
+    def test_supervisor_limit_zero_disables_supervision(self) -> None:
+        assert AVOBudget(max_supervisor_interventions=0).max_supervisor_interventions == 0
+
+    @pytest.mark.parametrize("field_name", ["max_elapsed_seconds", "max_cost_usd"])
+    def test_budget_rejects_non_finite_limits(self, field_name: str) -> None:
+        with pytest.raises(ValueError, match="finite"):
+            AVOBudget(**{field_name: float("nan")})
+
+    def test_usage_keeps_unknown_cost_distinct_from_known_cost(self) -> None:
+        unknown = VariationUsage(model_requests=1, development_evaluations=1)
+        known = _usage()
+
+        assert unknown.model_cost_usd is None
+        assert unknown.development_evaluation_cost_usd is None
+        assert unknown.total_cost_usd is None
+        assert known.total_cost_usd == pytest.approx(0.12)
+
+    def test_usage_distinguishes_known_zero_cost_from_unknown(self) -> None:
+        known_free = VariationUsage(
+            model_requests=1,
+            development_evaluations=1,
+            model_cost_usd=0.0,
+            development_evaluation_cost_usd=0.0,
+        )
+        unknown = VariationUsage(model_requests=1, development_evaluations=1)
+
+        assert known_free.total_cost_usd == 0.0
+        assert unknown.total_cost_usd is None
+
+    def test_attempt_binds_exact_evidence_and_usage(self) -> None:
+        attempt = _attempt(_candidate("child"))
+
+        assert attempt.evaluated.snapshot.candidate_id == "child"
+        assert attempt.usage_after.development_evaluations == 1
+
+    def test_state_rejects_duplicate_attempt_identity(self) -> None:
+        attempt = _attempt(_candidate("child"))
+        duplicate = DevelopmentAttempt(
+            attempt_id=attempt.attempt_id,
+            revision=2,
+            evaluated=attempt.evaluated,
+            mutation=attempt.mutation,
+            hypothesis=attempt.hypothesis,
+            usage_after=attempt.usage_after,
+        )
+
+        with pytest.raises(ValueError, match="attempt IDs must be unique"):
+            AVOState(
+                variation_id="variation-1",
+                parent_candidate_id="parent",
+                child_candidate_id="child",
+                current_revision=2,
+                attempts=(attempt, duplicate),
+                usage=attempt.usage_after,
+            )
+
+    def test_state_rejects_duplicate_internal_snapshot_identity(self) -> None:
+        attempt = _attempt(_candidate("snapshot-1"))
+        duplicate_snapshot = DevelopmentAttempt(
+            attempt_id="attempt-2",
+            revision=2,
+            evaluated=attempt.evaluated,
+            mutation=attempt.mutation,
+            hypothesis=attempt.hypothesis,
+            usage_after=attempt.usage_after,
+        )
+
+        with pytest.raises(ValueError, match="snapshot IDs must be unique"):
+            AVOState(
+                variation_id="variation-1",
+                parent_candidate_id="parent",
+                child_candidate_id="child",
+                current_revision=2,
+                attempts=(attempt, duplicate_snapshot),
+                usage=attempt.usage_after,
+            )
+
+    def test_state_rejects_reused_trial_identity_across_attempts(self) -> None:
+        first = _attempt(_candidate("snapshot-1"), revision=1)
+        second = _attempt(_candidate("snapshot-2"), revision=2)
+
+        with pytest.raises(ValueError, match="development attempt trial IDs must be unique"):
+            AVOState(
+                variation_id="variation-1",
+                parent_candidate_id="parent",
+                child_candidate_id="child",
+                current_revision=2,
+                attempts=(first, second),
+                usage=second.usage_after,
+            )
+
+    def test_state_can_restore_earlier_revision_and_retain_later_attempt(self) -> None:
+        first = _attempt(_candidate("snapshot-1", trial_id="trial-1"), revision=1)
+        second = _attempt(_candidate("snapshot-2", trial_id="trial-2"), revision=2)
+        parent_snapshot = WorkspaceSnapshot(system_prompt="Parent prompt.", candidate_id="parent")
+        state = AVOState(
+            variation_id="variation-1",
+            parent_candidate_id="parent",
+            child_candidate_id="child",
+            current_revision=1,
+            attempts=(first, second),
+            best_attempt_id=first.attempt_id,
+            usage=second.usage_after,
+            parent_snapshot=parent_snapshot,
+        )
+
+        assert state.attempts == (first, second)
+        assert is_revision_valid(state, 1, first.evaluated.snapshot, parent_snapshot=parent_snapshot) is True
+        assert is_revision_valid(state, 2, second.evaluated.snapshot, parent_snapshot=parent_snapshot) is False
+
+    def test_current_evaluated_revision_is_the_only_eligible_revision(self) -> None:
+        attempt = _attempt(_candidate("child"), revision=1)
+        state = AVOState(
+            variation_id="variation-1",
+            parent_candidate_id="parent",
+            child_candidate_id="child",
+            current_revision=1,
+            attempts=(attempt,),
+            best_attempt_id=attempt.attempt_id,
+            usage=attempt.usage_after,
+            parent_snapshot=WorkspaceSnapshot(system_prompt="Parent prompt.", candidate_id="parent"),
+        )
+
+        assert is_revision_valid(state, 1, attempt.evaluated.snapshot) is True
+        assert is_revision_valid(state, 0) is False
+        drifted = attempt.evaluated.snapshot.model_copy(update={"system_prompt": "Drifted."})
+        assert is_revision_valid(state, 1, drifted, parent_snapshot=state.parent_snapshot) is False
+
+    def test_revision_with_unchanged_parent_material_is_not_eligible(self) -> None:
+        attempt = _attempt(_candidate("internal-snapshot-1"))
+        parent_snapshot = _candidate("parent").snapshot
+        state = AVOState(
+            variation_id="variation-1",
+            parent_candidate_id="parent",
+            child_candidate_id="final-child",
+            current_revision=1,
+            attempts=(attempt,),
+            usage=attempt.usage_after,
+            parent_snapshot=parent_snapshot,
+        )
+
+        assert is_revision_valid(state, 1, parent_snapshot=parent_snapshot) is False
+
+    def test_budget_reports_state_counter_and_unknown_cost_limits(self) -> None:
+        attempt = _attempt(_candidate("child"))
+        state = AVOState(
+            variation_id="variation-1",
+            parent_candidate_id="parent",
+            child_candidate_id="child",
+            current_revision=1,
+            attempts=(attempt,),
+            consecutive_evaluation_errors=2,
+            usage=attempt.usage_after,
+            parent_snapshot=WorkspaceSnapshot(system_prompt="Parent prompt.", candidate_id="parent"),
+        )
+        budget = AVOBudget(
+            max_model_requests=10,
+            max_tool_calls=10,
+            max_development_evaluations=10,
+            max_elapsed_seconds=10.0,
+            max_consecutive_evaluation_errors=2,
+            max_stagnant_evaluations=10,
+            max_supervisor_interventions=10,
+        )
+
+        assert budget_exhaustion_reason(budget, state) == "max_consecutive_evaluation_errors"
+        assert budget_exhausted(budget, state) is True
+
+        disabled_supervision_budget = AVOBudget(
+            max_model_requests=10,
+            max_tool_calls=10,
+            max_development_evaluations=10,
+            max_elapsed_seconds=10.0,
+            max_consecutive_evaluation_errors=10,
+            max_stagnant_evaluations=10,
+            max_supervisor_interventions=0,
+        )
+        healthy_state = AVOState(
+            variation_id=state.variation_id,
+            parent_candidate_id=state.parent_candidate_id,
+            child_candidate_id=state.child_candidate_id,
+            current_revision=state.current_revision,
+            attempts=state.attempts,
+            usage=state.usage,
+            parent_snapshot=state.parent_snapshot,
+        )
+        assert budget_exhaustion_reason(disabled_supervision_budget, healthy_state) is None
+
+        unknown_budget = AVOBudget(
+            max_model_requests=10,
+            max_tool_calls=10,
+            max_development_evaluations=10,
+            max_elapsed_seconds=10.0,
+            max_consecutive_evaluation_errors=10,
+            max_stagnant_evaluations=10,
+            max_supervisor_interventions=10,
+            max_cost_usd=1.0,
+        )
+        unknown_state = AVOState(
+            variation_id=state.variation_id,
+            parent_candidate_id=state.parent_candidate_id,
+            child_candidate_id=state.child_candidate_id,
+            current_revision=state.current_revision,
+            attempts=state.attempts,
+            usage=VariationUsage(model_requests=1),
+            parent_snapshot=state.parent_snapshot,
+        )
+        assert budget_exhaustion_reason(unknown_budget, unknown_state) == "max_cost_usd_unknown"
+
+    def test_non_submission_result_has_no_child_or_attempt(self) -> None:
+        result = VariationResult(
+            status=VariationStatus.BUDGET_EXHAUSTED,
+            child=None,
+            mutation=None,
+            reasoning="The model request limit was reached.",
+            usage=VariationUsage(model_requests=1),
+        )
+
+        assert result.status is VariationStatus.BUDGET_EXHAUSTED
+        assert result.usage.total_cost_usd is None
+
+    def test_submitted_result_requires_exact_evaluated_attempt_snapshot(self) -> None:
+        attempt = _attempt(_candidate("child"))
+
+        with pytest.raises(ValueError, match="exact evaluated attempt snapshot"):
+            VariationResult(
+                status=VariationStatus.SUBMITTED,
+                child=WorkspaceSnapshot(system_prompt="Different.", candidate_id="child"),
+                mutation=attempt.mutation,
+                reasoning="submitted",
+                usage=attempt.usage_after,
+                attempt=attempt,
+            )
+
+    def test_submitted_result_allows_final_child_id_to_differ_from_attempt_snapshot(self) -> None:
+        attempt = _attempt(_candidate("internal-snapshot-1"))
+        result = VariationResult(
+            status=VariationStatus.SUBMITTED,
+            child=attempt.evaluated.snapshot.model_copy(update={"candidate_id": "final-child"}),
+            mutation=attempt.mutation,
+            reasoning="submitted",
+            usage=attempt.usage_after,
+            attempt=attempt,
+        )
+
+        assert result.child is not None
+        assert result.child.candidate_id == "final-child"
+
+
 class TestFunctionalEvolutionValues:
     def test_selection_rejects_parent_as_inspiration(self) -> None:
         with pytest.raises(ValueError, match="cannot also be an inspiration"):
@@ -176,17 +480,18 @@ class TestFunctionalEvolutionValues:
 
     def test_variation_status_validates_submitted_child(self) -> None:
         with pytest.raises(ValueError, match="requires a child"):
-            VariationResult(VariationStatus.SUBMITTED, None, None, "submitted", 0.0)
+            VariationResult(VariationStatus.SUBMITTED, None, None, "submitted", VariationUsage())
 
     def test_cycle_outcome_rejects_submitted_variation_without_child(self) -> None:
         parent = _candidate("parent")
         selection = SelectionPlan("parent", (), "conservative", "Improve checks", "Reason")
         variation = VariationResult(
-            VariationStatus.SUBMITTED,
-            WorkspaceSnapshot(system_prompt="Child.", candidate_id="child"),
-            MutationSummary(prompt_modified=True),
-            "submitted",
-            0.1,
+            status=VariationStatus.SUBMITTED,
+            child=_candidate("child").snapshot,
+            mutation=MutationSummary(prompt_modified=True),
+            reasoning="submitted",
+            usage=_usage(),
+            attempt=_attempt(_candidate("child")),
         )
         with pytest.raises(ValueError, match="bound evaluated child"):
             CycleOutcome(
@@ -204,11 +509,12 @@ class TestFunctionalEvolutionValues:
         parent = _candidate("parent")
         selection = SelectionPlan("parent", (), "conservative", "Improve checks", "Reason")
         variation = VariationResult(
-            VariationStatus.SUBMITTED,
-            parent.snapshot,
-            MutationSummary(prompt_modified=True),
-            "submitted",
-            0.1,
+            status=VariationStatus.SUBMITTED,
+            child=parent.snapshot,
+            mutation=MutationSummary(prompt_modified=True),
+            reasoning="submitted",
+            usage=_usage(),
+            attempt=_attempt(parent),
         )
         with pytest.raises(ValueError, match="must differ from the parent"):
             CycleOutcome(
@@ -225,7 +531,7 @@ class TestFunctionalEvolutionValues:
     def test_cycle_outcome_requires_positive_cycle_number(self) -> None:
         parent = _candidate("parent")
         selection = SelectionPlan("parent", (), "conservative", "Improve checks", "Reason")
-        variation = VariationResult(VariationStatus.ABSTAINED, None, None, "none", 0.0)
+        variation = VariationResult(VariationStatus.ABSTAINED, None, None, "none", VariationUsage())
         with pytest.raises(ValueError, match="must be positive"):
             CycleOutcome(
                 cycle=0,
@@ -259,11 +565,12 @@ class TestPureEvolutionPolicy:
             _assessment("child").model_copy(update={"batch_score": 0.85}),
         )
         variation = VariationResult(
-            VariationStatus.SUBMITTED,
-            child.snapshot,
-            MutationSummary(prompt_modified=True),
-            "submitted",
-            0.1,
+            status=VariationStatus.SUBMITTED,
+            child=child.snapshot,
+            mutation=MutationSummary(prompt_modified=True),
+            reasoning="submitted",
+            usage=_usage(),
+            attempt=_attempt(child),
         )
         stale_state = EvolutionState(
             cycle=2,
@@ -302,11 +609,12 @@ class TestPureEvolutionPolicy:
             _assessment("child", evaluation_case_ids=("case-2",)),
         )
         variation = VariationResult(
-            VariationStatus.SUBMITTED,
-            child.snapshot,
-            MutationSummary(prompt_modified=True),
-            "submitted",
-            0.1,
+            status=VariationStatus.SUBMITTED,
+            child=child.snapshot,
+            mutation=MutationSummary(prompt_modified=True),
+            reasoning="submitted",
+            usage=_usage(),
+            attempt=_attempt(child),
         )
 
         with pytest.raises(ValueError, match="same evaluation cases"):
@@ -326,11 +634,12 @@ class TestPureEvolutionPolicy:
             _assessment("child", structural_score=1.0),
         )
         variation = VariationResult(
-            VariationStatus.SUBMITTED,
-            child.snapshot,
-            MutationSummary(prompt_modified=True),
-            "submitted",
-            0.1,
+            status=VariationStatus.SUBMITTED,
+            child=child.snapshot,
+            mutation=MutationSummary(prompt_modified=True),
+            reasoning="submitted",
+            usage=_usage(),
+            attempt=_attempt(child),
         )
         baseline_state = EvolutionState.from_baseline(parent, structural_weight=0.3)
         decision = decide_candidate(
@@ -353,7 +662,7 @@ class TestPureEvolutionPolicy:
     def test_skipped_variation_does_not_advance_candidate_or_stagnation(self) -> None:
         parent = _candidate("parent")
         state = EvolutionState.from_baseline(parent)
-        variation = VariationResult(VariationStatus.ABSTAINED, None, None, "no change", 0.0)
+        variation = VariationResult(VariationStatus.ABSTAINED, None, None, "no change", VariationUsage())
         decision = decide_candidate(
             parent=parent,
             child=None,
