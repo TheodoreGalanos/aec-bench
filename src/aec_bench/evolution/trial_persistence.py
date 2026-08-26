@@ -30,6 +30,7 @@ class TrialOutcome:
     advisor_calls: int = 0
     advisor_input_tokens: int = 0
     advisor_output_tokens: int = 0
+    candidate_id: str = ""
 
 
 def extract_trial_outcome(obs: EvolutionObservation) -> TrialOutcome:
@@ -57,7 +58,7 @@ def extract_trial_outcome(obs: EvolutionObservation) -> TrialOutcome:
         trial_id=trial.trial_id,
         task_id=trial.task.task_id,
         discipline=obs.discipline,
-        reward=trial.evaluation.reward,
+        reward=trial.evaluation.reward if trial.evaluation is not None else 0.0,
         field_scores=field_scores,
         turn_count=turn_count,
         tool_call_count=tool_call_count,
@@ -67,6 +68,7 @@ def extract_trial_outcome(obs: EvolutionObservation) -> TrialOutcome:
         advisor_calls=advisor_calls,
         advisor_input_tokens=advisor_input_tokens,
         advisor_output_tokens=advisor_output_tokens,
+        candidate_id=obs.candidate_id,
     )
 
 

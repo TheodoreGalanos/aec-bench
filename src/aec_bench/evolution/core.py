@@ -355,7 +355,12 @@ def reduce_evolution_state(
 
     best_candidate_id = state.best_candidate_id
     best_score = state.best_score
-    if child is not None and decision.improved and decision.effective_score is not None:
+    if (
+        child is not None
+        and decision.decision is GateDecision.ACCEPTED
+        and decision.improved
+        and decision.effective_score is not None
+    ):
         best_candidate_id = child.snapshot.candidate_id
         best_score = decision.effective_score
 

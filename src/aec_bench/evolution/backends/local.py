@@ -43,6 +43,8 @@ def make_local_candidate_batch_planner(
     experiment_id: str,
     adapter: str = "rlm",
     timeout: int = 1800,
+    backend: str = "local",
+    agent_config: AgentConfig | None = None,
 ) -> CandidateBatchPlanner:
     """Resolve tasks once and plan one candidate-independent batch per cycle."""
     resolved_tasks: list[ResolvedTaskInstance] | None = None
@@ -62,13 +64,13 @@ def make_local_candidate_batch_planner(
         )
         if not selected:
             raise ValueError("evaluation batch requires at least one resolved task")
-        agent = AgentConfig(name="evolution-agent", adapter=adapter, model=model)
+        agent = agent_config or AgentConfig(name="evolution-agent", adapter=adapter, model=model)
         manifest = ExperimentManifest(
             experiment_id=f"{experiment_id}-cycle-{cycle}",
             name=f"Evolution fitness cycle {cycle}",
             tasks=TaskSelector(include_patterns=[task.task.task_id for task in selected]),
             agents=[agent],
-            compute=ComputeConfig(backend="local", timeout_override=timeout),
+            compute=ComputeConfig(backend=backend, timeout_override=timeout),
             repetitions=1,
         )
         trials = plan_trials(
