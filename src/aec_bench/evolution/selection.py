@@ -8,6 +8,93 @@ from collections import deque
 from dataclasses import dataclass, field
 from typing import TypedDict
 
+from aec_bench.contracts.evolution import MutationStrategy
+from aec_bench.evolution.core import SelectionPlan
+
+
+def _require_non_negative(value: int, field_name: str) -> None:
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        raise ValueError(f"{field_name} must be a non-negative integer")
+
+
+@dataclass(frozen=True)
+class CellSelectionStat:
+    """Outcome-relevant selection statistics for one archive cell."""
+
+    cell_index: int
+    selection_count: int = 0
+    improvement_count: int = 0
+    last_selected_cycle: int | None = None
+
+    def __post_init__(self) -> None:
+        _require_non_negative(self.cell_index, "cell_index")
+        _require_non_negative(self.selection_count, "selection_count")
+        _require_non_negative(self.improvement_count, "improvement_count")
+        if self.improvement_count > self.selection_count:
+            raise ValueError("improvement_count cannot exceed selection_count")
+        if self.last_selected_cycle is not None:
+            _require_non_negative(self.last_selected_cycle, "last_selected_cycle")
+
+
+@dataclass(frozen=True)
+class CellSelectionState:
+    """Immutable state for cell selection feedback."""
+
+    stats: tuple[CellSelectionStat, ...] = ()
+
+    def __post_init__(self) -> None:
+        stats = tuple(self.stats)
+        if len({stat.cell_index for stat in stats}) != len(stats):
+            raise ValueError("cell selection stats must have unique cell indices")
+        object.__setattr__(self, "stats", stats)
+
+
+@dataclass(frozen=True)
+class StrategyBanditStat:
+    """Attempt and successful archive-outcome counts for one strategy."""
+
+    strategy: MutationStrategy
+    attempts: int = 0
+    successes: int = 0
+
+    def __post_init__(self) -> None:
+        try:
+            strategy = MutationStrategy(self.strategy)
+        except ValueError as exc:
+            raise ValueError(f"unsupported mutation strategy: {self.strategy!r}") from exc
+        object.__setattr__(self, "strategy", strategy)
+        _require_non_negative(self.attempts, "attempts")
+        _require_non_negative(self.successes, "successes")
+        if self.successes > self.attempts:
+            raise ValueError("successes cannot exceed attempts")
+
+
+@dataclass(frozen=True)
+class StrategyBanditState:
+    """Immutable state for mutation-strategy bandit feedback."""
+
+    stats: tuple[StrategyBanditStat, ...] = ()
+
+    def __post_init__(self) -> None:
+        stats = tuple(self.stats)
+        if len({stat.strategy for stat in stats}) != len(stats):
+            raise ValueError("strategy bandit stats must have unique strategies")
+        object.__setattr__(self, "stats", stats)
+
+
+@dataclass(frozen=True)
+class QDState:
+    """Explicit quality-diversity search state for one evolution run."""
+
+    cell_selection: CellSelectionState
+    strategy_bandit: StrategyBanditState
+    last_selection: SelectionPlan | None
+    cycle: int
+
+    def __post_init__(self) -> None:
+        if isinstance(self.cycle, bool) or not isinstance(self.cycle, int) or self.cycle < 0:
+            raise ValueError("QD cycle must be a non-negative integer")
+
 
 class CellStats(TypedDict):
     """Public snapshot of a cell selector's counters and metadata."""

@@ -116,6 +116,24 @@ class SelectionPlan:
 
 
 @dataclass(frozen=True)
+class ResolvedSelection:
+    """A validated selection plan with the selected candidate material."""
+
+    plan: SelectionPlan
+    parent: WorkspaceSnapshot
+    inspirations: tuple[WorkspaceSnapshot, ...]
+
+    def __post_init__(self) -> None:
+        if self.parent.candidate_id != self.plan.parent_candidate_id:
+            raise ValueError("resolved parent must match the selection parent_candidate_id")
+        inspirations = tuple(self.inspirations)
+        inspiration_ids = tuple(snapshot.candidate_id for snapshot in inspirations)
+        if inspiration_ids != self.plan.inspiration_candidate_ids:
+            raise ValueError("resolved inspirations must match the selection candidate IDs exactly")
+        object.__setattr__(self, "inspirations", inspirations)
+
+
+@dataclass(frozen=True)
 class VariationRequest:
     """Inputs supplied to a variation operator after parent evaluation."""
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
+from enum import StrEnum
 from pathlib import Path
 from typing import TypedDict
 
@@ -12,6 +13,64 @@ import numpy as np
 from ribs.archives import CVTArchive
 
 from aec_bench.contracts.evolution import BehaviourDescriptor, WorkspaceSnapshot
+
+
+class ArchiveInsertionStatus(StrEnum):
+    """Outcome of inserting one descriptor and candidate into the archive."""
+
+    NOT_ADDED = "not_added"
+    IMPROVED = "improved"
+    NEW_CELL = "new_cell"
+
+
+@dataclass(frozen=True)
+class ArchiveInsertionResult:
+    """Immutable result for one archive insertion operation."""
+
+    status: ArchiveInsertionStatus
+    candidate_id: str
+    cell_index: int | None
+    displaced_candidate_id: str | None
+
+    def __post_init__(self) -> None:
+        try:
+            status = ArchiveInsertionStatus(self.status)
+        except ValueError as exc:
+            raise ValueError(f"unsupported archive insertion status: {self.status!r}") from exc
+        object.__setattr__(self, "status", status)
+        if not isinstance(self.candidate_id, str) or not self.candidate_id.strip():
+            raise ValueError("candidate_id must not be blank")
+        if self.cell_index is not None and (isinstance(self.cell_index, bool) or self.cell_index < 0):
+            raise ValueError("cell_index must be a non-negative integer or None")
+        if self.cell_index is not None and not isinstance(self.cell_index, int):
+            raise ValueError("cell_index must be a non-negative integer or None")
+        if self.displaced_candidate_id is not None:
+            if not isinstance(self.displaced_candidate_id, str) or not self.displaced_candidate_id.strip():
+                raise ValueError("displaced_candidate_id must not be blank when provided")
+
+
+@dataclass(frozen=True)
+class ArchiveBatchOutcome:
+    """Immutable outcomes for inserting one candidate's descriptors."""
+
+    candidate_id: str
+    insertions: tuple[ArchiveInsertionResult, ...]
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.candidate_id, str) or not self.candidate_id.strip():
+            raise ValueError("candidate_id must not be blank")
+        insertions = tuple(self.insertions)
+        if any(result.candidate_id != self.candidate_id for result in insertions):
+            raise ValueError("archive insertion candidate_id must match the batch candidate_id")
+        object.__setattr__(self, "insertions", insertions)
+
+    @property
+    def added(self) -> bool:
+        """Whether at least one descriptor entered or improved an archive cell."""
+        return any(
+            result.status in (ArchiveInsertionStatus.IMPROVED, ArchiveInsertionStatus.NEW_CELL)
+            for result in self.insertions
+        )
 
 
 @dataclass(frozen=True)
