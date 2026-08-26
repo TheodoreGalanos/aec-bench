@@ -73,6 +73,7 @@ def _assignment(parent: WorkspaceSnapshot | None = None) -> SwarmAssignment:
         reasoning="Use the exact assigned parent",
     )
     return SwarmAssignment(
+        run_id="run-test",
         assignment_id="assignment-1",
         agent_id="agent-1",
         selection=selection,

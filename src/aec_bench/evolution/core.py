@@ -215,6 +215,7 @@ class ResolvedSelection:
 class VariationRequest:
     """Inputs supplied to a variation operator after parent evaluation."""
 
+    run_id: str
     selection: SelectionPlan
     parent: EvaluatedCandidate
     inspirations: tuple[WorkspaceSnapshot, ...]
@@ -225,6 +226,7 @@ class VariationRequest:
     cycle: int = 1
 
     def __post_init__(self) -> None:
+        _require_text(self.run_id, "run_id")
         if self.parent.snapshot.candidate_id != self.selection.parent_candidate_id:
             raise ValueError("variation parent must match the selection parent_candidate_id")
         _require_positive_integer(self.cycle, "variation cycle")

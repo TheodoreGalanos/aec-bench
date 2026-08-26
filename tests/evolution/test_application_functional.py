@@ -126,6 +126,7 @@ def _run(
     variation: object,
     config: EvolutionConfig,
     evaluated_candidates: list[str] | None = None,
+    run_id: str = "run-fixed",
 ):
     def evaluate(snapshot: WorkspaceSnapshot, _batch: CandidateEvaluationBatch):
         if evaluated_candidates is not None:
@@ -149,7 +150,7 @@ def _run(
         batch_planner=lambda _size, _cycle: batch,
         variation=variation,
         enrich=lambda observations: observations,
-        run_id="run-fixed",
+        run_id=run_id,
         clock=lambda: datetime(2026, 1, 1, tzinfo=UTC),
         archive_agent=select_archive if config.strategy == "qd" else None,
     )
@@ -413,3 +414,49 @@ def test_agentic_operator_creates_one_development_boundary_per_variation_call(tm
     assert all(
         trial.trial_id not in boundary.host_trial_ids for boundary in boundaries for trial in boundary.batch.trials
     )
+
+
+def test_agentic_operator_names_development_evidence_by_run(tmp_path: Path, monkeypatch) -> None:
+    workspace_one, batch_one = _setup(tmp_path / "one")
+    workspace_two, batch_two = _setup(tmp_path / "two")
+    boundaries = []
+
+    def capture(*args, **kwargs):
+        boundaries.append(kwargs["development_boundary"])
+        return VariationResult(
+            status=VariationStatus.ABSTAINED,
+            child=None,
+            mutation=None,
+            reasoning="No safe change.",
+            usage=VariationUsage(),
+        )
+
+    monkeypatch.setattr(variation_operator, "run_agentic_variation", capture)
+    operator = build_agentic_variation_operator(
+        agent_model=object(),
+        development_batch_planner=lambda _size, _cycle: batch_one,
+        development_evaluator=lambda _snapshot, _batch: (),
+        development_batch_size=1,
+    )
+
+    _run(
+        workspace_one,
+        batch_one,
+        parent_reward=0.5,
+        child_reward=0.5,
+        variation=operator,
+        config=_config(workspace_one.root),
+        run_id="run-one",
+    )
+    _run(
+        workspace_two,
+        batch_two,
+        parent_reward=0.5,
+        child_reward=0.5,
+        variation=operator,
+        config=_config(workspace_two.root),
+        run_id="run-two",
+    )
+
+    assert len(boundaries) == 2
+    assert boundaries[0].experiment_id != boundaries[1].experiment_id

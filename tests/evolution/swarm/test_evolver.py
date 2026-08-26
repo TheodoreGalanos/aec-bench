@@ -154,6 +154,7 @@ def test_evolver_returns_exact_assignment_result_without_host_evidence(tmp_path:
     )
     parent = workspace.export_snapshot("parent")
     assignment = SwarmAssignment(
+        run_id="run-test",
         assignment_id="assignment-1",
         agent_id="agent-1",
         selection=SelectionPlan("parent", (), "conservative", "Improve", "Use exact material"),
@@ -286,6 +287,7 @@ def test_evolver_returns_submitted_child_without_mutating_canonical_workspace(tm
     )
 
     assignment = SwarmAssignment(
+        run_id="run-test",
         assignment_id="assignment-1",
         agent_id="agent-1",
         selection=SelectionPlan("parent", (), "conservative", "Improve", "Use exact material"),

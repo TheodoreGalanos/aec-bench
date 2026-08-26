@@ -204,6 +204,7 @@ async def test_unknown_agent_cost_has_no_host_effects(tmp_path: Path) -> None:
     )
     manager._state = initial_state
     assignment = SwarmAssignment(
+        run_id=manager._state.run_id,
         assignment_id="assignment-1",
         agent_id="agent-0",
         selection=SelectionPlan("baseline", (), "conservative", "Improve", "Use exact material"),

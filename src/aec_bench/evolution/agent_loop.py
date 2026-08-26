@@ -6,6 +6,7 @@ from __future__ import annotations
 import time
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, replace
+from pathlib import Path
 from types import MappingProxyType
 from typing import Any
 
@@ -26,6 +27,7 @@ from aec_bench.evolution.agent_protocol import (
     PydanticAIStructuredRunner,
 )
 from aec_bench.evolution.analysis import GraduatedScope
+from aec_bench.evolution.checkpoint import AVOCheckpoint, AVOConfigurationIdentity
 from aec_bench.evolution.core import (
     AVOBudget,
     AVOState,
@@ -39,6 +41,12 @@ from aec_bench.evolution.core import (
 from aec_bench.evolution.development import DevelopmentEvaluationBoundary
 from aec_bench.evolution.graveyard import GraveyardEntry
 from aec_bench.evolution.mutation import MutationAction, apply_mutations
+from aec_bench.evolution.resume import (
+    evaluation_batch_identity,
+    load_checkpoint_for_resume,
+    request_configuration_identity,
+    terminal_result_from_checkpoint,
+)
 from aec_bench.evolution.sanitiser import CompactionLLM, sanitise_workspace
 from aec_bench.evolution.workspace import Workspace, scratch_workspace_from
 
@@ -131,6 +139,8 @@ def run_agentic_variation(
     compaction_llm: CompactionLLM | None = None,
     development_evaluation_cost_usd: float | None = None,
     variation_id: str | None = None,
+    checkpoint_path: Path | None = None,
+    configuration_identity: AVOConfigurationIdentity | None = None,
     clock: Callable[[], float] = time.monotonic,
 ) -> VariationResult:
     """Run one bounded, self-directed variation call in isolated scratch.
@@ -154,8 +164,43 @@ def run_agentic_variation(
         raise TypeError("budget must be an AVOBudget")
     if development_evaluation_cost_usd is not None and development_evaluation_cost_usd < 0:
         raise ValueError("development_evaluation_cost_usd must be non-negative")
+    if checkpoint_path is not None:
+        if not isinstance(checkpoint_path, Path):
+            raise TypeError("checkpoint_path must be a Path")
+        if configuration_identity is None:
+            raise ValueError("configuration_identity is required when checkpointing is enabled")
     if variation_id is None:
-        variation_id = f"{request.parent.snapshot.candidate_id}->{child_candidate_id}"
+        variation_id = f"{request.run_id}:variation-{request.cycle}:child-{child_candidate_id}"
+    planned_batch = None
+    if checkpoint_path is not None or request.scope is not GraduatedScope.SKIP:
+        planned_batch = development_boundary.plan()
+    effective_configuration_identity = (
+        None
+        if configuration_identity is None
+        else request_configuration_identity(
+            configuration_identity,
+            request,
+            development_evaluation_cost_usd=development_evaluation_cost_usd,
+            development_batch_identity=(None if planned_batch is None else evaluation_batch_identity(planned_batch)),
+        )
+    )
+    resume_checkpoint: AVOCheckpoint | None = None
+    if checkpoint_path is not None and checkpoint_path.exists():
+        assert planned_batch is not None
+        assert effective_configuration_identity is not None
+        resume_checkpoint = load_checkpoint_for_resume(
+            checkpoint_path,
+            run_id=request.run_id,
+            variation_id=variation_id,
+            parent_snapshot=request.parent.snapshot,
+            final_child_candidate_id=child_candidate_id,
+            selection=request.selection,
+            development_case_ids=planned_batch.evaluation_case_ids,
+            budget=budget,
+            configuration_identity=effective_configuration_identity,
+        )
+        if resume_checkpoint.terminal_result is not None:
+            return terminal_result_from_checkpoint(resume_checkpoint)
     if request.scope is GraduatedScope.SKIP:
         return VariationResult(
             status=VariationStatus.ABSTAINED,
@@ -177,6 +222,9 @@ def run_agentic_variation(
             development_evaluation_cost_usd=development_evaluation_cost_usd,
             variation_id=variation_id,
             clock=clock,
+            checkpoint_path=checkpoint_path,
+            configuration_identity=effective_configuration_identity,
+            resume_checkpoint=resume_checkpoint,
         )
         return controller.run(agent_runner)
 
@@ -197,6 +245,9 @@ class _LoopController:
         development_evaluation_cost_usd: float | None,
         variation_id: str,
         clock: Callable[[], float],
+        checkpoint_path: Path | None,
+        configuration_identity: AVOConfigurationIdentity | None,
+        resume_checkpoint: AVOCheckpoint | None,
     ) -> None:
         self.request = request
         self.scratch = scratch
@@ -225,23 +276,19 @@ class _LoopController:
         self.parent_evidence: EvaluatedCandidate | None = None
         self.terminal_status: VariationStatus | None = None
         self.terminal_message = ""
+        self.checkpoint_path = checkpoint_path
+        self.configuration_identity = configuration_identity
+        self.resume_checkpoint = resume_checkpoint
 
     def run(self, runner: AgentRunner) -> VariationResult:
         """Evaluate the parent, then run agent requests until one terminal outcome."""
-        self._refresh_elapsed()
-        limit = self._loop_limit_reason()
-        if limit is not None:
-            return self._exhausted(limit)
-        try:
-            self.development_boundary.plan()
-            self._ensure_effect_budget("max_development_evaluations")
-            self.parent_evidence = self.development_boundary.evaluate(self.request.parent.snapshot, revision=0)
-            self._record_development_evaluation()
-        except AgentToolBudgetExceeded as exc:
-            return self._exhausted(exc.limit)
-        except Exception:
-            raise
+        if self.resume_checkpoint is not None:
+            self._restore_checkpoint()
+        else:
+            self._start_new_call()
 
+        if self.terminal_status is not None:
+            return self._terminal_result()
         tools = MappingProxyType(self._build_tools())
         while self.terminal_status is None:
             self._refresh_elapsed()
@@ -269,6 +316,81 @@ class _LoopController:
             except AgentToolBudgetExceeded as exc:
                 return self._exhausted(exc.limit)
         return self._terminal_result()
+
+    def _start_new_call(self) -> None:
+        """Plan and evaluate the parent before the first checkpoint."""
+        self._refresh_elapsed()
+        limit = self._loop_limit_reason()
+        if limit is not None:
+            self.terminal_status = VariationStatus.BUDGET_EXHAUSTED
+            self.terminal_message = f"Budget exhausted: {limit}."
+            return
+        try:
+            self.development_boundary.plan()
+            self._ensure_effect_budget("max_development_evaluations")
+            self.parent_evidence = self.development_boundary.evaluate(self.request.parent.snapshot, revision=0)
+            self._record_development_evaluation()
+            self._write_checkpoint()
+        except AgentToolBudgetExceeded as exc:
+            self.terminal_status = VariationStatus.BUDGET_EXHAUSTED
+            self.terminal_message = f"Budget exhausted: {exc.limit}."
+        except Exception:
+            raise
+
+    def _restore_checkpoint(self) -> None:
+        """Restore explicit state and scratch material from the validated checkpoint."""
+        assert self.resume_checkpoint is not None
+        checkpoint = self.resume_checkpoint
+        self.development_boundary.plan()
+        self.parent_evidence = checkpoint.parent_evidence.to_evaluated_candidate()
+        self.state = checkpoint.to_state()
+        self.scratch.apply_snapshot(checkpoint.current_snapshot)
+        self.started_at = self.clock() - checkpoint.usage.elapsed_seconds
+        saved_model_cost = checkpoint.usage.model_cost_usd
+        self._model_cost_known = saved_model_cost is not None or checkpoint.usage.model_requests == 0
+        self._model_cost_total = saved_model_cost or 0.0
+        current_attempt = next(
+            (item for item in self.state.attempts if item.revision == self.state.current_revision),
+            None,
+        )
+        if current_attempt is None:
+            self.last_mutation = _mutation_summary_for_material(
+                self.request.parent.snapshot,
+                checkpoint.current_snapshot,
+            )
+            self.last_hypothesis = ""
+        else:
+            self.last_mutation = current_attempt.mutation
+            self.last_hypothesis = current_attempt.hypothesis
+        self.terminal_status = self.state.terminal_status
+        if self.terminal_status is not None:
+            self.terminal_message = checkpoint.terminal_result.reasoning if checkpoint.terminal_result else ""
+
+    def _write_checkpoint(self, terminal_result: VariationResult | None = None) -> None:
+        """Persist the explicit call state when checkpointing is enabled."""
+        if self.checkpoint_path is None:
+            return
+        if self.parent_evidence is None or self.configuration_identity is None:
+            raise RuntimeError("checkpoint requires parent evidence and configuration identity")
+        terminal_record = None
+        if terminal_result is not None:
+            from aec_bench.evolution.checkpoint import AVOCheckpointTerminalResult
+
+            terminal_record = AVOCheckpointTerminalResult.from_result(terminal_result)
+        from aec_bench.evolution.checkpoint import AVOCheckpoint, write_checkpoint
+
+        checkpoint = AVOCheckpoint.from_state(
+            run_id=self.request.run_id,
+            state=self.state,
+            parent_evidence=self.parent_evidence,
+            selection=self.request.selection.to_record(),
+            development_case_ids=self.development_boundary.batch.evaluation_case_ids,
+            configuration_identity=self.configuration_identity,
+            budget=self.budget,
+            current_snapshot=self.scratch.export_snapshot(self.child_candidate_id),
+            terminal_result=terminal_record,
+        )
+        write_checkpoint(self.checkpoint_path, checkpoint)
 
     def _build_tools(self) -> dict[str, Callable[..., object]]:
         """Build the exact guarded tool surface for this loop."""
@@ -390,6 +512,7 @@ class _LoopController:
         next_revision = max(revisions) + 1
         self.state = replace(self.state, current_revision=next_revision)
         self.last_hypothesis = ""
+        self._write_checkpoint()
         return MutationToolResult(
             success=True,
             revision=self.state.current_revision,
@@ -444,6 +567,7 @@ class _LoopController:
                 self.state,
                 consecutive_evaluation_errors=self.state.consecutive_evaluation_errors + 1,
             )
+            self._write_checkpoint()
             return EvaluationToolResult(
                 success=False,
                 revision=self.state.current_revision,
@@ -464,6 +588,7 @@ class _LoopController:
             consecutive_without_progress=0 if improved else self.state.consecutive_without_progress + 1,
             consecutive_evaluation_errors=0,
         )
+        self._write_checkpoint()
         return EvaluationToolResult(
             success=True,
             revision=self.state.current_revision,
@@ -494,6 +619,7 @@ class _LoopController:
         )
         self.last_mutation = attempt.mutation
         self.last_hypothesis = attempt.hypothesis
+        self._write_checkpoint()
         return RestoreToolResult(
             success=True,
             revision=attempt.revision,
@@ -662,11 +788,12 @@ class _LoopController:
 
     def _terminal_result(self) -> VariationResult:
         self._refresh_elapsed()
+        self.state = replace(self.state, terminal_status=self.terminal_status or VariationStatus.BUDGET_EXHAUSTED)
         usage = self.state.usage
         if self.terminal_status is VariationStatus.SUBMITTED:
             snapshot = self.scratch.export_snapshot(self.child_candidate_id)
             attempt = next(item for item in self.state.attempts if item.revision == self.state.current_revision)
-            return VariationResult(
+            result = VariationResult(
                 status=VariationStatus.SUBMITTED,
                 child=snapshot,
                 mutation=attempt.mutation,
@@ -674,13 +801,16 @@ class _LoopController:
                 usage=usage,
                 attempt=attempt,
             )
-        return VariationResult(
-            status=self.terminal_status or VariationStatus.BUDGET_EXHAUSTED,
-            child=None,
-            mutation=None,
-            reasoning=self.terminal_message or "Variation ended without a submitted child.",
-            usage=usage,
-        )
+        else:
+            result = VariationResult(
+                status=self.terminal_status or VariationStatus.BUDGET_EXHAUSTED,
+                child=None,
+                mutation=None,
+                reasoning=self.terminal_message or "Variation ended without a submitted child.",
+                usage=usage,
+            )
+        self._write_checkpoint(result)
+        return result
 
 
 def _normalise_response(response: AgentCommand | AgentResponse) -> tuple[AgentCommand, float | None]:

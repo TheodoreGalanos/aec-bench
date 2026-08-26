@@ -23,6 +23,7 @@ from aec_bench.contracts.trial_record import TrialRecord
 from aec_bench.evaluation.behavioral import BehavioralLLMClient
 from aec_bench.evolution.application import CandidateEvaluator, _build_analysis, _enrich_candidate
 from aec_bench.evolution.backends.local import make_local_candidate_batch_planner, make_local_candidate_evaluator
+from aec_bench.evolution.checkpoint import AVOConfigurationIdentity
 from aec_bench.evolution.core import AVOBudget, EvolutionState, VariationRequest, VariationResult
 from aec_bench.evolution.enrichment import enrich_observations
 from aec_bench.evolution.evaluation import CandidateBatchPlanner, CandidateEvaluationBatch, bind_candidate_evaluation
@@ -91,6 +92,7 @@ class SwarmAgentEvolver:
         )
         analysis = _build_analysis(parent, evolution_state)
         request = VariationRequest(
+            run_id=assignment.run_id,
             selection=assignment.selection,
             parent=parent,
             inspirations=assignment.inspirations,
@@ -235,6 +237,21 @@ class SwarmEvolverFactory:
             development_experiment_prefix=development_experiment_id,
             budget=AVOBudget(),
             compaction_llm=classifier_llm,
+            # Agent workspaces are disposable copies. Keep the checkpoint in
+            # the factory's source workspace so cleanup cannot remove the
+            # only resume authority.
+            checkpoint_root=self._workspace_source,
+            configuration_identity=AVOConfigurationIdentity(
+                model_identity=evolver_model_name,
+                tool_identity="avo-tools:1",
+                development_evaluator_identity=(
+                    f"local:{development_experiment_id}:{self._adapter}:{solver_model}:timeout-{self._timeout}"
+                ),
+                configuration_identity=(
+                    f"swarm-config:batch-{self._batch_size}:threshold-{self._improvement_threshold}"
+                    f":stagnation-{self._stagnation_window}:structural-{self._structural_weight}"
+                ),
+            ),
         )
         config = EvolutionConfig(
             workspace_path=str(agent_ws_path),

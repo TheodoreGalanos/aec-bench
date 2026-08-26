@@ -145,6 +145,9 @@ class AVOCheckpointObservation(StrictModel):
     discipline: NonEmptyStr
     development_provenance: DevelopmentEvaluationProvenance
     extension_values: dict[str, Any] = Field(default_factory=dict)
+    raw_output_path: str | None = None
+    conversation_path: str | None = None
+    trajectory_path: str | None = None
 
     @classmethod
     def from_observation(cls, observation: EvolutionObservation) -> AVOCheckpointObservation:
@@ -167,6 +170,15 @@ class AVOCheckpointObservation(StrictModel):
             discipline=observation.discipline,
             development_provenance=provenance,
             extension_values=extension_values,
+            raw_output_path=(
+                observation.trial.output.raw_output_path if observation.trial.output is not None else None
+            ),
+            conversation_path=(
+                observation.trial.output.conversation_path if observation.trial.output is not None else None
+            ),
+            trajectory_path=(
+                observation.trial.output.trajectory_path if observation.trial.output is not None else None
+            ),
         )
 
     def to_observation(self) -> EvolutionObservation:
@@ -183,6 +195,12 @@ class AVOCheckpointObservation(StrictModel):
                 restored.attach_extension(kind, value)
             elif restored.pending_extensions[kind] != value:
                 raise ValueError(f"checkpoint extension value conflicts with TrialRecord extension: {kind}")
+        if restored.output is not None:
+            restored.output.bind_runtime_paths(
+                raw_output_path=self.raw_output_path,
+                conversation_path=self.conversation_path,
+                trajectory_path=self.trajectory_path,
+            )
         return EvolutionObservation(
             trial=restored,
             enrichment=self.enrichment.to_enrichment(),

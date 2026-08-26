@@ -16,6 +16,7 @@ from aec_bench.evolution.swarm.core import AgentBudget, SwarmAgentResult, SwarmA
 def _assignment(cycle: int, issued_at: datetime | None = None) -> SwarmAssignment:
     selection = SelectionPlan("parent", (), MutationStrategy.CONSERVATIVE, "Improve", "Exact source")
     return SwarmAssignment(
+        run_id="run-test",
         assignment_id=f"assignment-{cycle}",
         agent_id="agent-1",
         selection=selection,

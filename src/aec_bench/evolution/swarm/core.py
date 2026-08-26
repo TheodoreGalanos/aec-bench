@@ -115,6 +115,7 @@ class PivotInstruction:
 class SwarmAssignment:
     """Exact parent and inspiration material assigned to one swarm agent."""
 
+    run_id: str
     assignment_id: str
     agent_id: str
     selection: SelectionPlan
@@ -124,6 +125,7 @@ class SwarmAssignment:
     issued_at: datetime
 
     def __post_init__(self) -> None:
+        _require_text(self.run_id, "run_id")
         _require_text(self.assignment_id, "assignment_id")
         _require_text(self.agent_id, "agent_id")
         if not isinstance(self.selection, SelectionPlan):

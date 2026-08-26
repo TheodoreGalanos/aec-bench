@@ -491,6 +491,7 @@ class SwarmManager:
                 reasoning=f"Manager selected exact candidate source {parent_id}.",
             )
             return SwarmAssignment(
+                run_id=self._state.run_id,
                 assignment_id=self._assignment_id_factory(agent_id, cycle),
                 agent_id=agent_id,
                 selection=selection,

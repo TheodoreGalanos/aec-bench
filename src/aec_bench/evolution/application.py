@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import tempfile
@@ -29,6 +30,7 @@ from aec_bench.evolution.analysis import (
 )
 from aec_bench.evolution.archive import ArchiveBatchOutcome, ArchiveView, QDArchive
 from aec_bench.evolution.archive_agent import run_archive_selection
+from aec_bench.evolution.checkpoint import AVOConfigurationIdentity
 from aec_bench.evolution.core import (
     AVOBudget,
     CycleOutcome,
@@ -127,6 +129,7 @@ def _execute_evolution_cycle(
     analysis = _build_analysis(parent, state)
     inspirations = resolved_selection.inspirations
     request = VariationRequest(
+        run_id=run_id,
         selection=selection,
         parent=parent,
         inspirations=inspirations,
@@ -413,6 +416,7 @@ def run_evolution_from_config(
     from aec_bench.providers.behavioral_llm import build_behavioral_llm_client
 
     workspace = Workspace(Path(config.workspace_path))
+    resolved_run_id = run_id or _timestamp_slug()
     classifier_llm = build_behavioral_llm_client(model=config.models.classifier)
     task_dirs: list[Path] = []
     if config.generate is not None:
@@ -431,8 +435,22 @@ def run_evolution_from_config(
 
     model = config.solver.model if config.solver is not None else config.models.evolver
     adapter = config.solver.adapter if config.solver is not None else "rlm"
-    experiment_id = f"evo-{workspace.manifest.name}"
+    run_digest = hashlib.sha256(resolved_run_id.encode("utf-8")).hexdigest()
+    experiment_id = f"evo-{workspace.manifest.name}-{run_digest}"
     development_experiment_id = f"{experiment_id}-development"
+    configuration_digest = hashlib.sha256(
+        json.dumps(config.model_dump(mode="json"), ensure_ascii=True, sort_keys=True, separators=(",", ":")).encode(
+            "utf-8"
+        )
+    ).hexdigest()
+    avo_configuration_identity = AVOConfigurationIdentity(
+        model_identity=config.models.evolver,
+        tool_identity="avo-tools:1",
+        development_evaluator_identity=(
+            f"{config.backend}:{development_experiment_id}:{adapter}:{model}:timeout-{config.timeout}"
+        ),
+        configuration_identity=f"evolution-config:{configuration_digest}",
+    )
     if config.backend == "local" and task_dirs:
         batch_planner = make_local_candidate_batch_planner(
             task_dirs=task_dirs,
@@ -480,6 +498,8 @@ def run_evolution_from_config(
         development_experiment_prefix=development_experiment_id,
         budget=AVOBudget(),
         compaction_llm=classifier_llm,
+        checkpoint_root=workspace.root,
+        configuration_identity=avo_configuration_identity,
     )
 
     return run_evolution(
@@ -491,7 +511,7 @@ def run_evolution_from_config(
         enrich=lambda observations: enrich_observations(observations, classifier_llm=classifier_llm),
         report_writer=report_writer,
         clock=clock,
-        run_id=run_id,
+        run_id=resolved_run_id,
     )
 
 
