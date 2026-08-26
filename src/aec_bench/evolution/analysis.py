@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 
 from aec_bench.contracts.evolution import DisciplineScore, EvolutionObservation
+from aec_bench.evolution.evidence import require_evaluation
 
 
 class GraduatedScope(StrEnum):
@@ -31,7 +32,7 @@ class BehavioralPattern:
 
 
 @dataclass(frozen=True)
-class AnalysisResult:
+class EvolutionAnalysis:
     """Aggregate result of an analysis pass over a batch of observations."""
 
     discipline_scores: list[DisciplineScore]
@@ -66,7 +67,7 @@ def compute_discipline_scores(
     scores: list[DisciplineScore] = []
     for discipline, obs_list in sorted(groups.items()):
         task_count = len(obs_list)
-        mean_reward = sum(obs.trial.evaluation.reward for obs in obs_list) / task_count
+        mean_reward = sum(require_evaluation(obs.trial).reward for obs in obs_list) / task_count
 
         # field_pass_rate: proportion of all field_scores with reward >= 1.0
         all_field_scores = [fs for obs in obs_list for fs in obs.enrichment.field_scores]
@@ -106,7 +107,9 @@ def detect_behavioral_patterns(
     BehavioralPattern instances for patterns that meet the min_count threshold.
     """
     failed = [
-        obs for obs in observations if obs.trial.evaluation.reward < 0.8 and obs.enrichment.trace_digest is not None
+        obs
+        for obs in observations
+        if require_evaluation(obs.trial).reward < 0.8 and obs.enrichment.trace_digest is not None
     ]
 
     blind_action_ids: list[str] = []

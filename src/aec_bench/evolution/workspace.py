@@ -7,6 +7,9 @@ import json
 import re
 import shutil
 import subprocess
+import tempfile
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
 from typing import cast
@@ -31,6 +34,39 @@ _CANDIDATE_NOTES_REF = "aec-bench-evolution"
 
 class WorkspaceError(Exception):
     """Raised when the workspace is invalid or a filesystem/git operation fails."""
+
+
+@contextmanager
+def scratch_workspace_from(
+    source: Workspace,
+    parent: WorkspaceSnapshot,
+    child_candidate_id: str,
+) -> Iterator[Workspace]:
+    """Yield an isolated workspace materialised from one parent snapshot.
+
+    Scratch variation receives only the workspace manifest and an optional
+    workspace-specific evolution program. Prompt and skill files always come
+    from ``parent`` so source history, reports, and other run state cannot leak
+    into the variation. The temporary directory is outside the canonical
+    workspace and is removed after the operator returns or raises.
+    """
+    if not child_candidate_id.strip():
+        raise ValueError("child_candidate_id must not be blank")
+    if child_candidate_id == parent.candidate_id:
+        raise ValueError("child_candidate_id must differ from the parent candidate_id")
+
+    with tempfile.TemporaryDirectory(prefix="aec-bench-scratch-") as scratch_dir:
+        scratch_root = Path(scratch_dir)
+        for relative_path in ("manifest.yaml", "program.md"):
+            source_path = source.root / relative_path
+            if source_path.is_file():
+                shutil.copy2(source_path, scratch_root / relative_path)
+
+        (scratch_root / "prompts").mkdir()
+        (scratch_root / "prompts" / "system.md").write_text(parent.system_prompt, encoding="utf-8")
+        scratch = Workspace(scratch_root)
+        scratch.apply_snapshot(parent.model_copy(update={"candidate_id": child_candidate_id}))
+        yield scratch
 
 
 class Workspace:
@@ -139,7 +175,7 @@ class Workspace:
     def export_snapshot(self, candidate_id: str) -> WorkspaceSnapshot:
         return WorkspaceSnapshot(
             system_prompt=self.read_prompt(),
-            skills=self.list_skills(),
+            skills=tuple(self.list_skills()),
             candidate_id=candidate_id,
         )
 

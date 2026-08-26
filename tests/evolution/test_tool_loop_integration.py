@@ -1,16 +1,18 @@
 # ABOUTME: Integration test for the tool-loop evolver pipeline.
-# ABOUTME: Verifies that engine phase 4 builds tools, passes brief, and applies mutations.
+# ABOUTME: Verifies that the structured evolver builds tools, passes a brief, and applies mutations.
 
-from datetime import datetime
+from datetime import UTC, datetime
 
 from aec_bench.contracts.evaluation_result import EvaluationResult, ValidityCheck
 from aec_bench.contracts.evolution import (
+    CandidateAssessment,
     EvolutionCycleRecord,
     EvolutionObservation,
     FieldScore,
     GateDecision,
     MutationSummary,
     ObservationEnrichment,
+    SelectionRecord,
     TraceDigest,
 )
 from aec_bench.contracts.trial_record import TrialRecord
@@ -93,18 +95,33 @@ def _make_cycle_record(
     """Build a realistic EvolutionCycleRecord representing a prior cycle."""
     return EvolutionCycleRecord(
         cycle=cycle,
-        candidate_id_before=f"run:{cycle}",
-        candidate_id_after=f"run:{cycle + 1}",
-        batch_score=batch_score,
-        structural_score=0.71,
+        selection=SelectionRecord(
+            parent_candidate_id=f"run:{cycle}",
+            strategy="conservative",
+            goal="Improve the selected candidate.",
+            reasoning="Select the current best candidate.",
+        ),
+        parent_assessment=CandidateAssessment(
+            candidate_id=f"run:{cycle}",
+            batch_score=batch_score,
+            structural_score=0.71,
+            discipline_scores={},
+            trial_ids=("trial-001",),
+            evaluation_case_ids=("case-001",),
+            valid=True,
+        ),
+        child_assessment=None,
         mutation=MutationSummary(
             prompt_modified=False,
             skills_added=skills_added or ["verify-units"],
             evolver_reasoning="Added verify-units skill to address unit mismatch errors.",
         ),
         gate_decision=gate_decision,
-        trial_ids=["trial-001"],
-        timestamp=datetime(2026, 2, 1, 12, 0, 0),
+        gate_reason="Cycle decision.",
+        active_candidate_id_after=f"run:{cycle}",
+        best_candidate_id_after=f"run:{cycle}",
+        timestamp=datetime(2026, 2, 1, 12, 0, 0, tzinfo=UTC),
+        evolver_cost_usd=0.0,
     )
 
 

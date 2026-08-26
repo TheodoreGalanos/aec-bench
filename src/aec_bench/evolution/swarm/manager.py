@@ -7,7 +7,6 @@ import asyncio
 import logging
 import time
 import uuid
-from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Protocol, runtime_checkable
@@ -28,7 +27,6 @@ from aec_bench.evolution.archive import QDArchive
 from aec_bench.evolution.swarm.agent_task import AgentContext, run_agent_loop
 from aec_bench.evolution.swarm.budget import BudgetLedger
 from aec_bench.evolution.swarm.config import SwarmConfig
-from aec_bench.evolution.swarm.context import build_archive_context
 from aec_bench.evolution.swarm.events import SwarmEventWriter
 from aec_bench.evolution.swarm.lineage import LineageTracker
 from aec_bench.evolution.swarm.notes import NoteStore
@@ -205,7 +203,7 @@ class SwarmManager:
             if bd is not None:
                 snapshot = WorkspaceSnapshot(
                     system_prompt="swarm-generated",
-                    skills=[],
+                    skills=(),
                     candidate_id=candidate_id,
                 )
                 inserted = self._archive.insert(
@@ -471,59 +469,6 @@ class SwarmManager:
             return models[agent_index]
         return self._config.agents.default_model
 
-    def _build_context_provider(self, agent_id: str) -> Callable[[], str]:
-        """Create a context provider callback for an agent.
-
-        Returns a callable that builds the archive context string from
-        current shared state. Called by the evolver before each engine step.
-        """
-
-        def _provide_context() -> str:
-            nudge = self._agent_nudges.get(agent_id)
-            non_improving = self._agent_non_improving.get(agent_id, 0)
-            pivoting = non_improving >= self._pivot_after and self._agent_pivot_cooldown.get(agent_id, 0) <= 0
-            best = self._agent_best_scores.get(agent_id, 0.0)
-            evals = self._agent_eval_counts.get(agent_id, 0)
-
-            bd_focus = self._compute_bd_focus(agent_id)
-            recent_scores = self._agent_recent_scores.get(agent_id, [])
-
-            context = build_archive_context(
-                archive=self._archive,
-                graveyard=self._graveyard,
-                agent_id=agent_id,
-                agent_bd_focus=bd_focus,
-                generation=evals,
-                agent_recent_scores=recent_scores,
-                agent_best_score=best,
-                pivoting=pivoting,
-                consecutive_non_improving=non_improving,
-                notes=self._notes,
-                nudge=nudge,
-                consolidation_report=self._latest_report,
-            )
-
-            # Wind-down notification (I4)
-            phase = self._budget.phase
-            if phase == "winding_down":
-                remaining = self._budget.remaining
-                context += (
-                    f"\n### Budget Warning\n\n"
-                    f"Budget is running low (${remaining:.2f} remaining). "
-                    f"Make your remaining evaluations count — focus on the most "
-                    f"promising approaches.\n"
-                )
-            elif phase == "final":
-                context += (
-                    "\n### Budget Critical\n\n"
-                    "Almost no budget remaining. This may be your last evaluation. "
-                    "Make it count.\n"
-                )
-
-            return context
-
-        return _provide_context
-
     def _build_agent_context(self, agent_id: str, agent_index: int) -> AgentContext:
         """Build an AgentContext for a single agent."""
         model = self._resolve_agent_model(agent_index)
@@ -536,7 +481,6 @@ class SwarmManager:
         if hasattr(evolver, "set_shared_state"):
             evolver.set_shared_state(
                 graveyard=self._graveyard,
-                context_provider=self._build_context_provider(agent_id),
             )
         return AgentContext(
             agent_id=agent_id,

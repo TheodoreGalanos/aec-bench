@@ -13,6 +13,7 @@ from aec_bench.contracts.evolution import (
     WorkspaceSnapshot,
 )
 from aec_bench.evolution.archive_agent import SelectionResult
+from aec_bench.evolution.core import CycleOutcome
 from aec_bench.evolution.graveyard import MutationGraveyard
 
 logger = logging.getLogger(__name__)
@@ -56,17 +57,10 @@ class SelectionStrategy(Protocol):
 
 
 class HillClimbStrategy:
-    """Always mutate from the best-scoring workspace seen so far.
-
-    Tracks one best candidate/score/snapshot triple. The first cycle
-    always becomes the initial best. Subsequent cycles replace best only
-    when the batch score strictly improves.
-    """
+    """Provide snapshot lookup for hill climb while state owns selection."""
 
     def __init__(self) -> None:
-        self._best_candidate_id: str | None = None
-        self._best_score: float | None = None
-        self._best_snapshot: WorkspaceSnapshot | None = None
+        self._snapshots: dict[str, WorkspaceSnapshot] = {}
 
     # -- lifecycle -----------------------------------------------------------
 
@@ -81,37 +75,25 @@ class HillClimbStrategy:
         **kwargs: Any,
     ) -> None:
         """Update best-so-far if the cycle improved on the previous best."""
-        score = cycle_record.batch_score
-        if self._best_score is None or score > self._best_score:
-            self._best_candidate_id = cycle_record.candidate_id_after
-            self._best_score = score
-            self._best_snapshot = snapshot
-            logger.debug(
-                "hill-climb: new best %s (score=%.4f)",
-                self._best_candidate_id,
-                self._best_score,
-            )
+        outcome = kwargs.get("outcome")
+        if isinstance(outcome, CycleOutcome):
+            self._snapshots[outcome.parent.snapshot.candidate_id] = outcome.parent.snapshot
+            if outcome.child is not None:
+                self._snapshots[outcome.child.snapshot.candidate_id] = outcome.child.snapshot
+        else:
+            self._snapshots[snapshot.candidate_id] = snapshot
 
     # -- selection -----------------------------------------------------------
 
     def select_parent(self, current_score: float) -> SelectionResult | None:
-        """Return the best workspace as the parent, or None if no cycle has run."""
-        if self._best_candidate_id is None:
-            return None
-        return SelectionResult(
-            parent_candidate_id=self._best_candidate_id,
-            inspiration_candidate_ids=[],
-            strategy="conservative",
-            reasoning=(f"Hill-climb: selecting best-so-far {self._best_candidate_id} (score={self._best_score:.4f})"),
-        )
+        """Return no selection; the application state is the authority."""
+        return None
 
     # -- snapshot access -----------------------------------------------------
 
     def get_snapshot(self, candidate_id: str) -> WorkspaceSnapshot | None:
         """Return the stored snapshot if its candidate ID matches."""
-        if self._best_snapshot is not None and self._best_candidate_id == candidate_id:
-            return self._best_snapshot
-        return None
+        return self._snapshots.get(candidate_id)
 
     # -- persistence ---------------------------------------------------------
 
@@ -123,9 +105,6 @@ class HillClimbStrategy:
     def summary(self) -> dict[str, Any]:
         """Return a summary dict describing current strategy state."""
         result: dict[str, Any] = {"mode": "hill_climb"}
-        if self._best_candidate_id is not None:
-            result["best_candidate_id"] = self._best_candidate_id
-            result["best_score"] = self._best_score
         return result
 
 
@@ -183,11 +162,18 @@ class QDStrategy:
         graveyard: MutationGraveyard,
         **kwargs: Any,
     ) -> None:
-        """Extract behaviour descriptors from observations and insert into archive."""
+        """Extract exact outcome observations and insert the active candidate."""
         from aec_bench.evolution.behaviour import extract_behaviour_descriptor
 
+        outcome = kwargs.get("outcome")
         observations = kwargs.get("observations", [])
         run_id = kwargs.get("run_id", "")
+
+        if isinstance(outcome, CycleOutcome):
+            evaluated = outcome.child if outcome.decision.decision is GateDecision.ACCEPTED else outcome.parent
+            if evaluated is not None:
+                observations = list(evaluated.observations)
+                snapshot = evaluated.snapshot
 
         for obs in observations:
             bd = extract_behaviour_descriptor(obs)

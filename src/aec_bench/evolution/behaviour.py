@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 from aec_bench.contracts.evolution import BehaviourDescriptor, EvolutionObservation
+from aec_bench.evolution.evidence import require_evaluation
 
 
 def extract_behaviour_descriptor(obs: EvolutionObservation) -> BehaviourDescriptor:
@@ -20,7 +21,7 @@ def extract_behaviour_descriptor(obs: EvolutionObservation) -> BehaviourDescript
     else:
         token_cost = 0.0
 
-    reward = obs.trial.evaluation.reward
+    reward = require_evaluation(obs.trial).reward
 
     trace_digest = obs.enrichment.trace_digest
     if trace_digest is None or not trace_digest.bond_sequence:

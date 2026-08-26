@@ -7,6 +7,7 @@ from collections.abc import Callable, Sequence
 from typing import Any
 
 from aec_bench.contracts.evolution import EvolutionCycleRecord, EvolutionObservation
+from aec_bench.evolution.evidence import require_evaluation
 from aec_bench.evolution.graveyard import MutationGraveyard
 from aec_bench.evolution.prompts import _describe_error_direction
 
@@ -40,7 +41,7 @@ def build_evolver_toolset(
 
         lines: list[str] = [f"## Trace: {trial_id}"]
         lines.append(f"Discipline: {obs.discipline}")
-        lines.append(f"Reward: {obs.trial.evaluation.reward:.3f}")
+        lines.append(f"Reward: {require_evaluation(obs.trial).reward:.3f}")
 
         digest = obs.enrichment.trace_digest
         if digest is not None:
@@ -99,12 +100,13 @@ def build_evolver_toolset(
         lines: list[str] = [
             "## Evolution History",
             "",
-            "| Cycle | Score | Structural | Decision | Mutations |",
+            "| Cycle | Parent | Child | Decision | Mutations |",
             "| --- | --- | --- | --- | --- |",
         ]
 
         for record in history:
-            structural = f"{record.structural_score:.2f}" if record.structural_score is not None else "N/A"
+            parent = f"{record.parent_assessment.batch_score:.2f}"
+            child = f"{record.child_assessment.batch_score:.2f}" if record.child_assessment is not None else "-"
             mutation_parts: list[str] = []
             if record.mutation is not None:
                 m = record.mutation
@@ -117,10 +119,7 @@ def build_evolver_toolset(
                 if m.skills_removed:
                     mutation_parts.append(f"-{len(m.skills_removed)} skill(s)")
             mutations_str = ", ".join(mutation_parts) if mutation_parts else "none"
-            lines.append(
-                f"| {record.cycle} | {record.batch_score:.2f}"
-                f" | {structural} | {record.gate_decision} | {mutations_str} |"
-            )
+            lines.append(f"| {record.cycle} | {parent} | {child} | {record.gate_decision} | {mutations_str} |")
 
         lines.append("")
         lines.append("### Cycle Reasoning")
@@ -138,28 +137,28 @@ def build_evolver_toolset(
             return f"Cycle {cycle_number} not found. Available cycles: {available}"
 
         lines: list[str] = [f"## Cycle {record.cycle}"]
-        lines.append(f"Batch score: {record.batch_score:.3f}")
-        if record.structural_score is not None:
-            lines.append(f"Structural score: {record.structural_score:.3f}")
+        lines.append(f"Parent score: {record.parent_assessment.batch_score:.3f}")
+        if record.parent_assessment.structural_score is not None:
+            lines.append(f"Parent structural score: {record.parent_assessment.structural_score:.3f}")
+        if record.child_assessment is not None:
+            lines.append(f"Child score: {record.child_assessment.batch_score:.3f}")
+            if record.child_assessment.structural_score is not None:
+                lines.append(f"Child structural score: {record.child_assessment.structural_score:.3f}")
         lines.append(f"Gate decision: {record.gate_decision}")
-        lines.append(f"Candidate before: {record.candidate_id_before}")
-        lines.append(f"Candidate after: {record.candidate_id_after}")
+        lines.append(f"Gate reason: {record.gate_reason}")
+        lines.append(f"Parent candidate: {record.parent_assessment.candidate_id}")
+        lines.append(f"Active candidate after: {record.active_candidate_id_after}")
         lines.append(f"Timestamp: {record.timestamp.isoformat()}")
-        lines.append(f"Trials ({len(record.trial_ids)}): {', '.join(record.trial_ids)}")
+        parent_trials = record.parent_assessment.trial_ids
+        child_trials = record.child_assessment.trial_ids if record.child_assessment is not None else ()
+        lines.append(f"Parent trials ({len(parent_trials)}): {', '.join(parent_trials)}")
+        if child_trials:
+            lines.append(f"Child trials ({len(child_trials)}): {', '.join(child_trials)}")
 
-        if record.discipline_scores:
+        if record.parent_assessment.discipline_scores:
             lines.append("\n### Discipline Scores")
-            for ds in record.discipline_scores:
-                structural_sim = (
-                    f", structural similarity: {ds.mean_structural_similarity:.2f}"
-                    if ds.mean_structural_similarity is not None
-                    else ""
-                )
-                lines.append(
-                    f"- {ds.discipline}: reward={ds.mean_reward:.2f},"
-                    f" field pass rate={ds.field_pass_rate:.2f}"
-                    f"{structural_sim} ({ds.task_count} tasks)"
-                )
+            for discipline, score in record.parent_assessment.discipline_scores.items():
+                lines.append(f"- {discipline}: reward={score:.2f}")
 
         if record.mutation is not None:
             m = record.mutation

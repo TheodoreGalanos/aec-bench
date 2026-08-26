@@ -1849,6 +1849,26 @@ duplication = "unique"
 event = "trial execution started"
 
 [[field]]
+symbol = "aec_bench.evolution.graveyard.GraveyardEntry.timestamp"
+surface = "dataclass"
+wire_name = "timestamp"
+category = "event_time"
+domain_owner = "evolution"
+authority = "evolution_application"
+authoritative = true
+exposure = "persisted"
+status = "current"
+payload_contract = "one rejected evolution candidate graveyard entry"
+canonicalization = "timezone-aware datetime serialized with ISO 8601 notation"
+consumer = "evolution graveyard persistence and rescue selection"
+validation_behavior = "The application supplies the configured clock value when it rejects an evaluated child; older graveyard entries can omit the field"
+mismatch_behavior = "reject a malformed graveyard entry during loading"
+retention = "evolution_workspace_lifetime"
+rationale = "The field records when the exact rejected candidate entered the persisted graveyard."
+duplication = "unique"
+event = "evaluated evolution child rejected"
+
+[[field]]
 symbol = "aec_bench.experimentation.governance.critic_lifecycle.contracts.CriticRetirement.evaluation_outcome_sha256s"
 surface = "pydantic_model"
 wire_name = "evaluation_outcome_sha256s"

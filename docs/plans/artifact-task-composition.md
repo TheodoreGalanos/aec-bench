@@ -714,7 +714,7 @@ replace.
 Keep the current:
 
 - `EvolutionOrchestrator` and its `SolveFn` boundary;
-- `AECEvolutionEngine`;
+- the functional evolution coordinator;
 - `WorkspaceSnapshot` and snapshot serialization;
 - strategies, analysis, enrichment, archive, graveyard, and reporting;
 - swarm policy where it remains a current caller.

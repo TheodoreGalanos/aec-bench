@@ -18,7 +18,7 @@ from aec_bench.contracts.evolution import (
 from aec_bench.contracts.experiment_manifest import AgentConfig, ClientConfig, TaskSelector
 from aec_bench.evolution import application
 from aec_bench.evolution.application import (
-    _build_harbor_candidate_evaluator,
+    _build_harbor_candidate_runtime,
     run_evolution_from_config,
 )
 from aec_bench.generation.application import generate_template_instances, resolve_template
@@ -233,18 +233,19 @@ class TestBuildEvolutionRunnerRemoteExecution:
             ),
             backend="morph",
         )
-        evaluate = _build_harbor_candidate_evaluator(
+        planner, evaluate = _build_harbor_candidate_runtime(
             config=config,
             task_dirs=[task_dir],
             experiment_id="evo-current-harbor",
         )
 
+        batch = planner(1, 0)
         records = evaluate(
             WorkspaceSnapshot(
                 system_prompt="Use the evolved instructions.",
                 candidate_id="run:1",
             ),
-            1,
+            batch,
         )
 
         assert [item.model_dump(mode="json") for item in records] == [record.model_dump(mode="json")]
