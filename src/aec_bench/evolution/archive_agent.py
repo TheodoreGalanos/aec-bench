@@ -4,10 +4,11 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable
-from dataclasses import dataclass
+from collections.abc import Callable, Sequence
 
+from aec_bench.contracts.evolution import MutationStrategy
 from aec_bench.evolution.archive import QDArchive
+from aec_bench.evolution.core import SelectionPlan
 from aec_bench.evolution.graveyard import MutationGraveyard
 
 logger = logging.getLogger(__name__)
@@ -18,14 +19,16 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 
-@dataclass(frozen=True)
-class SelectionResult:
-    """The parent cell chosen by the archive-explorer agent."""
+# TODO(EF-01-T6): remove this alias when strategy.py no longer imports the old name.
+# It does not add a second result shape or a model-owned strategy field.
+SelectionResult = SelectionPlan
 
-    parent_candidate_id: str
-    inspiration_candidate_ids: list[str]
-    strategy: str
-    reasoning: str
+_STRATEGY_GOALS: dict[MutationStrategy, str] = {
+    MutationStrategy.CONSERVATIVE: "Apply a conservative mutation to the selected parent.",
+    MutationStrategy.EXPLORATORY: "Explore a less-covered archive region from the selected parent.",
+    MutationStrategy.CROSSOVER: "Combine material from the selected parent and inspirations.",
+    MutationStrategy.GRAVEYARD_RESCUE: "Recover a useful idea from a rejected graveyard candidate.",
+}
 
 
 # ---------------------------------------------------------------------------
@@ -246,49 +249,121 @@ def build_archive_tools(
 # ---------------------------------------------------------------------------
 
 
-def _parse_selection(text: str, shortlist: list[str]) -> SelectionResult:
-    """Parse the agent's free-text response for SELECTED/INSPIRATION/STRATEGY/REASON tags.
+def _resolvable_graveyard_candidate_ids(graveyard: MutationGraveyard) -> set[str]:
+    """Return graveyard IDs that have exact, identity-matching snapshots."""
+    candidate_ids: set[str] = set()
+    for entry in graveyard.browse(limit=graveyard.size):
+        snapshot = entry.rejected_snapshot
+        if snapshot is not None and snapshot.candidate_id == entry.candidate_id:
+            candidate_ids.add(snapshot.candidate_id)
+    return candidate_ids
 
-    Falls back to the first shortlist entry with 'conservative' strategy when the
-    expected tags are missing or the selected version is not in the shortlist.
+
+def _require_inspiration_limit(inspiration_limit: int) -> None:
+    if isinstance(inspiration_limit, bool) or not isinstance(inspiration_limit, int) or inspiration_limit < 0:
+        raise ValueError("inspiration_limit must be a non-negative integer")
+
+
+def _parse_selection(
+    text: str,
+    shortlist: Sequence[str],
+    strategy: MutationStrategy,
+    *,
+    graveyard: MutationGraveyard | None = None,
+    inspiration_limit: int,
+) -> SelectionPlan:
+    """Parse and validate the archive-agent response under host-owned intent.
+
+    The model may choose only IDs in the bounded shortlist. During graveyard
+    rescue, it may also choose an ID with an exact rejected snapshot. Strategy
+    remains host-owned and is never read from the model response.
     """
+    _require_inspiration_limit(inspiration_limit)
+    try:
+        selected_strategy = MutationStrategy(strategy)
+    except ValueError as exc:
+        raise ValueError(f"unsupported selected mutation strategy: {strategy!r}") from exc
+
+    allowed_parent_ids = tuple(shortlist)
+    if not allowed_parent_ids:
+        raise ValueError("archive selection requires a non-empty candidate shortlist")
+    if len(set(allowed_parent_ids)) != len(allowed_parent_ids):
+        raise ValueError("candidate shortlist IDs must be unique")
+    if any(not isinstance(candidate_id, str) or not candidate_id.strip() for candidate_id in allowed_parent_ids):
+        raise ValueError("candidate shortlist IDs must not be blank")
+
+    resolvable_graveyard_ids = (
+        _resolvable_graveyard_candidate_ids(graveyard)
+        if graveyard is not None and selected_strategy is MutationStrategy.GRAVEYARD_RESCUE
+        else set()
+    )
+    if selected_strategy is MutationStrategy.GRAVEYARD_RESCUE and not resolvable_graveyard_ids:
+        raise ValueError("graveyard_rescue requires a resolvable graveyard candidate")
+
     lines = text.splitlines()
 
     selected: str | None = None
     inspiration: list[str] = []
-    strategy = "conservative"
-    reason = ""
+    reason: str | None = None
+    reported_strategy: str | None = None
 
     for line in lines:
         stripped = line.strip()
         if stripped.startswith("SELECTED:"):
+            if selected is not None:
+                raise ValueError("archive agent returned repeated SELECTED fields")
             selected = stripped[len("SELECTED:") :].strip()
         elif stripped.startswith("INSPIRATION:"):
+            if inspiration:
+                raise ValueError("archive agent returned repeated INSPIRATION fields")
             raw = stripped[len("INSPIRATION:") :].strip()
-            inspiration = [v.strip() for v in raw.split(",") if v.strip()]
+            inspiration = [value.strip() for value in raw.split(",") if value.strip()]
+        elif stripped.startswith("GOAL:"):
+            raise ValueError("archive agent must not return a goal")
         elif stripped.startswith("STRATEGY:"):
-            strategy = stripped[len("STRATEGY:") :].strip()
+            if reported_strategy is not None:
+                raise ValueError("archive agent returned repeated STRATEGY fields")
+            reported_strategy = stripped[len("STRATEGY:") :].strip()
         elif stripped.startswith("REASON:"):
+            if reason is not None:
+                raise ValueError("archive agent returned repeated REASON fields")
             reason = stripped[len("REASON:") :].strip()
 
-    # Validate: selected must be non-empty and present in the shortlist
-    if not selected or selected not in shortlist:
-        fallback = shortlist[0] if shortlist else ""
-        logger.warning(
-            "Archive agent did not produce a valid SELECTED tag — falling back to %r",
-            fallback,
-        )
-        return SelectionResult(
-            parent_candidate_id=fallback,
-            inspiration_candidate_ids=[],
-            strategy="conservative",
-            reasoning="Fallback: agent output did not contain a valid SELECTED tag.",
-        )
+    if reported_strategy is not None:
+        try:
+            returned_strategy = MutationStrategy(reported_strategy)
+        except ValueError as exc:
+            raise ValueError("archive agent must not return a strategy") from exc
+        if returned_strategy is not selected_strategy:
+            raise ValueError(
+                f"archive agent changed the selected strategy from {selected_strategy.value!r} "
+                f"to {returned_strategy.value!r}"
+            )
+        raise ValueError("archive agent must not return a strategy")
 
-    return SelectionResult(
+    if not selected:
+        raise ValueError("archive agent response must contain a SELECTED candidate ID")
+    if selected not in allowed_parent_ids:
+        raise ValueError(f"archive agent selected parent outside the allowed candidate set: {selected!r}")
+    if len(inspiration) > inspiration_limit:
+        raise ValueError(f"archive agent returned {len(inspiration)} inspirations; limit is {inspiration_limit}")
+
+    allowed_inspiration_ids = set(allowed_parent_ids) | resolvable_graveyard_ids
+    unknown_inspirations = [candidate_id for candidate_id in inspiration if candidate_id not in allowed_inspiration_ids]
+    if unknown_inspirations:
+        raise ValueError(f"archive agent returned unknown inspiration IDs: {unknown_inspirations!r}")
+    if selected in inspiration:
+        raise ValueError("selection parent cannot also be an inspiration")
+    if len(inspiration) != len(set(inspiration)):
+        raise ValueError("selection inspiration candidate IDs must be unique")
+    if not reason:
+        raise ValueError("archive agent response must contain a non-empty REASON")
+
+    return SelectionPlan(
         parent_candidate_id=selected,
-        inspiration_candidate_ids=inspiration,
-        strategy=strategy,
+        inspiration_candidate_ids=tuple(inspiration),
+        strategy=selected_strategy,
+        goal=_STRATEGY_GOALS[selected_strategy],
         reasoning=reason,
     )
 
@@ -302,6 +377,10 @@ You are an archive-explorer agent choosing the best parent cell for the next \
 evolution mutation. You have tools to browse, compare, and inspect cells in \
 the quality-diversity archive and to read the graveyard of failed mutations.
 
+The host supplies the mutation strategy intent. You must choose only the \
+parent and inspiration IDs under that fixed intent. Do not return a strategy or \
+change it.
+
 Your goal is to select a parent workspace that maximises the chance of \
 producing a better offspring. Consider:
 - High-reward cells as safe conservative parents
@@ -313,7 +392,6 @@ Use the tools as needed, then end your response with EXACTLY:
 
 SELECTED: <candidate_id>
 INSPIRATION: <candidate_id>, <candidate_id>  (optional additional candidates that informed your choice)
-STRATEGY: conservative | exploratory | crossover | graveyard_rescue
 REASON: <one sentence explaining your choice>
 """
 
@@ -324,25 +402,22 @@ def run_archive_selection(
     graveyard: MutationGraveyard,
     shortlist: list[str],
     current_score: float,
-) -> SelectionResult:
+    strategy: MutationStrategy,
+    inspiration_limit: int,
+) -> SelectionPlan:
     """Run the archive-explorer agent to select a parent cell for mutation.
 
-    Builds archive tools, runs a PydanticAI agent with a 10-request budget,
-    parses the structured tail of the response, and falls back gracefully.
+    Builds archive tools over the supplied archive and graveyard, runs a
+    PydanticAI agent with a 10-request budget, and validates its response.
     """
     from pydantic_ai import Agent, UsageLimitExceeded, UsageLimits
     from pydantic_ai.tools import Tool
 
     from aec_bench.evolution.structured_evolver import _build_pydantic_model
 
+    _require_inspiration_limit(inspiration_limit)
     if not shortlist:
-        logger.warning("Empty shortlist passed to run_archive_selection — returning empty result")
-        return SelectionResult(
-            parent_candidate_id="",
-            inspiration_candidate_ids=[],
-            strategy="conservative",
-            reasoning="No shortlist provided.",
-        )
+        raise ValueError("archive selection requires a non-empty candidate shortlist")
 
     tools_dict = build_archive_tools(archive, graveyard)
     tools: list[Tool[None]] = [Tool[None](fn, name=name) for name, fn in tools_dict.items()]
@@ -359,17 +434,26 @@ def run_archive_selection(
     shortlist_text = "\n".join(f"- {v}" for v in shortlist)
     brief = (
         f"Current score: {current_score:.4f}\n\n"
+        f"Host-selected mutation strategy: {MutationStrategy(strategy).value}\n"
+        f"Maximum inspirations: {inspiration_limit}\n\n"
         f"Shortlisted candidate IDs:\n{shortlist_text}\n\n"
-        "Browse the archive, compare candidates, and select the best parent."
+        "Browse the archive, compare candidates, and select the best parent. "
+        "Do not return a strategy; the host owns that decision."
     )
 
-    raw_output = ""
     try:
         result = agent.run_sync(brief, usage_limits=UsageLimits(request_limit=10))
-        raw_output = result.output
-    except UsageLimitExceeded:
-        logger.warning("Archive selection agent hit request limit — using fallback")
-    except Exception:
-        logger.exception("Archive selection agent failed — using fallback")
+    except UsageLimitExceeded as exc:
+        raise RuntimeError("archive selection agent exceeded its request limit") from exc
+    except Exception as exc:
+        raise RuntimeError("archive selection agent failed") from exc
 
-    return _parse_selection(raw_output, shortlist)
+    if not isinstance(result.output, str):
+        raise ValueError("archive selection agent returned a non-text response")
+    return _parse_selection(
+        result.output,
+        shortlist,
+        strategy,
+        graveyard=graveyard,
+        inspiration_limit=inspiration_limit,
+    )
