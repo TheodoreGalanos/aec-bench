@@ -15,6 +15,7 @@ from aec_bench.contracts.evolution import (
     WorkspaceSnapshot,
 )
 from aec_bench.evolution.analysis import EvolutionAnalysis, GraduatedScope
+from aec_bench.evolution.convergence import is_converged
 from aec_bench.evolution.core import (
     CycleOutcome,
     EvaluatedCandidate,
@@ -24,7 +25,11 @@ from aec_bench.evolution.core import (
     VariationRequest,
     VariationResult,
     VariationStatus,
+    assess_candidate,
+    assessment_score,
     bind_evaluated_candidate,
+    decide_candidate,
+    reduce_evolution_state,
 )
 from tests.support.trial_record_factories import make_trial_record
 
@@ -65,6 +70,12 @@ def _candidate(candidate_id: str = "candidate-1") -> EvaluatedCandidate:
         observations,
         _assessment(candidate_id),
     )
+
+
+class _GateConfig:
+    improvement_threshold = 0.02
+    stagnation_window = 3
+    structural_weight = 0.3
 
 
 class TestCandidateAssessment:
@@ -232,3 +243,107 @@ class TestFunctionalEvolutionValues:
         assert state.best_score == pytest.approx(0.75)
         assert state.best_score_history == (0.75,)
         assert state.best_candidate_id == "candidate-1"
+
+
+class TestPureEvolutionPolicy:
+    def test_assessment_is_derived_from_exact_observations(self) -> None:
+        candidate = _candidate()
+        assessment = assess_candidate(
+            snapshot=candidate.snapshot,
+            observations=candidate.observations,
+            evaluation_case_ids=("case-1",),
+        )
+
+        assert assessment.candidate_id == candidate.snapshot.candidate_id
+        assert assessment.batch_score == pytest.approx(1.0)
+        assert assessment.trial_ids == ("trial-1",)
+        assert assessment.evaluation_case_ids == ("case-1",)
+        assert assessment.valid is True
+
+    def test_assessment_score_preserves_structural_weighting(self) -> None:
+        assert assessment_score(_assessment("candidate-1"), structural_weight=0.3) == pytest.approx(0.765)
+
+    def test_decision_rejects_unmatched_evaluation_cases(self) -> None:
+        parent = _candidate("parent")
+        child = bind_evaluated_candidate(
+            WorkspaceSnapshot(system_prompt="Child.", candidate_id="child"),
+            (_observation("child", "trial-1"),),
+            _assessment("child", evaluation_case_ids=("case-2",)),
+        )
+        variation = VariationResult(
+            VariationStatus.SUBMITTED,
+            child.snapshot,
+            MutationSummary(prompt_modified=True),
+            "submitted",
+            0.1,
+        )
+
+        with pytest.raises(ValueError, match="same evaluation cases"):
+            decide_candidate(
+                parent=parent,
+                child=child,
+                variation=variation,
+                state=EvolutionState.from_baseline(parent),
+                config=_GateConfig(),  # type: ignore[arg-type]
+            )
+
+    def test_gate_uses_child_evidence_and_state_reduction_is_repeatable(self) -> None:
+        parent = _candidate("parent")
+        child = bind_evaluated_candidate(
+            WorkspaceSnapshot(system_prompt="Child.", candidate_id="child"),
+            (_observation("child", "trial-1"),),
+            _assessment("child", structural_score=1.0),
+        )
+        variation = VariationResult(
+            VariationStatus.SUBMITTED,
+            child.snapshot,
+            MutationSummary(prompt_modified=True),
+            "submitted",
+            0.1,
+        )
+        baseline_state = EvolutionState.from_baseline(parent, structural_weight=0.3)
+        decision = decide_candidate(
+            parent=parent,
+            child=child,
+            variation=variation,
+            state=baseline_state,
+            config=_GateConfig(),  # type: ignore[arg-type]
+        )
+        reduced = reduce_evolution_state(state=baseline_state, parent=parent, child=child, decision=decision)
+
+        assert decision.decision is GateDecision.ACCEPTED
+        assert decision.effective_score == pytest.approx(0.825)
+        assert reduced.active_candidate_id == "child"
+        assert reduced.best_candidate_id == "child"
+        assert reduced.best_score == pytest.approx(0.825)
+        assert reduced == reduce_evolution_state(state=baseline_state, parent=parent, child=child, decision=decision)
+
+    def test_skipped_variation_does_not_advance_candidate_or_stagnation(self) -> None:
+        parent = _candidate("parent")
+        state = EvolutionState.from_baseline(parent)
+        variation = VariationResult(VariationStatus.ABSTAINED, None, None, "no change", 0.0)
+        decision = decide_candidate(
+            parent=parent,
+            child=None,
+            variation=variation,
+            state=state,
+            config=_GateConfig(),  # type: ignore[arg-type]
+        )
+        reduced = reduce_evolution_state(state=state, parent=parent, child=None, decision=decision)
+
+        assert decision.decision is GateDecision.SKIPPED
+        assert reduced.active_candidate_id == "parent"
+        assert reduced.best_candidate_id == "parent"
+        assert reduced.cycles_without_improvement == 0
+
+    def test_convergence_consumes_explicit_state(self) -> None:
+        state = EvolutionState(
+            cycle=3,
+            active_candidate_id="parent",
+            best_candidate_id="parent",
+            best_score=0.75,
+            cycles_without_improvement=2,
+            best_score_history=(0.75, 0.75, 0.76, 0.75),
+        )
+
+        assert is_converged(state, _GateConfig()) is True

@@ -12,6 +12,7 @@ from typing import Any
 
 from aec_bench.contracts.evolution import (
     CandidateAssessment,
+    EvolutionConfig,
     EvolutionCycleRecord,
     EvolutionObservation,
     GateDecision,
@@ -20,7 +21,8 @@ from aec_bench.contracts.evolution import (
     SelectionRecord,
     WorkspaceSnapshot,
 )
-from aec_bench.evolution.analysis import EvolutionAnalysis, GraduatedScope
+from aec_bench.contracts.trial_record import EvaluationStatus, ExecutionStatus
+from aec_bench.evolution.analysis import EvolutionAnalysis, GraduatedScope, compute_discipline_scores
 from aec_bench.evolution.graveyard import GraveyardEntry
 
 
@@ -199,16 +201,21 @@ class EvolutionState:
         object.__setattr__(self, "best_score_history", history)
 
     @classmethod
-    def from_baseline(cls, baseline: EvaluatedCandidate) -> EvolutionState:
-        """Create state from the baseline's exact assessment, not a default score."""
-        score = baseline.assessment.batch_score
+    def from_baseline(
+        cls,
+        baseline: EvaluatedCandidate,
+        *,
+        structural_weight: float = 0.0,
+    ) -> EvolutionState:
+        """Create state from the exact evaluated baseline rather than a default score."""
+        score = assessment_score(baseline.assessment, structural_weight=structural_weight)
         return cls(
             cycle=0,
             active_candidate_id=baseline.snapshot.candidate_id,
             best_candidate_id=baseline.snapshot.candidate_id,
             best_score=score,
             cycles_without_improvement=0,
-            best_score_history=(score,),
+            best_score_history=(baseline.assessment.batch_score,),
         )
 
 
@@ -218,9 +225,16 @@ class GateResult:
 
     decision: GateDecision
     reason: str
+    effective_score: float | None = None
+    improved: bool = False
+    cycles_without_improvement: int | None = None
 
     def __post_init__(self) -> None:
         _require_text(self.reason, "gate reason")
+        if self.effective_score is not None and not math.isfinite(self.effective_score):
+            raise ValueError("gate effective_score must be finite")
+        if self.cycles_without_improvement is not None and self.cycles_without_improvement < 0:
+            raise ValueError("gate stagnation counter must be non-negative")
 
 
 @dataclass(frozen=True)
@@ -266,3 +280,174 @@ class CycleOutcome:
             timestamp=timestamp,
             evolver_cost_usd=self.variation.model_cost_usd,
         )
+
+
+def assessment_score(assessment: CandidateAssessment, *, structural_weight: float) -> float:
+    """Return the configured gate score for one candidate assessment."""
+    if not math.isfinite(structural_weight) or not 0.0 <= structural_weight <= 1.0:
+        raise ValueError("structural_weight must be finite and between 0.0 and 1.0")
+    if assessment.structural_score is None:
+        return assessment.batch_score
+    return assessment.batch_score * (1.0 - structural_weight) + assessment.structural_score * structural_weight
+
+
+def assess_candidate(
+    *,
+    snapshot: WorkspaceSnapshot,
+    observations: tuple[EvolutionObservation, ...],
+    evaluation_case_ids: tuple[str, ...] | None = None,
+) -> CandidateAssessment:
+    """Derive one deterministic assessment from a candidate's observations."""
+    if not observations:
+        raise ValueError("candidate assessment evidence must not be empty")
+
+    candidate_id = snapshot.candidate_id
+    trial_ids = tuple(observation.trial.trial_id for observation in observations)
+    if len(trial_ids) != len(set(trial_ids)):
+        raise ValueError("candidate assessment trial IDs must be unique")
+    for observation in observations:
+        _validate_observation_candidate(observation, candidate_id)
+
+    case_ids = (
+        tuple(evaluation_case_ids)
+        if evaluation_case_ids is not None
+        else tuple(f"{observation.trial.task_id}#attempt-{observation.trial.attempt}" for observation in observations)
+    )
+    if len(case_ids) != len(observations):
+        raise ValueError("evaluation_case_ids must match the observation count")
+
+    rewards: list[float] = []
+    structural_scores: list[float] = []
+    invalid_reasons: list[str] = []
+    for observation in observations:
+        trial = observation.trial
+        evaluation = trial.evaluation
+        if evaluation is None:
+            invalid_reasons.append(f"trial {trial.trial_id} has no evaluation result")
+            continue
+        rewards.append(evaluation.reward)
+        if trial.execution_status is not ExecutionStatus.COMPLETED:
+            invalid_reasons.append(f"trial {trial.trial_id} execution is not completed")
+        if trial.evaluation_status is not EvaluationStatus.COMPLETED:
+            invalid_reasons.append(f"trial {trial.trial_id} evaluation is not completed")
+        if not evaluation.validity.output_parseable:
+            invalid_reasons.append(f"trial {trial.trial_id} output is not parseable")
+        if not evaluation.validity.schema_valid:
+            invalid_reasons.append(f"trial {trial.trial_id} output schema is invalid")
+        if not evaluation.validity.verifier_completed:
+            invalid_reasons.append(f"trial {trial.trial_id} verifier did not complete")
+        if observation.enrichment.structural_score is not None:
+            structural_scores.append(observation.enrichment.structural_score.cosine_similarity)
+
+    if not rewards:
+        raise ValueError("candidate assessment evidence has no evaluation results")
+    scored_observations = tuple(observation for observation in observations if observation.trial.evaluation is not None)
+    discipline_scores = compute_discipline_scores(scored_observations)
+    return CandidateAssessment(
+        candidate_id=candidate_id,
+        batch_score=sum(rewards) / len(rewards),
+        discipline_scores={item.discipline: item.mean_reward for item in discipline_scores},
+        trial_ids=trial_ids,
+        evaluation_case_ids=case_ids,
+        valid=not invalid_reasons,
+        structural_score=(sum(structural_scores) / len(structural_scores) if structural_scores else None),
+        invalid_reasons=tuple(invalid_reasons),
+    )
+
+
+def decide_candidate(
+    *,
+    parent: EvaluatedCandidate,
+    child: EvaluatedCandidate | None,
+    variation: VariationResult,
+    state: EvolutionState,
+    config: EvolutionConfig,
+) -> GateResult:
+    """Apply configured acceptance and stagnation policy without side effects."""
+    if variation.status is not VariationStatus.SUBMITTED:
+        reason = {
+            VariationStatus.ABSTAINED: "variation abstained",
+            VariationStatus.BUDGET_EXHAUSTED: "variation budget exhausted",
+        }[variation.status]
+        return GateResult(
+            decision=GateDecision.SKIPPED,
+            reason=reason,
+            cycles_without_improvement=state.cycles_without_improvement,
+        )
+    if child is None or variation.child is None:
+        raise ValueError("submitted variation requires an evaluated child")
+    if child.snapshot.candidate_id != variation.child.candidate_id:
+        raise ValueError("evaluated child must match the submitted variation child")
+    if child.snapshot.candidate_id == parent.snapshot.candidate_id:
+        raise ValueError("submitted child candidate_id must differ from the parent")
+    if parent.assessment.evaluation_case_ids != child.assessment.evaluation_case_ids:
+        raise ValueError("parent and child must use the same evaluation cases")
+    if not child.assessment.valid:
+        reasons = "; ".join(child.assessment.invalid_reasons)
+        count = state.cycles_without_improvement + 1
+        return GateResult(
+            decision=GateDecision.REJECTED,
+            reason=f"child evaluation is invalid: {reasons}",
+            effective_score=assessment_score(child.assessment, structural_weight=config.structural_weight),
+            cycles_without_improvement=count,
+        )
+
+    score = assessment_score(child.assessment, structural_weight=config.structural_weight)
+    improved = score > state.best_score + config.improvement_threshold
+    stagnation_count = 0 if improved else state.cycles_without_improvement + 1
+    if stagnation_count >= config.stagnation_window:
+        return GateResult(
+            decision=GateDecision.REJECTED,
+            reason=f"stagnation for {stagnation_count} cycles without improvement",
+            effective_score=score,
+            improved=improved,
+            cycles_without_improvement=stagnation_count,
+        )
+    return GateResult(
+        decision=GateDecision.ACCEPTED,
+        reason=f"candidate score {score:.3f} passed the configured gate",
+        effective_score=score,
+        improved=improved,
+        cycles_without_improvement=stagnation_count,
+    )
+
+
+def reduce_evolution_state(
+    *,
+    state: EvolutionState,
+    parent: EvaluatedCandidate,
+    child: EvaluatedCandidate | None,
+    decision: GateResult,
+) -> EvolutionState:
+    """Return the next explicit search state for one exact cycle outcome."""
+    if decision.decision is GateDecision.SKIPPED:
+        active_candidate_id = state.active_candidate_id
+    elif child is not None and decision.decision is GateDecision.ACCEPTED:
+        active_candidate_id = child.snapshot.candidate_id
+    else:
+        active_candidate_id = parent.snapshot.candidate_id
+
+    best_candidate_id = state.best_candidate_id
+    best_score = state.best_score
+    if child is not None and decision.improved and decision.effective_score is not None:
+        best_candidate_id = child.snapshot.candidate_id
+        best_score = decision.effective_score
+
+    if decision.cycles_without_improvement is None:
+        stagnation_count = (
+            state.cycles_without_improvement
+            if decision.decision is GateDecision.SKIPPED
+            else state.cycles_without_improvement + (0 if decision.improved else 1)
+        )
+    else:
+        stagnation_count = decision.cycles_without_improvement
+
+    current_assessment = child.assessment if child is not None else parent.assessment
+    return EvolutionState(
+        cycle=state.cycle + 1,
+        active_candidate_id=active_candidate_id,
+        best_candidate_id=best_candidate_id,
+        best_score=best_score,
+        cycles_without_improvement=stagnation_count,
+        best_score_history=(*state.best_score_history, current_assessment.batch_score),
+    )
