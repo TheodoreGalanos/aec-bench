@@ -1,5 +1,5 @@
-# ABOUTME: Tests for swarm state reconstruction from event log replay.
-# ABOUTME: Verifies budget, eval count, and best score recovery from JSONL events.
+# ABOUTME: Tests explicit swarm-state loading and exact candidate-material validation.
+# ABOUTME: Verifies that event logs remain diagnostic and are not the resume authority.
 
 from __future__ import annotations
 

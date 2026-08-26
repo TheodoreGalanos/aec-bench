@@ -39,9 +39,6 @@ def _make_config(agent_count: int = 2, max_cost: float = 10.0, eval_budget: floa
     )
 
 
-_call_counter = 0
-
-
 class FakeEvolverFactory:
     """Creates fake evolvers that return predetermined scores."""
 
