@@ -1,10 +1,12 @@
 # ABOUTME: Tests for the QDArchive — CVT-MAP-Elites archive for harness evolution.
 # ABOUTME: Verifies insert, query, projection, and summary operations.
 
+from dataclasses import FrozenInstanceError
+
 import pytest
 
 from aec_bench.contracts.evolution import BehaviourDescriptor, WorkspaceSnapshot
-from aec_bench.evolution.archive import QDArchive
+from aec_bench.evolution.archive import ArchiveInsertionStatus, QDArchive
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -54,8 +56,9 @@ def test_archive_starts_empty() -> None:
 
 def test_insert_increases_size() -> None:
     archive = QDArchive(n_centroids=50, seed=0)
-    accepted = archive.insert(bd=_make_bd(), snapshot=_make_snapshot("v1"))
-    assert accepted is True
+    result = archive.insert(bd=_make_bd(), snapshot=_make_snapshot("v1"))
+    assert result.status is ArchiveInsertionStatus.NEW_CELL
+    assert result.candidate_id == "v1"
     assert archive.size == 1
 
 
@@ -68,8 +71,9 @@ def test_insert_better_replaces_worse_at_same_cell() -> None:
     size_after_first = archive.size
 
     # Insert with the exact same measures but higher reward — must replace.
-    accepted = archive.insert(bd=bd_strong, snapshot=_make_snapshot("v_strong"))
-    assert accepted is True
+    result = archive.insert(bd=bd_strong, snapshot=_make_snapshot("v_strong"))
+    assert result.status is ArchiveInsertionStatus.IMPROVED
+    assert result.displaced_candidate_id == "v_weak"
     assert archive.size == size_after_first  # same cell, no growth
 
 
@@ -79,8 +83,10 @@ def test_insert_worse_does_not_replace() -> None:
     bd_weak = _make_bd(reward=0.3)
 
     archive.insert(bd=bd_strong, snapshot=_make_snapshot("v_strong"))
-    accepted = archive.insert(bd=bd_weak, snapshot=_make_snapshot("v_weak"))
-    assert accepted is False
+    result = archive.insert(bd=bd_weak, snapshot=_make_snapshot("v_weak"))
+    assert result.status is ArchiveInsertionStatus.NOT_ADDED
+    assert result.candidate_id == "v_weak"
+    assert result.displaced_candidate_id is None
 
 
 # ---------------------------------------------------------------------------
@@ -134,6 +140,26 @@ def test_query_nearest_returns_snapshot() -> None:
     result = archive.query_nearest(bd=_make_bd())
     assert result is not None
     assert result.candidate_id == "v_query"
+
+
+def test_view_is_an_exact_immutable_archive_projection() -> None:
+    archive = QDArchive(n_centroids=50, seed=0)
+    archive.insert(bd=_make_bd(), snapshot=_make_snapshot("v1"))
+
+    view = archive.view()
+    assert view.size == 1
+    assert view.entries[0].snapshot.candidate_id == "v1"
+    assert isinstance(view.entries, tuple)
+    assert view.top_k(1)[0].cell_index == view.entries[0].cell_index
+    with pytest.raises(FrozenInstanceError):
+        view.entries = ()  # type: ignore[misc]
+
+    archive.insert(
+        bd=_make_bd(token_cost=500_000.0, reward=0.9),
+        snapshot=_make_snapshot("v2"),
+    )
+    assert view.size == 1
+    assert tuple(entry.snapshot.candidate_id for entry in view.entries) == ("v1",)
 
 
 # ---------------------------------------------------------------------------

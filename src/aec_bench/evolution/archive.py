@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
+from enum import StrEnum
 from pathlib import Path
 from typing import TypedDict
 
@@ -14,15 +15,144 @@ from ribs.archives import CVTArchive
 from aec_bench.contracts.evolution import BehaviourDescriptor, WorkspaceSnapshot
 
 
+class ArchiveInsertionStatus(StrEnum):
+    """Outcome of inserting one descriptor and candidate into the archive."""
+
+    NOT_ADDED = "not_added"
+    IMPROVED = "improved"
+    NEW_CELL = "new_cell"
+
+
+_PYRIBS_STATUS_MAP: dict[int, ArchiveInsertionStatus] = {
+    0: ArchiveInsertionStatus.NOT_ADDED,
+    1: ArchiveInsertionStatus.IMPROVED,
+    2: ArchiveInsertionStatus.NEW_CELL,
+}
+
+
+@dataclass(frozen=True)
+class ArchiveInsertionResult:
+    """Immutable result for one archive insertion operation."""
+
+    status: ArchiveInsertionStatus
+    candidate_id: str
+    cell_index: int | None
+    displaced_candidate_id: str | None
+
+    @property
+    def added(self) -> bool:
+        """Whether this insertion occupied or improved an archive cell."""
+        return self.status is not ArchiveInsertionStatus.NOT_ADDED
+
+    def __post_init__(self) -> None:
+        try:
+            status = ArchiveInsertionStatus(self.status)
+        except ValueError as exc:
+            raise ValueError(f"unsupported archive insertion status: {self.status!r}") from exc
+        object.__setattr__(self, "status", status)
+        if not isinstance(self.candidate_id, str) or not self.candidate_id.strip():
+            raise ValueError("candidate_id must not be blank")
+        if self.cell_index is not None and (isinstance(self.cell_index, bool) or self.cell_index < 0):
+            raise ValueError("cell_index must be a non-negative integer or None")
+        if self.cell_index is not None and not isinstance(self.cell_index, int):
+            raise ValueError("cell_index must be a non-negative integer or None")
+        if self.displaced_candidate_id is not None:
+            if not isinstance(self.displaced_candidate_id, str) or not self.displaced_candidate_id.strip():
+                raise ValueError("displaced_candidate_id must not be blank when provided")
+
+
+@dataclass(frozen=True)
+class ArchiveBatchOutcome:
+    """Immutable outcomes for inserting one candidate's descriptors."""
+
+    candidate_id: str
+    insertions: tuple[ArchiveInsertionResult, ...]
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.candidate_id, str) or not self.candidate_id.strip():
+            raise ValueError("candidate_id must not be blank")
+        insertions = tuple(self.insertions)
+        if any(result.candidate_id != self.candidate_id for result in insertions):
+            raise ValueError("archive insertion candidate_id must match the batch candidate_id")
+        object.__setattr__(self, "insertions", insertions)
+
+    @property
+    def added(self) -> bool:
+        """Whether at least one descriptor entered or improved an archive cell."""
+        return any(
+            result.status in (ArchiveInsertionStatus.IMPROVED, ArchiveInsertionStatus.NEW_CELL)
+            for result in self.insertions
+        )
+
+
 @dataclass(frozen=True)
 class ArchiveEntry:
     """A single elite stored in the QD archive with provenance metadata."""
 
     snapshot: WorkspaceSnapshot
     bd: BehaviourDescriptor
+    cell_index: int
     task_ids: tuple[str, ...] = ()
     discipline: str = ""
     run_id: str = ""
+
+
+@dataclass(frozen=True)
+class ArchiveView:
+    """Exact immutable projection of the occupied archive cells for search."""
+
+    entries: tuple[ArchiveEntry, ...]
+    n_centroids: int
+
+    def __post_init__(self) -> None:
+        entries = tuple(self.entries)
+        if self.n_centroids < 0:
+            raise ValueError("archive view n_centroids must be non-negative")
+        if len({entry.cell_index for entry in entries}) != len(entries):
+            raise ValueError("archive view entries must have unique cell indices")
+        if any(entry.cell_index >= self.n_centroids for entry in entries):
+            raise ValueError("archive view entry cell_index must be within n_centroids")
+        object.__setattr__(self, "entries", entries)
+
+    @property
+    def size(self) -> int:
+        """Number of occupied cells in this view."""
+        return len(self.entries)
+
+    def top_k(self, k: int = 5) -> tuple[ArchiveEntry, ...]:
+        """Return entries sorted by reward without touching archive state."""
+        return tuple(sorted(self.entries, key=lambda entry: entry.bd.reward, reverse=True)[:k])
+
+    def frontier(self, k: int = 5) -> tuple[ArchiveEntry, ...]:
+        """Return diverse high-performing entries without touching archive state."""
+        entries = self.top_k(len(self.entries))
+        if not entries:
+            return ()
+        selected = [entries[0]]
+        remaining = list(entries[1:])
+        while len(selected) < min(k, len(entries)) and remaining:
+            selected_vectors = np.array([_bd_to_normalised(entry.bd) for entry in selected])
+            best = max(
+                remaining,
+                key=lambda entry: float(np.linalg.norm(selected_vectors - _bd_to_normalised(entry.bd), axis=1).min()),
+            )
+            selected.append(best)
+            remaining.remove(best)
+        return tuple(selected)
+
+    def get_entry_by_candidate_id(self, candidate_id: str) -> ArchiveEntry | None:
+        """Return an entry by candidate identity."""
+        return next((entry for entry in self.entries if entry.snapshot.candidate_id == candidate_id), None)
+
+    def coverage_report(self) -> ArchiveCoverage:
+        """Return occupancy statistics for this immutable view."""
+        occupied = self.size
+        return {
+            "occupied": occupied,
+            "empty": self.n_centroids - occupied,
+            "coverage": occupied / self.n_centroids if self.n_centroids else 0.0,
+            "total_centroids": self.n_centroids,
+        }
 
 
 class ArchiveCoverage(TypedDict):
@@ -95,6 +225,7 @@ class QDArchive:
 
     def __init__(self, n_centroids: int = 200, seed: int = 42) -> None:
         self._n_centroids = n_centroids
+        self._seed = seed
         self._archive = CVTArchive(
             solution_dim=1,
             centroids=n_centroids,
@@ -117,15 +248,19 @@ class QDArchive:
         task_ids: tuple[str, ...] = (),
         discipline: str = "",
         run_id: str = "",
-    ) -> bool:
+    ) -> ArchiveInsertionResult:
         """Add a workspace snapshot to the archive.
 
-        Returns True if the entry was accepted (new cell) or improved an existing
-        cell's objective. Returns False when the cell already holds a better elite.
+        The returned value preserves whether this was a new cell, an improvement,
+        or a rejection. The snapshot is stored directly as the candidate material;
+        the archive does not create a second candidate representation.
+
         Task metadata (task_ids, discipline, run_id) is stored alongside the entry
         for filtering and provenance.
         """
         measures = _bd_to_array(bd).reshape(1, -1)
+        cell_index = int(self._archive.index_of(measures)[0])
+        previous = self._entries.get(cell_index)
         result = self._archive.add(
             solution=np.array([[0.0]]),
             objective=np.array([bd.reward]),
@@ -134,16 +269,36 @@ class QDArchive:
         status = int(result["status"][0])
         # status 0 = not added, 1 = improved, 2 = new cell
         if status in (1, 2):
-            index = int(self._archive.index_of(measures)[0])
-            self._entries[index] = ArchiveEntry(
+            self._entries[cell_index] = ArchiveEntry(
                 snapshot=snapshot,
                 bd=bd,
+                cell_index=cell_index,
                 task_ids=task_ids,
                 discipline=discipline,
                 run_id=run_id,
             )
-            return True
-        return False
+        try:
+            insertion_status = _PYRIBS_STATUS_MAP[status]
+        except KeyError as exc:
+            raise RuntimeError(f"unsupported pyribs archive insertion status: {status}") from exc
+        displaced_candidate_id = (
+            previous.snapshot.candidate_id
+            if insertion_status is ArchiveInsertionStatus.IMPROVED and previous is not None
+            else None
+        )
+        return ArchiveInsertionResult(
+            status=insertion_status,
+            candidate_id=snapshot.candidate_id,
+            cell_index=cell_index,
+            displaced_candidate_id=displaced_candidate_id,
+        )
+
+    def view(self) -> ArchiveView:
+        """Return an exact immutable projection for pure search functions."""
+        return ArchiveView(
+            entries=tuple(self._entries[index] for index in sorted(self._entries)),
+            n_centroids=self._n_centroids,
+        )
 
     def query_nearest(self, bd: BehaviourDescriptor) -> WorkspaceSnapshot | None:
         """Retrieve the snapshot at the cell nearest to the given BD.
@@ -372,6 +527,7 @@ class QDArchive:
         for entry in self._entries.values():
             entries.append(
                 {
+                    "cell_index": entry.cell_index,
                     "bd": entry.bd.model_dump(),
                     "snapshot": entry.snapshot.model_dump(),
                     "objective": entry.bd.reward,
@@ -380,7 +536,7 @@ class QDArchive:
                     "run_id": entry.run_id,
                 }
             )
-        payload = {"n_centroids": self._n_centroids, "entries": entries}
+        payload = {"n_centroids": self._n_centroids, "seed": self._seed, "entries": entries}
         path.write_text(json.dumps(payload, indent=2, default=str), encoding="utf-8")
 
     @classmethod
@@ -393,7 +549,7 @@ class QDArchive:
         if not path.exists():
             return cls()
         data = json.loads(path.read_text(encoding="utf-8"))
-        archive = cls(n_centroids=data["n_centroids"])
+        archive = cls(n_centroids=data["n_centroids"], seed=data.get("seed", 42))
         for entry in data["entries"]:
             bd = BehaviourDescriptor(**entry["bd"])
             snapshot = WorkspaceSnapshot(**entry["snapshot"])

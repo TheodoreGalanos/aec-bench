@@ -461,7 +461,18 @@ class EvolutionConfig(StrictModel):
     timeout: PositiveInt = 1800
     harness_config: str | None = None
     strategy: Literal["hill_climb", "qd"] = "hill_climb"
+    qd_seed: int = 42
+    qd_n_centroids: PositiveInt = 200
+    qd_shortlist_size: PositiveInt = 5
+    qd_inspiration_limit: int = 2
     generate: TaskGenerateConfig | None = None
+
+    @field_validator("qd_seed", "qd_inspiration_limit")
+    @classmethod
+    def validate_qd_non_negative(cls, value: int) -> int:
+        if isinstance(value, bool) or value < 0:
+            raise ValueError("QD seed and inspiration limit must be non-negative")
+        return value
 
 
 class WorkspaceReadRequest(StrictModel):

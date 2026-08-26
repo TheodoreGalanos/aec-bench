@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import tempfile
 from collections.abc import Callable, Sequence
@@ -26,17 +27,19 @@ from aec_bench.evolution.analysis import (
     compute_graduated_scope,
     detect_behavioral_patterns,
 )
+from aec_bench.evolution.archive import ArchiveBatchOutcome, ArchiveView, QDArchive
+from aec_bench.evolution.archive_agent import run_archive_selection
 from aec_bench.evolution.core import (
     CycleOutcome,
     EvaluatedCandidate,
     EvolutionState,
+    ResolvedSelection,
     SelectionPlan,
     VariationRequest,
     VariationResult,
     VariationStatus,
     assessment_score,
     decide_candidate,
-    rebase_evolution_state_for_parent,
     reduce_evolution_state,
 )
 from aec_bench.evolution.enrichment import enrich_observations
@@ -49,7 +52,16 @@ from aec_bench.evolution.evaluation import (
     build_candidate_assessment,
 )
 from aec_bench.evolution.graveyard import GraveyardEntry, MutationGraveyard
-from aec_bench.evolution.strategy import HillClimbStrategy, SelectionStrategy
+from aec_bench.evolution.selection import (
+    CellSelectionStat,
+    CellSelectionState,
+    QDState,
+    StrategyBanditState,
+    select_mutation_strategy,
+    shortlist_cells,
+    update_cell_selection_state,
+    update_strategy_bandit_state,
+)
 from aec_bench.evolution.variation import run_structured_variation
 from aec_bench.evolution.workspace import Workspace
 from aec_bench.generation.application import generate_template_instances, resolve_template
@@ -60,6 +72,7 @@ ReportWriter = Callable[[Path], Path]
 CandidateIdFactory = Callable[[str, int], str]
 VariationOperator = Callable[[VariationRequest, Workspace, str], VariationResult]
 ObservationEnricher = Callable[[Sequence[EvolutionObservation]], Sequence[EvolutionObservation]]
+ArchiveAgent = Callable[[str, ArchiveView, MutationGraveyard, list[str], float, MutationStrategy, int], SelectionPlan]
 
 
 @dataclass(frozen=True)
@@ -70,6 +83,7 @@ class EvolutionCycleExecution:
     record: EvolutionCycleRecord
     state: EvolutionState
     score: float
+    archive_outcome: ArchiveBatchOutcome | None = None
 
 
 def _execute_evolution_cycle(
@@ -77,7 +91,6 @@ def _execute_evolution_cycle(
     workspace: Workspace,
     config: EvolutionConfig,
     evaluate: CandidateEvaluator,
-    strategy: SelectionStrategy,
     batch_planner: CandidateBatchPlanner,
     variation: VariationOperator,
     enrich: ObservationEnricher,
@@ -86,28 +99,31 @@ def _execute_evolution_cycle(
     snapshots: dict[str, WorkspaceSnapshot],
     cycle: int,
     state: EvolutionState | None,
-    selection: SelectionPlan,
+    resolved_selection: ResolvedSelection,
     run_id: str,
     now: Callable[[], datetime],
     candidate_id_factory: CandidateIdFactory,
+    archive: QDArchive | None = None,
+    planned_batch: CandidateEvaluationBatch | None = None,
+    evaluated_parent: EvaluatedCandidate | None = None,
 ) -> EvolutionCycleExecution:
     """Execute one cycle through the same functional path as ``run_evolution``.
 
     This narrow boundary lets provider-free swarm callers share the canonical
     candidate/evidence lifecycle without reviving a stateful engine.
     """
-    parent_snapshot = _resolve_snapshot(selection.parent_candidate_id, snapshots, strategy)
-    batch = batch_planner(config.batch_size, cycle - 1)
-    parent = bind_candidate_evaluation(parent_snapshot, batch, evaluate(parent_snapshot, batch))
-    parent = _enrich_candidate(parent, batch, enrich)
+    selection = resolved_selection.plan
+    parent_snapshot = resolved_selection.parent
+    batch = planned_batch or batch_planner(config.batch_size, cycle - 1)
+    parent = evaluated_parent
+    if parent is None or parent.snapshot.candidate_id != parent_snapshot.candidate_id:
+        parent = bind_candidate_evaluation(parent_snapshot, batch, evaluate(parent_snapshot, batch))
+        parent = _enrich_candidate(parent, batch, enrich)
     if state is None:
         state = EvolutionState.from_baseline(parent, structural_weight=config.structural_weight)
-    state = rebase_evolution_state_for_parent(state, parent, structural_weight=config.structural_weight)
 
     analysis = _build_analysis(parent, state)
-    inspirations = tuple(
-        _resolve_snapshot(candidate_id, snapshots, strategy) for candidate_id in selection.inspiration_candidate_ids
-    )
+    inspirations = resolved_selection.inspirations
     request = VariationRequest(
         selection=selection,
         parent=parent,
@@ -137,6 +153,38 @@ def _execute_evolution_cycle(
         state=state,
         config=config,
     )
+    archive_outcome: ArchiveBatchOutcome | None = None
+    if archive is not None and child is not None and child.assessment.valid:
+        from aec_bench.evolution.behaviour import extract_behaviour_descriptor
+
+        insertions = tuple(
+            archive.insert(
+                extract_behaviour_descriptor(observation),
+                child.snapshot,
+                task_ids=(observation.trial.task.task_id,),
+                discipline=observation.discipline,
+                run_id=run_id,
+            )
+            for observation in child.observations
+        )
+        archive_outcome = ArchiveBatchOutcome(candidate_id=child.snapshot.candidate_id, insertions=insertions)
+        if archive_outcome.added:
+            score = assessment_score(child.assessment, structural_weight=config.structural_weight)
+            global_improved = score > state.best_score + config.improvement_threshold
+            decision = replace(
+                decision,
+                decision=GateDecision.ACCEPTED,
+                reason="candidate entered or improved a quality-diversity archive cell",
+                effective_score=score,
+                improved=global_improved,
+                cycles_without_improvement=0 if global_improved else state.cycles_without_improvement + 1,
+            )
+        else:
+            decision = replace(
+                decision,
+                decision=GateDecision.REJECTED,
+                reason="candidate did not enter or improve a quality-diversity archive cell",
+            )
     next_state = reduce_evolution_state(state=state, parent=parent, child=child, decision=decision)
     outcome = CycleOutcome(
         cycle=cycle,
@@ -179,16 +227,13 @@ def _execute_evolution_cycle(
         (child if decision.decision is GateDecision.ACCEPTED and child is not None else parent).assessment,
         structural_weight=config.structural_weight,
     )
-    _notify_strategy(
-        strategy,
+    return EvolutionCycleExecution(
         outcome=outcome,
-        cycle_record=record,
-        snapshot=child.snapshot if decision.decision is GateDecision.ACCEPTED and child else parent.snapshot,
-        score_history=_project_score_history((*history, record), config),
-        graveyard=graveyard,
-        run_id=run_id,
+        record=record,
+        state=next_state,
+        score=score,
+        archive_outcome=archive_outcome,
     )
-    return EvolutionCycleExecution(outcome=outcome, record=record, state=next_state, score=score)
 
 
 def run_evolution(
@@ -196,7 +241,6 @@ def run_evolution(
     workspace: Workspace,
     config: EvolutionConfig,
     evaluate: CandidateEvaluator,
-    strategy: SelectionStrategy,
     batch_planner: CandidateBatchPlanner,
     variation: VariationOperator,
     enrich: ObservationEnricher,
@@ -204,6 +248,7 @@ def run_evolution(
     clock: Callable[[], datetime] | None = None,
     run_id: str | None = None,
     candidate_id_factory: CandidateIdFactory | None = None,
+    archive_agent: ArchiveAgent | None = None,
 ) -> EvolutionResult:
     """Run one functional evolution loop.
 
@@ -219,22 +264,58 @@ def run_evolution(
     history: list[EvolutionCycleRecord] = []
     snapshots: dict[str, WorkspaceSnapshot] = {"baseline": workspace.export_snapshot("baseline")}
     state: EvolutionState | None = None
-    pending_selection: SelectionPlan | None = None
+
+    baseline_batch = batch_planner(config.batch_size, 0)
+    baseline = bind_candidate_evaluation(
+        snapshots["baseline"], baseline_batch, evaluate(snapshots["baseline"], baseline_batch)
+    )
+    baseline = _enrich_candidate(baseline, baseline_batch, enrich)
+    state = EvolutionState.from_baseline(baseline, structural_weight=config.structural_weight)
+
+    archive: QDArchive | None = None
+    qd_state: QDState | None = None
+    if config.strategy == "qd":
+        archive_path = workspace.root / "archive.json"
+        archive = (
+            QDArchive.load(archive_path)
+            if archive_path.exists()
+            else QDArchive(n_centroids=config.qd_n_centroids, seed=config.qd_seed)
+        )
+        _insert_candidate_descriptors(archive, baseline, run_id=resolved_run_id)
+        qd_state = _load_qd_state(workspace.root / "qd_state.json")
+        if qd_state is None:
+            qd_state = _initial_qd_state(archive)
+        _add_archive_snapshots(archive, snapshots)
+        _add_graveyard_snapshots(graveyard, snapshots)
+    starting_cycle = qd_state.cycle if qd_state is not None else 0
 
     for cycle_index in range(config.max_cycles):
-        cycle = cycle_index + 1
-        selection = pending_selection or SelectionPlan(
-            parent_candidate_id="baseline",
-            inspiration_candidate_ids=(),
-            strategy=MutationStrategy.CONSERVATIVE,
-            goal="Improve the selected agent workspace against the configured evaluation batch.",
-            reasoning="Start from the baseline candidate.",
-        )
+        cycle = starting_cycle + cycle_index + 1
+        if config.strategy == "qd":
+            assert archive is not None and qd_state is not None
+            _add_graveyard_snapshots(graveyard, snapshots)
+            selection, parent_cell_index = _select_qd_plan(
+                archive=archive,
+                graveyard=graveyard,
+                state=qd_state,
+                current_score=state.best_score,
+                config=config,
+                archive_agent=archive_agent,
+            )
+            qd_state = replace(qd_state, last_selection=selection)
+        else:
+            selection = SelectionPlan(
+                parent_candidate_id=state.best_candidate_id,
+                inspiration_candidate_ids=(),
+                strategy=MutationStrategy.CONSERVATIVE,
+                goal="Improve the best evaluated candidate.",
+                reasoning=f"Explicit state selected best candidate {state.best_candidate_id}.",
+            )
+        resolved_selection = _resolve_selection(selection, snapshots)
         execution = _execute_evolution_cycle(
             workspace=workspace,
             config=config,
             evaluate=evaluate,
-            strategy=strategy,
             batch_planner=batch_planner,
             variation=variation,
             enrich=enrich,
@@ -243,15 +324,36 @@ def run_evolution(
             snapshots=snapshots,
             cycle=cycle,
             state=state,
-            selection=selection,
+            resolved_selection=resolved_selection,
             run_id=resolved_run_id,
             now=now,
             candidate_id_factory=make_candidate_id,
+            archive=archive,
+            planned_batch=baseline_batch if cycle == 1 else None,
+            evaluated_parent=baseline if cycle == 1 and selection.parent_candidate_id == "baseline" else None,
         )
         record = execution.record
         history.append(record)
         state = execution.state
-        pending_selection = _next_selection(strategy, state, execution.score)
+        if config.strategy == "qd":
+            assert archive is not None and qd_state is not None
+            qd_state = replace(qd_state, cycle=cycle)
+            if parent_cell_index is not None and execution.outcome.variation.status is VariationStatus.SUBMITTED:
+                inserted = execution.archive_outcome.added if execution.archive_outcome is not None else False
+                qd_state = replace(
+                    qd_state,
+                    cell_selection=update_cell_selection_state(
+                        qd_state.cell_selection,
+                        parent_cell_index,
+                        cycle,
+                        improved=inserted,
+                    ),
+                    strategy_bandit=update_strategy_bandit_state(
+                        qd_state.strategy_bandit,
+                        selection.strategy,
+                        success=inserted,
+                    ),
+                )
         logger.info(
             "Cycle %d/%d — score=%.3f, gate=%s, parent=%s, child=%s",
             cycle,
@@ -266,8 +368,13 @@ def run_evolution(
 
     assert state is not None
     _write_report(workspace, report_writer)
-    strategy.save(workspace.root)
     graveyard.save(workspace.root / "graveyard.json")
+    archive_summary: dict[str, object] | None = None
+    if archive is not None:
+        archive.save(workspace.root / "archive.json")
+        assert qd_state is not None
+        _save_qd_state(workspace.root / "qd_state.json", qd_state)
+        archive_summary = {"mode": "qd", "archive_summary": archive.to_summary()}
     return EvolutionResult(
         run_id=resolved_run_id,
         workspace_name=workspace.manifest.name,
@@ -280,7 +387,7 @@ def run_evolution(
         total_trials=sum(len(record.parent_assessment.trial_ids) for record in history)
         + sum(len(record.child_assessment.trial_ids) for record in history if record.child_assessment is not None),
         cycle_records=history,
-        archive_summary=strategy.summary(),
+        archive_summary=archive_summary,
     )
 
 
@@ -300,7 +407,6 @@ def run_evolution_from_config(
     )
     from aec_bench.evolution.config_loader import resolve_task_dirs
     from aec_bench.evolution.llm import build_evolution_llm_clients
-    from aec_bench.evolution.strategy import QDStrategy
 
     workspace = Workspace(Path(config.workspace_path))
     classifier_llm, evolver_llm = build_evolution_llm_clients(config.models)
@@ -343,10 +449,6 @@ def run_evolution_from_config(
         batch_planner = _empty_batch_planner
         evaluate = make_stub_candidate_evaluator(())
 
-    strategy: SelectionStrategy = (
-        QDStrategy(evolver_model=config.models.evolver) if config.strategy == "qd" else HillClimbStrategy()
-    )
-
     def vary(request: VariationRequest, source: Workspace, child_id: str) -> VariationResult:
         return run_structured_variation(
             request,
@@ -361,7 +463,6 @@ def run_evolution_from_config(
         workspace=workspace,
         config=config,
         evaluate=evaluate,
-        strategy=strategy,
         batch_planner=batch_planner,
         variation=vary,
         enrich=lambda observations: enrich_observations(observations, classifier_llm=classifier_llm),
@@ -398,58 +499,164 @@ def _build_analysis(candidate: EvaluatedCandidate, state: EvolutionState) -> Evo
     )
 
 
-def _resolve_snapshot(
-    candidate_id: str,
-    snapshots: dict[str, WorkspaceSnapshot],
-    strategy: SelectionStrategy,
-) -> WorkspaceSnapshot:
-    snapshot = snapshots.get(candidate_id) or strategy.get_snapshot(candidate_id)
-    if snapshot is None:
-        raise ValueError(f"selected candidate {candidate_id!r} has no available snapshot")
-    snapshots[candidate_id] = snapshot
-    return snapshot
+def _resolve_selection(selection: SelectionPlan, snapshots: dict[str, WorkspaceSnapshot]) -> ResolvedSelection:
+    """Resolve a validated plan to exact snapshot material before variation."""
+    parent = snapshots.get(selection.parent_candidate_id)
+    if parent is None:
+        raise ValueError(f"selected candidate {selection.parent_candidate_id!r} has no available snapshot")
+    inspirations = []
+    for candidate_id in selection.inspiration_candidate_ids:
+        snapshot = snapshots.get(candidate_id)
+        if snapshot is None:
+            raise ValueError(f"selected candidate {candidate_id!r} has no available snapshot")
+        inspirations.append(snapshot)
+    return ResolvedSelection(plan=selection, parent=parent, inspirations=tuple(inspirations))
 
 
-def _next_selection(strategy: SelectionStrategy, state: EvolutionState, current_score: float) -> SelectionPlan | None:
-    if isinstance(strategy, HillClimbStrategy):
-        return SelectionPlan(
-            parent_candidate_id=state.best_candidate_id,
-            inspiration_candidate_ids=(),
-            strategy=MutationStrategy.CONSERVATIVE,
-            goal="Improve the best evaluated candidate.",
-            reasoning=f"Explicit state selected best candidate {state.best_candidate_id}.",
-        )
-    selected = strategy.select_parent(current_score)
-    if selected is None:
-        return None
-    return SelectionPlan(
-        parent_candidate_id=selected.parent_candidate_id,
-        inspiration_candidate_ids=tuple(selected.inspiration_candidate_ids),
-        strategy=MutationStrategy(selected.strategy),
-        goal="Explore a quality-diversity archive candidate.",
-        reasoning=selected.reasoning,
+def _initial_qd_state(archive: QDArchive) -> QDState:
+    """Create selector state from the archive cells occupied at startup."""
+    return QDState(
+        cell_selection=CellSelectionState(
+            stats=tuple(CellSelectionStat(entry.cell_index) for entry in archive.view().entries)
+        ),
+        strategy_bandit=StrategyBanditState(),
+        last_selection=None,
+        cycle=0,
     )
 
 
-def _notify_strategy(
-    strategy: SelectionStrategy,
+def _add_archive_snapshots(archive: QDArchive, snapshots: dict[str, WorkspaceSnapshot]) -> None:
+    for entry in archive.view().entries:
+        snapshots.setdefault(entry.snapshot.candidate_id, entry.snapshot)
+
+
+def _add_graveyard_snapshots(graveyard: MutationGraveyard, snapshots: dict[str, WorkspaceSnapshot]) -> None:
+    for entry in graveyard.browse(limit=graveyard.size):
+        if entry.rejected_snapshot is not None and entry.rejected_snapshot.candidate_id == entry.candidate_id:
+            snapshots.setdefault(entry.candidate_id, entry.rejected_snapshot)
+
+
+def _insert_candidate_descriptors(
+    archive: QDArchive,
+    candidate: EvaluatedCandidate,
     *,
-    outcome: CycleOutcome,
-    cycle_record: EvolutionCycleRecord,
-    snapshot: WorkspaceSnapshot,
-    score_history: list[float],
-    graveyard: MutationGraveyard,
     run_id: str,
-) -> None:
-    strategy.on_cycle_end(
-        cycle_record=cycle_record,
-        snapshot=snapshot,
-        step_result_gate=outcome.decision.decision,
-        score_history=score_history,
-        graveyard=graveyard,
-        observations=list((outcome.child or outcome.parent).observations),
-        run_id=run_id,
-        outcome=outcome,
+) -> ArchiveBatchOutcome:
+    from aec_bench.evolution.behaviour import extract_behaviour_descriptor
+
+    return ArchiveBatchOutcome(
+        candidate_id=candidate.snapshot.candidate_id,
+        insertions=tuple(
+            archive.insert(
+                extract_behaviour_descriptor(observation),
+                candidate.snapshot,
+                task_ids=(observation.trial.task.task_id,),
+                discipline=observation.discipline,
+                run_id=run_id,
+            )
+            for observation in candidate.observations
+        ),
+    )
+
+
+def _select_qd_plan(
+    *,
+    archive: QDArchive,
+    graveyard: MutationGraveyard,
+    state: QDState,
+    current_score: float,
+    config: EvolutionConfig,
+    archive_agent: ArchiveAgent | None,
+) -> tuple[SelectionPlan, int]:
+    """Select one bounded plan from explicit archive and selector values."""
+    strategy = select_mutation_strategy(
+        state.strategy_bandit,
+        graveyard_available=_has_resolvable_graveyard(graveyard),
+        seed=config.qd_seed + state.cycle,
+    )
+    cells = shortlist_cells(
+        state.cell_selection,
+        (entry.cell_index for entry in archive.view().entries),
+        k=config.qd_shortlist_size,
+        seed=config.qd_seed + state.cycle,
+    )
+    entries_by_cell = {entry.cell_index: entry for entry in archive.view().entries}
+    shortlist = []
+    candidate_cells: dict[str, int] = {}
+    for cell in cells:
+        candidate_id = entries_by_cell[cell].snapshot.candidate_id
+        if candidate_id not in shortlist:
+            shortlist.append(candidate_id)
+            candidate_cells[candidate_id] = cell
+    if not shortlist:
+        raise ValueError("QD selection requires at least one occupied archive cell")
+    select = archive_agent or run_archive_selection
+    plan = select(
+        config.models.evolver,
+        archive.view(),
+        graveyard,
+        shortlist,
+        current_score,
+        strategy,
+        config.qd_inspiration_limit,
+    )
+    if plan.strategy is not strategy:
+        raise ValueError("archive agent changed the host-selected mutation strategy")
+    if plan.parent_candidate_id not in shortlist:
+        raise ValueError("archive agent selected parent outside the allowed candidate set")
+    allowed_inspirations = set(shortlist)
+    if strategy is MutationStrategy.GRAVEYARD_RESCUE:
+        allowed_inspirations.update(
+            entry.candidate_id
+            for entry in graveyard.browse(limit=graveyard.size)
+            if entry.rejected_snapshot is not None and entry.rejected_snapshot.candidate_id == entry.candidate_id
+        )
+    if len(plan.inspiration_candidate_ids) > config.qd_inspiration_limit:
+        raise ValueError("archive agent returned too many inspirations")
+    if any(candidate_id not in allowed_inspirations for candidate_id in plan.inspiration_candidate_ids):
+        raise ValueError("archive agent returned an unknown inspiration ID")
+    return plan, candidate_cells[plan.parent_candidate_id]
+
+
+def _has_resolvable_graveyard(graveyard: MutationGraveyard) -> bool:
+    return any(
+        entry.rejected_snapshot is not None and entry.rejected_snapshot.candidate_id == entry.candidate_id
+        for entry in graveyard.browse(limit=graveyard.size)
+    )
+
+
+def _save_qd_state(path: Path, state: QDState) -> None:
+    payload = {
+        "cycle": state.cycle,
+        "last_selection": state.last_selection.to_record().model_dump(mode="json")
+        if state.last_selection is not None
+        else None,
+        "cell_selection": [stat.__dict__ for stat in state.cell_selection.stats],
+        "strategy_bandit": [
+            {"strategy": stat.strategy.value, "attempts": stat.attempts, "successes": stat.successes}
+            for stat in state.strategy_bandit.stats
+        ],
+    }
+    path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+
+def _load_qd_state(path: Path) -> QDState | None:
+    if not path.exists():
+        return None
+    data = json.loads(path.read_text(encoding="utf-8"))
+    from aec_bench.evolution.selection import StrategyBanditStat
+
+    plan_data = data.get("last_selection")
+    plan = SelectionPlan(**plan_data) if plan_data is not None else None
+    return QDState(
+        cell_selection=CellSelectionState(
+            stats=tuple(CellSelectionStat(**item) for item in data.get("cell_selection", []))
+        ),
+        strategy_bandit=StrategyBanditState(
+            stats=tuple(StrategyBanditStat(**item) for item in data.get("strategy_bandit", []))
+        ),
+        last_selection=plan,
+        cycle=int(data.get("cycle", 0)),
     )
 
 

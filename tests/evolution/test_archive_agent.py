@@ -3,9 +3,13 @@
 
 from __future__ import annotations
 
-from aec_bench.contracts.evolution import BehaviourDescriptor, SkillEntry, WorkspaceSnapshot
-from aec_bench.evolution.archive import QDArchive
-from aec_bench.evolution.archive_agent import _parse_selection, build_archive_tools
+from types import SimpleNamespace
+
+import pytest
+
+from aec_bench.contracts.evolution import BehaviourDescriptor, MutationStrategy, SkillEntry, WorkspaceSnapshot
+from aec_bench.evolution.archive import ArchiveView, QDArchive
+from aec_bench.evolution.archive_agent import _parse_selection, build_archive_tools, run_archive_selection
 from aec_bench.evolution.graveyard import GraveyardEntry, MutationGraveyard
 
 # ---------------------------------------------------------------------------
@@ -108,7 +112,7 @@ def _populated_graveyard() -> MutationGraveyard:
 def test_browse_archive_returns_entries() -> None:
     archive = _populated_archive()
     graveyard = MutationGraveyard()
-    tools = build_archive_tools(archive, graveyard)
+    tools = build_archive_tools(archive.view(), graveyard)
 
     result = tools["browse_archive"](sort_by="reward", limit=3)
 
@@ -121,7 +125,7 @@ def test_browse_archive_returns_entries() -> None:
 def test_browse_archive_frontier_sort() -> None:
     archive = _populated_archive()
     graveyard = MutationGraveyard()
-    tools = build_archive_tools(archive, graveyard)
+    tools = build_archive_tools(archive.view(), graveyard)
 
     result = tools["browse_archive"](sort_by="frontier", limit=3)
 
@@ -133,7 +137,7 @@ def test_browse_archive_frontier_sort() -> None:
 def test_browse_archive_empty_returns_message() -> None:
     archive = QDArchive(n_centroids=50, seed=0)
     graveyard = MutationGraveyard()
-    tools = build_archive_tools(archive, graveyard)
+    tools = build_archive_tools(archive.view(), graveyard)
 
     result = tools["browse_archive"]()
 
@@ -148,7 +152,7 @@ def test_browse_archive_empty_returns_message() -> None:
 def test_compare_cells_shows_diff() -> None:
     archive = _populated_archive()
     graveyard = MutationGraveyard()
-    tools = build_archive_tools(archive, graveyard)
+    tools = build_archive_tools(archive.view(), graveyard)
 
     result = tools["compare_cells"]("v_high", "v_mid")
 
@@ -163,7 +167,7 @@ def test_compare_cells_shows_diff() -> None:
 def test_compare_cells_not_found() -> None:
     archive = _populated_archive()
     graveyard = MutationGraveyard()
-    tools = build_archive_tools(archive, graveyard)
+    tools = build_archive_tools(archive.view(), graveyard)
 
     result = tools["compare_cells"]("v_missing", "v_high")
 
@@ -185,7 +189,7 @@ def test_compare_cells_shows_skill_diff() -> None:
         _make_snapshot("v_with_b", skills=[skill_b]),
     )
     graveyard = MutationGraveyard()
-    tools = build_archive_tools(archive, graveyard)
+    tools = build_archive_tools(archive.view(), graveyard)
 
     result = tools["compare_cells"]("v_with_a", "v_with_b")
 
@@ -203,7 +207,7 @@ def test_compare_cells_shows_skill_diff() -> None:
 def test_inspect_cell_shows_detail() -> None:
     archive = _populated_archive()
     graveyard = MutationGraveyard()
-    tools = build_archive_tools(archive, graveyard)
+    tools = build_archive_tools(archive.view(), graveyard)
 
     result = tools["inspect_cell"]("v_high")
 
@@ -217,7 +221,7 @@ def test_inspect_cell_shows_detail() -> None:
 def test_inspect_cell_not_found() -> None:
     archive = _populated_archive()
     graveyard = MutationGraveyard()
-    tools = build_archive_tools(archive, graveyard)
+    tools = build_archive_tools(archive.view(), graveyard)
 
     result = tools["inspect_cell"]("v_nonexistent")
 
@@ -233,7 +237,7 @@ def test_inspect_cell_shows_skills() -> None:
         _make_snapshot("v_skilled", skills=[skill]),
     )
     graveyard = MutationGraveyard()
-    tools = build_archive_tools(archive, graveyard)
+    tools = build_archive_tools(archive.view(), graveyard)
 
     result = tools["inspect_cell"]("v_skilled")
 
@@ -249,7 +253,7 @@ def test_inspect_cell_shows_skills() -> None:
 def test_coverage_gaps_shows_empty_regions() -> None:
     archive = _populated_archive()
     graveyard = MutationGraveyard()
-    tools = build_archive_tools(archive, graveyard)
+    tools = build_archive_tools(archive.view(), graveyard)
 
     result = tools["coverage_gaps"]()
 
@@ -261,7 +265,7 @@ def test_coverage_gaps_shows_empty_regions() -> None:
 def test_coverage_gaps_empty_archive() -> None:
     archive = QDArchive(n_centroids=100, seed=0)
     graveyard = MutationGraveyard()
-    tools = build_archive_tools(archive, graveyard)
+    tools = build_archive_tools(archive.view(), graveyard)
 
     result = tools["coverage_gaps"]()
 
@@ -277,7 +281,7 @@ def test_coverage_gaps_empty_archive() -> None:
 def test_read_graveyard_empty() -> None:
     archive = QDArchive(n_centroids=50, seed=0)
     graveyard = MutationGraveyard()
-    tools = build_archive_tools(archive, graveyard)
+    tools = build_archive_tools(archive.view(), graveyard)
 
     result = tools["read_graveyard"]()
 
@@ -287,7 +291,7 @@ def test_read_graveyard_empty() -> None:
 def test_read_graveyard_with_entries() -> None:
     archive = QDArchive(n_centroids=50, seed=0)
     graveyard = _populated_graveyard()
-    tools = build_archive_tools(archive, graveyard)
+    tools = build_archive_tools(archive.view(), graveyard)
 
     result = tools["read_graveyard"](limit=5)
 
@@ -296,6 +300,50 @@ def test_read_graveyard_with_entries() -> None:
     assert "cable-sizing" in result
     assert "Score regressed" in result
     assert "0.500" in result
+
+
+def test_run_archive_selection_passes_host_context_and_real_graveyard(monkeypatch: pytest.MonkeyPatch) -> None:
+    archive = _populated_archive()
+    archive_view = archive.view()
+    graveyard = _populated_graveyard()
+    captured: dict[str, object] = {}
+
+    def fake_build_tools(actual_archive: ArchiveView, actual_graveyard: MutationGraveyard) -> dict[str, object]:
+        captured["archive"] = actual_archive
+        captured["graveyard"] = actual_graveyard
+        return {}
+
+    class FakeAgent:
+        def __init__(self, *_args: object, **kwargs: object) -> None:
+            captured["system_prompt"] = kwargs["system_prompt"]
+
+        def run_sync(self, brief: str, **_kwargs: object) -> SimpleNamespace:
+            captured["brief"] = brief
+            return SimpleNamespace(
+                output=("SELECTED: v_high\nINSPIRATION: v_mid\nREASON: The mid candidate supplies a useful comparison.")
+            )
+
+    monkeypatch.setattr("aec_bench.evolution.archive_agent.build_archive_tools", fake_build_tools)
+    monkeypatch.setattr("pydantic_ai.Agent", FakeAgent)
+    monkeypatch.setattr("aec_bench.evolution.structured_evolver._build_pydantic_model", lambda _name: object())
+
+    result = run_archive_selection(
+        "test-model",
+        archive_view,
+        graveyard,
+        ["v_high", "v_mid"],
+        0.8,
+        MutationStrategy.CONSERVATIVE,
+        1,
+    )
+
+    assert result.parent_candidate_id == "v_high"
+    assert result.strategy is MutationStrategy.CONSERVATIVE
+    assert captured["archive"] is archive_view
+    assert captured["graveyard"] is graveyard
+    assert "Host-selected mutation strategy: conservative" in captured["brief"]
+    assert "Maximum inspirations: 1" in captured["brief"]
+    assert "Do not return a strategy" in captured["system_prompt"]
 
 
 # ---------------------------------------------------------------------------
@@ -308,42 +356,112 @@ def test_parse_selection_valid_format() -> None:
         "I have reviewed the archive carefully.\n"
         "SELECTED: v_high\n"
         "INSPIRATION: v_mid, v_low\n"
-        "STRATEGY: crossover\n"
         "REASON: v_high has the best reward and diverse skills.\n"
     )
     shortlist = ["v_high", "v_mid", "v_low"]
-    result = _parse_selection(text, shortlist)
+    result = _parse_selection(text, shortlist, MutationStrategy.CROSSOVER, inspiration_limit=2)
 
     assert result.parent_candidate_id == "v_high"
-    assert result.inspiration_candidate_ids == ["v_mid", "v_low"]
-    assert result.strategy == "crossover"
+    assert result.inspiration_candidate_ids == ("v_mid", "v_low")
+    assert result.strategy is MutationStrategy.CROSSOVER
+    assert result.goal == "Combine material from the selected parent and inspirations."
     assert "best reward" in result.reasoning
 
 
-def test_parse_selection_fallback() -> None:
-    text = "I could not decide."  # missing SELECTED tag
-    shortlist = ["v_a", "v_b"]
-    result = _parse_selection(text, shortlist)
-
-    assert result.parent_candidate_id == "v_a"
-    assert result.strategy == "conservative"
-    assert "Fallback" in result.reasoning
-
-
-def test_parse_selection_invalid_version_falls_back() -> None:
-    text = "SELECTED: v_unknown\nSTRATEGY: exploratory\nREASON: seemed good"
-    shortlist = ["v_a", "v_b"]
-    result = _parse_selection(text, shortlist)
-
-    # v_unknown is not in shortlist, so must fall back to first entry
-    assert result.parent_candidate_id == "v_a"
-    assert result.strategy == "conservative"
+def test_parse_selection_invalid_output_is_rejected_without_fallback() -> None:
+    with pytest.raises(ValueError, match="SELECTED"):
+        _parse_selection(
+            "I could not decide.",
+            ["v_a", "v_b"],
+            MutationStrategy.CONSERVATIVE,
+            inspiration_limit=2,
+        )
 
 
-def test_parse_selection_empty_shortlist_returns_empty() -> None:
-    text = "SELECTED: v_high\nSTRATEGY: conservative\nREASON: best"
-    shortlist: list[str] = []
-    result = _parse_selection(text, shortlist)
+def test_parse_selection_rejects_strategy_change() -> None:
+    text = "SELECTED: v_a\nSTRATEGY: exploratory\nREASON: The parent is suitable."
+    with pytest.raises(ValueError, match="changed the selected strategy"):
+        _parse_selection(text, ["v_a", "v_b"], MutationStrategy.CONSERVATIVE, inspiration_limit=2)
 
-    assert result.parent_candidate_id == ""
-    assert result.strategy == "conservative"
+
+def test_parse_selection_rejects_model_owned_goal() -> None:
+    text = "SELECTED: v_a\nGOAL: Change the host intent.\nREASON: The parent is suitable."
+    with pytest.raises(ValueError, match="must not return a goal"):
+        _parse_selection(text, ["v_a", "v_b"], MutationStrategy.CONSERVATIVE, inspiration_limit=2)
+
+
+@pytest.mark.parametrize(
+    ("text", "message", "inspiration_limit"),
+    [
+        (
+            "SELECTED: v_unknown\nREASON: It is suitable.",
+            "outside the allowed candidate set",
+            1,
+        ),
+        (
+            "SELECTED: v_a\nINSPIRATION: v_unknown\nREASON: It is suitable.",
+            "unknown inspiration",
+            1,
+        ),
+        (
+            "SELECTED: v_a\nINSPIRATION: v_a\nREASON: It is suitable.",
+            "also be an inspiration",
+            1,
+        ),
+        (
+            "SELECTED: v_a\nINSPIRATION: v_b, v_b\nREASON: It is suitable.",
+            "unique",
+            2,
+        ),
+        (
+            "SELECTED: v_a\nINSPIRATION: v_b, v_c\nREASON: It is suitable.",
+            "limit is 1",
+            1,
+        ),
+    ],
+)
+def test_parse_selection_rejects_invalid_id_contracts(text: str, message: str, inspiration_limit: int) -> None:
+    with pytest.raises(ValueError, match=message):
+        _parse_selection(
+            text,
+            ["v_a", "v_b", "v_c"],
+            MutationStrategy.CONSERVATIVE,
+            inspiration_limit=inspiration_limit,
+        )
+
+
+def test_parse_selection_rejects_graveyard_rescue_without_resolvable_candidate() -> None:
+    text = "SELECTED: v_a\nREASON: The archive has no safer option."
+    with pytest.raises(ValueError, match="resolvable graveyard candidate"):
+        _parse_selection(
+            text,
+            ["v_a"],
+            MutationStrategy.GRAVEYARD_RESCUE,
+            graveyard=_populated_graveyard(),
+            inspiration_limit=1,
+        )
+
+
+def test_parse_selection_allows_exact_graveyard_inspiration_for_rescue() -> None:
+    graveyard = MutationGraveyard()
+    graveyard.insert(
+        GraveyardEntry(
+            cycle=1,
+            strategy="conservative",
+            mutation_description="Added a useful check",
+            score_before=0.5,
+            score_after=0.4,
+            candidate_id="failed-1",
+            failure_reason="The score regressed",
+            rejected_snapshot=_make_snapshot("failed-1"),
+        )
+    )
+    text = "SELECTED: v_a\nINSPIRATION: failed-1\nREASON: The rejected snapshot contains a reusable idea."
+    result = _parse_selection(
+        text,
+        ["v_a"],
+        MutationStrategy.GRAVEYARD_RESCUE,
+        graveyard=graveyard,
+        inspiration_limit=1,
+    )
+    assert result.inspiration_candidate_ids == ("failed-1",)
