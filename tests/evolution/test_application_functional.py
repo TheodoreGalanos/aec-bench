@@ -6,18 +6,20 @@ from __future__ import annotations
 import json
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 import pytest
 import yaml
 
 from aec_bench.contracts.evolution import (
     EvolutionConfig,
+    EvolverModelConfig,
     MutationSummary,
     WorkspaceSnapshot,
 )
 from aec_bench.contracts.experiment_manifest import AgentConfig, ComputeConfig, TaskSelector
-from aec_bench.evolution import variation_operator
-from aec_bench.evolution.application import run_evolution
+from aec_bench.evolution import application, variation_operator
+from aec_bench.evolution.application import run_evolution, run_evolution_from_config
 from aec_bench.evolution.checkpoint import AVOConfigurationIdentity
 from aec_bench.evolution.core import (
     DevelopmentAttempt,
@@ -63,6 +65,18 @@ def _setup(tmp_path: Path) -> tuple[Workspace, CandidateEvaluationBatch]:
         trials=(trial,),
         evaluation_case_ids=("electrical/voltage-drop/case::attempt=1",),
     )
+
+
+def _write_evolution_task(root: Path, task_id: str, *, visibility: str = "public") -> Path:
+    task_dir = root / task_id
+    (task_dir / "tests").mkdir(parents=True)
+    (task_dir / "task.toml").write_text(
+        f'[metadata]\ndifficulty = "easy"\nvisibility = "{visibility}"\n',
+        encoding="utf-8",
+    )
+    (task_dir / "instruction.md").write_text("Calculate the requested engineering result.\n", encoding="utf-8")
+    (task_dir / "tests" / "test.sh").write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    return task_dir
 
 
 def _config(
@@ -164,6 +178,41 @@ def _run(
         clock=lambda: datetime(2026, 1, 1, tzinfo=UTC),
         archive_agent=select_archive if config.strategy == "qd" else None,
     )
+
+
+def test_config_rejects_holdout_before_model_or_evolution_composition(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workspace_root = tmp_path / "workspace"
+    (workspace_root / "prompts").mkdir(parents=True)
+    (workspace_root / "prompts" / "system.md").write_text("canonical", encoding="utf-8")
+    (workspace_root / "manifest.yaml").write_text(
+        yaml.safe_dump({"name": "visibility-test", "agent_adapter": "direct", "evolvable_layers": ["prompts"]}),
+        encoding="utf-8",
+    )
+    tasks_root = tmp_path / "tasks"
+    _write_evolution_task(tasks_root, "electrical/public-case")
+    _write_evolution_task(tasks_root, "electrical/holdout-case", visibility="holdout")
+    config = EvolutionConfig(
+        workspace_path=str(workspace_root),
+        models=EvolverModelConfig(classifier="classifier", evolver="evolver"),
+        task_selector=TaskSelector(),
+    )
+
+    def unexpected_effect(*_args: Any, **_kwargs: Any) -> Any:
+        pytest.fail("holdout validation must happen before model or evolution composition")
+
+    monkeypatch.setattr(
+        "aec_bench.providers.behavioral_llm.build_behavioral_llm_client",
+        unexpected_effect,
+    )
+    monkeypatch.setattr(application, "build_pydantic_model", unexpected_effect)
+    monkeypatch.setattr(application, "build_agentic_variation_operator", unexpected_effect)
+    monkeypatch.setattr(application, "run_evolution", unexpected_effect)
+
+    with pytest.raises(ValueError, match="only PUBLIC tasks are permitted"):
+        run_evolution_from_config(config=config, tasks_root=tasks_root)
 
 
 def test_child_is_evaluated_before_commit_and_both_evidence_sets_persist(tmp_path: Path) -> None:
