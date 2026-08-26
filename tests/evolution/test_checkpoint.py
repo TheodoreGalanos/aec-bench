@@ -26,6 +26,7 @@ from aec_bench.evolution.checkpoint import (
     AVOCheckpointCompatibilityError,
     AVOCheckpointTerminalResult,
     AVOConfigurationIdentity,
+    AVOIncompleteExternalEffect,
     AVOUsageSnapshot,
     read_checkpoint,
     write_checkpoint,
@@ -343,6 +344,27 @@ def test_checkpoint_from_state_requires_terminal_status_to_match_result() -> Non
 
     checkpoint = _checkpoint(terminal_status=VariationStatus.SUBMITTED, terminal_result=terminal)
     assert checkpoint.terminal_result == terminal
+
+    with pytest.raises(ValidationError, match="terminal checkpoint must not retain incomplete external effects"):
+        _validated_update(
+            checkpoint,
+            incomplete_external_effects=(
+                AVOIncompleteExternalEffect(
+                    effect_id="variation-1:model-1",
+                    operation="model_request",
+                    reason="Provider completion is not confirmed.",
+                ),
+            ),
+        )
+
+
+def test_checkpoint_rejects_unknown_external_effect_operation() -> None:
+    with pytest.raises(ValidationError, match="model_request"):
+        AVOIncompleteExternalEffect(
+            effect_id="variation-1:unknown-1",
+            operation="unknown",  # type: ignore[arg-type]
+            reason="Unknown external operation.",
+        )
 
 
 def test_checkpoint_preserves_unknown_cost_and_typed_memory() -> None:

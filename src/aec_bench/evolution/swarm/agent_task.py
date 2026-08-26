@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from typing import Protocol
 
 from aec_bench.contracts.evolution import AgentStatus
+from aec_bench.evolution.cancellation import AVOCancellationError, AVOCancellationSignal
 from aec_bench.evolution.swarm.core import SwarmAgentResult, SwarmAssignment
 
 logger = logging.getLogger(__name__)
@@ -31,6 +32,7 @@ class AgentContext:
     on_error: Callable[[Exception], Awaitable[bool]] | None = None
     model: str = ""
     worktree_branch: str = ""
+    cancellation_signal: AVOCancellationSignal | None = None
 
 
 async def run_agent_loop(ctx: AgentContext) -> AgentStatus:
@@ -43,9 +45,13 @@ async def run_agent_loop(ctx: AgentContext) -> AgentStatus:
     status = AgentStatus.ACTIVE
 
     while True:
+        if ctx.cancellation_signal is not None:
+            ctx.cancellation_signal.raise_if_cancelled()
         try:
             assignment = await ctx.next_assignment()
             result = await ctx.evolver.step(assignment)
+        except AVOCancellationError:
+            raise
         except Exception as exc:
             logger.warning("Agent %s error: %s", ctx.agent_id, exc)
             status = AgentStatus.ERROR

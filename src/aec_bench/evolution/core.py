@@ -250,6 +250,7 @@ class VariationStatus(StrEnum):
     SUBMITTED = "submitted"
     ABSTAINED = "abstained"
     BUDGET_EXHAUSTED = "budget_exhausted"
+    CANCELLED = "cancelled"
 
 
 @dataclass(frozen=True)
@@ -540,6 +541,7 @@ def decide_candidate(
         reason = {
             VariationStatus.ABSTAINED: "variation abstained",
             VariationStatus.BUDGET_EXHAUSTED: "variation budget exhausted",
+            VariationStatus.CANCELLED: "variation cancelled",
         }[variation.status]
         return GateResult(
             decision=GateDecision.SKIPPED,

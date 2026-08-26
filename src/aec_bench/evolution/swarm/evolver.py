@@ -5,10 +5,12 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import math
 import shutil
 import tempfile
 from collections.abc import Callable, Sequence
 from pathlib import Path
+from threading import Lock
 
 from aec_bench.contracts.evolution import (
     EvolutionConfig,
@@ -23,6 +25,11 @@ from aec_bench.contracts.trial_record import TrialRecord
 from aec_bench.evaluation.behavioral import BehavioralLLMClient
 from aec_bench.evolution.application import CandidateEvaluator, _build_analysis, _enrich_candidate
 from aec_bench.evolution.backends.local import make_local_candidate_batch_planner, make_local_candidate_evaluator
+from aec_bench.evolution.cancellation import (
+    AVOCancellationCode,
+    AVOCancellationReason,
+    AVOCancellationSignal,
+)
 from aec_bench.evolution.checkpoint import AVOConfigurationIdentity
 from aec_bench.evolution.core import AVOBudget, EvolutionState, VariationRequest, VariationResult
 from aec_bench.evolution.enrichment import enrich_observations
@@ -50,6 +57,8 @@ class SwarmAgentEvolver:
         solve_fn: CandidateEvaluator,
         classifier_llm: BehavioralLLMClient,
         variation_operator: VariationOperator,
+        cancellation_signal: AVOCancellationSignal | None = None,
+        timeout: float = 1800,
     ) -> None:
         self._workspace = workspace
         self._config = config
@@ -57,6 +66,17 @@ class SwarmAgentEvolver:
         self._solve_fn = solve_fn
         self._classifier_llm = classifier_llm
         self._variation_operator = variation_operator
+        self._cancellation_signal = cancellation_signal or AVOCancellationSignal()
+        if (
+            isinstance(timeout, bool)
+            or not isinstance(timeout, int | float)
+            or not math.isfinite(timeout)
+            or timeout <= 0
+        ):
+            raise ValueError("timeout must be a finite positive number")
+        self._timeout = timeout
+        self._active_lock = Lock()
+        self._active_future: asyncio.Future[SwarmAgentResult] | None = None
         self._cycle = 0
         self._history: list[EvolutionCycleRecord] = []
         self._graveyard = MutationGraveyard()
@@ -68,26 +88,66 @@ class SwarmAgentEvolver:
         Wraps synchronous work in a thread executor with a timeout guard.
         Default timeout is 30 minutes — generous for complex evolution cycles.
         """
-        loop = asyncio.get_event_loop()
-        return await asyncio.wait_for(
-            loop.run_in_executor(None, self._sync_step, assignment),
-            timeout=1800,  # 30 minutes
-        )
+        self._cancellation_signal.raise_if_cancelled()
+        loop = asyncio.get_running_loop()
+        worker = loop.run_in_executor(None, self._sync_step, assignment)
+        with self._active_lock:
+            self._active_future = worker
+        try:
+            return await asyncio.wait_for(asyncio.shield(worker), timeout=self._timeout)
+        except TimeoutError as exc:
+            self._cancellation_signal.cancel(
+                AVOCancellationReason(
+                    code=AVOCancellationCode.TIMEOUT,
+                    detail=f"swarm agent step exceeded its {self._timeout}s timeout.",
+                )
+            )
+            try:
+                await asyncio.shield(worker)
+            except BaseException as worker_error:
+                raise TimeoutError(f"swarm agent step exceeded its {self._timeout}s timeout") from worker_error
+            raise TimeoutError(f"swarm agent step exceeded its {self._timeout}s timeout") from exc
+        except asyncio.CancelledError:
+            self._cancellation_signal.cancel()
+            try:
+                await asyncio.shield(worker)
+            except BaseException:
+                pass
+            raise
+        finally:
+            with self._active_lock:
+                if worker.done():
+                    self._active_future = None
+
+    @property
+    def cancellation_signal(self) -> AVOCancellationSignal:
+        """Return this agent's private cooperative cancellation signal."""
+        return self._cancellation_signal
+
+    @property
+    def worker_active(self) -> bool:
+        """Return whether the synchronous worker can still write its workspace."""
+        with self._active_lock:
+            return self._active_future is not None and not self._active_future.done()
 
     def _sync_step(self, assignment: SwarmAssignment) -> SwarmAgentResult:
         """Run variation for one exact assignment and return no evaluation evidence."""
+        self._cancellation_signal.raise_if_cancelled()
         self._cycle += 1
         batch = self._batch_planner(self._config.batch_size, self._cycle - 1)
+        self._cancellation_signal.raise_if_cancelled()
         parent = bind_candidate_evaluation(
             assignment.parent,
             batch,
             self._solve_fn(assignment.parent, batch),
         )
+        self._cancellation_signal.raise_if_cancelled()
         parent = _enrich_candidate(
             parent,
             batch,
             lambda observations: enrich_observations(observations, classifier_llm=self._classifier_llm),
         )
+        self._cancellation_signal.raise_if_cancelled()
         evolution_state = EvolutionState.from_baseline(
             parent,
             structural_weight=self._config.structural_weight,
@@ -105,7 +165,9 @@ class SwarmAgentEvolver:
             cycle=self._cycle,
             memory=self._memory,
         )
+        self._cancellation_signal.raise_if_cancelled()
         variation = self._variation_operator(request, self._workspace, assignment.assignment_id)
+        self._cancellation_signal.raise_if_cancelled()
         self._memory = variation.memory
         parent_costs = tuple(
             None
@@ -178,6 +240,7 @@ class SwarmEvolverFactory:
         self._stagnation_window = stagnation_window
         self._structural_weight = structural_weight
         self._agent_workspaces: dict[str, Path] = {}
+        self._agent_evolvers: dict[str, SwarmAgentEvolver] = {}
 
     def create(self, agent_id: str, model_override: str | None = None) -> SwarmAgentEvolver:
         """Create a fully-wired evolver for a single swarm agent.
@@ -233,6 +296,7 @@ class SwarmEvolverFactory:
             workspace_root=agent_ws_path,
             candidate_identity=False,
         )
+        cancellation_signal = AVOCancellationSignal()
         variation_operator = build_agentic_variation_operator(
             agent_model=build_pydantic_model(evolver_model_name),
             development_batch_planner=development_batch_planner,
@@ -256,6 +320,7 @@ class SwarmEvolverFactory:
                     f":stagnation-{self._stagnation_window}:structural-{self._structural_weight}"
                 ),
             ),
+            cancellation_signal=cancellation_signal,
         )
         config = EvolutionConfig(
             workspace_path=str(agent_ws_path),
@@ -269,14 +334,18 @@ class SwarmEvolverFactory:
             solver=AgentConfig(name=f"swarm-{agent_id}", adapter=self._adapter, model=solver_model),
         )
 
-        return SwarmAgentEvolver(
+        evolver = SwarmAgentEvolver(
             workspace=workspace,
             config=config,
             batch_planner=batch_planner,
             solve_fn=solve_fn,
             classifier_llm=classifier_llm,
             variation_operator=variation_operator,
+            cancellation_signal=cancellation_signal,
+            timeout=self._timeout,
         )
+        self._agent_evolvers[agent_id] = evolver
+        return evolver
 
     def plan_batch(self, batch_size: int, cycle: int) -> CandidateEvaluationBatch:
         """Plan one candidate-independent host evaluation batch."""
@@ -303,7 +372,10 @@ class SwarmEvolverFactory:
         return enrich_observations(observations, classifier_llm=self._classifier_llm)
 
     def cleanup(self) -> None:
-        """Remove all agent workspace copies."""
+        """Remove agent workspace copies only after all workers have stopped."""
+        active = [agent_id for agent_id, evolver in self._agent_evolvers.items() if evolver.worker_active]
+        if active:
+            raise RuntimeError(f"cannot clean up active swarm agent workspaces: {', '.join(sorted(active))}")
         for agent_id, ws_path in self._agent_workspaces.items():
             if ws_path.exists():
                 shutil.rmtree(ws_path, ignore_errors=True)

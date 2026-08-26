@@ -10,6 +10,7 @@ from pathlib import Path
 import pytest
 import yaml
 
+import aec_bench.evolution.checkpoint as checkpoint_module
 from aec_bench.contracts.evaluation_result import EvaluationResult, ValidityCheck
 from aec_bench.contracts.evolution import (
     CandidateAssessment,
@@ -28,7 +29,7 @@ from aec_bench.evolution.agent_loop import (
     run_agentic_variation,
 )
 from aec_bench.evolution.analysis import BehavioralPattern, EvolutionAnalysis, GraduatedScope
-from aec_bench.evolution.checkpoint import AVOConfigurationIdentity, read_checkpoint
+from aec_bench.evolution.checkpoint import AVOConfigurationIdentity, AVOIncompleteExternalEffectError, read_checkpoint
 from aec_bench.evolution.core import (
     AVOBudget,
     EvaluatedCandidate,
@@ -223,7 +224,7 @@ def test_loop_exposes_only_approved_tools_and_returns_abstention(tmp_path: Path)
     assert result.usage.development_evaluations == 1
 
 
-def test_loop_resumes_from_checkpoint_without_repeating_parent_evaluation(tmp_path: Path) -> None:
+def test_loop_fails_closed_on_incomplete_model_request(tmp_path: Path) -> None:
     workspace = _workspace(tmp_path / "workspace")
     request = _request(workspace)
     path = checkpoint_path(tmp_path / "state", run_id=request.run_id, variation_id="run-test:variation-1:child-child")
@@ -235,7 +236,7 @@ def test_loop_resumes_from_checkpoint_without_repeating_parent_evaluation(tmp_pa
         )
         raise RuntimeError("simulated interruption")
 
-    with pytest.raises(RuntimeError, match="simulated interruption"):
+    with pytest.raises(AVOIncompleteExternalEffectError, match="simulated interruption"):
         run_agentic_variation(
             request,
             workspace,
@@ -251,62 +252,22 @@ def test_loop_resumes_from_checkpoint_without_repeating_parent_evaluation(tmp_pa
     assert saved.current_revision == 1
     assert not saved.evaluated_attempts
 
-    second_boundary = _boundary(
-        tmp_path / "second-boundary",
-        trial_prefix="resumed-development-trial",
-        batch=first_boundary.batch,
-    )
-    runner = _SequenceRunner(
-        [
-            _command(AgentToolName.EVALUATE_CURRENT_REVISION, hypothesis="Add a verification step."),
-            _command(AgentToolName.SUBMIT_CURRENT_REVISION, reasoning="The evaluated revision is eligible."),
-        ]
-    )
-    resumed = run_agentic_variation(
-        request,
-        workspace,
-        "child",
-        development_boundary=second_boundary,
-        agent_runner=runner,
-        checkpoint_path=path,
-        configuration_identity=_checkpoint_identity(),
-    )
-
-    assert resumed.status is VariationStatus.SUBMITTED
-    assert resumed.usage.development_evaluations == 2
-    assert len(runner.contexts) == 2
-    assert second_boundary.batch.evaluation_case_ids == ("development-case-1",)
-    assert read_checkpoint(path).terminal_result is not None
-
-    def should_not_run(_context: AgentContext) -> AgentCommand:
-        raise AssertionError("terminal checkpoint must not call the model")
-
-    terminal_batch = second_boundary.batch
-
-    def fail_evaluator(_snapshot: object, _batch_value: object) -> tuple[object, ...]:
-        raise AssertionError("terminal checkpoint must not call the evaluator")
-
-    terminal_boundary = DevelopmentEvaluationBoundary(
-        planner=lambda _size, _cycle: terminal_batch,
-        evaluator=fail_evaluator,
-        batch_size=1,
-        experiment_id="development-experiment",
-        host_experiment_id="host-experiment",
-    )
-    terminal = run_agentic_variation(
-        request,
-        workspace,
-        "child",
-        development_boundary=terminal_boundary,
-        agent_runner=should_not_run,
-        checkpoint_path=path,
-        configuration_identity=_checkpoint_identity(),
-    )
-
-    assert terminal == resumed
+    with pytest.raises(AVOIncompleteExternalEffectError, match="must be reconciled"):
+        run_agentic_variation(
+            request,
+            workspace,
+            "child",
+            development_boundary=_boundary(tmp_path / "second-boundary", batch=first_boundary.batch),
+            agent_runner=lambda _context: (_ for _ in ()).throw(AssertionError("model must not retry")),
+            checkpoint_path=path,
+            configuration_identity=_checkpoint_identity(),
+        )
 
 
-def test_resume_preserves_structured_memory_and_returns_updated_memory(tmp_path: Path) -> None:
+def test_loop_resumes_clean_mutation_checkpoint_without_repeating_parent_evaluation(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
     workspace = _workspace(tmp_path / "workspace")
     prior = AVOMemoryEntry(
         source_variation_id="prior-variation",
@@ -315,32 +276,43 @@ def test_resume_preserves_structured_memory_and_returns_updated_memory(tmp_path:
         change_summary="system prompt modified",
         evidence_summary="valid=True; batch_score=0.4; evaluation_cases=1; trials=1",
         outcome="improved",
-        next_direction="Try one bounded follow-up.",
     )
     request = _request(workspace, memory=(prior,))
     path = checkpoint_path(tmp_path / "state", run_id=request.run_id, variation_id="run-test:variation-1:child-child")
     first_boundary = _boundary(tmp_path / "first-boundary")
+    original_write = checkpoint_module.write_checkpoint
 
-    def interrupting_runner(context: AgentContext) -> AgentCommand:
-        assert context.memory == (prior,)
-        context.tools["apply_mutation"](
-            mutation={"type": "modify_prompt", "content": "Child prompt with a verification step."}
-        )
-        raise RuntimeError("simulated interruption")
+    def crash_after_clean_mutation(selected_path: Path, checkpoint: checkpoint_module.AVOCheckpoint) -> Path:
+        written_path = original_write(selected_path, checkpoint)
+        if (
+            checkpoint.current_revision == 1
+            and not checkpoint.evaluated_attempts
+            and not checkpoint.incomplete_external_effects
+            and checkpoint.terminal_result is None
+        ):
+            raise RuntimeError("simulated crash after clean mutation checkpoint")
+        return written_path
 
-    with pytest.raises(RuntimeError, match="simulated interruption"):
+    monkeypatch.setattr(checkpoint_module, "write_checkpoint", crash_after_clean_mutation)
+    with pytest.raises(RuntimeError, match="simulated crash after clean mutation checkpoint"):
         run_agentic_variation(
             request,
             workspace,
             "child",
             development_boundary=first_boundary,
-            agent_runner=interrupting_runner,
+            agent_runner=lambda _context: _command(
+                AgentToolName.APPLY_MUTATION,
+                mutation={"type": "modify_prompt", "content": "Child prompt with a verification step."},
+            ),
             checkpoint_path=path,
             configuration_identity=_checkpoint_identity(),
         )
 
     saved = read_checkpoint(path)
+    assert saved.current_revision == 1
     assert saved.structured_memory == (prior,)
+    assert not saved.incomplete_external_effects
+    monkeypatch.setattr(checkpoint_module, "write_checkpoint", original_write)
 
     runner = _SequenceRunner(
         [
@@ -362,10 +334,60 @@ def test_resume_preserves_structured_memory_and_returns_updated_memory(tmp_path:
         configuration_identity=_checkpoint_identity(),
     )
 
+    assert resumed.status is VariationStatus.SUBMITTED
+    assert resumed.usage.development_evaluations == 2
     assert runner.contexts[0].memory == (prior,)
     assert resumed.memory[0] == prior
     assert len(resumed.memory) == 2
-    assert read_checkpoint(path).structured_memory == resumed.memory
+    assert read_checkpoint(path).terminal_result is not None
+
+
+def test_incomplete_model_request_checkpoint_preserves_structured_memory(tmp_path: Path) -> None:
+    workspace = _workspace(tmp_path / "workspace")
+    prior = AVOMemoryEntry(
+        source_variation_id="prior-variation",
+        source_attempt_id="prior-attempt",
+        hypothesis="Use a verification step.",
+        change_summary="system prompt modified",
+        evidence_summary="valid=True; batch_score=0.4; evaluation_cases=1; trials=1",
+        outcome="improved",
+        next_direction="Try one bounded follow-up.",
+    )
+    request = _request(workspace, memory=(prior,))
+    path = checkpoint_path(tmp_path / "state", run_id=request.run_id, variation_id="run-test:variation-1:child-child")
+    first_boundary = _boundary(tmp_path / "first-boundary")
+
+    def interrupting_runner(context: AgentContext) -> AgentCommand:
+        assert context.memory == (prior,)
+        context.tools["apply_mutation"](
+            mutation={"type": "modify_prompt", "content": "Child prompt with a verification step."}
+        )
+        raise RuntimeError("simulated interruption")
+
+    with pytest.raises(AVOIncompleteExternalEffectError, match="simulated interruption"):
+        run_agentic_variation(
+            request,
+            workspace,
+            "child",
+            development_boundary=first_boundary,
+            agent_runner=interrupting_runner,
+            checkpoint_path=path,
+            configuration_identity=_checkpoint_identity(),
+        )
+
+    saved = read_checkpoint(path)
+    assert saved.structured_memory == (prior,)
+
+    with pytest.raises(AVOIncompleteExternalEffectError, match="must be reconciled"):
+        run_agentic_variation(
+            request,
+            workspace,
+            "child",
+            development_boundary=_boundary(tmp_path / "second-boundary", batch=first_boundary.batch),
+            agent_runner=lambda _context: (_ for _ in ()).throw(AssertionError("model must not retry")),
+            checkpoint_path=path,
+            configuration_identity=_checkpoint_identity(),
+        )
 
 
 def test_resume_rejects_changed_incoming_memory_before_running_effects(tmp_path: Path) -> None:

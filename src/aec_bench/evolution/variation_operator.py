@@ -13,6 +13,7 @@ from aec_bench.contracts.evolution import WorkspaceSnapshot
 from aec_bench.contracts.trial_record import TrialRecord
 from aec_bench.evolution.agent_loop import run_agentic_variation
 from aec_bench.evolution.agent_protocol import PydanticAIStructuredRunner
+from aec_bench.evolution.cancellation import AVOCancellationSignal
 from aec_bench.evolution.checkpoint import AVOConfigurationIdentity
 from aec_bench.evolution.core import AVOBudget, VariationRequest, VariationResult
 from aec_bench.evolution.development import (
@@ -38,6 +39,7 @@ def build_agentic_variation_operator(
     compaction_llm: CompactionLLM | None = None,
     checkpoint_root: Path | None = None,
     configuration_identity: AVOConfigurationIdentity | None = None,
+    cancellation_signal: AVOCancellationSignal | None = None,
 ) -> Callable[[VariationRequest, Workspace, str], VariationResult]:
     """Build the production variation operator used by functional evolution.
 
@@ -121,6 +123,7 @@ def build_agentic_variation_operator(
             variation_id=variation_id,
             checkpoint_path=selected_checkpoint_path,
             configuration_identity=configuration_identity,
+            cancellation_signal=cancellation_signal,
         )
 
     return vary

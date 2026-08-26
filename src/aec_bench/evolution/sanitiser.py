@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Protocol
@@ -129,6 +130,8 @@ def compact_skill(body: str, *, budget: int, llm: CompactionLLM) -> str:
 def sanitise_workspace(
     ws: Workspace,
     compaction_llm: CompactionLLM | None = None,
+    *,
+    before_compaction: Callable[[str], None] | None = None,
 ) -> SanitiseResult:
     """Enforce limits on skills and prompts after evolver mutations.
 
@@ -167,6 +170,8 @@ def sanitise_workspace(
                     COMPACTION_TARGET_CHARS,
                     mode.value,
                 )
+                if before_compaction is not None:
+                    before_compaction(skill.name)
                 new_body = compact_skill(skill.body, budget=COMPACTION_TARGET_CHARS, llm=compaction_llm)
                 compacted_skill = skill.model_copy(update={"body": new_body})
                 ws.write_skill(compacted_skill)

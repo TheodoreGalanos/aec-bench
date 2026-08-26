@@ -17,6 +17,7 @@ from aec_bench.evolution.checkpoint import (
     AVOCheckpoint,
     AVOCheckpointTerminalResult,
     AVOConfigurationIdentity,
+    AVOIncompleteExternalEffectError,
     read_checkpoint,
 )
 from aec_bench.evolution.core import (
@@ -149,6 +150,10 @@ def load_checkpoint_for_resume(
 
     checkpoint = read_checkpoint(path)
     validate_checkpoint_for_resume(checkpoint, **compatibility)
+    if checkpoint.incomplete_external_effects:
+        # An event log cannot prove whether the provider or evaluator completed.
+        # Never retry an effect until its owner reconciles this marker.
+        raise AVOIncompleteExternalEffectError(checkpoint.incomplete_external_effects[0])
     return checkpoint
 
 

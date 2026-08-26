@@ -3,10 +3,14 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
+import threading
+import time
 from datetime import UTC, datetime
 from pathlib import Path
 
+import pytest
 import yaml
 
 from aec_bench.contracts.evolution import (
@@ -16,6 +20,7 @@ from aec_bench.contracts.evolution import (
 )
 from aec_bench.contracts.experiment_manifest import AgentConfig, ComputeConfig, TaskSelector
 from aec_bench.contracts.trial_record import CostRecord
+from aec_bench.evolution.cancellation import AVOCancellationSignal
 from aec_bench.evolution.core import DevelopmentAttempt, SelectionPlan, VariationResult, VariationStatus
 from aec_bench.evolution.evaluation import CandidateEvaluationBatch, bind_evaluated_candidate
 from aec_bench.evolution.memory import AVOMemoryEntry
@@ -29,6 +34,39 @@ from aec_bench.tasks.instance import resolve_instance_paths
 from aec_bench.trials import PlannedTrial
 from tests.support.task_factories import make_task_definition
 from tests.support.trial_record_factories import make_trial_record
+
+
+def test_evolver_timeout_waits_for_cooperative_executor_worker() -> None:
+    """A timeout signals the worker and does not abandon its executor future."""
+    started = threading.Event()
+    evolver = SwarmAgentEvolver(
+        workspace=None,
+        config=None,
+        batch_planner=None,
+        solve_fn=None,
+        classifier_llm=None,
+        variation_operator=lambda _request, _workspace, _child: None,
+        cancellation_signal=AVOCancellationSignal(),
+        timeout=0.01,
+    )
+
+    def worker(_assignment: object) -> object:
+        started.set()
+        while not evolver.cancellation_signal.is_set():
+            time.sleep(0.001)
+        return None
+
+    evolver._sync_step = worker  # type: ignore[method-assign]
+
+    async def run() -> None:
+        task = asyncio.create_task(evolver.step(None))
+        assert await asyncio.to_thread(started.wait, 1)
+        with pytest.raises(TimeoutError):
+            await task
+        assert not evolver.worker_active
+
+    asyncio.run(run())
+
 
 # ---------------------------------------------------------------------------
 # Stub LLM clients that return canned responses

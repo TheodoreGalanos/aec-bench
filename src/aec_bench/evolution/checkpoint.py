@@ -30,6 +30,7 @@ from aec_bench.evolution._checkpoint_evidence import (
     AVOCheckpointTurn,
     _candidate_evidence_refs,
 )
+from aec_bench.evolution.cancellation import AVOCancellationCode
 from aec_bench.evolution.core import (
     AVOBudget,
     AVOState,
@@ -44,9 +45,30 @@ from aec_bench.ledger.durability import mkdir_durable, replace_file_bytes_durabl
 AVO_CHECKPOINT_SCHEMA_VERSION: Literal[1] = 1
 """The only persisted checkpoint schema currently accepted by the reader."""
 
+AVOExternalEffectOperation = Literal["model_request", "development_evaluation", "compaction"]
+"""External operations that require durable incomplete-effect reconciliation."""
+
 
 class AVOCheckpointCompatibilityError(ValueError):
     """Raised when checkpoint bytes do not use the current schema."""
+
+
+class AVOIncompleteExternalEffectError(RuntimeError):
+    """Raised when a checkpoint contains an effect that needs reconciliation."""
+
+    def __init__(self, effect: AVOIncompleteExternalEffect | None = None, cause: BaseException | None = None) -> None:
+        self.effect = effect
+        self.cause = cause
+        if effect is None:
+            message = "AVO checkpoint contains an incomplete external effect that requires reconciliation."
+        else:
+            message = (
+                f"AVO external effect {effect.effect_id!r} ({effect.operation}) is incomplete and "
+                "must be reconciled before resume."
+            )
+        if cause is not None:
+            message = f"{message} Cause: {cause}"
+        super().__init__(message)
 
 
 def _same_workspace_material(left: WorkspaceSnapshot, right: WorkspaceSnapshot) -> bool:
@@ -221,7 +243,7 @@ class AVOIncompleteExternalEffect(StrictModel):
     """An external operation whose completion is not yet confirmed."""
 
     effect_id: NonEmptyStr
-    operation: NonEmptyStr
+    operation: AVOExternalEffectOperation
     reason: NonEmptyStr
     status: Literal["incomplete"] = "incomplete"
     observed_at: datetime | None = None
@@ -243,6 +265,7 @@ class AVOCheckpointTerminalResult(StrictModel):
     child: WorkspaceSnapshot | None = None
     mutation: MutationSummary | None = None
     attempt_id: NonEmptyStr | None = None
+    cancellation_code: AVOCancellationCode | None = None
 
     @model_validator(mode="after")
     def validate_terminal_shape(self) -> AVOCheckpointTerminalResult:
@@ -251,10 +274,19 @@ class AVOCheckpointTerminalResult(StrictModel):
                 raise ValueError("submitted checkpoint result requires child, mutation, and attempt_id")
         elif self.child is not None or self.mutation is not None or self.attempt_id is not None:
             raise ValueError(f"{self.status.value} checkpoint result must not contain child, mutation, or attempt")
+        if self.status is VariationStatus.CANCELLED and self.cancellation_code is None:
+            raise ValueError("cancelled checkpoint result requires a cancellation_code")
+        if self.status is not VariationStatus.CANCELLED and self.cancellation_code is not None:
+            raise ValueError("cancellation_code is only valid for a cancelled checkpoint result")
         return self
 
     @classmethod
-    def from_result(cls, result: VariationResult) -> AVOCheckpointTerminalResult:
+    def from_result(
+        cls,
+        result: VariationResult,
+        *,
+        cancellation_code: AVOCancellationCode | None = None,
+    ) -> AVOCheckpointTerminalResult:
         """Convert one terminal runtime result."""
 
         if not isinstance(result, VariationResult):
@@ -266,6 +298,7 @@ class AVOCheckpointTerminalResult(StrictModel):
             child=result.child,
             mutation=result.mutation,
             attempt_id=result.attempt.attempt_id if result.attempt is not None else None,
+            cancellation_code=cancellation_code,
         )
 
 
@@ -282,7 +315,7 @@ class AVOCheckpoint(StrictModel):
     development_evidence_refs: tuple[AVOCheckpointEvidenceRef, ...] = ()
     configuration_identity: AVOConfigurationIdentity
     parent_snapshot: WorkspaceSnapshot
-    parent_evidence: AVOCheckpointEvaluatedCandidate
+    parent_evidence: AVOCheckpointEvaluatedCandidate | None = None
     current_revision: int
     current_snapshot: WorkspaceSnapshot
     run_manifests: dict[str, RunManifest] = Field(default_factory=dict)
@@ -339,17 +372,48 @@ class AVOCheckpoint(StrictModel):
             raise ValueError("checkpoint parent and final child candidate IDs must differ")
         if self.parent_snapshot.candidate_id != self.parent_candidate_id:
             raise ValueError("checkpoint parent_snapshot must match parent_candidate_id")
-        if self.parent_evidence.snapshot.candidate_id != self.parent_candidate_id:
-            raise ValueError("checkpoint parent_evidence must match parent_candidate_id")
-        if self.parent_evidence.assessment.evaluation_case_ids != self.development_case_ids:
-            raise ValueError("checkpoint parent evidence cases must match development_case_ids exactly")
         if self.current_snapshot.candidate_id != self.final_child_candidate_id:
             raise ValueError("checkpoint current_snapshot must match final_child_candidate_id")
+        if self.terminal_result is not None and self.incomplete_external_effects:
+            raise ValueError("terminal checkpoint must not retain incomplete external effects")
+
+        # Parent development evidence is absent only before the first baseline
+        # evaluation. This shape is needed to durably represent cancellation or
+        # an interrupted evaluator call without substituting host evidence.
+        if self.parent_evidence is None:
+            pre_baseline = (
+                self.current_revision == 0
+                and not self.evaluated_attempts
+                and self.best_attempt_id is None
+                and not self.development_evidence_refs
+                and not self.run_manifests
+            )
+            if not pre_baseline:
+                raise ValueError("checkpoint without parent evidence must be pre-baseline with no evidence")
+            if not _same_workspace_material(self.parent_snapshot, self.current_snapshot):
+                raise ValueError("checkpoint without parent evidence must retain exact parent material")
+            if self.terminal_result is None:
+                if not (
+                    len(self.incomplete_external_effects) == 1
+                    and self.incomplete_external_effects[0].operation == "development_evaluation"
+                    and self.incomplete_external_effects[0].effect_id.endswith(":development-parent")
+                ):
+                    raise ValueError(
+                        "checkpoint without parent evidence must have the parent development incomplete marker"
+                    )
+            elif self.terminal_result.status not in (VariationStatus.CANCELLED, VariationStatus.ABSTAINED):
+                raise ValueError("checkpoint without parent evidence may only be terminal cancellation or abstention")
+        elif self.parent_evidence.snapshot.candidate_id != self.parent_candidate_id:
+            raise ValueError("checkpoint parent_evidence must match parent_candidate_id")
+        elif self.parent_evidence.assessment.evaluation_case_ids != self.development_case_ids:
+            raise ValueError("checkpoint parent evidence cases must match development_case_ids exactly")
+
+        evidence_candidates = () if self.parent_evidence is None else (self.parent_evidence,)
 
         expected_run_ids = {
             observation.trial.run_id
             for candidate in (
-                self.parent_evidence,
+                *evidence_candidates,
                 *(item.evaluated for item in self.evaluated_attempts),
             )
             for observation in candidate.observations
@@ -360,7 +424,7 @@ class AVOCheckpoint(StrictModel):
             if run_id != manifest.run_id:
                 raise ValueError("checkpoint run_manifests keys must match manifest run_id")
         for candidate, revision in (
-            (self.parent_evidence, 0),
+            *((candidate, 0) for candidate in evidence_candidates),
             *((item.evaluated, item.revision) for item in self.evaluated_attempts),
         ):
             for observation in candidate.observations:
@@ -406,7 +470,7 @@ class AVOCheckpoint(StrictModel):
         all_trial_ids = tuple(
             observation.trial.trial_id
             for candidate in (
-                self.parent_evidence,
+                *evidence_candidates,
                 *(item.evaluated for item in self.evaluated_attempts),
             )
             for observation in candidate.observations
@@ -419,10 +483,10 @@ class AVOCheckpoint(StrictModel):
         for attempt in self.evaluated_attempts:
             if attempt.evaluated.assessment.evaluation_case_ids != self.development_case_ids:
                 raise ValueError("checkpoint attempt evaluation cases must match development_case_ids exactly")
-        expected_evidence_refs = _candidate_evidence_refs(
-            self.parent_evidence,
-            revision=0,
-            attempt_id=None,
+        expected_evidence_refs = (
+            ()
+            if self.parent_evidence is None
+            else _candidate_evidence_refs(self.parent_evidence, revision=0, attempt_id=None)
         )
         expected_evidence_refs += tuple(
             evidence_ref
@@ -473,7 +537,7 @@ class AVOCheckpoint(StrictModel):
         *,
         run_id: str,
         state: AVOState,
-        parent_evidence: EvaluatedCandidate,
+        parent_evidence: EvaluatedCandidate | None,
         selection: SelectionRecord,
         development_case_ids: tuple[str, ...],
         configuration_identity: AVOConfigurationIdentity,
@@ -501,11 +565,15 @@ class AVOCheckpoint(StrictModel):
             raise ValueError("AVOState terminal_status requires a checkpoint terminal result")
         elif state.terminal_status is not terminal_result.status:
             raise ValueError("checkpoint terminal result status must match AVOState terminal_status")
-        parent_record = AVOCheckpointEvaluatedCandidate.from_evaluated_candidate(parent_evidence)
+        parent_record = (
+            None
+            if parent_evidence is None
+            else AVOCheckpointEvaluatedCandidate.from_evaluated_candidate(parent_evidence)
+        )
         attempt_records = tuple(AVOCheckpointAttempt.from_attempt(item) for item in state.attempts)
         run_manifests: dict[str, RunManifest] = {}
         for candidate in (
-            parent_evidence,
+            *((parent_evidence,) if parent_evidence is not None else ()),
             *(item.evaluated for item in state.attempts),
         ):
             for observation in candidate.observations:
@@ -522,7 +590,7 @@ class AVOCheckpoint(StrictModel):
             selection=selection,
             development_case_ids=development_case_ids,
             development_evidence_refs=(
-                _candidate_evidence_refs(parent_record, revision=0, attempt_id=None)
+                (() if parent_record is None else _candidate_evidence_refs(parent_record, revision=0, attempt_id=None))
                 + tuple(
                     evidence_ref
                     for attempt in attempt_records
@@ -621,7 +689,9 @@ __all__ = (
     "AVOCheckpointTrace",
     "AVOCheckpointTurn",
     "AVOConfigurationIdentity",
+    "AVOExternalEffectOperation",
     "AVOIncompleteExternalEffect",
+    "AVOIncompleteExternalEffectError",
     "AVOUsageSnapshot",
     "read_checkpoint",
     "write_checkpoint",
