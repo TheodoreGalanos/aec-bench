@@ -14,15 +14,6 @@ from aec_bench.evolution.graveyard import MutationGraveyard
 logger = logging.getLogger(__name__)
 
 
-# ---------------------------------------------------------------------------
-# Selection result
-# ---------------------------------------------------------------------------
-
-
-# TODO(EF-01-T6): remove this alias when strategy.py no longer imports the old name.
-# It does not add a second result shape or a model-owned strategy field.
-SelectionResult = SelectionPlan
-
 _STRATEGY_GOALS: dict[MutationStrategy, str] = {
     MutationStrategy.CONSERVATIVE: "Apply a conservative mutation to the selected parent.",
     MutationStrategy.EXPLORATORY: "Explore a less-covered archive region from the selected parent.",
@@ -66,7 +57,7 @@ def build_archive_tools(
             }
             if sort_by in valid_fields:
                 candidates.sort(key=lambda e: getattr(e.bd, sort_by), reverse=True)
-            entries = candidates[:limit]
+            entries = tuple(candidates[:limit])
 
         if not entries:
             return "Archive is empty — no entries to browse."

@@ -249,7 +249,6 @@ def run_evolution(
     run_id: str | None = None,
     candidate_id_factory: CandidateIdFactory | None = None,
     archive_agent: ArchiveAgent | None = None,
-    strategy: object | None = None,
 ) -> EvolutionResult:
     """Run one functional evolution loop.
 
@@ -257,7 +256,6 @@ def run_evolution(
     plan. The canonical workspace is changed only after an accepted child.
     Observation enrichment and variation are explicit application dependencies.
     """
-    del strategy  # Temporary source compatibility for callers removed in EF-01-T6.
     workspace.init_versioning()
     now = clock or (lambda: datetime.now(tz=UTC))
     resolved_run_id = run_id or _timestamp_slug()
