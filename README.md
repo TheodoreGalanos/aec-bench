@@ -901,6 +901,32 @@ Evolution workspaces use candidate IDs for lineage and full Git commits for
 source. Git tags are optional immutable labels. History displays the Git commit
 time; it does not create a new time when it reads old candidates.
 
+Evolution runs use one functional cycle. The host selects a parent and any
+inspirations, plans one shared evaluation batch, evaluates the exact parent,
+creates a child in scratch, evaluates the exact child against that same batch,
+then applies the search-specific acceptance and state transition. The
+canonical workspace changes only after acceptance. A one-shot variation is
+the current variation operator: it returns a child snapshot and mutation
+summary, or abstains when it makes no effective change. The operator seam is
+ready for future variation operators; this does not promise an AVO
+implementation.
+
+Hill-climb accepts a valid child when its trusted score clears the configured
+improvement threshold. QD accepts a valid child when it enters a new archive
+cell or improves an occupied cell; global-best improvement is not required.
+The QD host allocates mutation strategies with the strategy bandit and limits
+the archive agent to the host shortlist and chosen strategy. Bandit feedback is
+updated once from the archive outcome. Graveyard rescue uses only actual
+rejected candidate material with a matching candidate ID.
+
+Swarm agents receive exact `SwarmAssignment` values and return variation plus
+agent cost. They do not score candidates or update the archive. The host
+evaluates parent and child, binds exact `TrialRecord` evidence, and applies
+archive, graveyard, budget, and reducer effects. The async manager owns
+concurrency. Its immutable `SwarmState` owns decisions, while the event log
+reports them. Swarm state and candidate snapshots are persisted with the
+archive and graveyard so the recorded candidate material remains resolvable.
+
 ```bash
 # Create and run a workspace
 uv run aec-bench evolve init ./my-workspace --name "My Agent"

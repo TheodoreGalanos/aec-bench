@@ -76,6 +76,21 @@ result.
 A report, dashboard, provider adapter, or persistence layer must not invent a
 second metric definition or repair an invalid result into a valid one.
 
+## Candidate evidence is exact
+
+Any score, descriptor, gate decision, archive outcome, graveyard entry, or
+lineage update that names a candidate MUST derive from evidence produced by
+that exact candidate. Candidate identity MUST remain distinct from trial and
+attempt identity. Parent and child evidence MUST remain separate, and a
+comparison MUST use the same ordered evaluation cases for both candidates.
+
+`TrialRecord` remains the evidence authority. Evolution-owned assessments,
+archive entries, graveyard projections, and swarm decisions may summarise that
+evidence, but they MUST NOT invent a score, descriptor, validity result, or
+candidate snapshot. A rejected or invalid candidate MUST NOT become an
+accepted archive or global-best candidate through an event, placeholder, or
+agent-owned score.
+
 ## Public and holdout material remain separate
 
 Visibility is explicit. Public catalogues, examples, training exports,

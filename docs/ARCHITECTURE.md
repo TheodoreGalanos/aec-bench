@@ -107,38 +107,85 @@ meta-harness API.
 
 ### Agent evolution
 
-Evolution uses the same functional application shape as artifact-task
-execution:
+Evolution is one functional application path. `run_evolution()` composes task
+and attempt planning, evaluation, variation, search policy, and persistence;
+it does not create a second task executor or verifier. Its cycle is:
 
 ```text
-run_trial() -> run_experiment() -> run_evolution()
+functional application shell
+        ↓
+explicit selection state
+        ↓
+exact parent evaluation
+        ↓
+isolated variation
+        ↓
+exact child evaluation
+        ↓
+pure policy and state transition
+        ↓
+explicit commit/archive/graveyard effects
 ```
 
-`run_evolution()` owns the evolution cycle loop. It receives an explicit
-`Workspace`, `EvolutionConfig`, `CandidateEvaluator`, batch planner, variation
-operator, observation enricher, and selection strategy. The evaluator receives
-one `WorkspaceSnapshot` and one candidate-independent `CandidateEvaluationBatch`.
-It returns `TrialRecord` values through the normal `run_experiment()` path.
-The loop binds each candidate snapshot to its own `EvaluatedCandidate`, compares
-parent and child assessments from the same planned cases, applies pure gate and
-state functions, persists cycle evidence, saves archive and graveyard state,
-and returns `EvolutionResult` directly. The canonical workspace changes only
-after an accepted child; rejected child material remains in the graveyard.
+The shell receives an explicit `Workspace`, `EvolutionConfig`, candidate batch
+planner, candidate evaluator, variation operator, and observation enricher.
+The planner creates one candidate-independent `CandidateEvaluationBatch` for a
+cycle. Parent and child records are produced by the evaluator for that exact
+batch, then `bind_candidate_evaluation()` creates separate
+`EvaluatedCandidate` values. A child is evaluated before any gate or workspace
+write can accept it. Parent and child evidence are never combined.
 
-`EvolutionState` is the sole owner of active candidate, best candidate, score,
-and stagnation state. The application coordinator is the only owner of cycle
-effects. Swarm execution uses a private single-cycle call into that coordinator
-until its later redesign; it does not maintain a second evolution lifecycle.
+`EvolutionState` is the sole owner of the hill-climb active candidate, best
+candidate, score, and stagnation state. Pure transition functions decide the
+next state. The shell applies a canonical workspace commit only after an
+accepted child. Rejected or invalid child material is written to the
+graveyard. A one-shot variation call operates on a scratch workspace and
+returns either a complete `VariationResult` or an explicit abstention.
 
-`run_evolution_from_config()` is the repository composition root. It loads the
-workspace and configured model clients, selects the local or Harbor candidate
-evaluator, builds the batch planner, variation operator, and strategy, and calls
-`run_evolution()`. The
-`aec-bench evolve run` command is a thin caller of this function.
+Quality-diversity runs keep explicit `QDState` for cell-selection and strategy
+bandit feedback. The host selects the mutation strategy and shortlist. The
+archive agent may select a parent and inspirations only within those host
+constraints; it cannot change the strategy. An archive insertion is accepted
+when it enters a new cell or improves a cell, even when it does not improve the
+global score. Bandit and cell feedback updates once from that archive outcome.
+Graveyard rescue is allowed only when the entry contains a resolvable
+`rejected_snapshot` with the exact candidate ID.
+
+Swarm execution uses `SwarmManager` as an asynchronous shell over the same
+candidate/evidence boundary. Each `SwarmAssignment` contains exact parent and
+inspiration snapshots. An agent returns a `SwarmAgentResult` containing only a
+variation result and its agent cost; it does not submit a score, descriptor, or
+archive decision. The manager evaluates the assigned parent and submitted child
+through the host evaluator outside the shared-state lock. Archive and
+graveyard effects, budget accounting, pure reduction, and `SwarmState` updates
+are applied in one short locked section. `SwarmState` is immutable and is the
+decision authority; the event log reports those decisions and is not state.
+The manager persists `swarm_state.json`, exact candidate snapshots, archive,
+graveyard, budget, lineage, notes, and events as separate owned outputs.
+
+The durable ownership boundaries are:
+
+| Concern | Owner |
+| --- | --- |
+| Task and attempt planning | Evaluation composition |
+| Validity and score meaning | Evaluation |
+| Candidate/evidence binding | Evolution functional core |
+| Parent and inspiration selection | Search policy |
+| Variation | Variation operator |
+| Acceptance | Search-specific trusted policy |
+| Candidate persistence | Workspace/application shell |
+| QD insertion | Archive adapter |
+| Graveyard projection | Functional core |
+| Swarm concurrency | Async manager shell |
+| Swarm decisions | Functional reducer |
+
+`run_evolution_from_config()` is the composition root. It loads the workspace
+and model clients, selects the local or Harbor evaluator, builds the batch
+planner, variation operator, and enrichment path, and calls `run_evolution()`.
+The `aec-bench evolve run` command is a thin caller of this function.
 
 Best-of-K attempts stay inside one scored trial. Evolution cycles stay outside
-the trial and use the returned records as fitness evidence. Evolution does not
-own a separate task executor, verifier, artifact collector, or trial builder.
+the trial and use returned `TrialRecord` values as fitness evidence.
 
 Deterministic templates and suite generation live with authoring and generation.
 Generated instances remain derived artifacts. Runnable task directories contain
