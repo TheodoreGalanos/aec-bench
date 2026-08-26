@@ -15,6 +15,7 @@ from aec_bench.contracts.evolution import (
     TraceDigest,
     WorkspaceSnapshot,
 )
+from aec_bench.evolution.archive import ArchiveBatchOutcome, ArchiveInsertionResult, ArchiveInsertionStatus
 from aec_bench.evolution.core import SelectionPlan, VariationResult, VariationStatus
 from aec_bench.evolution.evaluation import bind_evaluated_candidate
 from aec_bench.evolution.swarm.config import SwarmConfig
@@ -89,6 +90,8 @@ def _outcome(
     structural_score: float | None = 0.4,
     observation_count: int = 1,
     cost: float = 0.2,
+    archive_status: ArchiveInsertionStatus = ArchiveInsertionStatus.NEW_CELL,
+    valid: bool = True,
 ) -> SwarmOutcome:
     assignment = _assignment(agent_id, assignment_id)
     if candidate_id is None:
@@ -146,10 +149,15 @@ def _outcome(
         discipline_scores={"structural": score},
         trial_ids=tuple(f"trial-{index}" for index in range(1, observation_count + 1)),
         evaluation_case_ids=tuple(f"case-{index}" for index in range(1, observation_count + 1)),
-        valid=True,
+        valid=valid,
+        invalid_reasons=() if valid else ("invalid candidate",),
     )
     evaluated = bind_evaluated_candidate(child, observations, assessment)
-    return SwarmOutcome(assignment, result, evaluated, None)
+    archive_outcome = ArchiveBatchOutcome(
+        candidate_id=candidate_id,
+        insertions=(ArchiveInsertionResult(archive_status, candidate_id, 0, None),),
+    )
+    return SwarmOutcome(assignment, result, evaluated, archive_outcome)
 
 
 def _reduce(state: SwarmState, outcome: SwarmOutcome, *, budget: BudgetSnapshot | None = None, **config: int):
@@ -172,6 +180,25 @@ def test_reducer_is_deterministic_and_uses_host_score() -> None:
     assert new_state.best_candidate_id == "child-1"
     assert new_state.best_score == pytest.approx(0.68)  # 0.8*0.7 + 0.4*0.3
     assert decision.continue_agent is True
+
+
+@pytest.mark.parametrize(
+    ("archive_status", "valid"),
+    [
+        (ArchiveInsertionStatus.NOT_ADDED, True),
+        (ArchiveInsertionStatus.NEW_CELL, False),
+    ],
+)
+def test_reducer_does_not_promote_rejected_or_invalid_candidates(
+    archive_status: ArchiveInsertionStatus, valid: bool
+) -> None:
+    state = _state("agent-1", best_score=0.5)
+    new_state, _ = _reduce(
+        state,
+        _outcome(score=0.99, archive_status=archive_status, valid=valid),
+    )
+    assert new_state.best_candidate_id == "existing"
+    assert new_state.best_score == pytest.approx(0.5)
 
 
 def test_no_child_updates_only_explicit_agent_cost() -> None:
