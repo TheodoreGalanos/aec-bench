@@ -7,6 +7,7 @@ import pytest
 from pydantic import ValidationError
 
 from aec_bench.contracts.evolution import (
+    CandidateAssessment,
     DisciplineScore,
     EvolutionConfig,
     EvolutionCycleRecord,
@@ -18,6 +19,7 @@ from aec_bench.contracts.evolution import (
     GateDecision,
     MutationSummary,
     ObservationEnrichment,
+    SelectionRecord,
     SkillEntry,
     StagnationInfo,
     StepResult,
@@ -281,7 +283,7 @@ class TestWorkspaceSnapshot:
             system_prompt="You are an agent.",
             candidate_id="baseline",
         )
-        assert snapshot.skills == []
+        assert snapshot.skills == ()
 
     def test_blank_system_prompt_rejected(self) -> None:
         with pytest.raises(ValidationError):
@@ -550,14 +552,6 @@ class TestDisciplineScore:
 
 
 class TestEvolutionCycleRecord:
-    def _make_discipline_score(self, discipline: str = "structural") -> DisciplineScore:
-        return DisciplineScore(
-            discipline=discipline,
-            task_count=8,
-            mean_reward=0.72,
-            field_pass_rate=0.80,
-        )
-
     def _make_mutation(self) -> MutationSummary:
         return MutationSummary(
             prompt_modified=True,
@@ -565,53 +559,79 @@ class TestEvolutionCycleRecord:
             evolver_reasoning="Added formula to improve accuracy.",
         )
 
+    def _make_assessment(self, candidate_id: str, trial_id: str = "trial-001") -> CandidateAssessment:
+        return CandidateAssessment(
+            candidate_id=candidate_id,
+            batch_score=0.75,
+            structural_score=0.68,
+            discipline_scores={"structural": 0.72},
+            trial_ids=(trial_id,),
+            evaluation_case_ids=(f"case-{trial_id}",),
+            valid=True,
+        )
+
+    def _make_selection(self, parent_candidate_id: str) -> SelectionRecord:
+        return SelectionRecord(
+            parent_candidate_id=parent_candidate_id,
+            strategy="conservative",
+            goal="Improve the selected candidate.",
+            reasoning="Select the current best candidate.",
+        )
+
     def test_accepted_cycle_full(self) -> None:
         record = EvolutionCycleRecord(
             cycle=3,
-            candidate_id_before="run:2",
-            candidate_id_after="run:3",
-            batch_score=0.75,
-            discipline_scores=[self._make_discipline_score()],
-            structural_score=0.68,
+            selection=self._make_selection("run:2"),
+            parent_assessment=self._make_assessment("run:2"),
+            child_assessment=self._make_assessment("run:3", "trial-002"),
             mutation=self._make_mutation(),
             gate_decision=GateDecision.ACCEPTED,
-            trial_ids=["trial-001", "trial-002"],
+            gate_reason="Child improved the configured objective.",
+            active_candidate_id_after="run:3",
+            best_candidate_id_after="run:3",
             timestamp=datetime.now(UTC),
+            evolver_cost_usd=0.04,
         )
         assert record.cycle == 3
         assert record.gate_decision == GateDecision.ACCEPTED
-        assert record.candidate_id_after == "run:3"
-        assert len(record.discipline_scores) == 1
-        assert record.evolver_cost is None
+        assert record.parent_assessment.candidate_id == "run:2"
+        assert record.child_assessment is not None
+        assert record.child_assessment.candidate_id == "run:3"
+        assert record.active_candidate_id_after == "run:3"
+        assert record.evolver_cost_usd == pytest.approx(0.04)
 
     def test_skipped_cycle_same_versions(self) -> None:
         record = EvolutionCycleRecord(
             cycle=1,
-            candidate_id_before="baseline",
-            candidate_id_after="baseline",
-            batch_score=0.50,
-            structural_score=None,
+            selection=self._make_selection("baseline"),
+            parent_assessment=self._make_assessment("baseline", "trial-100"),
+            child_assessment=None,
             mutation=None,
             gate_decision=GateDecision.SKIPPED,
-            trial_ids=["trial-100"],
+            gate_reason="Variation abstained.",
+            active_candidate_id_after="baseline",
+            best_candidate_id_after="baseline",
             timestamp=datetime.now(UTC),
+            evolver_cost_usd=0.0,
         )
         assert record.gate_decision == GateDecision.SKIPPED
-        assert record.candidate_id_before == record.candidate_id_after
+        assert record.active_candidate_id_after == record.best_candidate_id_after == "baseline"
         assert record.mutation is None
 
     def test_blank_version_before_rejected(self) -> None:
         with pytest.raises(ValidationError):
             EvolutionCycleRecord(
                 cycle=1,
-                candidate_id_before="",
-                candidate_id_after="run:2",
-                batch_score=0.5,
-                structural_score=None,
+                selection=self._make_selection(""),
+                parent_assessment=self._make_assessment("baseline"),
+                child_assessment=None,
                 mutation=None,
                 gate_decision=GateDecision.REJECTED,
-                trial_ids=[],
+                gate_reason="Rejected child.",
+                active_candidate_id_after="baseline",
+                best_candidate_id_after="baseline",
                 timestamp=datetime.now(UTC),
+                evolver_cost_usd=0.0,
             )
 
 
@@ -619,14 +639,28 @@ class TestStepResult:
     def _make_cycle_record(self, gate: GateDecision = GateDecision.ACCEPTED) -> EvolutionCycleRecord:
         return EvolutionCycleRecord(
             cycle=1,
-            candidate_id_before="baseline",
-            candidate_id_after="run:2",
-            batch_score=0.80,
-            structural_score=None,
+            selection=SelectionRecord(
+                parent_candidate_id="baseline",
+                strategy="conservative",
+                goal="Improve the selected candidate.",
+                reasoning="Select the current best candidate.",
+            ),
+            parent_assessment=CandidateAssessment(
+                candidate_id="baseline",
+                batch_score=0.80,
+                discipline_scores={},
+                trial_ids=("trial-x",),
+                evaluation_case_ids=("case-x",),
+                valid=True,
+            ),
+            child_assessment=None,
             mutation=None,
             gate_decision=gate,
-            trial_ids=["trial-x"],
+            gate_reason="Cycle decision.",
+            active_candidate_id_after="baseline",
+            best_candidate_id_after="baseline",
             timestamp=datetime.now(UTC),
+            evolver_cost_usd=0.0,
         )
 
     def test_mutated_result(self) -> None:
@@ -655,14 +689,29 @@ class TestEvolutionResult:
     def _make_cycle_record(self) -> EvolutionCycleRecord:
         return EvolutionCycleRecord(
             cycle=1,
-            candidate_id_before="baseline",
-            candidate_id_after="run:2",
-            batch_score=0.82,
-            structural_score=0.70,
+            selection=SelectionRecord(
+                parent_candidate_id="baseline",
+                strategy="conservative",
+                goal="Improve the selected candidate.",
+                reasoning="Select the current best candidate.",
+            ),
+            parent_assessment=CandidateAssessment(
+                candidate_id="baseline",
+                batch_score=0.82,
+                structural_score=0.70,
+                discipline_scores={},
+                trial_ids=("trial-001",),
+                evaluation_case_ids=("case-001",),
+                valid=True,
+            ),
+            child_assessment=None,
             mutation=MutationSummary(prompt_modified=True),
             gate_decision=GateDecision.ACCEPTED,
-            trial_ids=["trial-001"],
+            gate_reason="Accepted baseline cycle.",
+            active_candidate_id_after="run:2",
+            best_candidate_id_after="run:2",
             timestamp=datetime.now(UTC),
+            evolver_cost_usd=0.01,
         )
 
     def test_converged_run(self) -> None:

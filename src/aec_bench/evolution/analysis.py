@@ -31,7 +31,7 @@ class BehavioralPattern:
 
 
 @dataclass(frozen=True)
-class AnalysisResult:
+class EvolutionAnalysis:
     """Aggregate result of an analysis pass over a batch of observations."""
 
     discipline_scores: list[DisciplineScore]

@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import math
 from datetime import datetime
 from enum import StrEnum
 from typing import Any, Literal
@@ -162,7 +163,7 @@ class WorkspaceSnapshot(StrictModel):
     """The full runtime state of one evolution candidate."""
 
     system_prompt: NonEmptyStr
-    skills: list[SkillEntry] = Field(default_factory=list)
+    skills: tuple[SkillEntry, ...] = ()
     candidate_id: NonEmptyStr
 
 
@@ -226,6 +227,54 @@ class EvolutionObservation(StrictModel):
     discipline: NonEmptyStr
 
 
+class CandidateAssessment(StrictModel):
+    """Evaluation-owned evidence projected for one exact candidate."""
+
+    candidate_id: NonEmptyStr
+    batch_score: float
+    discipline_scores: dict[str, float]
+    trial_ids: tuple[NonEmptyStr, ...]
+    evaluation_case_ids: tuple[NonEmptyStr, ...]
+    valid: bool
+    structural_score: float | None = None
+    invalid_reasons: tuple[NonEmptyStr, ...] = ()
+
+    @field_validator("batch_score", "structural_score")
+    @classmethod
+    def validate_scores(cls, value: float | None) -> float | None:
+        if value is not None and not math.isfinite(value):
+            raise ValueError("candidate assessment scores must be finite")
+        return value
+
+    @field_validator("discipline_scores")
+    @classmethod
+    def validate_discipline_scores(cls, value: dict[str, float]) -> dict[str, float]:
+        if any(not discipline.strip() for discipline in value):
+            raise ValueError("discipline score names must not be blank")
+        if any(not math.isfinite(score) for score in value.values()):
+            raise ValueError("discipline scores must be finite")
+        return value
+
+    @field_validator("trial_ids", "evaluation_case_ids")
+    @classmethod
+    def validate_unique_ids(cls, value: tuple[str, ...], info: Any) -> tuple[str, ...]:
+        if not value:
+            raise ValueError(f"{info.field_name} must not be empty")
+        if len(value) != len(set(value)):
+            raise ValueError(f"{info.field_name} must be unique")
+        return value
+
+    @model_validator(mode="after")
+    def validate_evidence_cardinality(self) -> CandidateAssessment:
+        if len(self.trial_ids) != len(self.evaluation_case_ids):
+            raise ValueError("trial_ids and evaluation_case_ids must have equal cardinality")
+        if self.valid and self.invalid_reasons:
+            raise ValueError("valid candidate assessments cannot contain invalid reasons")
+        if not self.valid and not self.invalid_reasons:
+            raise ValueError("invalid candidate assessments require invalid reasons")
+        return self
+
+
 class TraceQueryRequest(StrictModel):
     """Parameters for querying a subset of turns from a trial trace."""
 
@@ -276,6 +325,33 @@ class MutationSummary(StrictModel):
     evolver_reasoning: str | None = None
 
 
+class MutationStrategy(StrEnum):
+    """Host-selected variation intent used by the evolution search policy."""
+
+    CONSERVATIVE = "conservative"
+    EXPLORATORY = "exploratory"
+    CROSSOVER = "crossover"
+    GRAVEYARD_RESCUE = "graveyard_rescue"
+
+
+class SelectionRecord(StrictModel):
+    """Persisted summary of the parent and inspirations selected for a cycle."""
+
+    parent_candidate_id: NonEmptyStr
+    inspiration_candidate_ids: tuple[NonEmptyStr, ...] = ()
+    strategy: MutationStrategy
+    goal: NonEmptyStr
+    reasoning: NonEmptyStr
+
+    @model_validator(mode="after")
+    def validate_inspirations(self) -> SelectionRecord:
+        if len(self.inspiration_candidate_ids) != len(set(self.inspiration_candidate_ids)):
+            raise ValueError("selection inspiration candidate IDs must be unique")
+        if self.parent_candidate_id in self.inspiration_candidate_ids:
+            raise ValueError("selection parent cannot also be an inspiration")
+        return self
+
+
 class DisciplineScore(StrictModel):
     """Aggregate performance metrics for a single engineering discipline in a cycle."""
 
@@ -290,16 +366,30 @@ class EvolutionCycleRecord(StrictModel):
     """Immutable record of a single evolution cycle."""
 
     cycle: int
-    candidate_id_before: NonEmptyStr
-    candidate_id_after: NonEmptyStr
-    batch_score: float
-    discipline_scores: list[DisciplineScore] = Field(default_factory=list)
-    structural_score: float | None
+    selection: SelectionRecord
+    parent_assessment: CandidateAssessment
+    child_assessment: CandidateAssessment | None
     mutation: MutationSummary | None
     gate_decision: GateDecision
-    trial_ids: list[str]
+    gate_reason: NonEmptyStr
+    active_candidate_id_after: NonEmptyStr
+    best_candidate_id_after: NonEmptyStr
     timestamp: datetime
-    evolver_cost: CostRecord | None = None
+    evolver_cost_usd: float
+
+    @field_validator("evolver_cost_usd")
+    @classmethod
+    def validate_evolver_cost(cls, value: float) -> float:
+        if not math.isfinite(value) or value < 0:
+            raise ValueError("evolver_cost_usd must be a finite non-negative number")
+        return value
+
+    @field_validator("timestamp")
+    @classmethod
+    def validate_timestamp(cls, value: datetime) -> datetime:
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise ValueError("evolution cycle timestamps must include a timezone")
+        return value
 
 
 class StepResult(StrictModel):

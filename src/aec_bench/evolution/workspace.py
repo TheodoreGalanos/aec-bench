@@ -139,7 +139,7 @@ class Workspace:
     def export_snapshot(self, candidate_id: str) -> WorkspaceSnapshot:
         return WorkspaceSnapshot(
             system_prompt=self.read_prompt(),
-            skills=self.list_skills(),
+            skills=tuple(self.list_skills()),
             candidate_id=candidate_id,
         )
 
