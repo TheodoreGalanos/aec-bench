@@ -9,6 +9,7 @@ import threading
 import time
 from datetime import UTC, datetime
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 import yaml
@@ -20,10 +21,19 @@ from aec_bench.contracts.evolution import (
 )
 from aec_bench.contracts.experiment_manifest import AgentConfig, ComputeConfig, TaskSelector
 from aec_bench.contracts.trial_record import CostRecord
+from aec_bench.evolution import variation_operator
 from aec_bench.evolution.cancellation import AVOCancellationSignal
 from aec_bench.evolution.core import DevelopmentAttempt, SelectionPlan, VariationResult, VariationStatus
 from aec_bench.evolution.evaluation import CandidateEvaluationBatch, bind_evaluated_candidate
 from aec_bench.evolution.memory import AVOMemoryEntry
+from aec_bench.evolution.supervision import (
+    AVORemainingBudget,
+    AVOSupervisionAdvice,
+    AVOSupervisionRequest,
+    AVOSupervisionResult,
+    AVOSupervisionTrigger,
+)
+from aec_bench.evolution.swarm import evolver as swarm_evolver_module
 from aec_bench.evolution.swarm.core import AgentBudget, SwarmAgentResult, SwarmAssignment
 from aec_bench.evolution.swarm.evolver import (
     SwarmAgentEvolver,
@@ -377,6 +387,179 @@ def test_factory_creates_independent_workspaces(tmp_path: Path) -> None:
     # Each agent should have a different workspace path
     assert e1._workspace._root != e2._workspace._root
     factory.cleanup()
+
+
+def test_factory_isolates_supervisor_state_and_checkpoint_paths_per_agent(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = _setup_workspace(tmp_path)
+    task_dir = _setup_task(tmp_path)
+    inputs_root = tmp_path / "inputs"
+    inputs_root.mkdir()
+    _inputs_workspace, batch = _setup_evolution_inputs(inputs_root)
+    models: list[object] = []
+    supervisor_runners = []
+    captures = []
+
+    def build_model(_model_name: str) -> object:
+        model = object()
+        models.append(model)
+        return model
+
+    monkeypatch.setattr(swarm_evolver_module, "build_pydantic_model", build_model)
+
+    def batch_planner(**_kwargs):
+        return lambda _size, _cycle: batch
+
+    def candidate_evaluator(**_kwargs):
+        def evaluate(snapshot, current_batch):
+            return tuple(
+                make_trial_record(
+                    trial_id=trial.trial_id,
+                    task_id=trial.task_id,
+                    evaluation={
+                        "reward": 0.5,
+                        "validity": {
+                            "output_parseable": True,
+                            "schema_valid": True,
+                            "verifier_completed": True,
+                        },
+                    },
+                )
+                for trial in current_batch.trials
+            )
+
+        return evaluate
+
+    monkeypatch.setattr(swarm_evolver_module, "make_local_candidate_batch_planner", batch_planner)
+    monkeypatch.setattr(swarm_evolver_module, "make_local_candidate_evaluator", candidate_evaluator)
+
+    class RecordingSupervisor:
+        def __init__(self, label: str, model: object) -> None:
+            self.label = label
+            self.model = model
+            self.requests: list[AVOSupervisionRequest] = []
+
+        def __call__(self, request: AVOSupervisionRequest) -> AVOSupervisionResult:
+            self.requests.append(request)
+            return AVOSupervisionResult(
+                output=AVOSupervisionAdvice(
+                    directions=(f"Private direction for {self.label}.",),
+                    reasoning="Advice must stay inside this agent's call.",
+                ),
+                usage=VariationUsage(model_requests=1, supervisor_interventions=1),
+            )
+
+    def build_supervisor(model: object, *, model_identity: str) -> SimpleNamespace:
+        runner = RecordingSupervisor(f"agent-{len(supervisor_runners)}", model)
+        supervisor_runners.append(runner)
+        return SimpleNamespace(runner=runner)
+
+    monkeypatch.setattr(variation_operator, "build_supervision_composition", build_supervisor)
+
+    def capture_run(
+        request,
+        _source,
+        child_candidate_id,
+        *,
+        agent_runner,
+        supervisor_runner,
+        checkpoint_path,
+        cancellation_signal,
+        **_kwargs,
+    ) -> VariationResult:
+        supervision_request = AVOSupervisionRequest(
+            goal=request.selection.goal,
+            selected_parent_id=request.selection.parent_candidate_id,
+            strategy=request.selection.strategy,
+            attempt_summaries=(),
+            remaining_budget=AVORemainingBudget(
+                remaining_model_requests=1,
+                remaining_tool_calls=1,
+                remaining_development_evaluations=1,
+                remaining_elapsed_seconds=1.0,
+                remaining_supervisor_interventions=1,
+                cost_limit_usd=None,
+                remaining_cost_usd=None,
+            ),
+            trigger_reason=AVOSupervisionTrigger.EXHAUSTED_DIRECTION_REQUEST,
+        )
+        advice = supervisor_runner(supervision_request).output
+        captures.append(
+            {
+                "agent_runner": agent_runner,
+                "supervisor_runner": supervisor_runner,
+                "cancellation_signal": cancellation_signal,
+                "checkpoint_path": checkpoint_path,
+                "advice": advice,
+                "child_candidate_id": child_candidate_id,
+            }
+        )
+        return VariationResult(
+            status=VariationStatus.ABSTAINED,
+            child=None,
+            mutation=None,
+            reasoning=advice.directions[0],
+            usage=VariationUsage(),
+        )
+
+    monkeypatch.setattr(variation_operator, "run_agentic_variation", capture_run)
+    factory = SwarmEvolverFactory(
+        workspace_source=source,
+        task_dirs=[task_dir],
+        classifier_llm=StubClassifierLLM(),
+        model="test-model",
+    )
+
+    first = factory.create("agent-0")
+    second = factory.create("agent-1")
+    parent = Workspace(source).export_snapshot("parent")
+    selection = SelectionPlan("parent", (), "conservative", "Improve checks", "Use the host direction.")
+    first_assignment = SwarmAssignment(
+        run_id="run-test",
+        assignment_id="assignment-1",
+        agent_id="agent-0",
+        selection=selection,
+        parent=parent,
+        inspirations=(),
+        budget=AgentBudget(2.0),
+        issued_at=datetime.now(UTC),
+    )
+    second_assignment = SwarmAssignment(
+        run_id="run-test",
+        assignment_id="assignment-2",
+        agent_id="agent-1",
+        selection=selection,
+        parent=parent,
+        inspirations=(),
+        budget=AgentBudget(2.0),
+        issued_at=datetime.now(UTC),
+    )
+    first._sync_step(first_assignment)
+    second._sync_step(second_assignment)
+    factory.cleanup()
+
+    assert len(models) == 2
+    assert models[0] is not models[1]
+    assert len(supervisor_runners) == 2
+    assert supervisor_runners[0].model is models[0]
+    assert supervisor_runners[1].model is models[1]
+    assert supervisor_runners[0] is not supervisor_runners[1]
+    assert first._variation_operator is not second._variation_operator
+    assert first.cancellation_signal is not second.cancellation_signal
+    assert len(captures) == 2
+    assert captures[0]["agent_runner"] is not captures[1]["agent_runner"]
+    assert captures[0]["supervisor_runner"] is supervisor_runners[0]
+    assert captures[1]["supervisor_runner"] is supervisor_runners[1]
+    assert captures[0]["cancellation_signal"] is first.cancellation_signal
+    assert captures[1]["cancellation_signal"] is second.cancellation_signal
+    assert captures[0]["checkpoint_path"] != captures[1]["checkpoint_path"]
+    assert captures[0]["checkpoint_path"].parent.parent == source / "_avo_checkpoints"
+    assert captures[1]["checkpoint_path"].parent.parent == source / "_avo_checkpoints"
+    assert captures[0]["advice"].directions != captures[1]["advice"].directions
+    assert len(supervisor_runners[0].requests) == 1
+    assert len(supervisor_runners[1].requests) == 1
+    assert supervisor_runners[0].requests[0] is not supervisor_runners[1].requests[0]
 
 
 def test_evolver_returns_submitted_child_without_mutating_canonical_workspace(tmp_path: Path) -> None:
