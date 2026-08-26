@@ -6,10 +6,12 @@ from typing import Any
 
 import pytest
 
+from aec_bench.contracts.evaluation_result import EvaluationResult, ValidityCheck
 from aec_bench.contracts.evolution import ObservationEnrichment, WorkspaceSnapshot
 from aec_bench.contracts.experiment_manifest import AgentConfig, ComputeConfig
+from aec_bench.contracts.trial_record import EvaluationStatus
 from aec_bench.evolution.backends import local
-from aec_bench.evolution.core import (
+from aec_bench.evolution.evaluation import (
     CandidateEvaluationBatch,
     bind_candidate_evaluation,
     build_candidate_assessment,
@@ -94,12 +96,57 @@ def test_assessment_uses_trial_evaluation_and_preserves_invalidity(tmp_path: Pat
     records = (make_trial_record(trial_id="trial-1", task_id="electrical/check/one", evaluation=None),)
     observations = build_observations(records, "candidate", batch=batch)
 
+    with pytest.raises(ValueError, match="trial trial-1 has no EvaluationResult evidence"):
+        build_candidate_assessment("candidate", batch, observations)
+
+
+def test_non_completed_evaluation_retains_reward_and_trial_qualified_invalidity(tmp_path: Path) -> None:
+    batch = _batch(tmp_path)
+    record = make_trial_record(
+        trial_id="trial-1",
+        task_id="electrical/check/one",
+        evaluation_status=EvaluationStatus.FAILED,
+        evaluation=EvaluationResult(
+            reward=0.73,
+            validity=ValidityCheck(
+                output_parseable=True,
+                schema_valid=True,
+                verifier_completed=True,
+            ),
+        ),
+    )
+    observations = build_observations((record,), "candidate", batch=batch)
+
     assessment = build_candidate_assessment("candidate", batch, observations)
 
-    assert assessment.batch_score == 0.0
     assert assessment.valid is False
-    assert assessment.invalid_reasons == ("trial trial-1 has no completed evaluation",)
-    assert assessment.evaluation_case_ids == ("case-1",)
+    assert assessment.batch_score == pytest.approx(0.73)
+    assert assessment.invalid_reasons == ("trial trial-1: evaluation status is failed",)
+
+
+def test_validity_errors_are_qualified_by_trial_id(tmp_path: Path) -> None:
+    batch = _batch(tmp_path)
+    record = make_trial_record(
+        trial_id="trial-1",
+        task_id="electrical/check/one",
+        evaluation=EvaluationResult(
+            reward=0.0,
+            validity=ValidityCheck(
+                output_parseable=False,
+                schema_valid=True,
+                verifier_completed=True,
+                errors=["parse failed"],
+            ),
+        ),
+    )
+
+    assessment = build_candidate_assessment(
+        "candidate",
+        batch,
+        build_observations((record,), "candidate", batch=batch),
+    )
+
+    assert assessment.invalid_reasons == ("trial trial-1: parse failed",)
 
 
 def test_enrichment_must_preserve_record_order(tmp_path: Path) -> None:

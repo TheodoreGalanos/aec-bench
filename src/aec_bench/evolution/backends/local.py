@@ -10,7 +10,7 @@ from pathlib import Path
 from aec_bench.contracts.evolution import WorkspaceSnapshot
 from aec_bench.contracts.experiment_manifest import AgentConfig, ComputeConfig, ExperimentManifest, TaskSelector
 from aec_bench.contracts.trial_record import TrialRecord
-from aec_bench.evolution.core import (
+from aec_bench.evolution.evaluation import (
     CandidateBatchPlanner,
     CandidateEvaluationBatch,
     CandidateEvaluator,

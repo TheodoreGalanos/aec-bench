@@ -26,10 +26,10 @@ from aec_bench.evolution.core import (
     VariationResult,
     VariationStatus,
     assessment_score,
-    bind_evaluated_candidate,
     decide_candidate,
     reduce_evolution_state,
 )
+from aec_bench.evolution.evaluation import bind_evaluated_candidate
 from tests.support.trial_record_factories import make_trial_record
 
 

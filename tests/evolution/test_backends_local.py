@@ -9,7 +9,7 @@ import pytest
 from aec_bench.contracts.evolution import SkillEntry, WorkspaceSnapshot
 from aec_bench.contracts.experiment_manifest import AgentConfig, ComputeConfig
 from aec_bench.evolution.backends import local
-from aec_bench.evolution.core import CandidateEvaluationBatch
+from aec_bench.evolution.evaluation import CandidateEvaluationBatch
 from aec_bench.tasks.instance import resolve_instance_paths
 from aec_bench.trials import PlannedTrial
 from tests.support.task_factories import make_task_definition
