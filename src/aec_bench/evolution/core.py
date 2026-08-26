@@ -8,7 +8,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from aec_bench.contracts.evolution import (
     CandidateAssessment,
@@ -25,6 +25,9 @@ from aec_bench.contracts.evolution import (
 from aec_bench.evolution.analysis import EvolutionAnalysis, GraduatedScope
 from aec_bench.evolution.graveyard import GraveyardEntry
 from aec_bench.evolution.memory import AVO_MEMORY_LIMIT, AVOMemoryEntry, validate_memory_entries
+
+if TYPE_CHECKING:
+    from aec_bench.evolution.supervision import AVOSupervisionRecord
 
 
 def _require_text(value: str, field_name: str) -> None:
@@ -271,6 +274,8 @@ class AVOState:
     best_attempt_id: str | None = None
     consecutive_without_progress: int = 0
     consecutive_evaluation_errors: int = 0
+    exhausted_direction_requested: bool = False
+    supervision_records: tuple[AVOSupervisionRecord, ...] = ()
     memory: tuple[AVOMemoryEntry, ...] = ()
     usage: VariationUsage = VariationUsage()
     terminal_status: VariationStatus | None = None
@@ -282,6 +287,25 @@ class AVOState:
         _require_non_negative_integer(self.current_revision, "current_revision")
         _require_non_negative_integer(self.consecutive_without_progress, "consecutive_without_progress")
         _require_non_negative_integer(self.consecutive_evaluation_errors, "consecutive_evaluation_errors")
+        if not isinstance(self.exhausted_direction_requested, bool):
+            raise TypeError("exhausted_direction_requested must be a boolean")
+        if not isinstance(self.usage, VariationUsage):
+            raise TypeError("usage must be a VariationUsage")
+        records = tuple(self.supervision_records)
+        if any(record is None for record in records):
+            raise TypeError("supervision_records must not contain None")
+        if records:
+            # Keep the foundational core independent from the supervision
+            # adapter while still rejecting untyped state at this boundary.
+            from aec_bench.evolution.supervision import AVOSupervisionRecord
+
+            if any(not isinstance(record, AVOSupervisionRecord) for record in records):
+                raise TypeError("supervision_records must contain AVOSupervisionRecord values")
+        if len(records) > self.usage.supervisor_interventions:
+            raise ValueError("supervision_records cannot exceed supervisor_interventions usage")
+        if self.terminal_status is not None and self.exhausted_direction_requested:
+            raise ValueError("terminal AVO state cannot retain a pending exhausted-direction request")
+        object.__setattr__(self, "supervision_records", records)
         attempts = tuple(self.attempts)
         if any(not isinstance(attempt, DevelopmentAttempt) for attempt in attempts):
             raise TypeError("attempts must contain DevelopmentAttempt values")
@@ -301,8 +325,6 @@ class AVOState:
             raise ValueError("development attempt trial IDs must be unique")
         if self.best_attempt_id is not None and self.best_attempt_id not in attempt_ids:
             raise ValueError("best_attempt_id must reference an attempt")
-        if not isinstance(self.usage, VariationUsage):
-            raise TypeError("usage must be a VariationUsage")
         memory = validate_memory_entries(self.memory)
         if len(memory) > AVO_MEMORY_LIMIT:
             raise ValueError(f"AVO state memory must contain at most {AVO_MEMORY_LIMIT} entries")

@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -33,6 +34,13 @@ from aec_bench.evolution.checkpoint import (
 )
 from aec_bench.evolution.core import AVOState, DevelopmentAttempt, EvaluatedCandidate, VariationStatus
 from aec_bench.evolution.development import DevelopmentEvaluationProvenance
+from aec_bench.evolution.supervision import (
+    AVOSupervisionAdvice,
+    AVOSupervisionFailure,
+    AVOSupervisionFailureCode,
+    AVOSupervisionRecord,
+    AVOSupervisionTrigger,
+)
 from tests.support.trial_record_factories import make_trial_record
 
 
@@ -115,6 +123,9 @@ def _checkpoint(
     with_artifact: bool = False,
     terminal_status: VariationStatus | None = None,
     terminal_result: AVOCheckpointTerminalResult | None = None,
+    supervision_records: tuple[AVOSupervisionRecord, ...] = (),
+    exhausted_direction_requested: bool = False,
+    max_supervisor_interventions: int = 1,
 ) -> AVOCheckpoint:
     attempt = DevelopmentAttempt(
         attempt_id="attempt-1",
@@ -139,9 +150,14 @@ def _checkpoint(
         current_revision=current_revision,
         attempts=(attempt,),
         best_attempt_id="attempt-1",
-        usage=VariationUsage(development_evaluations=1),
+        usage=VariationUsage(
+            development_evaluations=1,
+            supervisor_interventions=len(supervision_records),
+        ),
         terminal_status=terminal_status,
         parent_snapshot=parent,
+        supervision_records=supervision_records,
+        exhausted_direction_requested=exhausted_direction_requested,
     )
     return AVOCheckpoint.from_state(
         run_id="run-1",
@@ -161,7 +177,7 @@ def _checkpoint(
             development_evaluator_identity="evaluator:1",
             configuration_identity="config:1",
         ),
-        budget=AVOBudgetSnapshot().to_budget(),
+        budget=AVOBudgetSnapshot(max_supervisor_interventions=max_supervisor_interventions).to_budget(),
         current_snapshot=current_snapshot or WorkspaceSnapshot(system_prompt="Child prompt", candidate_id="child"),
         terminal_result=terminal_result,
     )
@@ -197,6 +213,118 @@ def test_checkpoint_snapshots_round_trip_supervisor_identity_tokens_and_limits()
     assert AVOUsageSnapshot.from_usage(usage).to_usage() == usage
     assert AVOBudgetSnapshot.from_budget(budget).to_budget() == budget
     assert identity.model_dump(mode="json")["supervisor_model_identity"] == "provider:supervisor"
+
+
+@pytest.mark.parametrize(
+    "record",
+    [
+        AVOSupervisionRecord(
+            trigger_reason=AVOSupervisionTrigger.VALID_DEVELOPMENT_STAGNATION,
+            advice=AVOSupervisionAdvice(
+                directions=("Use a narrower verification path.",),
+                reasoning="The latest valid attempts repeat the same direction.",
+            ),
+        ),
+        AVOSupervisionRecord(
+            trigger_reason=AVOSupervisionTrigger.CONSECUTIVE_INVALID_OR_FAILED_EVALUATIONS,
+            failure=AVOSupervisionFailure(
+                code=AVOSupervisionFailureCode.OUTPUT_VALIDATION_REJECTED,
+                detail="The supervisor output was not valid advice.",
+            ),
+        ),
+    ],
+)
+def test_checkpoint_round_trips_ordered_supervision_outcome_and_pending_request(
+    record: AVOSupervisionRecord,
+    tmp_path: Path,
+) -> None:
+    checkpoint = _checkpoint(supervision_records=(record,))
+    path = write_checkpoint(tmp_path / "avo.json", checkpoint)
+    restored = read_checkpoint(path)
+
+    assert restored.supervision_records == (record,)
+    assert restored.to_state().supervision_records == (record,)
+    assert restored.model_dump(mode="json") == read_checkpoint(path).model_dump(mode="json")
+
+    pending = _checkpoint(exhausted_direction_requested=True)
+    assert pending.exhausted_direction_requested is True
+    assert pending.to_state().exhausted_direction_requested is True
+
+
+def test_checkpoint_preserves_ordered_supervision_history_within_explicit_budget() -> None:
+    first = AVOSupervisionRecord(
+        trigger_reason=AVOSupervisionTrigger.VALID_DEVELOPMENT_STAGNATION,
+        advice=AVOSupervisionAdvice(directions=("Try direction one.",), reasoning="First intervention."),
+    )
+    second = AVOSupervisionRecord(
+        trigger_reason=AVOSupervisionTrigger.EXHAUSTED_DIRECTION_REQUEST,
+        advice=AVOSupervisionAdvice(directions=("Try direction two.",), reasoning="Second intervention."),
+    )
+    checkpoint = _checkpoint(
+        supervision_records=(first, second),
+        max_supervisor_interventions=2,
+    )
+
+    assert checkpoint.supervision_records == (first, second)
+    assert checkpoint.to_state().supervision_records == (first, second)
+
+
+def test_checkpoint_rejects_supervision_history_over_budget() -> None:
+    first = AVOSupervisionRecord(
+        trigger_reason=AVOSupervisionTrigger.VALID_DEVELOPMENT_STAGNATION,
+        advice=AVOSupervisionAdvice(directions=("Try direction one.",), reasoning="First intervention."),
+    )
+    second = AVOSupervisionRecord(
+        trigger_reason=AVOSupervisionTrigger.EXHAUSTED_DIRECTION_REQUEST,
+        advice=AVOSupervisionAdvice(directions=("Try direction two.",), reasoning="Second intervention."),
+    )
+
+    with pytest.raises(ValidationError, match="exceed the configured supervisor intervention budget"):
+        _checkpoint(supervision_records=(first, second))
+
+
+def test_checkpoint_rejects_supervision_usage_without_outcome_or_incomplete_request() -> None:
+    checkpoint = _checkpoint()
+    with pytest.raises(ValidationError, match="supervision_records and incomplete requests"):
+        _validated_update(
+            checkpoint,
+            usage=AVOUsageSnapshot.from_usage(VariationUsage(model_requests=1, supervisor_interventions=1)),
+        )
+
+
+def test_checkpoint_accepts_one_incomplete_supervisor_request_before_outcome() -> None:
+    checkpoint = _checkpoint(exhausted_direction_requested=True)
+    pending_effect = AVOIncompleteExternalEffect(
+        effect_id="variation-1:supervisor-1",
+        operation="supervisor_request",
+        reason="Supervisor request started; completion is not yet confirmed.",
+    )
+    resumed_shape = _validated_update(
+        checkpoint,
+        usage=AVOUsageSnapshot.from_usage(VariationUsage(model_requests=1, supervisor_interventions=1)),
+        incomplete_external_effects=(pending_effect,),
+    )
+
+    assert resumed_shape.incomplete_external_effects == (pending_effect,)
+
+
+def test_avo_state_rejects_untyped_or_overcounted_supervision_records() -> None:
+    base = _checkpoint().to_state()
+    with pytest.raises(TypeError, match="AVOSupervisionRecord"):
+        replace(base, supervision_records=(object(),))
+    with pytest.raises(ValueError, match="cannot exceed supervisor_interventions"):
+        replace(
+            base,
+            supervision_records=(
+                AVOSupervisionRecord(
+                    trigger_reason=AVOSupervisionTrigger.EXHAUSTED_DIRECTION_REQUEST,
+                    advice=AVOSupervisionAdvice(
+                        directions=("Try a different direction.",),
+                        reasoning="The current path is exhausted.",
+                    ),
+                ),
+            ),
+        )
 
 
 @pytest.mark.parametrize("field_name", ["max_input_tokens", "max_output_tokens"])

@@ -11,7 +11,10 @@ from enum import StrEnum
 from importlib import import_module
 from typing import Any
 
+from pydantic import model_validator
+
 from aec_bench.contracts.evolution import MutationStrategy, VariationUsage
+from aec_bench.contracts.validators import FrozenStrictModel
 from aec_bench.evolution.core import AVOBudget, AVOState
 from aec_bench.evolution.memory import AVO_MEMORY_LIMIT, AVOMemoryEntry, validate_memory_entries
 
@@ -177,6 +180,20 @@ class AVOSupervisionFailure:
             raise ValueError(f"unsupported supervisor failure code: {self.code!r}") from exc
         object.__setattr__(self, "code", code)
         _require_text(self.detail, "detail")
+
+
+class AVOSupervisionRecord(FrozenStrictModel):
+    """One confirmed intervention outcome retained in AVO state."""
+
+    trigger_reason: AVOSupervisionTrigger
+    advice: AVOSupervisionAdvice | None = None
+    failure: AVOSupervisionFailure | None = None
+
+    @model_validator(mode="after")
+    def validate_outcome(self) -> AVOSupervisionRecord:
+        if (self.advice is None) == (self.failure is None):
+            raise ValueError("supervision record requires advice or confirmed failure, but not both")
+        return self
 
 
 @dataclass(frozen=True)
@@ -542,6 +559,7 @@ __all__ = (
     "AVOSupervisionComposition",
     "AVOSupervisionFailure",
     "AVOSupervisionFailureCode",
+    "AVOSupervisionRecord",
     "AVOSupervisionResult",
     "AVORemainingBudget",
     "AVOSupervisionAdvice",
