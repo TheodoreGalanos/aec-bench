@@ -9,7 +9,6 @@ from typing import Literal, Self, TypeVar
 from pydantic import Field, FiniteFloat, NonNegativeInt, PositiveInt, field_validator, model_validator
 
 from aec_bench.contracts.commitments import validate_sha256
-from aec_bench.contracts.legacy_content_address import LegacyContentAddressedModel
 from aec_bench.contracts.task_definition import Visibility
 from aec_bench.contracts.validators import FrozenStrictModel, NonEmptyStr
 
@@ -106,7 +105,6 @@ class AVOQualificationSplit(FrozenStrictModel):
     visibility: Visibility
     task_set_id: NonEmptyStr
     task_refs: tuple[NonEmptyStr, ...] = Field(min_length=1)
-    task_set_sha256: str
 
     @field_validator("task_refs")
     @classmethod
@@ -114,11 +112,6 @@ class AVOQualificationSplit(FrozenStrictModel):
         if value != tuple(sorted(set(value))):
             raise ValueError("qualification split task refs must be sorted and unique")
         return value
-
-    @field_validator("task_set_sha256")
-    @classmethod
-    def validate_task_set_sha256(cls, value: str) -> str:
-        return validate_sha256(value)
 
     @model_validator(mode="after")
     def validate_visibility(self) -> Self:
@@ -214,10 +207,9 @@ class AVOQualificationArm(FrozenStrictModel):
         return self
 
 
-class AVOQualificationProtocol(LegacyContentAddressedModel):
+class AVOQualificationProtocol(FrozenStrictModel):
     """Immutable provider-free plan for a later AVO versus EF-03 comparison."""
 
-    schema_version: Literal["aecbench.avo-qualification-protocol.v1"] = "aecbench.avo-qualification-protocol.v1"
     protocol_id: NonEmptyStr
     baseline: AVOQualificationArm
     avo: AVOQualificationArm

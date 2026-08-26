@@ -3,8 +3,6 @@
 
 from __future__ import annotations
 
-import hashlib
-
 import pytest
 from pydantic import ValidationError
 
@@ -32,7 +30,6 @@ def _split(name: str, visibility: Visibility, task_refs: tuple[str, ...]) -> AVO
         visibility=visibility,
         task_set_id=f"set-{name}",
         task_refs=task_refs,
-        task_set_sha256=hashlib.sha256(name.encode()).hexdigest(),
     )
 
 
@@ -44,16 +41,15 @@ def test_protocol_pins_ef03_source_without_resolving_git() -> None:
     assert reference.source_sha256 == EF03_BASELINE_SOURCE_SHA256
 
 
-def test_protocol_accepts_two_independent_runs_and_is_content_addressed() -> None:
+def test_protocol_accepts_two_independent_runs_and_is_immutable() -> None:
     protocol = _protocol()
 
     assert protocol.independent_seeds == (11, 29)
     assert protocol.repetitions_per_seed == 1
-    assert len(protocol.content_sha256) == 64
     with pytest.raises(ValidationError):
-        AVOQualificationProtocol.model_validate(
-            protocol.model_dump(mode="python", exclude={"content_sha256"}) | {"independent_seeds": (11,)}
-        )
+        protocol.protocol_id = "changed"  # type: ignore[misc]
+    with pytest.raises(ValidationError):
+        AVOQualificationProtocol.model_validate(protocol.model_dump(mode="python") | {"independent_seeds": (11,)})
 
 
 @pytest.mark.parametrize(
@@ -95,9 +91,7 @@ def test_protocol_rejects_paired_configuration_identity_drift(
     avo_payload[field] = replacement
 
     with pytest.raises(ValidationError, match=message):
-        AVOQualificationProtocol.model_validate(
-            protocol.model_dump(mode="python", exclude={"content_sha256"}) | {"avo": avo_payload}
-        )
+        AVOQualificationProtocol.model_validate(protocol.model_dump(mode="python") | {"avo": avo_payload})
 
 
 def test_protocol_rejects_noncanonical_or_overlapping_split_membership() -> None:
@@ -144,12 +138,12 @@ def test_arm_requires_explicit_avo_inner_budget_and_baseline_reference() -> None
 
 
 def test_protocol_keeps_process_and_outcome_measure_sets_separate() -> None:
-    protocol_payload = _protocol().model_dump(mode="python", exclude={"content_sha256"})
+    protocol_payload = _protocol().model_dump(mode="python")
     protocol_payload["process_measures"] = (AVOOutcomeMeasure.VALIDITY_RATE,)
     with pytest.raises(ValidationError, match="process_measures"):
         AVOQualificationProtocol.model_validate(protocol_payload)
 
-    protocol_payload = _protocol().model_dump(mode="python", exclude={"content_sha256"})
+    protocol_payload = _protocol().model_dump(mode="python")
     protocol_payload["outcome_measures"] = (AVOProcessMeasure.MODEL_REQUESTS,)
     with pytest.raises(ValidationError, match="outcome_measures"):
         AVOQualificationProtocol.model_validate(protocol_payload)
@@ -167,7 +161,7 @@ def test_protocol_requires_complete_canonical_measure_sets(
     replacement: tuple[AVOProcessMeasure, ...] | tuple[AVOOutcomeMeasure, ...],
     message: str,
 ) -> None:
-    protocol_payload = _protocol().model_dump(mode="python", exclude={"content_sha256"})
+    protocol_payload = _protocol().model_dump(mode="python")
     protocol_payload[field] = replacement
 
     with pytest.raises(ValidationError, match=message):

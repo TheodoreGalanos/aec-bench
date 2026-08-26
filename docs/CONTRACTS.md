@@ -499,6 +499,13 @@ checkpoint with an incomplete model, development-evaluation, compaction, or
 supervisor effect MUST be reconciled before retry. Terminal checkpoints restore
 the recorded `VariationResult` without another model or evaluator call.
 
+The maintained [provider-free AVO qualification protocol](../src/aec_bench/experimentation/qualification/avo_protocol.py)
+pins the historic EF-03 baseline source, exact task splits, model route,
+outer budgets, AVO inner budgets, seeds, and separate process and outcome
+measures. Validation proves the comparison design only. It is not execution
+evidence or a performance claim. A paid or hosted qualification run needs
+explicit approval for the route and its cost.
+
 `SwarmAssignment` contains exact parent and inspiration snapshots. A swarm
 agent returns `SwarmAgentResult` with variation and exact agent usage only. The
 usage includes agent model cost, development-evaluation cost, and the parent
