@@ -99,13 +99,26 @@ def _default_assignment_id(agent_id: str, cycle: int) -> str:
     return f"{agent_id}:assignment:{cycle}"
 
 
-def _trial_cost(record: object) -> float:
-    """Read the explicit trial cost projection used for evaluation spend."""
+def _trial_cost(record: object) -> float | None:
+    """Read the explicit trial cost, retaining unknown costs as ``None``."""
     if not isinstance(record, TrialRecord) or record.cost is None:
+        return None
+    if record.cost.estimated_cost_usd is None:
+        return None
+    return float(record.cost.estimated_cost_usd)
+
+
+def _evaluation_cost(evaluated: SwarmEvaluation) -> float | None:
+    """Return exact host evaluation spend or ``None`` when any price is unknown."""
+    if evaluated.parent is None or evaluated.child is None:
         return 0.0
-    if record.cost.estimated_cost_usd is not None:
-        return float(record.cost.estimated_cost_usd)
-    return 0.0
+    records = tuple(
+        observation.trial for candidate in (evaluated.parent, evaluated.child) for observation in candidate.observations
+    )
+    costs = tuple(_trial_cost(record) for record in records)
+    if any(cost is None for cost in costs):
+        return None
+    return sum(cost for cost in costs if cost is not None)
 
 
 def _agent_cost(result: SwarmAgentResult) -> float:
@@ -269,6 +282,12 @@ class SwarmManager:
         else:
             evaluated = SwarmEvaluation(assignment, result, parent=None, child=None)
 
+        eval_cost = _evaluation_cost(evaluated)
+        if eval_cost is None:
+            # Host evidence exists, but its price is not confirmed. Do not let
+            # an unknown cost mutate any shared result, archive, or budget state.
+            raise ValueError("swarm host evaluation has unknown cost and cannot be applied to a USD budget")
+
         async with self._lock:
             current_parent = self._candidate_snapshots.get(assignment.parent.candidate_id)
             if current_parent != assignment.parent:
@@ -284,9 +303,6 @@ class SwarmManager:
             if outcome.evaluated_candidate is not None:
                 child = outcome.evaluated_candidate
                 self._candidate_snapshots[child.snapshot.candidate_id] = child.snapshot
-                eval_cost = sum(_trial_cost(obs.trial) for obs in child.observations)
-                if evaluated.parent is not None:
-                    eval_cost += sum(_trial_cost(obs.trial) for obs in evaluated.parent.observations)
                 self._budget.record_eval_spend(eval_cost)
             self._budget.record_agent_spend(assignment.agent_id, agent_cost)
             self._agent_consecutive_errors[assignment.agent_id] = 0

@@ -112,19 +112,19 @@ and attempt planning, evaluation, variation, search policy, and persistence;
 it does not create a second task executor or verifier. Its cycle is:
 
 ```text
-functional application shell
+host selection and exact parent evidence
         ↓
-explicit selection state
+bounded AVO scratch loop
         ↓
-exact parent evaluation
+public development feedback
         ↓
-isolated variation
+one exact child, abstention, or budget exhaustion
         ↓
-exact child evaluation
+host exact parent-child evaluation
         ↓
-pure policy and state transition
+trusted search policy
         ↓
-explicit commit/archive/graveyard effects
+explicit commit, archive, graveyard, lineage, and swarm effects
 ```
 
 The shell receives an explicit `Workspace`, `EvolutionConfig`, candidate batch
@@ -139,8 +139,39 @@ write can accept it. Parent and child evidence are never combined.
 candidate, score, and stagnation state. Pure transition functions decide the
 next state. The shell applies a canonical workspace commit only after an
 accepted child. Rejected or invalid child material is written to the
-graveyard. A one-shot variation call operates on a scratch workspace and
-returns either a complete `VariationResult` or an explicit abstention.
+graveyard. A variation call operates on a scratch workspace and returns one
+complete `VariationResult`.
+
+The current variation operator is bounded agentic variation (AVO). The host
+passes one immutable `VariationRequest` after it selects the parent and
+inspirations and evaluates the host parent. The operator creates a fresh
+`DevelopmentEvaluationBoundary`, scratch workspace, and mutable loop
+controller for each call. The development boundary plans one fixed,
+candidate-independent public batch for that call. AVO evaluates the parent at
+revision `0`, then permits bounded scratch mutations and exact development
+evaluations. Each `DevelopmentAttempt` binds one revision to its own material
+and evidence. AVO can submit only the current evaluated revision. It returns a
+`VariationResult` with a submitted child or one explicit terminal status;
+selection, acceptance, canonical workspace state, archive, graveyard, and
+lineage remain outside this result.
+
+Conditional supervision is an optional, bounded part of the same AVO call.
+The supervisor receives only an `AVOSupervisionRequest` with the goal, selected
+parent ID, strategy, bounded attempt summaries, projected remaining budget,
+and trigger reason. It has no workspace, tools, evaluation, or outer-loop
+authority. Validated advice is stored in the call-local `AVOState` and may
+enter a later main-agent context in that call. It is not returned in
+`VariationResult` and cannot change selection, parent, strategy, goal, budget,
+evaluation, or any search effect.
+
+AVO memory is bounded structured evidence from attempts. The application may
+carry the returned memory into a later variation request; it does not become
+outer search state. Checkpoint schema `2` is the sole validated resume
+authority for a durable call. Resume validates the run, variation, parent,
+selection, development case order, budget, configuration identity, and current
+scratch material. An incomplete external effect blocks retry until its owner
+reconciles it. Unknown token or cost usage reaches the budget boundary as
+unknown and fails closed when the matching limit is configured.
 
 Quality-diversity runs keep explicit `QDState` for cell-selection and strategy
 bandit feedback. The host selects the mutation strategy and shortlist. The
@@ -171,11 +202,19 @@ The durable ownership boundaries are:
 | Validity and score meaning | Evaluation |
 | Candidate/evidence binding | Evolution functional core |
 | Parent and inspiration selection | Search policy |
-| Variation | Variation operator |
+| Variation goal and strategy | Host selection contract |
+| Scratch planning, editing, diagnosis, and repair | AVO main agent |
+| Development task membership | Development evaluation composition |
+| Development validity and score meaning | Evaluation |
+| Final parent-child evaluation | Host evaluation composition |
 | Acceptance | Search-specific trusted policy |
 | Candidate persistence | Workspace/application shell |
 | QD insertion | Archive adapter |
 | Graveyard projection | Functional core |
+| AVO checkpoint and private memory | AVO runtime |
+| Inner stagnation trigger | Pure AVO supervision policy |
+| Supervisor advice | AVO supervisor |
+| Outer stagnation and swarm pivot | Existing search and manager state |
 | Swarm concurrency | Async manager shell |
 | Swarm decisions | Functional reducer |
 

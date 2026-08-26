@@ -21,6 +21,7 @@ from aec_bench.contracts.evolution import (
     MutationStrategy,
     WorkspaceSnapshot,
 )
+from aec_bench.contracts.task_definition import Visibility
 from aec_bench.contracts.trial_record import CostRecord, TrialRecord
 from aec_bench.evolution.analysis import (
     EvolutionAnalysis,
@@ -69,6 +70,7 @@ from aec_bench.evolution.selection import (
 from aec_bench.evolution.variation_operator import build_agentic_variation_operator
 from aec_bench.evolution.workspace import Workspace
 from aec_bench.generation.application import generate_template_instances, resolve_template
+from aec_bench.tasks.loader import load_task_definition
 
 logger = logging.getLogger(__name__)
 
@@ -422,7 +424,6 @@ def run_evolution_from_config(
 
     workspace = Workspace(Path(config.workspace_path))
     resolved_run_id = run_id or _timestamp_slug()
-    classifier_llm = build_behavioral_llm_client(model=config.models.classifier)
     task_dirs: list[Path] = []
     if config.generate is not None:
         generation = config.generate
@@ -434,9 +435,18 @@ def run_evolution_from_config(
             seed=generation.seed,
             suite_id="evolution-generated-tasks",
         )
+        _validate_public_evolution_tasks(generated.task_paths, generated.output_root)
         task_dirs.extend(generated.task_paths)
     if tasks_root is not None:
-        task_dirs.extend(resolve_task_dirs(config.task_selector, tasks_root))
+        resolved_tasks_root = tasks_root.resolve()
+        resolved_task_dirs = resolve_task_dirs(config.task_selector, resolved_tasks_root)
+        _validate_public_evolution_tasks(resolved_task_dirs, resolved_tasks_root)
+        task_dirs.extend(resolved_task_dirs)
+
+    # Validate task visibility before composing any model client or entering
+    # the host application. Holdout material belongs to a separate qualification
+    # operation and must never reach adaptive evolution.
+    classifier_llm = build_behavioral_llm_client(model=config.models.classifier)
 
     model = config.solver.model if config.solver is not None else config.models.evolver
     adapter = config.solver.adapter if config.solver is not None else "rlm"
@@ -783,6 +793,17 @@ def _write_report(workspace: Workspace, report_writer: ReportWriter | None) -> N
 
 def _empty_batch_planner(_batch_size: int, _cycle: int) -> CandidateEvaluationBatch:
     raise ValueError("evolution evaluation requires at least one resolved task")
+
+
+def _validate_public_evolution_tasks(task_dirs: Sequence[Path], tasks_root: Path) -> None:
+    """Reject non-public task definitions before evolution composition starts."""
+    for task_dir in task_dirs:
+        task = load_task_definition(task_dir, tasks_root)
+        if task.visibility is not Visibility.PUBLIC:
+            raise ValueError(
+                f"evolution task {task.task_id!r} has visibility {task.visibility.value!r}; "
+                "only PUBLIC tasks are permitted"
+            )
 
 
 def _timestamp_slug() -> str:

@@ -905,11 +905,41 @@ Evolution runs use one functional cycle. The host selects a parent and any
 inspirations, plans one shared evaluation batch, evaluates the exact parent,
 creates a child in scratch, evaluates the exact child against that same batch,
 then applies the search-specific acceptance and state transition. The
-canonical workspace changes only after acceptance. A one-shot variation is
-the current variation operator: it returns a child snapshot and mutation
-summary, or abstains when it makes no effective change. The operator seam is
-ready for future variation operators; this does not promise an AVO
-implementation.
+canonical workspace changes only after acceptance. The current variation
+operator is bounded agentic variation (AVO). It runs one call in scratch and
+returns `submitted`, `abstained`, or `budget_exhausted`. Cooperative
+cancellation first stores an exact `cancelled` terminal checkpoint and then
+raises `AVOCancellationError`. AVO never writes the canonical source material
+or commits a candidate. The host owns final child evaluation, acceptance,
+commit, archive, graveyard, and lineage effects.
+
+AVO plans one fixed public development batch for each call, evaluates the
+selected parent first, and then permits bounded scratch revisions. A submitted
+child is the exact current revision with its own development evidence. AVO
+memory is bounded structured attempt evidence. The application can pass that
+memory to the next variation call; it does not change parent selection,
+strategy, `EvolutionState`, `QDState`, or swarm decisions. See the
+[architecture](docs/ARCHITECTURE.md), [contracts](docs/CONTRACTS.md), and
+[invariants](docs/INVARIANTS.md) for the ownership and evidence rules.
+
+The core `AVOBudget` defaults are 12 model requests, 40 tool calls, 7
+development evaluations, 1,800 seconds, two consecutive evaluation errors, and
+three stagnant evaluations, and zero supervisor interventions. Token and cost
+limits are optional. The composed production variation operator enables one
+conditional supervisor intervention by default; a direct
+`run_agentic_variation` caller must provide a supervisor runner when it enables
+interventions. A supervisor receives only the bounded request fields, returns
+one to three advisory directions or a confirmed output failure, and cannot
+change outer search state. Advice stays inside that AVO call and is not part of
+`VariationResult`.
+
+Usage is fail-closed when a configured limit needs an unknown value. An
+explicit `0.0` cost means free; `None` means unknown. The cycle record keeps
+the full AVO usage, and an aggregate cost remains unknown when any used cost
+plane is unknown. A durable call uses checkpoint schema `2` as its sole resume
+authority. Resume rejects changed run, variation, parent, selection,
+development case order, budget, configuration identity, or scratch material;
+an incomplete external effect must be reconciled before retry.
 
 Hill-climb accepts a valid child when its trusted score clears the configured
 improvement threshold. QD accepts a valid child when it enters a new archive
@@ -926,6 +956,19 @@ archive, graveyard, budget, and reducer effects. The async manager owns
 concurrency. Its immutable `SwarmState` owns decisions, while the event log
 reports them. Swarm state and candidate snapshots are persisted with the
 archive and graveyard so the recorded candidate material remains resolvable.
+
+Direct and QD runs keep selection authority and all effects in the host. Direct
+runs select the parent in the host. QD keeps strategy and shortlist selection
+in the host, then permits its archive agent to choose only within those
+constraints. QD archive cells and strategy-bandit feedback remain in `QDState`;
+AVO only proposes a child. Swarm composition gives each agent its own
+workspace, variation operator, cancellation signal, call-local memory, and
+checkpoint identity. The manager remains the owner of shared budget, archive,
+graveyard, lineage, reducer, and pivot state.
+
+Local provider-free tests prove the AVO protocol and deterministic boundaries.
+They do not qualify a paid or hosted model route. Do not run paid provider or
+hosted qualification until an explicit approval covers that run and its cost.
 
 ```bash
 # Create and run a workspace

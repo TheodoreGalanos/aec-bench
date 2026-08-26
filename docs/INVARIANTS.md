@@ -93,9 +93,19 @@ agent-owned score.
 
 ## Public and holdout material remain separate
 
+Adaptive development evaluation MUST use only public tasks and public input
+visibility. AVO may evaluate many scratch revisions against one fixed public
+development batch. The development boundary MUST reject a non-public batch or
+non-public development input. Development evidence MUST keep a distinct
+development role and experiment identity from host evaluation.
+
 Visibility is explicit. Public catalogues, examples, training exports,
 calibration, reports, and generated documentation must not contain sealed or
 holdout task content.
+
+Holdout material remains hidden from variation, supervision, and development
+memory. Holdout evaluation is a separate host-owned operation and MUST NOT be
+used to adapt the development call.
 
 Missing visibility is unknown, not public. Holdout-derived evidence can change
 general principles only through a deliberate review that does not reveal the

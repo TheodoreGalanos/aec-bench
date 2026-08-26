@@ -24,6 +24,7 @@ from aec_bench.contracts.evolution import (
     WorkspaceSnapshot,
 )
 from aec_bench.contracts.experiment_manifest import AgentConfig, ComputeConfig
+from aec_bench.contracts.trial_record import CostRecord
 from aec_bench.evolution.cancellation import AVOCancellationError, AVOCancellationReason, AVOCancellationSignal
 from aec_bench.evolution.checkpoint import AVOIncompleteExternalEffectError
 from aec_bench.evolution.core import DevelopmentAttempt, SelectionPlan, VariationResult, VariationStatus
@@ -62,9 +63,15 @@ def _make_config(agent_count: int = 2, max_cost: float = 10.0, eval_budget: floa
 class FakeEvolverFactory:
     """Creates fake evolvers that return predetermined scores."""
 
-    def __init__(self, scores_per_agent: dict[str, list[float]], state_dir: Path | None = None) -> None:
+    def __init__(
+        self,
+        scores_per_agent: dict[str, list[float]],
+        state_dir: Path | None = None,
+        evaluation_cost: float | None = 0.0,
+    ) -> None:
         self._state_dir = state_dir or Path("/private/tmp/aec-bench-swarm-test")
         self._scores = scores_per_agent
+        self._evaluation_cost = evaluation_cost
         self._scores_by_candidate: dict[str, float] = {}
 
     def create(self, agent_id: str, model_override: str | None = None):
@@ -157,6 +164,7 @@ class FakeEvolverFactory:
                     reward=score,
                     validity=ValidityCheck(output_parseable=True, schema_valid=True, verifier_completed=True),
                 ),
+                cost=CostRecord(estimated_cost_usd=self._evaluation_cost),
             )
             for trial in batch.trials
         )
@@ -243,6 +251,62 @@ async def test_unknown_agent_cost_has_no_host_effects(tmp_path: Path) -> None:
 
 
 @pytest.mark.asyncio
+async def test_unknown_host_evaluation_cost_has_no_shared_effects(tmp_path: Path) -> None:
+    """Unknown parent or child evaluation cost is rejected before finalisation."""
+    factory = FakeEvolverFactory({"agent-0": [0.5]}, evaluation_cost=None)
+    manager = SwarmManager(
+        config=_make_config(agent_count=1),
+        state_dir=tmp_path,
+        evolver_factory=factory,
+    )
+    parent = factory.baseline_snapshot()
+    manager._candidate_snapshots[parent.candidate_id] = parent
+    manager._initial_candidate_id = parent.candidate_id
+    manager._agent_cycles["agent-0"] = 1
+    initial_state = SwarmState(
+        run_id=manager._run_id,
+        total_evaluations=0,
+        best_candidate_id=None,
+        best_score=None,
+        agent_states=(SwarmAgentState(agent_id="agent-0", model="test-model", status="active"),),
+        recent_scores=(),
+        recent_descriptors=(),
+        pivot_state=PivotState((AgentPivotState("agent-0"),)),
+        stopped=False,
+        stop_reason=None,
+    )
+    manager._state = initial_state
+    assignment = SwarmAssignment(
+        run_id=manager._state.run_id,
+        assignment_id="assignment-1",
+        agent_id="agent-0",
+        selection=SelectionPlan("baseline", (), "conservative", "Improve", "Use exact material"),
+        parent=parent,
+        inspirations=(),
+        budget=AgentBudget(1.0),
+        issued_at=datetime.now(UTC),
+    )
+    result = await factory.create("agent-0").step(assignment)
+    before_snapshots = dict(manager._candidate_snapshots)
+    before_agent_spend = dict(manager._budget.agent_spend)
+
+    with pytest.raises(ValueError, match="host evaluation has unknown cost"):
+        await manager._on_result(assignment, result)
+
+    assert manager._state == initial_state
+    assert manager._candidate_snapshots == before_snapshots
+    assert manager._archive.size == 0
+    assert manager._graveyard.size == 0
+    assert manager._budget.total_agent_spend == 0.0
+    assert manager._budget.eval_spend == 0.0
+    assert manager._budget.agent_spend == before_agent_spend
+    assert not any(
+        event.event_type == SwarmEventType.EVAL_COMPLETED
+        for event in SwarmEventReader(tmp_path / "events.jsonl").read_all()
+    )
+
+
+@pytest.mark.asyncio
 async def test_manager_runs_and_completes(tmp_path: Path) -> None:
     """SwarmManager spawns agents, runs evals, and returns a valid SwarmResult."""
     config = _make_config(agent_count=2, max_cost=5.0)
@@ -252,6 +316,7 @@ async def test_manager_runs_and_completes(tmp_path: Path) -> None:
     assert result.run_id != ""
     assert result.total_evals > 0
     assert len(result.agents) == 2
+    assert manager._budget.eval_spend == 0.0
 
 
 @pytest.mark.asyncio
