@@ -206,11 +206,12 @@ class SwarmManager:
                     skills=(),
                     candidate_id=candidate_id,
                 )
-                inserted = self._archive.insert(
+                insertion_result = self._archive.insert(
                     bd=bd,
                     snapshot=snapshot,
                     run_id=agent_id,
                 )
+                inserted = insertion_result.added
 
             # Track global best
             if score > self._global_best_score:
