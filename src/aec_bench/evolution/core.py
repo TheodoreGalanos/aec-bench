@@ -273,8 +273,6 @@ class AVOState:
         revisions = tuple(attempt.revision for attempt in attempts)
         if len(revisions) != len(set(revisions)):
             raise ValueError("attempt revisions must be unique")
-        if revisions and max(revisions) > self.current_revision:
-            raise ValueError("attempt revision cannot exceed current_revision")
         snapshot_ids = tuple(attempt.evaluated.snapshot.candidate_id for attempt in attempts)
         if len(snapshot_ids) != len(set(snapshot_ids)):
             raise ValueError("development attempt snapshot IDs must be unique")

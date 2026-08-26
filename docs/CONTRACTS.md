@@ -454,8 +454,19 @@ Archive insertion distinguishes a new cell, an improved cell, and rejection.
 The archive agent and strategy bandit are search-policy inputs and feedback;
 they do not own candidate scores or evaluation validity.
 
+Bounded variation retains one `VariationUsage` value for each operator call.
+Model requests and development evaluations are separate usage planes. A known
+free call uses an explicit `0.0` cost; `None` means that the cost is unknown.
+`EvolutionCycleRecord.evolver_usage` retains the full value; aggregate cost
+projections stay unknown when any used cost plane is unknown.
+Each `DevelopmentAttempt` binds exact internal evidence. Attempt IDs, revision
+numbers, internal snapshot IDs, and `TrialRecord.trial_id` values MUST be
+unique within one `AVOState`.
+
 `SwarmAssignment` contains exact parent and inspiration snapshots. A swarm
-agent returns `SwarmAgentResult` with variation and agent cost only. The host
+agent returns `SwarmAgentResult` with variation and exact agent usage only. The
+usage includes agent model cost, development-evaluation cost, and the parent
+analysis evaluation owned by that agent step. The host
 evaluates both parent and submitted child and binds the resulting `TrialRecord`
 values before archive, graveyard, budget, or reducer effects. `SwarmState` is
 immutable decision state. The manager owns concurrency and effect application;

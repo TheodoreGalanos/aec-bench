@@ -70,12 +70,12 @@ def _assessment(
     )
 
 
-def _candidate(candidate_id: str = "candidate-1") -> EvaluatedCandidate:
-    observations = (_observation(candidate_id, "trial-1"),)
+def _candidate(candidate_id: str = "candidate-1", *, trial_id: str = "trial-1") -> EvaluatedCandidate:
+    observations = (_observation(candidate_id, trial_id),)
     return bind_evaluated_candidate(
         WorkspaceSnapshot(system_prompt="Use engineering checks.", candidate_id=candidate_id),
         observations,
-        _assessment(candidate_id),
+        _assessment(candidate_id, trial_ids=(trial_id,)),
     )
 
 
@@ -299,6 +299,25 @@ class TestAVOContracts:
                 attempts=(first, second),
                 usage=second.usage_after,
             )
+
+    def test_state_can_restore_earlier_revision_and_retain_later_attempt(self) -> None:
+        first = _attempt(_candidate("snapshot-1", trial_id="trial-1"), revision=1)
+        second = _attempt(_candidate("snapshot-2", trial_id="trial-2"), revision=2)
+        parent_snapshot = WorkspaceSnapshot(system_prompt="Parent prompt.", candidate_id="parent")
+        state = AVOState(
+            variation_id="variation-1",
+            parent_candidate_id="parent",
+            child_candidate_id="child",
+            current_revision=1,
+            attempts=(first, second),
+            best_attempt_id=first.attempt_id,
+            usage=second.usage_after,
+            parent_snapshot=parent_snapshot,
+        )
+
+        assert state.attempts == (first, second)
+        assert is_revision_valid(state, 1, first.evaluated.snapshot, parent_snapshot=parent_snapshot) is True
+        assert is_revision_valid(state, 2, second.evaluated.snapshot, parent_snapshot=parent_snapshot) is False
 
     def test_current_evaluated_revision_is_the_only_eligible_revision(self) -> None:
         attempt = _attempt(_candidate("child"), revision=1)
