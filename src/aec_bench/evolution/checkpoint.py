@@ -43,7 +43,7 @@ from aec_bench.evolution.memory import AVO_MEMORY_LIMIT, AVOMemoryEntry, validat
 from aec_bench.evolution.supervision import AVOSupervisionRecord
 from aec_bench.ledger.durability import mkdir_durable, replace_file_bytes_durable
 
-AVO_CHECKPOINT_SCHEMA_VERSION: Literal[1] = 1
+AVO_CHECKPOINT_SCHEMA_VERSION: Literal[2] = 2
 """The only persisted checkpoint schema currently accepted by the reader."""
 
 AVOExternalEffectOperation = Literal["model_request", "development_evaluation", "compaction", "supervisor_request"]
@@ -330,7 +330,7 @@ class AVOCheckpointTerminalResult(StrictModel):
 class AVOCheckpoint(StrictModel):
     """The sole validated resume authority for one durable AVO call."""
 
-    schema_version: Literal[1] = AVO_CHECKPOINT_SCHEMA_VERSION
+    schema_version: Literal[2] = AVO_CHECKPOINT_SCHEMA_VERSION
     run_id: NonEmptyStr
     variation_id: NonEmptyStr
     parent_candidate_id: NonEmptyStr
@@ -419,6 +419,14 @@ class AVOCheckpoint(StrictModel):
             raise ValueError("checkpoint supervision_records exceed the configured supervisor intervention budget")
         if len(self.supervision_records) + len(in_flight_supervisions) != self.usage.supervisor_interventions:
             raise ValueError("checkpoint supervision_records and incomplete requests must match supervisor usage")
+        if (
+            self.exhausted_direction_requested
+            and self.usage.supervisor_interventions >= self.budget.max_supervisor_interventions
+            and not in_flight_supervisions
+        ):
+            raise ValueError(
+                "checkpoint exhausted_direction_requested cannot remain after supervisor budget is consumed"
+            )
         if self.terminal_result is not None and self.exhausted_direction_requested:
             raise ValueError("terminal checkpoint cannot retain a pending exhausted-direction request")
 

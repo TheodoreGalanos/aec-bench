@@ -308,6 +308,22 @@ def test_checkpoint_accepts_one_incomplete_supervisor_request_before_outcome() -
     assert resumed_shape.incomplete_external_effects == (pending_effect,)
 
 
+def test_checkpoint_rejects_pending_direction_after_supervisor_budget_is_consumed() -> None:
+    record = AVOSupervisionRecord(
+        trigger_reason=AVOSupervisionTrigger.EXHAUSTED_DIRECTION_REQUEST,
+        advice=AVOSupervisionAdvice(
+            directions=("Try a bounded alternative.",), reasoning="The first direction stalled."
+        ),
+    )
+
+    with pytest.raises(ValidationError, match="cannot remain after supervisor budget is consumed"):
+        _checkpoint(
+            supervision_records=(record,),
+            exhausted_direction_requested=True,
+            max_supervisor_interventions=1,
+        )
+
+
 def test_avo_state_rejects_untyped_or_overcounted_supervision_records() -> None:
     base = _checkpoint().to_state()
     with pytest.raises(TypeError, match="AVOSupervisionRecord"):
@@ -377,7 +393,7 @@ def test_checkpoint_writer_uses_durable_replacement(monkeypatch: pytest.MonkeyPa
     assert json.loads(calls[0][2]) == checkpoint.model_dump(mode="json")
 
 
-@pytest.mark.parametrize("schema_version", [None, 0, 2, "1"])
+@pytest.mark.parametrize("schema_version", [None, 0, 1, "2"])
 def test_checkpoint_reader_rejects_missing_or_unsupported_schema(schema_version: object, tmp_path: Path) -> None:
     payload = _checkpoint().model_dump(mode="json")
     if schema_version is None:

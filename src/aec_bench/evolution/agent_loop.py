@@ -347,6 +347,15 @@ class _LoopController:
                 return self._terminal_result()
             if self.resume_checkpoint is not None:
                 self._restore_checkpoint()
+                if self.terminal_status is None:
+                    try:
+                        # A crash can occur after a deterministic trigger was
+                        # checkpointed but before the normal post-command
+                        # supervision turn. Resolve that trigger first so the
+                        # next main-agent context contains the outcome.
+                        self._maybe_run_supervision()
+                    except AgentToolBudgetExceeded as exc:
+                        return self._exhausted(exc.limit)
             else:
                 self._start_new_call()
 
@@ -502,6 +511,10 @@ class _LoopController:
 
     def _finish_cancellation(self, reason: AVOCancellationReason) -> VariationResult:
         """Publish a truthful cancellation result before propagating it."""
+        # A pending host request is a trigger, not a terminal outcome. Clear
+        # it before publishing cancellation so the terminal checkpoint is a
+        # valid consumed state even when cancellation wins before supervision.
+        self.state = replace(self.state, exhausted_direction_requested=False)
         self.cancellation_reason = reason
         self.terminal_status = VariationStatus.CANCELLED
         self.terminal_message = reason.detail
@@ -889,6 +902,8 @@ class _LoopController:
             if not isinstance(result, AVOSupervisionResult):
                 raise TypeError("supervisor runner must return AVOSupervisionResult")
             reconciled_usage = reconcile_supervision_usage(usage_before, self.budget, result.usage)
+            self._model_cost_known = reconciled_usage.model_cost_usd is not None
+            self._model_cost_total = reconciled_usage.model_cost_usd or 0.0
             if isinstance(result.output, AVOSupervisionAdvice):
                 record = AVOSupervisionRecord(trigger_reason=trigger_reason, advice=result.output)
             else:

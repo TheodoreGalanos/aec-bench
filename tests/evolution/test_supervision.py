@@ -285,6 +285,20 @@ def test_supervision_failure_and_result_are_immutable_typed_contracts() -> None:
         result.output = failure  # type: ignore[misc]
 
 
+def test_supervision_result_rejects_development_evaluation_cost() -> None:
+    advice = AVOSupervisionAdvice(directions=("Try one bounded alternative.",), reasoning="The direction stalled.")
+
+    with pytest.raises(ValueError, match="must not include development evaluation cost"):
+        AVOSupervisionResult(
+            output=advice,
+            usage=VariationUsage(
+                model_requests=1,
+                supervisor_interventions=1,
+                development_evaluation_cost_usd=0.0,
+            ),
+        )
+
+
 def test_supervision_record_requires_exactly_one_confirmed_outcome() -> None:
     advice = AVOSupervisionAdvice(directions=("Try a new direction.",), reasoning="The current direction repeats.")
     failure = AVOSupervisionFailure(

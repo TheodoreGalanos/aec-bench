@@ -212,6 +212,8 @@ class AVOSupervisionResult:
             raise ValueError("supervision result usage must describe exactly one request and intervention")
         if self.usage.tool_calls or self.usage.development_evaluations:
             raise ValueError("supervision result usage must not include tools or development evaluations")
+        if self.usage.development_evaluation_cost_usd is not None:
+            raise ValueError("supervision result usage must not include development evaluation cost")
 
 
 class AVOSupervisionBudgetError(ValueError):
@@ -305,6 +307,7 @@ def reconcile_supervision_usage(
         or supervisor_usage.supervisor_interventions != 1
         or supervisor_usage.tool_calls != 0
         or supervisor_usage.development_evaluations != 0
+        or supervisor_usage.development_evaluation_cost_usd is not None
     ):
         raise ValueError("supervisor usage must describe exactly one request and intervention")
 
