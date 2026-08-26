@@ -345,7 +345,7 @@ def test_fixed_seed_selection_and_resume_numbering_are_reproducible(tmp_path: Pa
             variation=_abstain,
             calls=calls,
         )
-        _run(
+        resumed = _run(
             workspace,
             batch,
             _config(workspace.root, seed=17),
@@ -356,6 +356,7 @@ def test_fixed_seed_selection_and_resume_numbering_are_reproducible(tmp_path: Pa
         )
         traces.append((calls[0]["strategy"], calls[0]["shortlist"], calls[1]["strategy"], calls[1]["shortlist"]))
         assert json.loads((workspace.root / "qd_state.json").read_text(encoding="utf-8"))["cycle"] == 2
+        assert resumed.cycle_records[0].cycle == 2
     assert traces[0] == traces[1]
 
 
