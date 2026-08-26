@@ -6,10 +6,13 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass
 from datetime import datetime
+from statistics import fmean
 
 from aec_bench.contracts.evolution import BehaviourDescriptor, SwarmAgentState, WorkspaceSnapshot
 from aec_bench.evolution.archive import ArchiveBatchOutcome
-from aec_bench.evolution.core import EvaluatedCandidate, SelectionPlan, VariationResult
+from aec_bench.evolution.behaviour import extract_behaviour_descriptor
+from aec_bench.evolution.core import EvaluatedCandidate, SelectionPlan, VariationResult, assessment_score
+from aec_bench.evolution.swarm.config import SwarmConfig
 
 
 def _require_text(value: str, field_name: str) -> None:
@@ -40,6 +43,27 @@ class AgentBudget:
 
     def __post_init__(self) -> None:
         _require_finite_non_negative(self.max_cost_usd, "max_cost_usd")
+
+
+@dataclass(frozen=True)
+class BudgetSnapshot:
+    """Immutable budget values supplied to the pure swarm reducer."""
+
+    max_cost_usd: float
+    total_agent_spend: float
+    eval_budget_usd: float
+    eval_spend: float
+
+    def __post_init__(self) -> None:
+        _require_finite_non_negative(self.max_cost_usd, "max_cost_usd")
+        _require_finite_non_negative(self.total_agent_spend, "total_agent_spend")
+        _require_finite_non_negative(self.eval_budget_usd, "eval_budget_usd")
+        _require_finite_non_negative(self.eval_spend, "eval_spend")
+
+    @property
+    def exhausted(self) -> bool:
+        """Return whether either explicit shared budget is exhausted."""
+        return self.total_agent_spend >= self.max_cost_usd or self.eval_spend >= self.eval_budget_usd
 
 
 @dataclass(frozen=True)
@@ -251,15 +275,12 @@ class SwarmOutcome:
     agent_result: SwarmAgentResult
     evaluated_candidate: EvaluatedCandidate | None
     archive_outcome: ArchiveBatchOutcome | None
-    decision: SwarmDecision
 
     def __post_init__(self) -> None:
         if not isinstance(self.assignment, SwarmAssignment):
             raise TypeError("assignment must be a SwarmAssignment")
         if not isinstance(self.agent_result, SwarmAgentResult):
             raise TypeError("agent_result must be a SwarmAgentResult")
-        if not isinstance(self.decision, SwarmDecision):
-            raise TypeError("decision must be a SwarmDecision")
         if self.assignment.agent_id != self.agent_result.agent_id:
             raise ValueError("assignment and result agent_id must match")
         if self.assignment.assignment_id != self.agent_result.assignment_id:
@@ -286,3 +307,208 @@ class SwarmOutcome:
             candidate_id = self.evaluated_candidate.snapshot.candidate_id
             if self.archive_outcome.candidate_id != candidate_id:
                 raise ValueError("archive outcome must match the evaluated candidate")
+
+
+_RECENT_WINDOW = 5
+_PIVOT_COOLDOWN = 3
+
+
+def _average_descriptors(descriptors: tuple[BehaviourDescriptor, ...]) -> BehaviourDescriptor:
+    """Return one deterministic centroid for a non-empty descriptor sequence."""
+    return BehaviourDescriptor(
+        token_cost=fmean(descriptor.token_cost for descriptor in descriptors),
+        verification_depth=fmean(descriptor.verification_depth for descriptor in descriptors),
+        tool_density=fmean(descriptor.tool_density for descriptor in descriptors),
+        exploration_ratio=fmean(descriptor.exploration_ratio for descriptor in descriptors),
+        deliberation_ratio=fmean(descriptor.deliberation_ratio for descriptor in descriptors),
+        reward=fmean(descriptor.reward for descriptor in descriptors),
+    )
+
+
+def _replace_agent_state(
+    agent_states: tuple[SwarmAgentState, ...],
+    agent_id: str,
+    **updates: object,
+) -> tuple[SwarmAgentState, ...]:
+    """Replace one immutable agent state while preserving pool order."""
+    replaced = False
+    result: list[SwarmAgentState] = []
+    for agent_state in agent_states:
+        if agent_state.agent_id == agent_id:
+            result.append(agent_state.model_copy(update=updates))
+            replaced = True
+        else:
+            result.append(agent_state)
+    if not replaced:
+        raise ValueError(f"swarm outcome agent {agent_id!r} is not present in state")
+    return tuple(result)
+
+
+def _update_pivot_state(
+    pivot_state: PivotState,
+    agent_id: str,
+    *,
+    evaluated: bool,
+    non_improving: int,
+    pivot_after: int,
+) -> tuple[PivotState, PivotInstruction | None]:
+    """Apply one evaluation to one keyed pivot counter."""
+    current = next(
+        (agent_state for agent_state in pivot_state.agent_states if agent_state.agent_id == agent_id),
+        AgentPivotState(agent_id),
+    )
+    if not evaluated:
+        return pivot_state, None
+
+    if current.cooldown_remaining > 0:
+        updated = AgentPivotState(
+            agent_id=agent_id,
+            cooldown_remaining=current.cooldown_remaining - 1,
+            pivot_count=current.pivot_count,
+        )
+        pivot = None
+    elif non_improving >= pivot_after:
+        updated = AgentPivotState(
+            agent_id=agent_id,
+            cooldown_remaining=_PIVOT_COOLDOWN,
+            pivot_count=current.pivot_count + 1,
+        )
+        pivot = PivotInstruction(reason=f"{non_improving} consecutive non-improving evaluations")
+    else:
+        updated = current
+        pivot = None
+
+    states = [updated if agent_state.agent_id == agent_id else agent_state for agent_state in pivot_state.agent_states]
+    if not any(agent_state.agent_id == agent_id for agent_state in pivot_state.agent_states):
+        states.append(updated)
+    return PivotState(agent_states=tuple(states)), pivot
+
+
+def reduce_swarm_outcome(
+    *,
+    state: SwarmState,
+    outcome: SwarmOutcome,
+    budget: BudgetSnapshot,
+    config: SwarmConfig,
+    now: datetime,
+) -> tuple[SwarmState, SwarmDecision]:
+    """Reduce one host-visible outcome into immutable state and next actions.
+
+    The reducer only reads its inputs. Host evaluation evidence is the sole source
+    of scores and descriptors; archive and budget side effects remain manager work.
+    """
+    if not isinstance(state, SwarmState):
+        raise TypeError("state must be a SwarmState")
+    if not isinstance(outcome, SwarmOutcome):
+        raise TypeError("outcome must be a SwarmOutcome")
+    if not isinstance(budget, BudgetSnapshot):
+        raise TypeError("budget must be a BudgetSnapshot")
+    if not isinstance(config, SwarmConfig):
+        raise TypeError("config must be a SwarmConfig")
+    if not isinstance(now, datetime):
+        raise TypeError("now must be a datetime")
+    if now.tzinfo is None or now.utcoffset() is None:
+        raise ValueError("now must be timezone-aware")
+
+    agent_id = outcome.assignment.agent_id
+    result = outcome.agent_result
+    if result.agent_id != agent_id or result.assignment_id != outcome.assignment.assignment_id:
+        raise ValueError("outcome assignment and result identities must match")
+    # Resolve the agent before applying any update, including an explicit cost.
+    current_agent = next((agent for agent in state.agent_states if agent.agent_id == agent_id), None)
+    if current_agent is None:
+        raise ValueError(f"swarm outcome agent {agent_id!r} is not present in state")
+
+    child = result.variation.child
+    evaluated_candidate = outcome.evaluated_candidate
+    evaluated = child is not None and evaluated_candidate is not None
+    if child is not None and not evaluated:
+        raise ValueError("submitted variation requires a host-evaluated candidate")
+    if evaluated_candidate is not None and child is None:
+        raise ValueError("evaluated candidate requires a submitted variation child")
+
+    agent_states = _replace_agent_state(
+        state.agent_states,
+        agent_id,
+        budget_consumed_usd=current_agent.budget_consumed_usd + result.agent_cost_usd,
+    )
+    total_evaluations = state.total_evaluations
+    best_candidate_id = state.best_candidate_id
+    best_score = state.best_score
+    recent_scores = state.recent_scores
+    recent_descriptors = state.recent_descriptors
+    current_descriptors: tuple[BehaviourDescriptor, ...] = ()
+    score: float | None = None
+    pivot: PivotInstruction | None = None
+
+    if evaluated and evaluated_candidate is not None:
+        # This is deliberately the exact host assessment, not agent-reported data.
+        score = assessment_score(
+            evaluated_candidate.assessment,
+            structural_weight=config.evolution.structural_weight,
+        )
+        current_descriptors = tuple(extract_behaviour_descriptor(obs) for obs in evaluated_candidate.observations)
+        total_evaluations += 1
+        recent_scores = (*recent_scores, score)[-_RECENT_WINDOW:]
+        recent_descriptors = (*recent_descriptors, *current_descriptors)[-_RECENT_WINDOW:]
+
+        improved_global = best_score is None or score > best_score
+        if improved_global:
+            best_candidate_id = evaluated_candidate.snapshot.candidate_id
+            best_score = score
+
+        improved_agent = score > current_agent.best_score
+        consecutive_non_improving = 0 if improved_agent else current_agent.consecutive_non_improving + 1
+        focus = _average_descriptors(current_descriptors) if current_descriptors else current_agent.current_bd_focus
+        agent_states = _replace_agent_state(
+            agent_states,
+            agent_id,
+            eval_count=current_agent.eval_count + 1,
+            best_score=max(current_agent.best_score, score),
+            last_evaluated_at=now.isoformat(),
+            consecutive_non_improving=consecutive_non_improving,
+            current_bd_focus=focus,
+        )
+        pivot_state, pivot = _update_pivot_state(
+            state.pivot_state,
+            agent_id,
+            evaluated=True,
+            non_improving=consecutive_non_improving,
+            pivot_after=config.heartbeat.pivot_after,
+        )
+    else:
+        pivot_state = state.pivot_state
+
+    # BudgetSnapshot is captured after manager-side budget effects. The reducer
+    # must not apply the same cost a second time when deciding to stop.
+    budget_exhausted = budget.exhausted
+    consolidate = bool(
+        evaluated and total_evaluations > 0 and total_evaluations % config.heartbeat.consolidate_every == 0
+    )
+    stop = state.stopped or budget_exhausted
+    if stop:
+        stop_reason = state.stop_reason or "budget exhausted"
+        decision = SwarmDecision(False, None, consolidate, True, stop_reason)
+    elif pivot is not None:
+        stop_reason = None
+        decision = SwarmDecision(True, pivot, consolidate, False, pivot.reason)
+    elif evaluated:
+        stop_reason = None
+        decision = SwarmDecision(True, None, consolidate, False, "host evaluation recorded")
+    else:
+        stop_reason = None
+        decision = SwarmDecision(True, None, consolidate, False, "no child submitted")
+
+    new_state = SwarmState(
+        run_id=state.run_id,
+        total_evaluations=total_evaluations,
+        best_candidate_id=best_candidate_id,
+        best_score=best_score,
+        agent_states=agent_states,
+        recent_scores=recent_scores,
+        recent_descriptors=recent_descriptors,
+        pivot_state=pivot_state,
+        stopped=stop,
+        stop_reason=stop_reason,
+    )
+    return new_state, decision

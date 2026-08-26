@@ -146,13 +146,7 @@ def test_swarm_state_validates_counters_and_stop_reason() -> None:
 def test_outcome_requires_assignment_and_result_identity() -> None:
     assignment = _assignment()
     result = _result(assignment)
-    outcome = SwarmOutcome(
-        assignment=assignment,
-        agent_result=result,
-        evaluated_candidate=None,
-        archive_outcome=None,
-        decision=SwarmDecision(True, None, False, False, "Continue"),
-    )
+    outcome = SwarmOutcome(assignment, result, None, None)
     assert outcome.agent_result.assignment_id == assignment.assignment_id
 
     mismatched = SwarmAgentResult(
@@ -162,7 +156,7 @@ def test_outcome_requires_assignment_and_result_identity() -> None:
         agent_cost_usd=0.1,
     )
     with pytest.raises(ValueError, match="agent_id"):
-        SwarmOutcome(assignment, mismatched, None, None, outcome.decision)
+        SwarmOutcome(assignment, mismatched, None, None)
 
 
 def test_outcome_requires_host_evaluation_for_submitted_child() -> None:
@@ -186,7 +180,6 @@ def test_outcome_requires_host_evaluation_for_submitted_child() -> None:
             agent_result=result,
             evaluated_candidate=None,
             archive_outcome=None,
-            decision=SwarmDecision(True, None, False, False, "Continue"),
         )
 
 
@@ -198,7 +191,6 @@ def test_outcome_without_child_cannot_have_host_values() -> None:
             agent_result=_result(assignment),
             evaluated_candidate=object(),  # type: ignore[arg-type]
             archive_outcome=None,
-            decision=SwarmDecision(True, None, False, False, "Continue"),
         )
 
 
