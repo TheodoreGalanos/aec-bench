@@ -21,7 +21,7 @@ from aec_bench.evolution.checkpoint import (
     AVOIncompleteExternalEffectError,
     read_checkpoint,
 )
-from aec_bench.evolution.core import VariationStatus
+from aec_bench.evolution.core import AVOBudget, VariationStatus
 from aec_bench.evolution.development import DevelopmentEvaluationBoundary
 from aec_bench.evolution.resume import checkpoint_path
 from tests.evolution.test_agent_loop import _boundary, _checkpoint_identity, _command, _request, _workspace
@@ -265,6 +265,45 @@ def test_scope_skip_writes_idempotent_prebaseline_abstention_checkpoint(tmp_path
         configuration_identity=_checkpoint_identity(),
     )
     assert resumed.status is VariationStatus.ABSTAINED
+
+
+def test_budget_exhaustion_before_parent_evaluation_is_idempotent(tmp_path: Path) -> None:
+    workspace = _workspace(tmp_path / "workspace")
+    request = _request(workspace)
+    path = checkpoint_path(tmp_path / "state", run_id=request.run_id, variation_id="run-test:variation-1:child-child")
+    boundary = _boundary(tmp_path / "boundary")
+    clock_values = iter((0.0, 2.0, 2.0))
+
+    result = run_agentic_variation(
+        request,
+        workspace,
+        "child",
+        development_boundary=boundary,
+        agent_runner=lambda _context: (_ for _ in ()).throw(AssertionError("model must not run")),
+        budget=AVOBudget(max_elapsed_seconds=1.0),
+        checkpoint_path=path,
+        configuration_identity=_checkpoint_identity(),
+        clock=lambda: next(clock_values),
+    )
+
+    assert result.status is VariationStatus.BUDGET_EXHAUSTED
+    saved = read_checkpoint(path)
+    assert saved.parent_evidence is None
+    assert saved.terminal_result is not None
+    assert saved.terminal_result.status is VariationStatus.BUDGET_EXHAUSTED
+
+    resumed = run_agentic_variation(
+        request,
+        workspace,
+        "child",
+        development_boundary=_boundary(tmp_path / "resume-boundary", batch=boundary.batch),
+        agent_runner=lambda _context: (_ for _ in ()).throw(AssertionError("terminal model must not run")),
+        budget=AVOBudget(max_elapsed_seconds=1.0),
+        checkpoint_path=path,
+        configuration_identity=_checkpoint_identity(),
+    )
+
+    assert resumed == result
 
 
 def test_compaction_marker_is_reconciled_after_an_existing_attempt(tmp_path: Path) -> None:

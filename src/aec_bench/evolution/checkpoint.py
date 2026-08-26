@@ -392,6 +392,17 @@ class AVOCheckpoint(StrictModel):
                 raise ValueError("checkpoint without parent evidence must be pre-baseline with no evidence")
             if not _same_workspace_material(self.parent_snapshot, self.current_snapshot):
                 raise ValueError("checkpoint without parent evidence must retain exact parent material")
+            if (
+                self.usage.model_requests != 0
+                or self.usage.tool_calls != 0
+                or self.usage.development_evaluations != 0
+                or self.usage.supervisor_interventions != 0
+                or self.usage.model_cost_usd is not None
+                or self.usage.development_evaluation_cost_usd is not None
+            ):
+                raise ValueError(
+                    "checkpoint without parent evidence must have zero usage counters and no recorded costs"
+                )
             if self.terminal_result is None:
                 if not (
                     len(self.incomplete_external_effects) == 1
@@ -401,8 +412,16 @@ class AVOCheckpoint(StrictModel):
                     raise ValueError(
                         "checkpoint without parent evidence must have the parent development incomplete marker"
                     )
+            elif self.terminal_result.status is VariationStatus.BUDGET_EXHAUSTED:
+                if self.usage.elapsed_seconds < self.budget.max_elapsed_seconds:
+                    raise ValueError(
+                        "pre-baseline budget exhaustion requires elapsed_seconds to reach max_elapsed_seconds"
+                    )
             elif self.terminal_result.status not in (VariationStatus.CANCELLED, VariationStatus.ABSTAINED):
-                raise ValueError("checkpoint without parent evidence may only be terminal cancellation or abstention")
+                raise ValueError(
+                    "checkpoint without parent evidence may only be terminal cancellation, abstention, "
+                    "or budget exhaustion"
+                )
         elif self.parent_evidence.snapshot.candidate_id != self.parent_candidate_id:
             raise ValueError("checkpoint parent_evidence must match parent_candidate_id")
         elif self.parent_evidence.assessment.evaluation_case_ids != self.development_case_ids:

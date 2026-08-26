@@ -25,6 +25,7 @@ from aec_bench.contracts.evolution import (
 )
 from aec_bench.contracts.experiment_manifest import AgentConfig, ComputeConfig
 from aec_bench.evolution.cancellation import AVOCancellationError, AVOCancellationReason, AVOCancellationSignal
+from aec_bench.evolution.checkpoint import AVOIncompleteExternalEffectError
 from aec_bench.evolution.core import DevelopmentAttempt, SelectionPlan, VariationResult, VariationStatus
 from aec_bench.evolution.evaluation import CandidateEvaluationBatch, bind_evaluated_candidate
 from aec_bench.evolution.swarm.config import (
@@ -371,6 +372,39 @@ async def test_manager_stops_peer_before_cleanup_after_agent_cancellation(tmp_pa
         await manager.run()
 
     assert factory.cleaned
+
+
+@pytest.mark.asyncio
+async def test_manager_does_not_retry_incomplete_external_effect(tmp_path: Path) -> None:
+    class NonRetryableFactory(FakeEvolverFactory):
+        def __init__(self) -> None:
+            super().__init__({"agent-0": [0.5]})
+            self.step_count = 0
+            self.cleaned = False
+
+        def create(self, agent_id: str, model_override: str | None = None):
+            del agent_id, model_override
+            factory = self
+
+            class IncompleteEvolver:
+                async def step(self, _assignment: SwarmAssignment) -> SwarmAgentResult:
+                    factory.step_count += 1
+                    raise AVOIncompleteExternalEffectError()
+
+            return IncompleteEvolver()
+
+        def cleanup(self) -> None:
+            self.cleaned = True
+
+    factory = NonRetryableFactory()
+    manager = SwarmManager(config=_make_config(agent_count=1), state_dir=tmp_path, evolver_factory=factory)
+
+    with pytest.raises(AVOIncompleteExternalEffectError):
+        await manager.run()
+
+    assert factory.step_count == 1
+    assert factory.cleaned
+    assert (tmp_path / "swarm_state.json").exists()
 
 
 @pytest.mark.asyncio

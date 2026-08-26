@@ -10,6 +10,7 @@ from typing import Protocol
 
 from aec_bench.contracts.evolution import AgentStatus
 from aec_bench.evolution.cancellation import AVOCancellationError, AVOCancellationSignal
+from aec_bench.evolution.checkpoint import AVOIncompleteExternalEffectError
 from aec_bench.evolution.swarm.core import SwarmAgentResult, SwarmAssignment
 
 logger = logging.getLogger(__name__)
@@ -50,7 +51,7 @@ async def run_agent_loop(ctx: AgentContext) -> AgentStatus:
         try:
             assignment = await ctx.next_assignment()
             result = await ctx.evolver.step(assignment)
-        except AVOCancellationError:
+        except (AVOCancellationError, AVOIncompleteExternalEffectError):
             raise
         except Exception as exc:
             logger.warning("Agent %s error: %s", ctx.agent_id, exc)
