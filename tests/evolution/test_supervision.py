@@ -15,7 +15,7 @@ from aec_bench.contracts.evolution import (
     VariationUsage,
     WorkspaceSnapshot,
 )
-from aec_bench.evolution.core import AVOBudget, AVOState, DevelopmentAttempt
+from aec_bench.evolution.core import AVOBudget, AVOState, DevelopmentAttempt, budget_exhaustion_reason
 from aec_bench.evolution.evaluation import bind_evaluated_candidate
 from aec_bench.evolution.memory import AVOMemoryEntry, AVOMemoryOutcome
 from aec_bench.evolution.supervision import (
@@ -23,6 +23,7 @@ from aec_bench.evolution.supervision import (
     AVOSupervisionAdvice,
     AVOSupervisionFailure,
     AVOSupervisionFailureCode,
+    AVOSupervisionRecord,
     AVOSupervisionRequest,
     AVOSupervisionResult,
     AVOSupervisionTrigger,
@@ -284,6 +285,28 @@ def test_supervision_failure_and_result_are_immutable_typed_contracts() -> None:
         result.output = failure  # type: ignore[misc]
 
 
+def test_supervision_record_requires_exactly_one_confirmed_outcome() -> None:
+    advice = AVOSupervisionAdvice(directions=("Try a new direction.",), reasoning="The current direction repeats.")
+    failure = AVOSupervisionFailure(
+        code=AVOSupervisionFailureCode.OUTPUT_VALIDATION_REJECTED,
+        detail="The supervisor output was rejected.",
+    )
+    valid = AVOSupervisionRecord(
+        trigger_reason=AVOSupervisionTrigger.EXHAUSTED_DIRECTION_REQUEST,
+        advice=advice,
+    )
+
+    assert valid.advice == advice
+    with pytest.raises(ValueError, match="advice or confirmed failure"):
+        AVOSupervisionRecord(trigger_reason=AVOSupervisionTrigger.EXHAUSTED_DIRECTION_REQUEST)
+    with pytest.raises(ValueError, match="advice or confirmed failure"):
+        AVOSupervisionRecord(
+            trigger_reason=AVOSupervisionTrigger.EXHAUSTED_DIRECTION_REQUEST,
+            advice=advice,
+            failure=failure,
+        )
+
+
 def test_supervision_usage_reservation_and_reconciliation_share_avo_budget() -> None:
     before = VariationUsage(model_requests=1, input_tokens=10, output_tokens=4, model_cost_usd=0.4)
     budget = AVOBudget(max_model_requests=3, max_supervisor_interventions=1, max_input_tokens=30, max_output_tokens=20)
@@ -321,18 +344,32 @@ def test_supervision_usage_rejects_unknown_tokens_when_a_bound_cannot_be_proved(
         )
 
 
-def test_supervision_reservation_allows_first_unknown_cost_then_rejects_unknown_reconciliation() -> None:
-    budget = AVOBudget(max_cost_usd=2, max_supervisor_interventions=1)
+def test_supervision_reconciliation_preserves_unknown_cost_for_budget_exhaustion() -> None:
+    budget = AVOBudget(max_cost_usd=2, max_supervisor_interventions=2)
 
     reserved = reserve_supervision_usage(VariationUsage(), budget)
 
     assert reserved.model_requests == 1
-    with pytest.raises(ValueError, match="max_cost_usd_unknown"):
-        reconcile_supervision_usage(
-            VariationUsage(),
+    reconciled = reconcile_supervision_usage(
+        VariationUsage(),
+        budget,
+        VariationUsage(model_requests=1, supervisor_interventions=1),
+    )
+
+    assert reconciled.model_cost_usd is None
+    assert (
+        budget_exhaustion_reason(
             budget,
-            VariationUsage(model_requests=1, supervisor_interventions=1),
+            AVOState(
+                variation_id="variation",
+                parent_candidate_id="parent",
+                child_candidate_id="child",
+                current_revision=0,
+                usage=reconciled,
+            ),
         )
+        == "max_cost_usd_unknown"
+    )
 
 
 def test_supervision_reservation_allows_first_model_cost_after_known_evaluation_cost() -> None:

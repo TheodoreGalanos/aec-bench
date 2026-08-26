@@ -24,6 +24,7 @@ from aec_bench.evolution.development import (
 from aec_bench.evolution.evaluation import CandidateEvaluationBatch
 from aec_bench.evolution.resume import checkpoint_path
 from aec_bench.evolution.sanitiser import CompactionLLM
+from aec_bench.evolution.supervision import build_supervision_composition
 from aec_bench.evolution.workspace import Workspace
 from aec_bench.trials import build_trial_id
 
@@ -31,6 +32,8 @@ from aec_bench.trials import build_trial_id
 def build_agentic_variation_operator(
     *,
     agent_model: Any,
+    supervisor_model: Any,
+    supervisor_model_identity: str,
     development_batch_planner: DevelopmentBatchPlanner,
     development_evaluator: DevelopmentEvaluator,
     development_batch_size: int,
@@ -59,14 +62,27 @@ def build_agentic_variation_operator(
         raise ValueError("development_batch_size must be positive")
     if not isinstance(development_experiment_prefix, str) or not development_experiment_prefix.strip():
         raise ValueError("development_experiment_prefix must not be blank")
-    selected_budget = budget if budget is not None else AVOBudget()
+    selected_budget = budget if budget is not None else AVOBudget(max_supervisor_interventions=1)
     if not isinstance(selected_budget, AVOBudget):
         raise TypeError("budget must be an AVOBudget")
+    if supervisor_model is None:
+        raise ValueError("supervisor_model must be explicit")
+    if not isinstance(supervisor_model_identity, str) or not supervisor_model_identity.strip():
+        raise ValueError("supervisor_model_identity must not be blank")
     if checkpoint_root is not None and not isinstance(checkpoint_root, Path):
         raise TypeError("checkpoint_root must be a Path")
     if checkpoint_root is not None and configuration_identity is None:
         raise ValueError("configuration_identity is required when checkpointing is enabled")
+    if (
+        configuration_identity is not None
+        and supervisor_model_identity.strip() != configuration_identity.supervisor_model_identity
+    ):
+        raise ValueError("supervisor_model_identity must match configuration_identity.supervisor_model_identity")
     runner = PydanticAIStructuredRunner(agent_model)
+    supervisor_runner = build_supervision_composition(
+        supervisor_model,
+        model_identity=supervisor_model_identity,
+    ).runner
 
     def vary(request: VariationRequest, source: Workspace, child_candidate_id: str) -> VariationResult:
         if not isinstance(request, VariationRequest):
@@ -117,6 +133,7 @@ def build_agentic_variation_operator(
             child_candidate_id,
             development_boundary=boundary,
             agent_runner=runner,
+            supervisor_runner=supervisor_runner,
             budget=selected_budget,
             knowledge_source=lambda: _workspace_program(source),
             compaction_llm=compaction_llm,

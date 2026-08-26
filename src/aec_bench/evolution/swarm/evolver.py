@@ -31,7 +31,7 @@ from aec_bench.evolution.cancellation import (
     AVOCancellationSignal,
 )
 from aec_bench.evolution.checkpoint import AVOConfigurationIdentity
-from aec_bench.evolution.core import AVOBudget, EvolutionState, VariationRequest, VariationResult
+from aec_bench.evolution.core import EvolutionState, VariationRequest, VariationResult
 from aec_bench.evolution.enrichment import enrich_observations
 from aec_bench.evolution.evaluation import CandidateBatchPlanner, CandidateEvaluationBatch, bind_candidate_evaluation
 from aec_bench.evolution.graveyard import MutationGraveyard
@@ -297,13 +297,15 @@ class SwarmEvolverFactory:
             candidate_identity=False,
         )
         cancellation_signal = AVOCancellationSignal()
+        evolver_model = build_pydantic_model(evolver_model_name)
         variation_operator = build_agentic_variation_operator(
-            agent_model=build_pydantic_model(evolver_model_name),
+            agent_model=evolver_model,
+            supervisor_model=evolver_model,
+            supervisor_model_identity=evolver_model_name,
             development_batch_planner=development_batch_planner,
             development_evaluator=development_evaluator,
             development_batch_size=self._batch_size,
             development_experiment_prefix=development_experiment_id,
-            budget=AVOBudget(),
             compaction_llm=classifier_llm,
             # Agent workspaces are disposable copies. Keep the checkpoint in
             # the factory's source workspace so cleanup cannot remove the

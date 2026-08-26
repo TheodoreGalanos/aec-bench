@@ -9,7 +9,7 @@ import time
 from dataclasses import asdict, dataclass
 from enum import StrEnum
 from importlib import import_module
-from typing import Any
+from typing import Any, Protocol
 
 from pydantic import model_validator
 
@@ -218,6 +218,12 @@ class AVOSupervisionBudgetError(ValueError):
     """Raised when a supervisor reservation or reconciliation exceeds AVO authority."""
 
 
+class SupervisorRunner(Protocol):
+    """Narrow provider boundary for one non-recursive supervisor request."""
+
+    def __call__(self, request: AVOSupervisionRequest) -> AVOSupervisionResult: ...
+
+
 def _validate_usage_within_budget(
     usage: VariationUsage,
     budget: AVOBudget,
@@ -327,7 +333,6 @@ def reconcile_supervision_usage(
         development_evaluation_cost_usd=usage_before.development_evaluation_cost_usd,
         elapsed_seconds=reserved.elapsed_seconds + supervisor_usage.elapsed_seconds,
     )
-    _validate_usage_within_budget(reconciled, budget)
     return reconciled
 
 
@@ -566,6 +571,7 @@ __all__ = (
     "AVOSupervisionRequest",
     "AVOSupervisionTrigger",
     "PydanticAISupervisionRunner",
+    "SupervisorRunner",
     "build_supervision_composition",
     "project_remaining_budget",
     "reconcile_supervision_usage",

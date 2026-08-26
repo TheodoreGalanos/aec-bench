@@ -18,6 +18,7 @@ from aec_bench.contracts.evolution import (
     FieldScore,
     MutationStrategy,
     ObservationEnrichment,
+    VariationUsage,
     WorkspaceSnapshot,
 )
 from aec_bench.evolution.agent_loop import (
@@ -42,6 +43,7 @@ from aec_bench.evolution.development import DevelopmentEvaluationBoundary
 from aec_bench.evolution.evaluation import CandidateEvaluationBatch
 from aec_bench.evolution.memory import AVOMemoryEntry
 from aec_bench.evolution.resume import AVOResumeMismatchError, checkpoint_path
+from aec_bench.evolution.supervision import AVOSupervisionAdvice, AVOSupervisionResult
 from aec_bench.evolution.workspace import Workspace
 from tests.evolution.test_development import _batch, _record
 from tests.support.trial_record_factories import make_trial_record
@@ -261,6 +263,95 @@ def test_loop_fails_closed_on_incomplete_model_request(tmp_path: Path) -> None:
             "child",
             development_boundary=_boundary(tmp_path / "second-boundary", batch=first_boundary.batch),
             agent_runner=lambda _context: (_ for _ in ()).throw(AssertionError("model must not retry")),
+            checkpoint_path=path,
+            configuration_identity=_checkpoint_identity(),
+        )
+
+
+def test_explicit_supervision_request_persists_advice_for_next_main_context(tmp_path: Path) -> None:
+    workspace = _workspace(tmp_path / "workspace")
+    request = _request(workspace)
+    path = checkpoint_path(tmp_path / "state", run_id=request.run_id, variation_id="run-test:variation-1:child-child")
+    main_runner = _SequenceRunner(
+        [
+            _command(AgentToolName.REQUEST_SUPERVISION),
+            _command(AgentToolName.ABSTAIN, reasoning="The advised direction is not safe to submit."),
+        ]
+    )
+    supervisor_calls = []
+
+    def supervisor(supervision_request):
+        supervisor_calls.append(supervision_request)
+        return AVOSupervisionResult(
+            output=AVOSupervisionAdvice(
+                directions=("Try a bounded verification-focused direction.",),
+                reasoning="The current direction has repeated without progress.",
+            ),
+            usage=VariationUsage(model_requests=1, supervisor_interventions=1, elapsed_seconds=0.25),
+        )
+
+    result = run_agentic_variation(
+        request,
+        workspace,
+        "child",
+        development_boundary=_boundary(tmp_path / "boundary"),
+        agent_runner=main_runner,
+        supervisor_runner=supervisor,
+        budget=AVOBudget(max_supervisor_interventions=1),
+        checkpoint_path=path,
+        configuration_identity=_checkpoint_identity(),
+    )
+
+    assert result.status is VariationStatus.ABSTAINED
+    assert len(supervisor_calls) == 1
+    assert len(main_runner.contexts) == 2
+    next_context = main_runner.contexts[1]
+    assert next_context.latest_supervision_advice is not None
+    assert next_context.latest_supervision_advice.directions == ("Try a bounded verification-focused direction.",)
+    assert "request_supervision" not in next_context.tools
+    assert result.usage.supervisor_interventions == 1
+    saved = read_checkpoint(path)
+    assert len(saved.supervision_records) == 1
+    assert saved.supervision_records[0].advice == next_context.latest_supervision_advice
+    assert not saved.incomplete_external_effects
+
+
+def test_supervision_provider_exception_leaves_marker_and_resume_does_not_retry(tmp_path: Path) -> None:
+    workspace = _workspace(tmp_path / "workspace")
+    request = _request(workspace)
+    boundary = _boundary(tmp_path / "boundary")
+    path = checkpoint_path(tmp_path / "state", run_id=request.run_id, variation_id="run-test:variation-1:child-child")
+    budget = AVOBudget(max_supervisor_interventions=1)
+
+    def failing_supervisor(_request):
+        raise RuntimeError("ambiguous supervisor provider")
+
+    with pytest.raises(AVOIncompleteExternalEffectError, match="ambiguous supervisor provider"):
+        run_agentic_variation(
+            request,
+            workspace,
+            "child",
+            development_boundary=boundary,
+            agent_runner=lambda _context: _command(AgentToolName.REQUEST_SUPERVISION),
+            supervisor_runner=failing_supervisor,
+            budget=budget,
+            checkpoint_path=path,
+            configuration_identity=_checkpoint_identity(),
+        )
+
+    saved = read_checkpoint(path)
+    assert saved.usage.supervisor_interventions == 1
+    assert saved.incomplete_external_effects[0].operation == "supervisor_request"
+
+    with pytest.raises(AVOIncompleteExternalEffectError, match="must be reconciled"):
+        run_agentic_variation(
+            request,
+            workspace,
+            "child",
+            development_boundary=_boundary(tmp_path / "resume-boundary", batch=boundary.batch),
+            agent_runner=lambda _context: (_ for _ in ()).throw(AssertionError("main agent must not retry")),
+            supervisor_runner=lambda _request: (_ for _ in ()).throw(AssertionError("supervisor must not retry")),
+            budget=budget,
             checkpoint_path=path,
             configuration_identity=_checkpoint_identity(),
         )

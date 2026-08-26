@@ -191,7 +191,7 @@ class TestAVOContracts:
         assert budget.max_tool_calls == 40
         assert budget.max_development_evaluations == 7
         assert budget.max_elapsed_seconds == 1800.0
-        assert budget.max_supervisor_interventions == 1
+        assert budget.max_supervisor_interventions == 0
 
     @pytest.mark.parametrize(
         "field_name",
@@ -211,6 +211,18 @@ class TestAVOContracts:
 
     def test_supervisor_limit_zero_disables_supervision(self) -> None:
         assert AVOBudget(max_supervisor_interventions=0).max_supervisor_interventions == 0
+
+    def test_supervisor_limit_does_not_end_the_main_variation_loop(self) -> None:
+        budget = AVOBudget(max_supervisor_interventions=1)
+        state = AVOState(
+            variation_id="variation",
+            parent_candidate_id="parent",
+            child_candidate_id="child",
+            current_revision=0,
+            usage=VariationUsage(supervisor_interventions=1),
+        )
+
+        assert budget_exhaustion_reason(budget, state) is None
 
     @pytest.mark.parametrize("field_name", ["max_input_tokens", "max_output_tokens"])
     def test_budget_rejects_non_positive_token_limits(self, field_name: str) -> None:

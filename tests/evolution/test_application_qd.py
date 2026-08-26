@@ -415,6 +415,8 @@ def test_qd_uses_the_shared_variation_seam_and_hosts_only_the_final_child(
     monkeypatch.setattr(agent_loop.PydanticAIStructuredRunner, "__call__", next_command)
     operator = build_agentic_variation_operator(
         agent_model=TestModel(),
+        supervisor_model=TestModel(),
+        supervisor_model_identity="test-supervisor",
         development_batch_planner=lambda _size, _cycle: batch,
         development_evaluator=development_evaluate,
         development_batch_size=1,

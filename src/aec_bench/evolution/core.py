@@ -71,7 +71,7 @@ class AVOBudget:
     max_elapsed_seconds: float = 1800.0
     max_consecutive_evaluation_errors: int = 2
     max_stagnant_evaluations: int = 3
-    max_supervisor_interventions: int = 1
+    max_supervisor_interventions: int = 0
     max_cost_usd: float | None = None
 
     def __post_init__(self) -> None:
@@ -391,7 +391,6 @@ def budget_exhaustion_reason(budget: AVOBudget, state: AVOState) -> str | None:
             state.consecutive_without_progress,
             budget.max_stagnant_evaluations,
         ),
-        ("max_supervisor_interventions", usage.supervisor_interventions, budget.max_supervisor_interventions),
     )
     for name, observed, limit in limits:
         if limit > 0 and observed >= limit:

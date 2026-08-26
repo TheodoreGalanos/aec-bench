@@ -424,6 +424,8 @@ def test_agentic_operator_creates_one_development_boundary_per_variation_call(tm
     monkeypatch.setattr(variation_operator, "run_agentic_variation", capture)
     operator = build_agentic_variation_operator(
         agent_model=TestModel(custom_output_args={"tool": "abstain", "arguments": {"reasoning": "No safe change."}}),
+        supervisor_model=TestModel(),
+        supervisor_model_identity="test-supervisor",
         development_batch_planner=development_plan,
         development_evaluator=development_evaluate,
         development_batch_size=1,
@@ -478,6 +480,8 @@ def test_agentic_operator_names_development_evidence_by_run(tmp_path: Path, monk
     monkeypatch.setattr(variation_operator, "run_agentic_variation", capture)
     operator = build_agentic_variation_operator(
         agent_model=object(),
+        supervisor_model=object(),
+        supervisor_model_identity="test-supervisor",
         development_batch_planner=lambda _size, _cycle: batch_one,
         development_evaluator=lambda _snapshot, _batch: (),
         development_batch_size=1,
