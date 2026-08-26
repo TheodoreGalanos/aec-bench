@@ -21,8 +21,7 @@ from aec_bench.contracts.evolution import (
     SelectionRecord,
     WorkspaceSnapshot,
 )
-from aec_bench.contracts.trial_record import EvaluationStatus, ExecutionStatus
-from aec_bench.evolution.analysis import EvolutionAnalysis, GraduatedScope, compute_discipline_scores
+from aec_bench.evolution.analysis import EvolutionAnalysis, GraduatedScope
 from aec_bench.evolution.graveyard import GraveyardEntry
 
 
@@ -215,7 +214,7 @@ class EvolutionState:
             best_candidate_id=baseline.snapshot.candidate_id,
             best_score=score,
             cycles_without_improvement=0,
-            best_score_history=(baseline.assessment.batch_score,),
+            best_score_history=(score,),
         )
 
 
@@ -289,70 +288,6 @@ def assessment_score(assessment: CandidateAssessment, *, structural_weight: floa
     if assessment.structural_score is None:
         return assessment.batch_score
     return assessment.batch_score * (1.0 - structural_weight) + assessment.structural_score * structural_weight
-
-
-def assess_candidate(
-    *,
-    snapshot: WorkspaceSnapshot,
-    observations: tuple[EvolutionObservation, ...],
-    evaluation_case_ids: tuple[str, ...] | None = None,
-) -> CandidateAssessment:
-    """Derive one deterministic assessment from a candidate's observations."""
-    if not observations:
-        raise ValueError("candidate assessment evidence must not be empty")
-
-    candidate_id = snapshot.candidate_id
-    trial_ids = tuple(observation.trial.trial_id for observation in observations)
-    if len(trial_ids) != len(set(trial_ids)):
-        raise ValueError("candidate assessment trial IDs must be unique")
-    for observation in observations:
-        _validate_observation_candidate(observation, candidate_id)
-
-    case_ids = (
-        tuple(evaluation_case_ids)
-        if evaluation_case_ids is not None
-        else tuple(f"{observation.trial.task_id}#attempt-{observation.trial.attempt}" for observation in observations)
-    )
-    if len(case_ids) != len(observations):
-        raise ValueError("evaluation_case_ids must match the observation count")
-
-    rewards: list[float] = []
-    structural_scores: list[float] = []
-    invalid_reasons: list[str] = []
-    for observation in observations:
-        trial = observation.trial
-        evaluation = trial.evaluation
-        if evaluation is None:
-            invalid_reasons.append(f"trial {trial.trial_id} has no evaluation result")
-            continue
-        rewards.append(evaluation.reward)
-        if trial.execution_status is not ExecutionStatus.COMPLETED:
-            invalid_reasons.append(f"trial {trial.trial_id} execution is not completed")
-        if trial.evaluation_status is not EvaluationStatus.COMPLETED:
-            invalid_reasons.append(f"trial {trial.trial_id} evaluation is not completed")
-        if not evaluation.validity.output_parseable:
-            invalid_reasons.append(f"trial {trial.trial_id} output is not parseable")
-        if not evaluation.validity.schema_valid:
-            invalid_reasons.append(f"trial {trial.trial_id} output schema is invalid")
-        if not evaluation.validity.verifier_completed:
-            invalid_reasons.append(f"trial {trial.trial_id} verifier did not complete")
-        if observation.enrichment.structural_score is not None:
-            structural_scores.append(observation.enrichment.structural_score.cosine_similarity)
-
-    if not rewards:
-        raise ValueError("candidate assessment evidence has no evaluation results")
-    scored_observations = tuple(observation for observation in observations if observation.trial.evaluation is not None)
-    discipline_scores = compute_discipline_scores(scored_observations)
-    return CandidateAssessment(
-        candidate_id=candidate_id,
-        batch_score=sum(rewards) / len(rewards),
-        discipline_scores={item.discipline: item.mean_reward for item in discipline_scores},
-        trial_ids=trial_ids,
-        evaluation_case_ids=case_ids,
-        valid=not invalid_reasons,
-        structural_score=(sum(structural_scores) / len(structural_scores) if structural_scores else None),
-        invalid_reasons=tuple(invalid_reasons),
-    )
 
 
 def decide_candidate(
@@ -442,12 +377,12 @@ def reduce_evolution_state(
     else:
         stagnation_count = decision.cycles_without_improvement
 
-    current_assessment = child.assessment if child is not None else parent.assessment
+    score_history = (*state.best_score_history, best_score)
     return EvolutionState(
         cycle=state.cycle + 1,
         active_candidate_id=active_candidate_id,
         best_candidate_id=best_candidate_id,
         best_score=best_score,
         cycles_without_improvement=stagnation_count,
-        best_score_history=(*state.best_score_history, current_assessment.batch_score),
+        best_score_history=score_history,
     )

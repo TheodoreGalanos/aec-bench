@@ -25,7 +25,6 @@ from aec_bench.evolution.core import (
     VariationRequest,
     VariationResult,
     VariationStatus,
-    assess_candidate,
     assessment_score,
     bind_evaluated_candidate,
     decide_candidate,
@@ -246,22 +245,10 @@ class TestFunctionalEvolutionValues:
 
 
 class TestPureEvolutionPolicy:
-    def test_assessment_is_derived_from_exact_observations(self) -> None:
-        candidate = _candidate()
-        assessment = assess_candidate(
-            snapshot=candidate.snapshot,
-            observations=candidate.observations,
-            evaluation_case_ids=("case-1",),
-        )
-
-        assert assessment.candidate_id == candidate.snapshot.candidate_id
-        assert assessment.batch_score == pytest.approx(1.0)
-        assert assessment.trial_ids == ("trial-1",)
-        assert assessment.evaluation_case_ids == ("case-1",)
-        assert assessment.valid is True
-
     def test_assessment_score_preserves_structural_weighting(self) -> None:
         assert assessment_score(_assessment("candidate-1"), structural_weight=0.3) == pytest.approx(0.765)
+        state = EvolutionState.from_baseline(_candidate(), structural_weight=0.3)
+        assert state.best_score_history == pytest.approx((state.best_score,))
 
     def test_decision_rejects_unmatched_evaluation_cases(self) -> None:
         parent = _candidate("parent")
@@ -316,6 +303,7 @@ class TestPureEvolutionPolicy:
         assert reduced.active_candidate_id == "child"
         assert reduced.best_candidate_id == "child"
         assert reduced.best_score == pytest.approx(0.825)
+        assert reduced.best_score_history == pytest.approx((0.765, 0.825))
         assert reduced == reduce_evolution_state(state=baseline_state, parent=parent, child=child, decision=decision)
 
     def test_skipped_variation_does_not_advance_candidate_or_stagnation(self) -> None:
