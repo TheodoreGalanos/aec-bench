@@ -29,8 +29,9 @@ from aec_bench.evolution.agent_loop import (
     PydanticAIStructuredRunner,
     run_agentic_variation,
 )
-from aec_bench.evolution.agent_protocol import AgentResponse
+from aec_bench.evolution.agent_protocol import AgentResponse, _render_agent_prompt
 from aec_bench.evolution.analysis import BehavioralPattern, EvolutionAnalysis, GraduatedScope
+from aec_bench.evolution.cancellation import AVOCancellationError, AVOCancellationSignal
 from aec_bench.evolution.checkpoint import AVOConfigurationIdentity, AVOIncompleteExternalEffectError, read_checkpoint
 from aec_bench.evolution.core import (
     AVOBudget,
@@ -43,7 +44,14 @@ from aec_bench.evolution.development import DevelopmentEvaluationBoundary
 from aec_bench.evolution.evaluation import CandidateEvaluationBatch
 from aec_bench.evolution.memory import AVOMemoryEntry
 from aec_bench.evolution.resume import AVOResumeMismatchError, checkpoint_path
-from aec_bench.evolution.supervision import AVOSupervisionAdvice, AVOSupervisionResult
+from aec_bench.evolution.supervision import (
+    AVOSupervisionAdvice,
+    AVOSupervisionFailure,
+    AVOSupervisionFailureCode,
+    AVOSupervisionRequest,
+    AVOSupervisionResult,
+    AVOSupervisionTrigger,
+)
 from aec_bench.evolution.workspace import Workspace
 from tests.evolution.test_development import _batch, _record
 from tests.support.trial_record_factories import make_trial_record
@@ -162,6 +170,38 @@ def _boundary(
     )
 
 
+def _outcome_boundary(
+    tmp_path: Path, child_invalid: tuple[bool, ...]
+) -> tuple[DevelopmentEvaluationBoundary, list[int]]:
+    selected_batch = _batch(tmp_path / "batch")
+    evaluation_count = [0]
+
+    def evaluate(_snapshot: object, _batch_value: object):
+        evaluation_count[0] += 1
+        invalid = evaluation_count[0] > 1 and child_invalid[evaluation_count[0] - 2]
+        validity = ValidityCheck(
+            output_parseable=not invalid,
+            schema_valid=True,
+            verifier_completed=True,
+            errors=("invalid fixture",) if invalid else (),
+        )
+        reward = 0.0 if invalid else 0.4
+        return (
+            _record(
+                trial_id=f"outcome-development-trial-{evaluation_count[0]}",
+            ).model_copy(update={"evaluation": EvaluationResult(reward=reward, validity=validity)}),
+        )
+
+    boundary = DevelopmentEvaluationBoundary(
+        planner=lambda _size, _cycle: selected_batch,
+        evaluator=evaluate,
+        batch_size=1,
+        experiment_id="development-experiment",
+        host_experiment_id="host-experiment",
+    )
+    return boundary, evaluation_count
+
+
 def _checkpoint_identity() -> AVOConfigurationIdentity:
     return AVOConfigurationIdentity(
         model_identity="test-model",
@@ -275,6 +315,7 @@ def test_explicit_supervision_request_persists_advice_for_next_main_context(tmp_
     main_runner = _SequenceRunner(
         [
             _command(AgentToolName.REQUEST_SUPERVISION),
+            _command(AgentToolName.REQUEST_SUPERVISION),
             _command(AgentToolName.ABSTAIN, reasoning="The advised direction is not safe to submit."),
         ]
     )
@@ -304,15 +345,283 @@ def test_explicit_supervision_request_persists_advice_for_next_main_context(tmp_
 
     assert result.status is VariationStatus.ABSTAINED
     assert len(supervisor_calls) == 1
-    assert len(main_runner.contexts) == 2
+    assert len(main_runner.contexts) == 3
     next_context = main_runner.contexts[1]
     assert next_context.latest_supervision_advice is not None
     assert next_context.latest_supervision_advice.directions == ("Try a bounded verification-focused direction.",)
     assert "request_supervision" not in next_context.tools
+    prompt = _render_agent_prompt(next_context)
+    assert "optional advisory guidance only" in prompt
+    assert "does not itself perform or authorize workspace edits" in prompt
+    assert "SupervisorRunner" not in prompt
+    assert "credentials" not in prompt
+    assert "hidden verifier" not in prompt
     assert result.usage.supervisor_interventions == 1
     saved = read_checkpoint(path)
     assert len(saved.supervision_records) == 1
     assert saved.supervision_records[0].advice == next_context.latest_supervision_advice
+    assert saved.exhausted_direction_requested is False
+    assert not saved.incomplete_external_effects
+
+
+def test_three_stagnant_child_evaluations_trigger_once_and_open_a_new_direction_window(tmp_path: Path) -> None:
+    workspace = _workspace(tmp_path / "workspace")
+    request = _request(workspace)
+    boundary, evaluation_count = _outcome_boundary(tmp_path / "boundary", (False, False, False, False))
+    commands: list[AgentCommand] = []
+    for index in range(4):
+        commands.extend(
+            (
+                _command(
+                    AgentToolName.APPLY_MUTATION,
+                    mutation={"type": "modify_prompt", "content": f"Direction {index}"},
+                ),
+                _command(AgentToolName.EVALUATE_CURRENT_REVISION, hypothesis=f"Try direction {index}."),
+            )
+        )
+    commands.append(_command(AgentToolName.ABSTAIN, reasoning="The bounded direction window is complete."))
+    main_runner = _SequenceRunner(commands)
+    supervisor_requests: list[AVOSupervisionRequest] = []
+
+    def supervisor(supervision_request: AVOSupervisionRequest) -> AVOSupervisionResult:
+        supervisor_requests.append(supervision_request)
+        return AVOSupervisionResult(
+            output=AVOSupervisionAdvice(directions=("Try a different bounded direction.",), reasoning="No progress."),
+            usage=VariationUsage(model_requests=1, supervisor_interventions=1),
+        )
+
+    result = run_agentic_variation(
+        request,
+        workspace,
+        "child",
+        development_boundary=boundary,
+        agent_runner=main_runner,
+        supervisor_runner=supervisor,
+        budget=AVOBudget(max_supervisor_interventions=1),
+    )
+
+    assert result.status is VariationStatus.ABSTAINED
+    assert evaluation_count[0] == 5  # parent baseline plus four child evaluations
+    assert len(supervisor_requests) == 1
+    assert supervisor_requests[0].trigger_reason is AVOSupervisionTrigger.VALID_DEVELOPMENT_STAGNATION
+    assert len(supervisor_requests[0].attempt_summaries) == 3
+    assert main_runner.contexts[6].state.consecutive_without_progress == 0
+    assert main_runner.contexts[6].latest_supervision_advice is not None
+
+
+def test_two_invalid_child_assessments_trigger_one_supervisor_without_counting_raw_errors(tmp_path: Path) -> None:
+    workspace = _workspace(tmp_path / "workspace")
+    request = _request(workspace)
+    boundary, evaluation_count = _outcome_boundary(tmp_path / "boundary", (True, True))
+    main_runner = _SequenceRunner(
+        [
+            _command(AgentToolName.APPLY_MUTATION, mutation={"type": "modify_prompt", "content": "Invalid one"}),
+            _command(AgentToolName.EVALUATE_CURRENT_REVISION, hypothesis="First invalid result."),
+            _command(AgentToolName.APPLY_MUTATION, mutation={"type": "modify_prompt", "content": "Invalid two"}),
+            _command(AgentToolName.EVALUATE_CURRENT_REVISION, hypothesis="Second invalid result."),
+            _command(AgentToolName.ABSTAIN, reasoning="Invalid evidence cannot be submitted."),
+        ]
+    )
+    supervisor_requests: list[AVOSupervisionRequest] = []
+
+    def supervisor(supervision_request: AVOSupervisionRequest) -> AVOSupervisionResult:
+        supervisor_requests.append(supervision_request)
+        return AVOSupervisionResult(
+            output=AVOSupervisionAdvice(directions=("Try a bounded alternative.",), reasoning="Two invalid results."),
+            usage=VariationUsage(model_requests=1, supervisor_interventions=1),
+        )
+
+    result = run_agentic_variation(
+        request,
+        workspace,
+        "child",
+        development_boundary=boundary,
+        agent_runner=main_runner,
+        supervisor_runner=supervisor,
+        budget=AVOBudget(max_supervisor_interventions=1),
+    )
+
+    assert result.status is VariationStatus.ABSTAINED
+    assert evaluation_count[0] == 3  # parent plus two returned invalid assessments
+    assert len(supervisor_requests) == 1
+    assert supervisor_requests[0].trigger_reason is AVOSupervisionTrigger.CONSECUTIVE_INVALID_OR_FAILED_EVALUATIONS
+
+
+def test_confirmed_supervision_failure_is_visible_once_and_does_not_retry(tmp_path: Path) -> None:
+    workspace = _workspace(tmp_path / "workspace")
+    request = _request(workspace)
+    path = checkpoint_path(tmp_path / "state", run_id=request.run_id, variation_id="run-test:variation-1:child-child")
+    main_runner = _SequenceRunner(
+        [
+            _command(AgentToolName.REQUEST_SUPERVISION),
+            _command(AgentToolName.ABSTAIN, reasoning="Continue without supervisor advice."),
+        ]
+    )
+    supervisor_calls = 0
+
+    def supervisor(_supervision_request: AVOSupervisionRequest) -> AVOSupervisionResult:
+        nonlocal supervisor_calls
+        supervisor_calls += 1
+        return AVOSupervisionResult(
+            output=AVOSupervisionFailure(
+                code=AVOSupervisionFailureCode.OUTPUT_VALIDATION_REJECTED,
+                detail="The supervisor response was not usable.",
+            ),
+            usage=VariationUsage(model_requests=1, supervisor_interventions=1),
+        )
+
+    result = run_agentic_variation(
+        request,
+        workspace,
+        "child",
+        development_boundary=_boundary(tmp_path / "boundary"),
+        agent_runner=main_runner,
+        supervisor_runner=supervisor,
+        budget=AVOBudget(max_supervisor_interventions=1),
+        checkpoint_path=path,
+        configuration_identity=_checkpoint_identity(),
+    )
+
+    assert result.status is VariationStatus.ABSTAINED
+    assert supervisor_calls == 1
+    assert main_runner.contexts[1].latest_supervision_failure is not None
+    assert main_runner.contexts[1].latest_supervision_failure.detail == "The supervisor response was not usable."
+    saved = read_checkpoint(path)
+    assert saved.supervision_records[0].failure == main_runner.contexts[1].latest_supervision_failure
+    assert not saved.incomplete_external_effects
+
+
+def test_successful_supervision_reconciles_before_cancellation_and_resume_is_idempotent(tmp_path: Path) -> None:
+    workspace = _workspace(tmp_path / "workspace")
+    request = _request(workspace)
+    path = checkpoint_path(tmp_path / "state", run_id=request.run_id, variation_id="run-test:variation-1:child-child")
+    first_boundary = _boundary(tmp_path / "boundary")
+    resume_boundary = _boundary(tmp_path / "resume-boundary", batch=first_boundary.batch)
+    signal = AVOCancellationSignal()
+    current_time = [0.0]
+    main_calls = 0
+    supervisor_calls = 0
+
+    def main_runner(_context: AgentContext) -> AgentResponse:
+        nonlocal main_calls
+        main_calls += 1
+        return AgentResponse(
+            command=_command(AgentToolName.REQUEST_SUPERVISION),
+            model_cost_usd=0.4,
+            input_tokens=10,
+            output_tokens=5,
+        )
+
+    def supervisor(_supervision_request: AVOSupervisionRequest) -> AVOSupervisionResult:
+        nonlocal supervisor_calls
+        supervisor_calls += 1
+        signal.cancel("cancel during supervisor call")
+        current_time[0] = 2.0
+        return AVOSupervisionResult(
+            output=AVOSupervisionAdvice(directions=("Use a bounded alternative.",), reasoning="Try once."),
+            usage=VariationUsage(
+                model_requests=1,
+                supervisor_interventions=1,
+                input_tokens=7,
+                output_tokens=3,
+                model_cost_usd=0.2,
+                elapsed_seconds=2.0,
+            ),
+        )
+
+    with pytest.raises(AVOCancellationError):
+        run_agentic_variation(
+            request,
+            workspace,
+            "child",
+            development_boundary=first_boundary,
+            agent_runner=main_runner,
+            supervisor_runner=supervisor,
+            budget=AVOBudget(max_supervisor_interventions=1),
+            checkpoint_path=path,
+            configuration_identity=_checkpoint_identity(),
+            cancellation_signal=signal,
+            clock=lambda: current_time[0],
+        )
+    saved = read_checkpoint(path)
+    assert saved.terminal_result is not None
+    assert saved.terminal_result.status is VariationStatus.CANCELLED
+    assert saved.usage.model_requests == 2
+    assert saved.usage.supervisor_interventions == 1
+    assert saved.usage.input_tokens == 17
+    assert saved.usage.output_tokens == 8
+    assert saved.usage.model_cost_usd == pytest.approx(0.6)
+    assert saved.usage.elapsed_seconds == pytest.approx(2.0)
+    assert saved.supervision_records[0].advice is not None
+    assert not saved.incomplete_external_effects
+
+    with pytest.raises(AVOCancellationError):
+        run_agentic_variation(
+            request,
+            workspace,
+            "child",
+            development_boundary=resume_boundary,
+            agent_runner=lambda _context: (_ for _ in ()).throw(AssertionError("main must not retry")),
+            supervisor_runner=lambda _request: (_ for _ in ()).throw(AssertionError("supervisor must not retry")),
+            budget=AVOBudget(max_supervisor_interventions=1),
+            checkpoint_path=path,
+            configuration_identity=_checkpoint_identity(),
+        )
+    assert main_calls == 1
+    assert supervisor_calls == 1
+
+
+def test_supervision_usage_plane_overrun_is_checkpointed_before_budget_stop(tmp_path: Path) -> None:
+    workspace = _workspace(tmp_path / "workspace")
+    request = _request(workspace)
+    path = checkpoint_path(tmp_path / "state", run_id=request.run_id, variation_id="run-test:variation-1:child-child")
+    main_calls = 0
+    supervisor_calls = 0
+
+    def main_runner(_context: AgentContext) -> AgentResponse:
+        nonlocal main_calls
+        main_calls += 1
+        return AgentResponse(
+            command=_command(AgentToolName.REQUEST_SUPERVISION),
+            model_cost_usd=0.4,
+            input_tokens=10,
+            output_tokens=5,
+        )
+
+    def supervisor(_request: AVOSupervisionRequest) -> AVOSupervisionResult:
+        nonlocal supervisor_calls
+        supervisor_calls += 1
+        return AVOSupervisionResult(
+            output=AVOSupervisionAdvice(directions=("Use one bounded alternative.",), reasoning="Try once."),
+            usage=VariationUsage(
+                model_requests=1,
+                supervisor_interventions=1,
+                input_tokens=7,
+                output_tokens=3,
+                model_cost_usd=0.2,
+                elapsed_seconds=0.5,
+            ),
+        )
+
+    result = run_agentic_variation(
+        request,
+        workspace,
+        "child",
+        development_boundary=_boundary(tmp_path / "boundary"),
+        agent_runner=main_runner,
+        supervisor_runner=supervisor,
+        budget=AVOBudget(max_supervisor_interventions=1, max_input_tokens=15),
+        checkpoint_path=path,
+        configuration_identity=_checkpoint_identity(),
+    )
+
+    assert result.status is VariationStatus.BUDGET_EXHAUSTED
+    assert "max_input_tokens" in result.reasoning
+    assert main_calls == 1
+    assert supervisor_calls == 1
+    saved = read_checkpoint(path)
+    assert saved.usage.input_tokens == 17
+    assert saved.supervision_records[0].advice is not None
     assert not saved.incomplete_external_effects
 
 
