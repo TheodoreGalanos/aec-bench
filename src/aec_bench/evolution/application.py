@@ -6,7 +6,7 @@ from __future__ import annotations
 import logging
 import tempfile
 from collections.abc import Callable, Sequence
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -62,6 +62,135 @@ VariationOperator = Callable[[VariationRequest, Workspace, str], VariationResult
 ObservationEnricher = Callable[[Sequence[EvolutionObservation]], Sequence[EvolutionObservation]]
 
 
+@dataclass(frozen=True)
+class EvolutionCycleExecution:
+    """Result of one functional evolution cycle, including its next state."""
+
+    outcome: CycleOutcome
+    record: EvolutionCycleRecord
+    state: EvolutionState
+    score: float
+
+
+def _execute_evolution_cycle(
+    *,
+    workspace: Workspace,
+    config: EvolutionConfig,
+    evaluate: CandidateEvaluator,
+    strategy: SelectionStrategy,
+    batch_planner: CandidateBatchPlanner,
+    variation: VariationOperator,
+    enrich: ObservationEnricher,
+    graveyard: MutationGraveyard,
+    history: list[EvolutionCycleRecord],
+    snapshots: dict[str, WorkspaceSnapshot],
+    cycle: int,
+    state: EvolutionState | None,
+    selection: SelectionPlan,
+    run_id: str,
+    now: Callable[[], datetime],
+    candidate_id_factory: CandidateIdFactory,
+) -> EvolutionCycleExecution:
+    """Execute one cycle through the same functional path as ``run_evolution``.
+
+    This narrow boundary lets provider-free swarm callers share the canonical
+    candidate/evidence lifecycle without reviving a stateful engine.
+    """
+    parent_snapshot = _resolve_snapshot(selection.parent_candidate_id, snapshots, strategy)
+    batch = batch_planner(config.batch_size, cycle - 1)
+    parent = bind_candidate_evaluation(parent_snapshot, batch, evaluate(parent_snapshot, batch))
+    parent = _enrich_candidate(parent, batch, enrich)
+    if state is None:
+        state = EvolutionState.from_baseline(parent, structural_weight=config.structural_weight)
+    state = rebase_evolution_state_for_parent(state, parent, structural_weight=config.structural_weight)
+
+    analysis = _build_analysis(parent, state)
+    inspirations = tuple(
+        _resolve_snapshot(candidate_id, snapshots, strategy) for candidate_id in selection.inspiration_candidate_ids
+    )
+    request = VariationRequest(
+        selection=selection,
+        parent=parent,
+        inspirations=inspirations,
+        analysis=analysis,
+        scope=analysis.scope,
+        history=tuple(history),
+        graveyard=tuple(graveyard.browse(limit=graveyard.size)),
+    )
+    child_candidate_id = candidate_id_factory(run_id, cycle)
+    variation_result = variation(request, workspace, child_candidate_id)
+    child: EvaluatedCandidate | None = None
+    if variation_result.status is VariationStatus.SUBMITTED:
+        if variation_result.child is None:
+            raise ValueError("submitted variation did not provide a child snapshot")
+        child = bind_candidate_evaluation(
+            variation_result.child,
+            batch,
+            evaluate(variation_result.child, batch),
+        )
+        child = _enrich_candidate(child, batch, enrich)
+
+    decision = decide_candidate(
+        parent=parent,
+        child=child,
+        variation=variation_result,
+        state=state,
+        config=config,
+    )
+    next_state = reduce_evolution_state(state=state, parent=parent, child=child, decision=decision)
+    outcome = CycleOutcome(
+        cycle=cycle,
+        selection=selection,
+        parent=parent,
+        variation=variation_result,
+        child=child,
+        decision=decision,
+        active_candidate_id_after=next_state.active_candidate_id,
+        best_candidate_id_after=next_state.best_candidate_id,
+    )
+
+    if decision.decision is GateDecision.ACCEPTED:
+        assert child is not None
+        workspace.apply_snapshot(child.snapshot)
+        workspace.commit_candidate(
+            candidate_id=child.snapshot.candidate_id,
+            summary=_candidate_summary(cycle, child, selection),
+            score=assessment_score(child.assessment, structural_weight=config.structural_weight),
+            parent_candidate_id=parent.snapshot.candidate_id,
+            label=f"evo-{run_id}-{cycle}",
+        )
+        snapshots[child.snapshot.candidate_id] = child.snapshot
+    elif decision.decision is GateDecision.REJECTED and child is not None:
+        graveyard.insert(_graveyard_entry(outcome, run_id, now()))
+
+    from aec_bench.evolution.trial_persistence import persist_cycle_trials
+
+    persisted_observations = list(parent.observations)
+    if child is not None:
+        persisted_observations.extend(child.observations)
+    persist_cycle_trials(
+        workspace_root=workspace.root,
+        cycle=cycle,
+        run_id=run_id,
+        observations=persisted_observations,
+    )
+    record = outcome.to_record(now())
+    score = assessment_score(
+        (child if decision.decision is GateDecision.ACCEPTED and child is not None else parent).assessment,
+        structural_weight=config.structural_weight,
+    )
+    _notify_strategy(
+        strategy,
+        outcome=outcome,
+        cycle_record=record,
+        snapshot=child.snapshot if decision.decision is GateDecision.ACCEPTED and child else parent.snapshot,
+        score_history=_project_score_history((*history, record), config),
+        graveyard=graveyard,
+        run_id=run_id,
+    )
+    return EvolutionCycleExecution(outcome=outcome, record=record, state=next_state, score=score)
+
+
 def run_evolution(
     *,
     workspace: Workspace,
@@ -101,112 +230,36 @@ def run_evolution(
             goal="Improve the selected agent workspace against the configured evaluation batch.",
             reasoning="Start from the baseline candidate.",
         )
-        parent_snapshot = _resolve_snapshot(selection.parent_candidate_id, snapshots, strategy)
-        batch = batch_planner(config.batch_size, cycle_index)
-        parent = bind_candidate_evaluation(parent_snapshot, batch, evaluate(parent_snapshot, batch))
-        parent = _enrich_candidate(parent, batch, enrich)
-        if state is None:
-            state = EvolutionState.from_baseline(parent, structural_weight=config.structural_weight)
-        state = rebase_evolution_state_for_parent(
-            state,
-            parent,
-            structural_weight=config.structural_weight,
-        )
-
-        analysis = _build_analysis(parent, state)
-        inspirations = tuple(
-            _resolve_snapshot(candidate_id, snapshots, strategy) for candidate_id in selection.inspiration_candidate_ids
-        )
-        request = VariationRequest(
-            selection=selection,
-            parent=parent,
-            inspirations=inspirations,
-            analysis=analysis,
-            scope=analysis.scope,
-            history=tuple(history),
-            graveyard=tuple(graveyard.browse(limit=graveyard.size)),
-        )
-        child_candidate_id = make_candidate_id(resolved_run_id, cycle)
-        variation_result = variation(request, workspace, child_candidate_id)
-        child: EvaluatedCandidate | None = None
-        if variation_result.status is VariationStatus.SUBMITTED:
-            if variation_result.child is None:
-                raise ValueError("submitted variation did not provide a child snapshot")
-            child = bind_candidate_evaluation(
-                variation_result.child,
-                batch,
-                evaluate(variation_result.child, batch),
-            )
-            child = _enrich_candidate(child, batch, enrich)
-
-        decision = decide_candidate(
-            parent=parent,
-            child=child,
-            variation=variation_result,
-            state=state,
+        execution = _execute_evolution_cycle(
+            workspace=workspace,
             config=config,
-        )
-        next_state = reduce_evolution_state(state=state, parent=parent, child=child, decision=decision)
-        outcome = CycleOutcome(
-            cycle=cycle,
-            selection=selection,
-            parent=parent,
-            variation=variation_result,
-            child=child,
-            decision=decision,
-            active_candidate_id_after=next_state.active_candidate_id,
-            best_candidate_id_after=next_state.best_candidate_id,
-        )
-
-        if decision.decision is GateDecision.ACCEPTED:
-            assert child is not None
-            workspace.apply_snapshot(child.snapshot)
-            workspace.commit_candidate(
-                candidate_id=child.snapshot.candidate_id,
-                summary=_candidate_summary(cycle, child, selection),
-                score=assessment_score(child.assessment, structural_weight=config.structural_weight),
-                parent_candidate_id=parent.snapshot.candidate_id,
-                label=f"evo-{resolved_run_id}-{cycle}",
-            )
-            snapshots[child.snapshot.candidate_id] = child.snapshot
-        elif decision.decision is GateDecision.REJECTED and child is not None:
-            graveyard.insert(_graveyard_entry(outcome, resolved_run_id, now()))
-
-        from aec_bench.evolution.trial_persistence import persist_cycle_trials
-
-        persisted_observations = list(parent.observations)
-        if child is not None:
-            persisted_observations.extend(child.observations)
-        persist_cycle_trials(
-            workspace_root=workspace.root,
-            cycle=cycle,
-            run_id=resolved_run_id,
-            observations=persisted_observations,
-        )
-        record = outcome.to_record(now())
-        history.append(record)
-        active_candidate = child if decision.decision is GateDecision.ACCEPTED and child is not None else parent
-        cycle_score = assessment_score(active_candidate.assessment, structural_weight=config.structural_weight)
-        score_history = _project_score_history(history, config)
-        _notify_strategy(
-            strategy,
-            outcome=outcome,
-            cycle_record=record,
-            snapshot=child.snapshot if decision.decision is GateDecision.ACCEPTED and child else parent.snapshot,
-            score_history=score_history,
+            evaluate=evaluate,
+            strategy=strategy,
+            batch_planner=batch_planner,
+            variation=variation,
+            enrich=enrich,
             graveyard=graveyard,
+            history=history,
+            snapshots=snapshots,
+            cycle=cycle,
+            state=state,
+            selection=selection,
             run_id=resolved_run_id,
+            now=now,
+            candidate_id_factory=make_candidate_id,
         )
-        state = next_state
-        pending_selection = _next_selection(strategy, state, cycle_score)
+        record = execution.record
+        history.append(record)
+        state = execution.state
+        pending_selection = _next_selection(strategy, state, execution.score)
         logger.info(
             "Cycle %d/%d — score=%.3f, gate=%s, parent=%s, child=%s",
             cycle,
             config.max_cycles,
-            cycle_score,
-            decision.decision.value,
-            parent.snapshot.candidate_id,
-            child.snapshot.candidate_id if child else "none",
+            execution.score,
+            execution.outcome.decision.decision.value,
+            execution.outcome.parent.snapshot.candidate_id,
+            execution.outcome.child.snapshot.candidate_id if execution.outcome.child else "none",
         )
         if _is_converged(state, config):
             break

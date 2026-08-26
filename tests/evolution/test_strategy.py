@@ -1,5 +1,5 @@
 # ABOUTME: Tests for SelectionStrategy protocol and HillClimbStrategy implementation.
-# ABOUTME: Verifies hill-climb parent tracking, snapshot storage, and score updates.
+# ABOUTME: Verifies hill-climb snapshot storage without duplicate search state.
 
 from __future__ import annotations
 
@@ -7,12 +7,13 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from aec_bench.contracts.evolution import (
+    CandidateAssessment,
     EvolutionCycleRecord,
     GateDecision,
     MutationSummary,
+    SelectionRecord,
     WorkspaceSnapshot,
 )
-from aec_bench.evolution.archive_agent import SelectionResult
 from aec_bench.evolution.graveyard import MutationGraveyard
 from aec_bench.evolution.strategy import HillClimbStrategy, QDStrategy, SelectionStrategy
 
@@ -38,14 +39,35 @@ def _make_cycle_record(
 ) -> EvolutionCycleRecord:
     return EvolutionCycleRecord(
         cycle=cycle,
-        candidate_id_before=version_before,
-        candidate_id_after=version_after,
-        batch_score=batch_score,
-        structural_score=None,
+        selection=SelectionRecord(
+            parent_candidate_id=version_before,
+            strategy="conservative",
+            goal="Improve the selected candidate.",
+            reasoning="Select the current best candidate.",
+        ),
+        parent_assessment=CandidateAssessment(
+            candidate_id=version_before,
+            batch_score=batch_score,
+            discipline_scores={},
+            trial_ids=("trial-001",),
+            evaluation_case_ids=("case-001",),
+            valid=True,
+        ),
+        child_assessment=CandidateAssessment(
+            candidate_id=version_after,
+            batch_score=batch_score,
+            discipline_scores={},
+            trial_ids=("trial-001-child",),
+            evaluation_case_ids=("case-001",),
+            valid=True,
+        ),
         mutation=MutationSummary(prompt_modified=True),
         gate_decision=gate,
-        trial_ids=["trial-001"],
+        gate_reason="Cycle decision.",
+        active_candidate_id_after=version_after if gate is GateDecision.ACCEPTED else version_before,
+        best_candidate_id_after=version_after if gate is GateDecision.ACCEPTED else version_before,
         timestamp=datetime.now(tz=UTC),
+        evolver_cost_usd=0.0,
     )
 
 
@@ -71,7 +93,7 @@ class TestHillClimbStrategy:
         result = strategy.select_parent(current_score=0.0)
         assert result is None
 
-    def test_select_parent_returns_best_after_cycle(self) -> None:
+    def test_select_parent_is_delegated_to_explicit_state(self) -> None:
         strategy = HillClimbStrategy()
         snapshot = _make_snapshot("evo-1")
         record = _make_cycle_record(batch_score=0.6, version_after="evo-1")
@@ -86,12 +108,9 @@ class TestHillClimbStrategy:
         )
 
         result = strategy.select_parent(current_score=0.5)
-        assert result is not None
-        assert isinstance(result, SelectionResult)
-        assert result.parent_candidate_id == "evo-1"
-        assert result.strategy == "conservative"
+        assert result is None
 
-    def test_best_updates_on_higher_score(self) -> None:
+    def test_cycle_results_only_store_snapshots(self) -> None:
         strategy = HillClimbStrategy()
         graveyard = MutationGraveyard()
 
@@ -118,10 +137,9 @@ class TestHillClimbStrategy:
         )
 
         result = strategy.select_parent(current_score=0.7)
-        assert result is not None
-        assert result.parent_candidate_id == "evo-2"
+        assert result is None
 
-    def test_best_does_not_update_on_lower_score(self) -> None:
+    def test_lower_score_does_not_change_snapshot_storage(self) -> None:
         strategy = HillClimbStrategy()
         graveyard = MutationGraveyard()
 
@@ -148,8 +166,7 @@ class TestHillClimbStrategy:
         )
 
         result = strategy.select_parent(current_score=0.3)
-        assert result is not None
-        assert result.parent_candidate_id == "evo-1"
+        assert result is None
 
     def test_get_snapshot_returns_stored(self) -> None:
         strategy = HillClimbStrategy()
@@ -187,7 +204,7 @@ class TestHillClimbStrategy:
         summary = strategy.summary()
         assert summary["mode"] == "hill_climb"
 
-    def test_summary_includes_best_after_cycle(self) -> None:
+    def test_summary_has_no_duplicate_search_state(self) -> None:
         strategy = HillClimbStrategy()
         graveyard = MutationGraveyard()
 
@@ -202,8 +219,7 @@ class TestHillClimbStrategy:
         )
 
         summary = strategy.summary()
-        assert summary["best_candidate_id"] == "evo-3"
-        assert summary["best_score"] == 0.75
+        assert summary == {"mode": "hill_climb"}
 
     def test_on_cycle_end_accepts_extra_kwargs(self) -> None:
         """The **kwargs on on_cycle_end allows QD-specific params to be ignored."""
@@ -223,8 +239,7 @@ class TestHillClimbStrategy:
         )
 
         result = strategy.select_parent(current_score=0.0)
-        assert result is not None
-        assert result.parent_candidate_id == "evo-1"
+        assert result is None
 
 
 # ---------------------------------------------------------------------------

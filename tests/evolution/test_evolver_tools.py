@@ -1,15 +1,17 @@
 # ABOUTME: Tests for the evolver investigation tool functions.
 # ABOUTME: Covers read_trace, read_skill, list_history, read_cycle, field_detail, search_traces.
 
-from datetime import datetime
+from datetime import UTC, datetime
 
 from aec_bench.contracts.evolution import (
+    CandidateAssessment,
     EvolutionCycleRecord,
     EvolutionObservation,
     FieldScore,
     GateDecision,
     MutationSummary,
     ObservationEnrichment,
+    SelectionRecord,
     TraceDigest,
 )
 from aec_bench.evolution.evolver_tools import build_evolver_toolset
@@ -68,16 +70,33 @@ def _make_cycle_record(
     trial_ids: list[str] | None = None,
     mutation: MutationSummary | None = None,
 ) -> EvolutionCycleRecord:
+    trial_ids_tuple = tuple(trial_ids or ["trial-001"])
+    parent_id = f"run:{cycle}"
     return EvolutionCycleRecord(
         cycle=cycle,
-        candidate_id_before=f"run:{cycle}",
-        candidate_id_after=f"run:{cycle + 1}",
-        batch_score=batch_score,
-        structural_score=structural_score,
+        selection=SelectionRecord(
+            parent_candidate_id=parent_id,
+            strategy="conservative",
+            goal="Improve the selected candidate.",
+            reasoning="Select the current best candidate.",
+        ),
+        parent_assessment=CandidateAssessment(
+            candidate_id=parent_id,
+            batch_score=batch_score,
+            structural_score=structural_score,
+            discipline_scores={},
+            trial_ids=trial_ids_tuple,
+            evaluation_case_ids=tuple(f"case-{i}" for i, _ in enumerate(trial_ids_tuple)),
+            valid=True,
+        ),
+        child_assessment=None,
         mutation=mutation,
         gate_decision=gate_decision,
-        trial_ids=trial_ids or ["trial-001"],
-        timestamp=datetime(2026, 1, cycle, 12, 0, 0),
+        gate_reason="Cycle decision.",
+        active_candidate_id_after=parent_id,
+        best_candidate_id_after=parent_id,
+        timestamp=datetime(2026, 1, cycle, 12, 0, 0, tzinfo=UTC),
+        evolver_cost_usd=0.0,
     )
 
 

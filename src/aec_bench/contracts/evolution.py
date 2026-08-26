@@ -392,16 +392,6 @@ class EvolutionCycleRecord(StrictModel):
         return value
 
 
-class StepResult(StrictModel):
-    """The outcome of a single evolution step including gate decision and cycle record."""
-
-    mutated: bool
-    gate_decision: GateDecision
-    mutation: MutationSummary | None = None
-    cycle_record: EvolutionCycleRecord
-    enriched_observations: list[EvolutionObservation] = Field(default_factory=list)
-
-
 class StagnationInfo(StrictModel):
     """Describes a stagnation event where no improvement was observed over several cycles."""
 

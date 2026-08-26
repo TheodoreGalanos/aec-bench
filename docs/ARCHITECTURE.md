@@ -115,16 +115,25 @@ run_trial() -> run_experiment() -> run_evolution()
 ```
 
 `run_evolution()` owns the evolution cycle loop. It receives an explicit
-`Workspace`, `EvolutionConfig`, `AECEvolutionEngine`, `CandidateEvaluator`, and
-selection strategy. The evaluator receives one `WorkspaceSnapshot` and a batch
-size. It returns `TrialRecord` values through the normal `run_experiment()`
-path. The loop converts those records to observations, applies engine and
-selection policy, persists cycle evidence, saves archive and graveyard state,
-and returns `EvolutionResult` directly.
+`Workspace`, `EvolutionConfig`, `CandidateEvaluator`, batch planner, variation
+operator, observation enricher, and selection strategy. The evaluator receives
+one `WorkspaceSnapshot` and one candidate-independent `CandidateEvaluationBatch`.
+It returns `TrialRecord` values through the normal `run_experiment()` path.
+The loop binds each candidate snapshot to its own `EvaluatedCandidate`, compares
+parent and child assessments from the same planned cases, applies pure gate and
+state functions, persists cycle evidence, saves archive and graveyard state,
+and returns `EvolutionResult` directly. The canonical workspace changes only
+after an accepted child; rejected child material remains in the graveyard.
+
+`EvolutionState` is the sole owner of active candidate, best candidate, score,
+and stagnation state. The application coordinator is the only owner of cycle
+effects. Swarm execution uses a private single-cycle call into that coordinator
+until its later redesign; it does not maintain a second evolution lifecycle.
 
 `run_evolution_from_config()` is the repository composition root. It loads the
 workspace and configured model clients, selects the local or Harbor candidate
-evaluator, builds the engine and strategy, and calls `run_evolution()`. The
+evaluator, builds the batch planner, variation operator, and strategy, and calls
+`run_evolution()`. The
 `aec-bench evolve run` command is a thin caller of this function.
 
 Best-of-K attempts stay inside one scored trial. Evolution cycles stay outside

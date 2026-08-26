@@ -22,7 +22,6 @@ from aec_bench.contracts.evolution import (
     SelectionRecord,
     SkillEntry,
     StagnationInfo,
-    StepResult,
     TraceDigest,
     TraceQueryRequest,
     TraceSlice,
@@ -633,56 +632,6 @@ class TestEvolutionCycleRecord:
                 timestamp=datetime.now(UTC),
                 evolver_cost_usd=0.0,
             )
-
-
-class TestStepResult:
-    def _make_cycle_record(self, gate: GateDecision = GateDecision.ACCEPTED) -> EvolutionCycleRecord:
-        return EvolutionCycleRecord(
-            cycle=1,
-            selection=SelectionRecord(
-                parent_candidate_id="baseline",
-                strategy="conservative",
-                goal="Improve the selected candidate.",
-                reasoning="Select the current best candidate.",
-            ),
-            parent_assessment=CandidateAssessment(
-                candidate_id="baseline",
-                batch_score=0.80,
-                discipline_scores={},
-                trial_ids=("trial-x",),
-                evaluation_case_ids=("case-x",),
-                valid=True,
-            ),
-            child_assessment=None,
-            mutation=None,
-            gate_decision=gate,
-            gate_reason="Cycle decision.",
-            active_candidate_id_after="baseline",
-            best_candidate_id_after="baseline",
-            timestamp=datetime.now(UTC),
-            evolver_cost_usd=0.0,
-        )
-
-    def test_mutated_result(self) -> None:
-        mutation = MutationSummary(prompt_modified=True)
-        result = StepResult(
-            mutated=True,
-            gate_decision=GateDecision.ACCEPTED,
-            mutation=mutation,
-            cycle_record=self._make_cycle_record(GateDecision.ACCEPTED),
-        )
-        assert result.mutated is True
-        assert result.gate_decision == GateDecision.ACCEPTED
-        assert result.mutation is not None
-
-    def test_skipped_result(self) -> None:
-        result = StepResult(
-            mutated=False,
-            gate_decision=GateDecision.SKIPPED,
-            cycle_record=self._make_cycle_record(GateDecision.SKIPPED),
-        )
-        assert result.mutated is False
-        assert result.mutation is None
 
 
 class TestEvolutionResult:

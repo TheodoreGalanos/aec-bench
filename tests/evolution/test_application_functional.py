@@ -54,15 +54,18 @@ def _setup(tmp_path: Path) -> tuple[Workspace, CandidateEvaluationBatch]:
     )
 
 
-def _config(root: Path, *, threshold: float = 0.02, stagnation: int = 5) -> EvolutionConfig:
+def _config(
+    root: Path, *, threshold: float = 0.02, stagnation: int = 5, max_cycles: int = 1, strategy: str = "hill_climb"
+) -> EvolutionConfig:
     return EvolutionConfig(
         workspace_path=str(root),
         models={"classifier": "test", "evolver": "test"},
         task_selector=TaskSelector(),
         batch_size=1,
-        max_cycles=1,
+        max_cycles=max_cycles,
         improvement_threshold=threshold,
         stagnation_window=stagnation,
+        strategy=strategy,
     )
 
 
@@ -88,6 +91,8 @@ def _run(
     config: EvolutionConfig,
     evaluated_candidates: list[str] | None = None,
 ):
+    from aec_bench.evolution.strategy import QDStrategy
+
     def evaluate(snapshot: WorkspaceSnapshot, _batch: CandidateEvaluationBatch):
         if evaluated_candidates is not None:
             evaluated_candidates.append(snapshot.candidate_id)
@@ -98,7 +103,7 @@ def _run(
         workspace=workspace,
         config=config,
         evaluate=evaluate,
-        strategy=HillClimbStrategy(),
+        strategy=QDStrategy(evolver_model="test") if config.strategy == "qd" else HillClimbStrategy(),
         batch_planner=lambda _size, _cycle: batch,
         variation=variation,
         enrich=lambda observations: observations,
@@ -130,6 +135,7 @@ def test_child_is_evaluated_before_commit_and_both_evidence_sets_persist(tmp_pat
         evaluated_candidates=candidates_seen_during_eval,
     )
     assert candidates_seen_during_eval == ["baseline", "run-fixed:1"]
+    assert workspace.read_prompt() == "child"
     assert [item.candidate_id for item in workspace.list_candidates()] == ["baseline", "run-fixed:1"]
     assert result.cycle_records[0].child_assessment is not None
     trial_path = workspace.root / "_trials" / "run-fixed" / "cycle_001.jsonl"
@@ -192,3 +198,106 @@ def test_abstention_creates_no_child_version(tmp_path: Path) -> None:
     assert result.cycle_records[0].gate_decision.value == "skipped"
     assert [item.candidate_id for item in workspace.list_candidates()] == ["baseline"]
     assert json.loads((workspace.root / "graveyard.json").read_text(encoding="utf-8")) == []
+
+
+def test_runs_configured_multi_cycle_count_and_projects_best_and_final_scores(tmp_path: Path) -> None:
+    workspace, batch = _setup(tmp_path)
+
+    def submit(request, _source, child_id):
+        return VariationResult(
+            status=VariationStatus.SUBMITTED,
+            child=request.parent.snapshot.model_copy(update={"candidate_id": child_id}),
+            mutation=MutationSummary(prompt_modified=True),
+            reasoning="test child",
+            model_cost_usd=0.0,
+        )
+
+    result = _run(
+        workspace,
+        batch,
+        parent_reward=0.5,
+        child_reward=0.9,
+        variation=submit,
+        config=_config(workspace.root, max_cycles=3),
+    )
+    assert result.cycles_completed == 3
+    assert result.final_score == 0.9
+    assert result.best_score == 0.9
+    assert result.score_history == [0.9, 0.9, 0.9]
+
+
+def test_stagnation_converges_before_configured_limit(tmp_path: Path) -> None:
+    workspace, batch = _setup(tmp_path)
+
+    def submit(request, _source, child_id):
+        return VariationResult(
+            status=VariationStatus.SUBMITTED,
+            child=request.parent.snapshot.model_copy(update={"candidate_id": child_id}),
+            mutation=MutationSummary(prompt_modified=True),
+            reasoning="unchanged score",
+            model_cost_usd=0.0,
+        )
+
+    result = _run(
+        workspace,
+        batch,
+        parent_reward=0.5,
+        child_reward=0.5,
+        variation=submit,
+        config=_config(workspace.root, max_cycles=10, stagnation=2),
+    )
+    assert result.converged is True
+    assert result.cycles_completed < 10
+
+
+def test_graveyard_loads_and_saves_existing_entries(tmp_path: Path) -> None:
+    workspace, batch = _setup(tmp_path)
+    existing = {
+        "cycle": 1,
+        "strategy": "conservative",
+        "mutation_description": "prior failed mutation",
+        "score_before": 0.4,
+        "score_after": 0.3,
+        "candidate_id": "old:1",
+        "failure_reason": "prior rejection",
+    }
+    (workspace.root / "graveyard.json").write_text(json.dumps([existing]), encoding="utf-8")
+
+    result = _run(
+        workspace,
+        batch,
+        parent_reward=0.5,
+        child_reward=0.5,
+        variation=lambda _request, _source, _child_id: VariationResult(
+            status=VariationStatus.ABSTAINED,
+            child=None,
+            mutation=None,
+            reasoning="no change",
+            model_cost_usd=0.0,
+        ),
+        config=_config(workspace.root),
+    )
+    assert result.cycles_completed == 1
+    saved = json.loads((workspace.root / "graveyard.json").read_text(encoding="utf-8"))
+    assert saved[0]["candidate_id"] == "old:1"
+
+
+def test_qd_strategy_persists_archive_summary_on_functional_path(tmp_path: Path) -> None:
+    workspace, batch = _setup(tmp_path)
+    result = _run(
+        workspace,
+        batch,
+        parent_reward=0.7,
+        child_reward=0.7,
+        variation=lambda _request, _source, _child_id: VariationResult(
+            status=VariationStatus.ABSTAINED,
+            child=None,
+            mutation=None,
+            reasoning="no change",
+            model_cost_usd=0.0,
+        ),
+        config=_config(workspace.root, strategy="qd"),
+    )
+    assert result.archive_summary is not None
+    assert result.archive_summary["mode"] == "qd"
+    assert (workspace.root / "archive.json").exists()
