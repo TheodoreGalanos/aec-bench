@@ -3,110 +3,115 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any
 
 import pytest
 
-from aec_bench.contracts.evolution import AgentStatus
+from aec_bench.contracts.evolution import AgentStatus, MutationStrategy, WorkspaceSnapshot
+from aec_bench.evolution.core import SelectionPlan, VariationResult, VariationStatus
 from aec_bench.evolution.swarm.agent_task import AgentContext, run_agent_loop
+from aec_bench.evolution.swarm.core import AgentBudget, SwarmAgentResult, SwarmAssignment
 
 
-@dataclass
-class FakeResult:
-    score: float
+def _assignment(cycle: int, issued_at: datetime | None = None) -> SwarmAssignment:
+    selection = SelectionPlan("parent", (), MutationStrategy.CONSERVATIVE, "Improve", "Exact source")
+    return SwarmAssignment(
+        assignment_id=f"assignment-{cycle}",
+        agent_id="agent-1",
+        selection=selection,
+        parent=WorkspaceSnapshot(system_prompt="Parent", candidate_id="parent"),
+        inspirations=(),
+        budget=AgentBudget(1.0),
+        issued_at=issued_at or datetime(2026, 8, 26, tzinfo=UTC),
+    )
 
 
 class FakeEvolver:
-    def __init__(self, scores: list[float]) -> None:
-        self._scores = scores
+    def __init__(self, scores: list[float] | None = None) -> None:
+        self._scores = scores or [0.5]
         self._index = 0
 
-    async def step(self) -> FakeResult:
-        score = self._scores[self._index % len(self._scores)]
+    async def step(self, assignment: SwarmAssignment) -> SwarmAgentResult:
         self._index += 1
-        return FakeResult(score=score)
+        cost = self._scores[(self._index - 1) % len(self._scores)]
+        variation = VariationResult(VariationStatus.ABSTAINED, None, None, "No child", cost)
+        return SwarmAgentResult("agent-1", assignment.assignment_id, variation, cost)
 
 
 @pytest.mark.asyncio
 async def test_agent_loop_runs_n_evals() -> None:
-    evolver = FakeEvolver(scores=[0.5, 0.6, 0.7])
-    results: list[Any] = []
+    evolver = FakeEvolver()
+    assignments: list[SwarmAssignment] = []
 
-    async def on_eval(result: Any) -> bool:
+    async def next_assignment() -> SwarmAssignment:
+        assignment = _assignment(len(assignments) + 1)
+        assignments.append(assignment)
+        return assignment
+
+    async def on_eval(assignment: SwarmAssignment, result: SwarmAgentResult) -> bool:
+        assert assignment.assignment_id == result.assignment_id
+        return len(assignments) < 3
+
+    ctx = AgentContext(agent_id="agent-1", evolver=evolver, next_assignment=next_assignment, on_eval_complete=on_eval)
+    state = await run_agent_loop(ctx)
+    assert [assignment.assignment_id for assignment in assignments] == ["assignment-1", "assignment-2", "assignment-3"]
+    assert state is AgentStatus.RETIRED
+
+
+@pytest.mark.asyncio
+async def test_agent_loop_forwards_exact_typed_result() -> None:
+    evolver = FakeEvolver(scores=[0.3, 0.8, 0.5])
+    assignments: list[SwarmAssignment] = []
+    results: list[SwarmAgentResult] = []
+
+    async def next_assignment() -> SwarmAssignment:
+        assignment = _assignment(len(assignments) + 1)
+        assignments.append(assignment)
+        return assignment
+
+    async def on_eval(assignment: SwarmAssignment, result: SwarmAgentResult) -> bool:
         results.append(result)
         return len(results) < 3
 
-    ctx = AgentContext(agent_id="agent-1", evolver=evolver, on_eval_complete=on_eval)
+    ctx = AgentContext(agent_id="agent-1", evolver=evolver, next_assignment=next_assignment, on_eval_complete=on_eval)
     state = await run_agent_loop(ctx)
     assert len(results) == 3
-    assert state.eval_count == 3
-
-
-@pytest.mark.asyncio
-async def test_agent_loop_tracks_best_score() -> None:
-    evolver = FakeEvolver(scores=[0.3, 0.8, 0.5])
-    results: list[Any] = []
-
-    async def on_eval(result: Any) -> bool:
-        results.append(result)
-        return len(results) < 3
-
-    ctx = AgentContext(agent_id="agent-1", evolver=evolver, on_eval_complete=on_eval)
-    state = await run_agent_loop(ctx)
-    assert state.best_score == pytest.approx(0.8)
-
-
-@pytest.mark.asyncio
-async def test_agent_loop_records_last_evaluation_time() -> None:
-    completed_at = datetime(2026, 4, 7, 10, 0, tzinfo=UTC)
-
-    @dataclass
-    class CycleRecord:
-        timestamp: datetime
-
-    @dataclass
-    class TimedResult:
-        score: float
-        cycle_record: CycleRecord
-
-    class TimedEvolver:
-        async def step(self) -> TimedResult:
-            return TimedResult(score=0.5, cycle_record=CycleRecord(timestamp=completed_at))
-
-    async def stop_after_evaluation(result: Any) -> bool:
-        return False
-
-    state = await run_agent_loop(
-        AgentContext(agent_id="agent-1", evolver=TimedEvolver(), on_eval_complete=stop_after_evaluation)
-    )
-
-    assert state.last_evaluated_at == completed_at.isoformat()
+    assert [result.assignment_id for result in results] == [
+        "assignment-1",
+        "assignment-2",
+        "assignment-3",
+    ]
+    assert [result.agent_cost_usd for result in results] == [0.3, 0.8, 0.5]
+    assert state is AgentStatus.RETIRED
 
 
 @pytest.mark.asyncio
 async def test_agent_loop_stops_on_false() -> None:
     evolver = FakeEvolver(scores=[0.5])
 
-    async def on_eval(result: Any) -> bool:
+    async def next_assignment() -> SwarmAssignment:
+        return _assignment(1)
+
+    async def on_eval(assignment: SwarmAssignment, result: SwarmAgentResult) -> bool:
         return False
 
-    ctx = AgentContext(agent_id="agent-1", evolver=evolver, on_eval_complete=on_eval)
+    ctx = AgentContext(agent_id="agent-1", evolver=evolver, next_assignment=next_assignment, on_eval_complete=on_eval)
     state = await run_agent_loop(ctx)
-    assert state.eval_count == 1
-    assert state.status == AgentStatus.RETIRED
+    assert state is AgentStatus.RETIRED
 
 
 @pytest.mark.asyncio
 async def test_agent_loop_handles_error() -> None:
     class FailingEvolver:
-        async def step(self) -> FakeResult:
+        async def step(self, assignment: SwarmAssignment) -> SwarmAgentResult:
             raise RuntimeError("API error")
 
     error_count = 0
 
-    async def on_eval(result: Any) -> bool:
+    async def next_assignment() -> SwarmAssignment:
+        return _assignment(1)
+
+    async def on_eval(assignment: SwarmAssignment, result: SwarmAgentResult) -> bool:
         return True
 
     async def on_error(error: Exception) -> bool:
@@ -117,9 +122,10 @@ async def test_agent_loop_handles_error() -> None:
     ctx = AgentContext(
         agent_id="agent-1",
         evolver=FailingEvolver(),
+        next_assignment=next_assignment,
         on_eval_complete=on_eval,
         on_error=on_error,
     )
     state = await run_agent_loop(ctx)
     assert error_count == 1
-    assert state.status == AgentStatus.ERROR
+    assert state is AgentStatus.ERROR

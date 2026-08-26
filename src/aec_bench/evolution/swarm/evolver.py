@@ -7,89 +7,30 @@ import asyncio
 import logging
 import shutil
 import tempfile
-from dataclasses import dataclass
-from datetime import UTC, datetime
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Any
 
 from aec_bench.contracts.evolution import (
-    BehaviourDescriptor,
     EvolutionConfig,
     EvolutionCycleRecord,
+    EvolutionObservation,
     EvolverModelConfig,
-    MutationStrategy,
     WorkspaceSnapshot,
 )
 from aec_bench.contracts.experiment_manifest import AgentConfig, TaskSelector
 from aec_bench.contracts.trial_record import TrialRecord
-from aec_bench.evolution.application import CandidateEvaluator, _execute_evolution_cycle
+from aec_bench.evaluation.behavioral import BehavioralLLMClient
+from aec_bench.evolution.application import CandidateEvaluator, _build_analysis, _enrich_candidate
 from aec_bench.evolution.backends.local import make_local_candidate_batch_planner, make_local_candidate_evaluator
-from aec_bench.evolution.behaviour import extract_behaviour_descriptor
-from aec_bench.evolution.core import EvolutionState, ResolvedSelection, SelectionPlan
+from aec_bench.evolution.core import EvolutionState, VariationRequest
 from aec_bench.evolution.enrichment import enrich_observations
+from aec_bench.evolution.evaluation import CandidateBatchPlanner, CandidateEvaluationBatch, bind_candidate_evaluation
 from aec_bench.evolution.graveyard import MutationGraveyard
+from aec_bench.evolution.swarm.core import SwarmAgentResult, SwarmAssignment
 from aec_bench.evolution.variation import run_structured_variation
 from aec_bench.evolution.workspace import Workspace
 
 _log = logging.getLogger(__name__)
-
-# Per-token pricing for Sonnet 4 on Bedrock.
-_INPUT_COST_PER_MTOK = 3.0
-_OUTPUT_COST_PER_MTOK = 15.0
-_CACHE_READ_COST_PER_MTOK = 0.30
-_CACHE_WRITE_COST_PER_MTOK = 3.75
-
-
-def _estimate_trial_cost(trial_record: TrialRecord) -> float:
-    """Estimate the USD cost of a trial from its CostRecord.
-
-    Uses estimated_cost_usd if available. When cache token counts are
-    present, computes cache-aware pricing. Otherwise uses a heuristic:
-    in multi-turn conversations, ~80% of input tokens are typically
-    cached after the first turn.
-    """
-    cost = trial_record.cost
-    if cost is None:
-        return 0.0
-    estimated = cost.estimated_cost_usd
-    if estimated is not None:
-        return float(estimated)
-
-    tokens_in = cost.tokens_in or 0
-    tokens_out = cost.tokens_out or 0
-    cache_read = cost.cache_read_tokens
-    cache_write = cost.cache_write_tokens
-
-    output_cost = tokens_out * _OUTPUT_COST_PER_MTOK / 1_000_000
-
-    if cache_read is not None:
-        # Exact cache data available — use precise pricing
-        cache_write_count = cache_write or 0
-        uncached_in = max(0, tokens_in - cache_read - cache_write_count)
-        input_cost = (
-            uncached_in * _INPUT_COST_PER_MTOK
-            + cache_read * _CACHE_READ_COST_PER_MTOK
-            + cache_write_count * _CACHE_WRITE_COST_PER_MTOK
-        ) / 1_000_000
-    else:
-        # Heuristic: assume ~80% of input tokens are cached in multi-turn
-        cached_portion = 0.8 if tokens_in > 5000 else 0.0
-        uncached = tokens_in * (1 - cached_portion)
-        cached = tokens_in * cached_portion
-        input_cost = (uncached * _INPUT_COST_PER_MTOK + cached * _CACHE_READ_COST_PER_MTOK) / 1_000_000
-
-    return input_cost + output_cost
-
-
-@dataclass(frozen=True)
-class SwarmStepResult:
-    """Result of one evolution cycle by a swarm agent."""
-
-    score: float
-    bd: BehaviourDescriptor | None
-    cost_usd: float
-    candidate_id: str
-    parent_candidate_id: str = ""
 
 
 class SwarmAgentEvolver:
@@ -99,12 +40,11 @@ class SwarmAgentEvolver:
         self,
         workspace: Workspace,
         config: EvolutionConfig,
-        batch_planner: Any,
+        batch_planner: CandidateBatchPlanner,
         solve_fn: CandidateEvaluator,
-        classifier_llm: Any,
-        evolver_llm: Any,
+        classifier_llm: BehavioralLLMClient,
+        evolver_llm: BehavioralLLMClient,
         evolver_model_name: str,
-        run_id: str,
     ) -> None:
         self._workspace = workspace
         self._config = config
@@ -113,28 +53,11 @@ class SwarmAgentEvolver:
         self._classifier_llm = classifier_llm
         self._evolver_llm = evolver_llm
         self._evolver_model_name = evolver_model_name
-        self._run_id = run_id
-        self._shared_graveyard: Any | None = None
         self._cycle = 0
         self._history: list[EvolutionCycleRecord] = []
         self._graveyard = MutationGraveyard()
-        self._snapshots: dict[str, WorkspaceSnapshot] = {"baseline": workspace.export_snapshot("baseline")}
-        self._state: EvolutionState | None = None
-        self._pending_selection: SelectionPlan | None = None
 
-    def set_shared_state(
-        self,
-        graveyard: Any | None = None,
-    ) -> None:
-        """Inject shared swarm state into this evolver.
-
-        Called by SwarmManager after factory creation to connect the
-        evolver to the shared graveyard.
-        """
-        if graveyard is not None:
-            self._shared_graveyard = graveyard
-
-    async def step(self) -> SwarmStepResult:
+    async def step(self, assignment: SwarmAssignment) -> SwarmAgentResult:
         """Run one evolution cycle asynchronously.
 
         Wraps synchronous work in a thread executor with a timeout guard.
@@ -142,92 +65,56 @@ class SwarmAgentEvolver:
         """
         loop = asyncio.get_event_loop()
         return await asyncio.wait_for(
-            loop.run_in_executor(None, self._sync_step),
+            loop.run_in_executor(None, self._sync_step, assignment),
             timeout=1800,  # 30 minutes
         )
 
-    def _sync_step(self) -> SwarmStepResult:
-        """Run one evolution cycle synchronously."""
+    def _sync_step(self, assignment: SwarmAssignment) -> SwarmAgentResult:
+        """Run variation for one exact assignment and return no evaluation evidence."""
         self._cycle += 1
-        selection = self._pending_selection or SelectionPlan(
-            parent_candidate_id="baseline",
-            inspiration_candidate_ids=(),
-            strategy=MutationStrategy.CONSERVATIVE,
-            goal="Improve the selected agent workspace against the configured evaluation batch.",
-            reasoning="Start from the baseline candidate.",
+        batch = self._batch_planner(self._config.batch_size, self._cycle - 1)
+        parent = bind_candidate_evaluation(
+            assignment.parent,
+            batch,
+            self._solve_fn(assignment.parent, batch),
         )
-
-        resolved_selection = ResolvedSelection(
-            plan=selection,
-            parent=self._snapshots[selection.parent_candidate_id],
-            inspirations=tuple(self._snapshots[candidate_id] for candidate_id in selection.inspiration_candidate_ids),
+        parent = _enrich_candidate(
+            parent,
+            batch,
+            lambda observations: enrich_observations(observations, classifier_llm=self._classifier_llm),
         )
-        execution = _execute_evolution_cycle(
-            workspace=self._workspace,
-            config=self._config,
-            evaluate=self._solve_fn,
-            batch_planner=self._batch_planner,
-            variation=lambda request, source, child_id: run_structured_variation(
-                request,
-                source,
-                child_id,
-                evolver_model_name=self._evolver_model_name,
-                evolver_llm=self._evolver_llm,
-                compaction_llm=self._classifier_llm,
-            ),
-            enrich=lambda observations: enrich_observations(observations, classifier_llm=self._classifier_llm),
-            graveyard=self._graveyard,
-            history=self._history,
-            snapshots=self._snapshots,
-            cycle=self._cycle,
-            state=self._state,
-            resolved_selection=resolved_selection,
-            run_id=self._run_id,
-            now=lambda: datetime.now(tz=UTC),
-            candidate_id_factory=lambda current_run, cycle: f"{current_run}:{cycle}",
+        evolution_state = EvolutionState.from_baseline(
+            parent,
+            structural_weight=self._config.structural_weight,
         )
-
-        if (
-            execution.outcome.decision.decision.value == "rejected"
-            and execution.outcome.child is not None
-            and self._shared_graveyard is not None
-        ):
-            entries = self._graveyard.browse(limit=1)
-            if entries:
-                self._shared_graveyard.insert(
-                    entries[0], extract_behaviour_descriptor(execution.outcome.child.observations[0]), self._run_id
-                )
-
-        self._history.append(execution.record)
-        self._state = execution.state
-        self._pending_selection = SelectionPlan(
-            parent_candidate_id=self._state.best_candidate_id,
-            inspiration_candidate_ids=(),
-            strategy=MutationStrategy.CONSERVATIVE,
-            goal="Improve the selected agent workspace against the configured evaluation batch.",
-            reasoning=f"Explicit state selected best candidate {self._state.best_candidate_id}.",
+        analysis = _build_analysis(parent, evolution_state)
+        request = VariationRequest(
+            selection=assignment.selection,
+            parent=parent,
+            inspirations=assignment.inspirations,
+            analysis=analysis,
+            scope=analysis.scope,
+            history=tuple(self._history),
+            graveyard=tuple(self._graveyard.browse(limit=self._graveyard.size)),
         )
-
-        bd = None
-        evaluated = execution.outcome.child or execution.outcome.parent
-        enriched = evaluated.observations
-        if enriched:
-            bd = extract_behaviour_descriptor(enriched[0])
-
-        score = execution.score
-        evolver_cost = execution.record.evolver_cost_usd
-        candidate_id_after = execution.outcome.active_candidate_id_after
-        candidate_id_before = execution.outcome.parent.snapshot.candidate_id
-
-        solver_cost = sum(_estimate_trial_cost(observation.trial) for observation in enriched)
-        total_cost = evolver_cost + solver_cost
-
-        return SwarmStepResult(
-            score=score,
-            bd=bd,
-            cost_usd=total_cost,
-            candidate_id=candidate_id_after,
-            parent_candidate_id=candidate_id_before,
+        variation = run_structured_variation(
+            request,
+            self._workspace,
+            assignment.assignment_id,
+            evolver_model_name=self._evolver_model_name,
+            evolver_llm=self._evolver_llm,
+            compaction_llm=self._classifier_llm,
+        )
+        parent_cost = sum(
+            float(observation.trial.cost.estimated_cost_usd)
+            for observation in parent.observations
+            if observation.trial.cost is not None and observation.trial.cost.estimated_cost_usd is not None
+        )
+        return SwarmAgentResult(
+            agent_id=assignment.agent_id,
+            assignment_id=assignment.assignment_id,
+            variation=variation,
+            agent_cost_usd=parent_cost + variation.model_cost_usd,
         )
 
 
@@ -246,8 +133,8 @@ class SwarmEvolverFactory:
         *,
         workspace_source: Path,
         task_dirs: list[Path],
-        classifier_llm: Any,
-        evolver_llm: Any,
+        classifier_llm: BehavioralLLMClient,
+        evolver_llm: BehavioralLLMClient,
         evolver_model_name: str,
         model: str,
         adapter: str = "rlm",
@@ -288,6 +175,8 @@ class SwarmEvolverFactory:
         workspace.init_versioning()
 
         # 3. Build LLM clients — per-agent override or factory default
+        classifier_llm: BehavioralLLMClient
+        evolver_llm: BehavioralLLMClient
         if model_override and model_override != self._model:
             from aec_bench.providers.behavioral_llm import build_behavioral_llm_client
 
@@ -334,8 +223,31 @@ class SwarmEvolverFactory:
             classifier_llm=classifier_llm,
             evolver_llm=evolver_llm,
             evolver_model_name=evolver_model_name,
-            run_id=agent_id,
         )
+
+    def plan_batch(self, batch_size: int, cycle: int) -> CandidateEvaluationBatch:
+        """Plan one candidate-independent host evaluation batch."""
+        planner = make_local_candidate_batch_planner(
+            task_dirs=self._task_dirs,
+            model=self._model,
+            experiment_id="swarm-host",
+            adapter=self._adapter,
+            timeout=self._timeout,
+        )
+        return planner(batch_size, cycle)
+
+    def baseline_snapshot(self) -> WorkspaceSnapshot:
+        """Return the exact source workspace material for the first assignment."""
+        return Workspace(self._workspace_source).export_snapshot("baseline")
+
+    def evaluate(self, snapshot: WorkspaceSnapshot, batch: CandidateEvaluationBatch) -> tuple[TrialRecord, ...]:
+        """Evaluate an exact submitted snapshot in the host runtime."""
+        evaluator = make_local_candidate_evaluator(workspace_root=self._workspace_source)
+        return evaluator(snapshot, batch)
+
+    def enrich(self, observations: Sequence[EvolutionObservation]) -> tuple[EvolutionObservation, ...]:
+        """Attach trusted behavioural evidence to host observations."""
+        return enrich_observations(observations, classifier_llm=self._classifier_llm)
 
     def cleanup(self) -> None:
         """Remove all agent workspace copies."""

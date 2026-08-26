@@ -9,7 +9,7 @@ from collections import deque
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
-from aec_bench.contracts.evolution import BehaviourDescriptor
+from aec_bench.contracts.evolution import BehaviourDescriptor, CandidateAssessment, MutationSummary, WorkspaceSnapshot
 from aec_bench.evolution.graveyard import GraveyardEntry
 
 # Normalisation ranges for BD dimensions — maps raw values to [0, 1].
@@ -106,14 +106,17 @@ class SharedGraveyard:
         Each record stores the entry dict, BD dict, and agent_id so that
         region queries work after reload.
         """
-        payload = [
-            {
-                "entry": asdict(ie.entry),
-                "bd": ie.bd.model_dump(),
-                "agent_id": ie.agent_id,
-            }
-            for ie in self._entries
-        ]
+        payload = []
+        for indexed in self._entries:
+            entry = asdict(indexed.entry)
+            for field_name in ("rejected_snapshot", "parent_assessment", "child_assessment", "mutation"):
+                value = getattr(indexed.entry, field_name)
+                if value is not None and hasattr(value, "model_dump"):
+                    entry[field_name] = value.model_dump(mode="json")
+            if indexed.entry.timestamp is not None:
+                entry["timestamp"] = indexed.entry.timestamp.isoformat()
+            payload.append({"entry": entry, "bd": indexed.bd.model_dump(), "agent_id": indexed.agent_id})
+        path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
     @classmethod
@@ -127,7 +130,20 @@ class SharedGraveyard:
         data = json.loads(path.read_text(encoding="utf-8"))
         graveyard = cls()
         for item in data:
-            entry = GraveyardEntry(**item["entry"])
+            raw_entry = dict(item["entry"])
+            if raw_entry.get("rejected_snapshot") is not None:
+                raw_entry["rejected_snapshot"] = WorkspaceSnapshot.model_validate(raw_entry["rejected_snapshot"])
+            if raw_entry.get("parent_assessment") is not None:
+                raw_entry["parent_assessment"] = CandidateAssessment.model_validate(raw_entry["parent_assessment"])
+            if raw_entry.get("child_assessment") is not None:
+                raw_entry["child_assessment"] = CandidateAssessment.model_validate(raw_entry["child_assessment"])
+            if raw_entry.get("mutation") is not None:
+                raw_entry["mutation"] = MutationSummary.model_validate(raw_entry["mutation"])
+            if raw_entry.get("timestamp") is not None:
+                from datetime import datetime
+
+                raw_entry["timestamp"] = datetime.fromisoformat(raw_entry["timestamp"])
+            entry = GraveyardEntry(**raw_entry)
             bd = BehaviourDescriptor(**item["bd"])
             graveyard.insert(entry, bd, item["agent_id"])
         return graveyard

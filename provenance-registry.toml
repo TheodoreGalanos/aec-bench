@@ -1869,6 +1869,26 @@ duplication = "unique"
 event = "evaluated evolution child rejected"
 
 [[field]]
+symbol = "aec_bench.evolution.swarm.core.SwarmAssignment.issued_at"
+surface = "dataclass"
+wire_name = "issued_at"
+category = "event_time"
+domain_owner = "evolution_swarm"
+authority = "swarm_manager"
+authoritative = true
+exposure = "application_memory"
+status = "current"
+payload_contract = "one exact swarm agent assignment"
+canonicalization = "timezone-aware datetime supplied by the injected swarm wall clock"
+consumer = "swarm agent task loop and variation operator"
+validation_behavior = "SwarmAssignment rejects a naive or non-datetime issued_at value"
+mismatch_behavior = "reject the assignment before agent execution"
+retention = "swarm_assignment_lifetime"
+rationale = "The field records when the manager issued the exact bounded assignment to one agent."
+duplication = "unique"
+event = "swarm assignment issued"
+
+[[field]]
 symbol = "aec_bench.experimentation.governance.critic_lifecycle.contracts.CriticRetirement.evaluation_outcome_sha256s"
 surface = "pydantic_model"
 wire_name = "evaluation_outcome_sha256s"

@@ -6,9 +6,10 @@ from __future__ import annotations
 import logging
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from typing import Any, Protocol
+from typing import Protocol
 
-from aec_bench.contracts.evolution import AgentStatus, SwarmAgentState
+from aec_bench.contracts.evolution import AgentStatus
+from aec_bench.evolution.swarm.core import SwarmAgentResult, SwarmAssignment
 
 logger = logging.getLogger(__name__)
 
@@ -16,7 +17,7 @@ logger = logging.getLogger(__name__)
 class Evolver(Protocol):
     """Protocol for an evolver that can perform a single evolution step."""
 
-    async def step(self) -> Any: ...
+    async def step(self, assignment: SwarmAssignment) -> SwarmAgentResult: ...
 
 
 @dataclass
@@ -25,27 +26,26 @@ class AgentContext:
 
     agent_id: str
     evolver: Evolver
-    on_eval_complete: Callable[[Any], Awaitable[bool]]
+    next_assignment: Callable[[], Awaitable[SwarmAssignment]]
+    on_eval_complete: Callable[[SwarmAssignment, SwarmAgentResult], Awaitable[bool]]
     on_error: Callable[[Exception], Awaitable[bool]] | None = None
     model: str = ""
     worktree_branch: str = ""
 
 
-async def run_agent_loop(ctx: AgentContext) -> SwarmAgentState:
+async def run_agent_loop(ctx: AgentContext) -> AgentStatus:
     """Run the eval loop for a single agent until told to stop.
 
     Calls ``ctx.evolver.step()`` repeatedly.  After each successful step the
     ``on_eval_complete`` callback decides whether to continue (return True)
     or stop (return False).  On error, ``on_error`` is consulted if provided.
     """
-    eval_count = 0
-    best_score = 0.0
     status = AgentStatus.ACTIVE
-    last_evaluated_at = ""
 
     while True:
         try:
-            result = await ctx.evolver.step()
+            assignment = await ctx.next_assignment()
+            result = await ctx.evolver.step(assignment)
         except Exception as exc:
             logger.warning("Agent %s error: %s", ctx.agent_id, exc)
             status = AgentStatus.ERROR
@@ -55,25 +55,9 @@ async def run_agent_loop(ctx: AgentContext) -> SwarmAgentState:
                     continue
             break
 
-        eval_count += 1
-        score = getattr(result, "score", 0.0)
-        if score > best_score:
-            best_score = score
-        cycle_record = getattr(result, "cycle_record", None)
-        evaluated_at = getattr(cycle_record, "timestamp", None)
-        last_evaluated_at = evaluated_at.isoformat() if evaluated_at is not None else ""
-
-        should_continue = await ctx.on_eval_complete(result)
+        should_continue = await ctx.on_eval_complete(assignment, result)
         if not should_continue:
             status = AgentStatus.RETIRED
             break
 
-    return SwarmAgentState(
-        agent_id=ctx.agent_id,
-        model=ctx.model or "unknown",
-        status=status,
-        eval_count=eval_count,
-        best_score=best_score,
-        last_evaluated_at=last_evaluated_at,
-        worktree_branch=ctx.worktree_branch or f"coral/{ctx.agent_id}",
-    )
+    return status

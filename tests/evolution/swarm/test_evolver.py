@@ -4,18 +4,19 @@
 from __future__ import annotations
 
 import json
+from datetime import UTC, datetime
 from pathlib import Path
 
 import yaml
 
 from aec_bench.contracts.evolution import EvolutionConfig, MutationSummary
 from aec_bench.contracts.experiment_manifest import AgentConfig, ComputeConfig, TaskSelector
-from aec_bench.evolution.core import VariationResult, VariationStatus
+from aec_bench.evolution.core import SelectionPlan, VariationResult, VariationStatus
 from aec_bench.evolution.evaluation import CandidateEvaluationBatch
+from aec_bench.evolution.swarm.core import AgentBudget, SwarmAgentResult, SwarmAssignment
 from aec_bench.evolution.swarm.evolver import (
     SwarmAgentEvolver,
     SwarmEvolverFactory,
-    SwarmStepResult,
 )
 from aec_bench.evolution.workspace import Workspace
 from aec_bench.tasks.instance import resolve_instance_paths
@@ -116,26 +117,80 @@ def _setup_evolution_inputs(tmp_path: Path) -> tuple[Workspace, CandidateEvaluat
 
 
 # ---------------------------------------------------------------------------
-# SwarmStepResult contract
+# Swarm assignment/result contract
 # ---------------------------------------------------------------------------
 
 
-def test_swarm_step_result_has_required_fields() -> None:
-    from aec_bench.contracts.evolution import BehaviourDescriptor
-
-    bd = BehaviourDescriptor(
-        token_cost=5000.0,
-        verification_depth=0.5,
-        tool_density=1.0,
-        exploration_ratio=0.3,
-        deliberation_ratio=0.2,
-        reward=0.7,
+def test_evolver_returns_exact_assignment_result_without_host_evidence(tmp_path: Path, monkeypatch) -> None:
+    workspace, batch = _setup_evolution_inputs(tmp_path)
+    config = EvolutionConfig(
+        workspace_path=str(workspace.root),
+        models={"classifier": "test", "evolver": "test"},
+        task_selector=TaskSelector(),
+        batch_size=1,
+        max_cycles=1,
     )
-    result = SwarmStepResult(score=0.7, bd=bd, cost_usd=0.5, candidate_id="v1")
-    assert result.score == 0.7
-    assert result.bd is not None
-    assert result.cost_usd == 0.5
-    assert result.candidate_id == "v1"
+    parent = workspace.export_snapshot("parent")
+    assignment = SwarmAssignment(
+        assignment_id="assignment-1",
+        agent_id="agent-1",
+        selection=SelectionPlan("parent", (), "conservative", "Improve", "Use exact material"),
+        parent=parent,
+        inspirations=(),
+        budget=AgentBudget(2.0),
+        issued_at=datetime.now(UTC),
+    )
+
+    def evaluate(snapshot, _batch):
+        return (
+            make_trial_record(
+                trial_id=f"{snapshot.candidate_id}-trial",
+                task_id="electrical/voltage-drop/case",
+                evaluation={
+                    "reward": 0.5,
+                    "validity": {
+                        "output_parseable": True,
+                        "schema_valid": True,
+                        "verifier_completed": True,
+                    },
+                },
+            ),
+        )
+
+    def submit(request, _source, child_id, **_kwargs):
+        assert request.selection == assignment.selection
+        assert request.parent.snapshot.candidate_id == assignment.parent.candidate_id
+        return VariationResult(
+            status=VariationStatus.SUBMITTED,
+            child=assignment.parent.model_copy(update={"candidate_id": child_id, "system_prompt": "child prompt"}),
+            mutation=MutationSummary(prompt_modified=True),
+            reasoning="submitted test child",
+            model_cost_usd=0.25,
+        )
+
+    monkeypatch.setattr("aec_bench.evolution.swarm.evolver.run_structured_variation", submit)
+    evolver = SwarmAgentEvolver(
+        workspace=workspace,
+        config=config,
+        batch_planner=lambda _size, _cycle: batch,
+        solve_fn=evaluate,
+        classifier_llm=StubClassifierLLM(),
+        evolver_llm=StubEvolverLLM(),
+        evolver_model_name="test",
+    )
+
+    result = evolver._sync_step(assignment)
+
+    assert isinstance(result, SwarmAgentResult)
+    assert result.agent_id == assignment.agent_id
+    assert result.assignment_id == assignment.assignment_id
+    assert result.variation.status is VariationStatus.SUBMITTED
+    assert result.variation.child is not None
+    assert result.variation.child.candidate_id == assignment.assignment_id
+    assert result.agent_cost_usd == 0.25
+    assert not hasattr(result, "score")
+    assert not hasattr(result, "bd")
+    assert workspace.read_prompt() == parent.system_prompt
 
 
 # ---------------------------------------------------------------------------
@@ -182,7 +237,7 @@ def test_factory_creates_independent_workspaces(tmp_path: Path) -> None:
     factory.cleanup()
 
 
-def test_accepted_swarm_child_remains_in_canonical_workspace(tmp_path: Path, monkeypatch) -> None:
+def test_evolver_returns_submitted_child_without_mutating_canonical_workspace(tmp_path: Path, monkeypatch) -> None:
     workspace, batch = _setup_evolution_inputs(tmp_path)
     config = EvolutionConfig(
         workspace_path=str(workspace.root),
@@ -226,10 +281,20 @@ def test_accepted_swarm_child_remains_in_canonical_workspace(tmp_path: Path, mon
         classifier_llm=StubClassifierLLM(),
         evolver_llm=StubEvolverLLM(),
         evolver_model_name="test",
-        run_id="swarm-test",
     )
 
-    result = evolver._sync_step()
+    assignment = SwarmAssignment(
+        assignment_id="assignment-1",
+        agent_id="agent-1",
+        selection=SelectionPlan("parent", (), "conservative", "Improve", "Use exact material"),
+        parent=workspace.export_snapshot("parent"),
+        inspirations=(),
+        budget=AgentBudget(2.0),
+        issued_at=datetime.now(UTC),
+    )
+    result = evolver._sync_step(assignment)
 
-    assert result.candidate_id == "swarm-test:1"
-    assert workspace.read_prompt() == "accepted prompt"
+    assert result.assignment_id == assignment.assignment_id
+    assert result.variation.child is not None
+    assert result.variation.child.system_prompt == "accepted prompt"
+    assert workspace.read_prompt() == "You are a helpful engineering agent. Solve the task.\n"

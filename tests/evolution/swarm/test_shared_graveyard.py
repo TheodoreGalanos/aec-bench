@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from aec_bench.contracts.evolution import BehaviourDescriptor
+from aec_bench.contracts.evolution import BehaviourDescriptor, WorkspaceSnapshot
 from aec_bench.evolution.graveyard import GraveyardEntry
 from aec_bench.evolution.swarm.shared_graveyard import SharedGraveyard
 
@@ -111,6 +111,21 @@ def test_save_load_roundtrip(tmp_path: Path) -> None:
     query = _make_bd(token_cost=5000)
     results = loaded.browse_for_region(query, k=1)
     assert results[0].cycle == 1
+
+
+def test_save_load_preserves_exact_rejected_snapshot(tmp_path: Path) -> None:
+    snapshot = WorkspaceSnapshot(system_prompt="Rejected prompt", candidate_id="rejected-1")
+    entry = GraveyardEntry(
+        **{**_make_entry().__dict__, "candidate_id": snapshot.candidate_id, "rejected_snapshot": snapshot}
+    )
+    sg = SharedGraveyard()
+    sg.insert(entry, _make_bd(), "agent-1")
+    path = tmp_path / "graveyard.json"
+    sg.save(path)
+
+    loaded = SharedGraveyard.load(path)
+    restored = loaded.browse_all(limit=1)[0]
+    assert restored.rejected_snapshot == snapshot
 
 
 def test_load_missing_returns_empty(tmp_path: Path) -> None:
