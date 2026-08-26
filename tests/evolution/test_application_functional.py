@@ -16,9 +16,8 @@ from aec_bench.contracts.evolution import (
 )
 from aec_bench.contracts.experiment_manifest import AgentConfig, ComputeConfig, TaskSelector
 from aec_bench.evolution.application import run_evolution
-from aec_bench.evolution.core import VariationResult, VariationStatus
+from aec_bench.evolution.core import SelectionPlan, VariationResult, VariationStatus
 from aec_bench.evolution.evaluation import CandidateEvaluationBatch
-from aec_bench.evolution.strategy import HillClimbStrategy
 from aec_bench.evolution.workspace import Workspace
 from aec_bench.tasks.instance import resolve_instance_paths
 from aec_bench.trials import PlannedTrial
@@ -91,24 +90,31 @@ def _run(
     config: EvolutionConfig,
     evaluated_candidates: list[str] | None = None,
 ):
-    from aec_bench.evolution.strategy import QDStrategy
-
     def evaluate(snapshot: WorkspaceSnapshot, _batch: CandidateEvaluationBatch):
         if evaluated_candidates is not None:
             evaluated_candidates.append(snapshot.candidate_id)
         reward = child_reward if snapshot.candidate_id != "baseline" else parent_reward
         return (_record(snapshot.candidate_id, reward),)
 
+    def select_archive(_model, _archive, _graveyard, shortlist, _score, selected_strategy, _limit):
+        return SelectionPlan(
+            parent_candidate_id=shortlist[0],
+            inspiration_candidate_ids=(),
+            strategy=selected_strategy,
+            goal="test selection",
+            reasoning="test selection",
+        )
+
     return run_evolution(
         workspace=workspace,
         config=config,
         evaluate=evaluate,
-        strategy=QDStrategy(evolver_model="test") if config.strategy == "qd" else HillClimbStrategy(),
         batch_planner=lambda _size, _cycle: batch,
         variation=variation,
         enrich=lambda observations: observations,
         run_id="run-fixed",
         clock=lambda: datetime(2026, 1, 1, tzinfo=UTC),
+        archive_agent=select_archive if config.strategy == "qd" else None,
     )
 
 
@@ -301,3 +307,7 @@ def test_qd_strategy_persists_archive_summary_on_functional_path(tmp_path: Path)
     assert result.archive_summary is not None
     assert result.archive_summary["mode"] == "qd"
     assert (workspace.root / "archive.json").exists()
+    archive = json.loads((workspace.root / "archive.json").read_text(encoding="utf-8"))
+    assert {entry["snapshot"]["candidate_id"] for entry in archive["entries"]} == {"baseline"}
+    qd_state = json.loads((workspace.root / "qd_state.json").read_text(encoding="utf-8"))
+    assert qd_state["cycle"] == 1

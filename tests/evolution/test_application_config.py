@@ -287,10 +287,10 @@ class TestResolveTemplate:
 
 
 class TestRunnerStrategyWiring:
-    def test_config_builds_qd_strategy(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        """When config.strategy='qd', composition creates QDStrategy."""
-        from aec_bench.evolution.strategy import QDStrategy
-
+    def test_config_passes_qd_mode_to_functional_application(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """When config.strategy='qd', composition leaves selection to the application."""
         observed, _expected = _capture_run(monkeypatch)
 
         ws_path = tmp_path / "ws"
@@ -309,12 +309,13 @@ class TestRunnerStrategyWiring:
         )
 
         run_evolution_from_config(config=config)
-        assert isinstance(observed["strategy"], QDStrategy)
+        assert observed["config"].strategy == "qd"
+        assert "strategy" not in observed
 
-    def test_config_builds_hill_climb_by_default(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        """Default config builds HillClimbStrategy."""
-        from aec_bench.evolution.strategy import HillClimbStrategy
-
+    def test_config_passes_hill_climb_mode_to_functional_application(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Default config leaves direct hill-climb selection to the application state."""
         observed, _expected = _capture_run(monkeypatch)
 
         ws_path = tmp_path / "ws"
@@ -332,7 +333,8 @@ class TestRunnerStrategyWiring:
         )
 
         run_evolution_from_config(config=config)
-        assert isinstance(observed["strategy"], HillClimbStrategy)
+        assert observed["config"].strategy == "hill_climb"
+        assert "strategy" not in observed
 
 
 class TestGenerateTaskInstances:
