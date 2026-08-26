@@ -24,6 +24,8 @@ from aec_bench.contracts.evolution import (
     WorkspaceSnapshot,
 )
 from aec_bench.contracts.experiment_manifest import AgentConfig, ComputeConfig
+from aec_bench.evolution.cancellation import AVOCancellationError, AVOCancellationReason, AVOCancellationSignal
+from aec_bench.evolution.checkpoint import AVOIncompleteExternalEffectError
 from aec_bench.evolution.core import DevelopmentAttempt, SelectionPlan, VariationResult, VariationStatus
 from aec_bench.evolution.evaluation import CandidateEvaluationBatch, bind_evaluated_candidate
 from aec_bench.evolution.swarm.config import (
@@ -204,6 +206,7 @@ async def test_unknown_agent_cost_has_no_host_effects(tmp_path: Path) -> None:
     )
     manager._state = initial_state
     assignment = SwarmAssignment(
+        run_id=manager._state.run_id,
         assignment_id="assignment-1",
         agent_id="agent-0",
         selection=SelectionPlan("baseline", (), "conservative", "Improve", "Use exact material"),
@@ -327,6 +330,81 @@ async def test_cancellation_persists_state_and_cleans_agent_resources(tmp_path: 
     assert factory.cleaned
     assert (tmp_path / "swarm_state.json").exists()
     assert load_resumed_state(tmp_path).run_id == manager._run_id
+
+
+@pytest.mark.asyncio
+async def test_manager_stops_peer_before_cleanup_after_agent_cancellation(tmp_path: Path) -> None:
+    peer_started = asyncio.Event()
+    peer_stopped = asyncio.Event()
+
+    class PeerAwareFactory(FakeEvolverFactory):
+        def __init__(self) -> None:
+            super().__init__({"agent-0": [0.5], "agent-1": [0.5]})
+            self.cleaned = False
+
+        def create(self, agent_id: str, model_override: str | None = None):
+            del model_override
+            signal = AVOCancellationSignal()
+
+            class PeerAwareEvolver:
+                cancellation_signal = signal
+
+                async def step(self, _assignment):
+                    if agent_id == "agent-1":
+                        peer_started.set()
+                        try:
+                            await asyncio.Event().wait()
+                        except asyncio.CancelledError:
+                            peer_stopped.set()
+                            raise
+                    await peer_started.wait()
+                    raise AVOCancellationError(AVOCancellationReason(detail="agent-0 cancelled"))
+
+            return PeerAwareEvolver()
+
+        def cleanup(self) -> None:
+            assert peer_stopped.is_set()
+            self.cleaned = True
+
+    factory = PeerAwareFactory()
+    manager = SwarmManager(config=_make_config(agent_count=2), state_dir=tmp_path, evolver_factory=factory)
+    with pytest.raises(AVOCancellationError, match="agent-0 cancelled"):
+        await manager.run()
+
+    assert factory.cleaned
+
+
+@pytest.mark.asyncio
+async def test_manager_does_not_retry_incomplete_external_effect(tmp_path: Path) -> None:
+    class NonRetryableFactory(FakeEvolverFactory):
+        def __init__(self) -> None:
+            super().__init__({"agent-0": [0.5]})
+            self.step_count = 0
+            self.cleaned = False
+
+        def create(self, agent_id: str, model_override: str | None = None):
+            del agent_id, model_override
+            factory = self
+
+            class IncompleteEvolver:
+                async def step(self, _assignment: SwarmAssignment) -> SwarmAgentResult:
+                    factory.step_count += 1
+                    raise AVOIncompleteExternalEffectError()
+
+            return IncompleteEvolver()
+
+        def cleanup(self) -> None:
+            self.cleaned = True
+
+    factory = NonRetryableFactory()
+    manager = SwarmManager(config=_make_config(agent_count=1), state_dir=tmp_path, evolver_factory=factory)
+
+    with pytest.raises(AVOIncompleteExternalEffectError):
+        await manager.run()
+
+    assert factory.step_count == 1
+    assert factory.cleaned
+    assert (tmp_path / "swarm_state.json").exists()
 
 
 @pytest.mark.asyncio

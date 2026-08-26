@@ -469,6 +469,7 @@ class TestFunctionalEvolutionValues:
         analysis = EvolutionAnalysis([], [], GraduatedScope.MINIMAL, None, parent.assessment.batch_score)
         with pytest.raises(ValueError, match="inspirations must match"):
             VariationRequest(
+                run_id="run-test",
                 selection=selection,
                 parent=parent,
                 inspirations=(),

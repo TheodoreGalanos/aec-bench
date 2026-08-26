@@ -48,6 +48,7 @@ def _config(*, pivot_after: int = 5, consolidate_every: int = 10) -> SwarmConfig
 def _assignment(agent_id: str = "agent-1", assignment_id: str = "assignment-1") -> SwarmAssignment:
     selection = SelectionPlan("parent", (), MutationStrategy.CONSERVATIVE, "Improve", "Use exact material")
     return SwarmAssignment(
+        run_id="run-test",
         assignment_id=assignment_id,
         agent_id=agent_id,
         selection=selection,

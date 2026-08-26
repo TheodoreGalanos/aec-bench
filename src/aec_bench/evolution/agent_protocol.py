@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import json
 import math
 from collections.abc import Callable, Mapping
 from enum import StrEnum
@@ -12,7 +13,9 @@ from typing import Any, Literal, Protocol
 from pydantic import ConfigDict, Field, model_validator
 
 from aec_bench.contracts.validators import NonEmptyStr, StrictModel
+from aec_bench.evolution.cancellation import AVOCancellationSignal
 from aec_bench.evolution.core import AVOState, EvaluatedCandidate, VariationRequest
+from aec_bench.evolution.memory import AVOMemoryEntry
 from aec_bench.evolution.mutation import MutationAction
 
 
@@ -106,6 +109,7 @@ class AgentContext:
         tools: Mapping[str, Callable[..., object]],
         previous_tool_result: object | None,
         previous_tool_error: str | None,
+        cancellation_signal: AVOCancellationSignal | None = None,
     ) -> None:
         self.request = request
         self.parent_evidence = parent_evidence
@@ -113,6 +117,8 @@ class AgentContext:
         self.tools = tools
         self.previous_tool_result = previous_tool_result
         self.previous_tool_error = previous_tool_error
+        self.cancellation_signal = cancellation_signal
+        self.memory: tuple[AVOMemoryEntry, ...] = state.memory
 
 
 class AgentRunner(Protocol):
@@ -167,6 +173,23 @@ def _render_agent_prompt(context: AgentContext) -> str:
         previous = f"Previous tool result: {context.previous_tool_result!r}"
     names = ", ".join(context.tools)
     request = context.request
+    memory = json.dumps(
+        [
+            {
+                "source_variation_id": entry.source_variation_id,
+                "source_attempt_id": entry.source_attempt_id,
+                "hypothesis": entry.hypothesis,
+                "change_summary": entry.change_summary,
+                "evidence_summary": entry.evidence_summary,
+                "outcome": entry.outcome,
+                "failure_category": entry.failure_category,
+                "next_direction": entry.next_direction,
+            }
+            for entry in context.memory
+        ],
+        ensure_ascii=True,
+        sort_keys=True,
+    )
     return (
         f"Goal: {request.selection.goal}\n"
         f"Strategy: {request.selection.strategy.value}\n"
@@ -174,6 +197,7 @@ def _render_agent_prompt(context: AgentContext) -> str:
         f"Variation {context.state.variation_id}; current revision {context.state.current_revision}; "
         f"model requests {context.state.usage.model_requests}; tool calls {context.state.usage.tool_calls}; "
         f"development evaluations {context.state.usage.development_evaluations}.\n"
+        f"Structured memory (bounded facts only): {memory}\n"
         f"Approved tools: {names}. Each command uses `tool` plus an `arguments` object. "
         "For apply_mutation, arguments are {mutation: {type, name, description, discipline, body, or content}}. "
         "For evaluate_current_revision, arguments are {hypothesis: string}. For restore_attempt, "

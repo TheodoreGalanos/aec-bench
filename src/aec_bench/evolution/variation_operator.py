@@ -3,14 +3,18 @@
 
 from __future__ import annotations
 
+import hashlib
 from collections.abc import Callable
 from dataclasses import replace
+from pathlib import Path
 from typing import Any
 
 from aec_bench.contracts.evolution import WorkspaceSnapshot
 from aec_bench.contracts.trial_record import TrialRecord
 from aec_bench.evolution.agent_loop import run_agentic_variation
 from aec_bench.evolution.agent_protocol import PydanticAIStructuredRunner
+from aec_bench.evolution.cancellation import AVOCancellationSignal
+from aec_bench.evolution.checkpoint import AVOConfigurationIdentity
 from aec_bench.evolution.core import AVOBudget, VariationRequest, VariationResult
 from aec_bench.evolution.development import (
     DevelopmentBatchPlanner,
@@ -18,6 +22,7 @@ from aec_bench.evolution.development import (
     DevelopmentEvaluator,
 )
 from aec_bench.evolution.evaluation import CandidateEvaluationBatch
+from aec_bench.evolution.resume import checkpoint_path
 from aec_bench.evolution.sanitiser import CompactionLLM
 from aec_bench.evolution.workspace import Workspace
 from aec_bench.trials import build_trial_id
@@ -32,6 +37,9 @@ def build_agentic_variation_operator(
     development_experiment_prefix: str = "development",
     budget: AVOBudget | None = None,
     compaction_llm: CompactionLLM | None = None,
+    checkpoint_root: Path | None = None,
+    configuration_identity: AVOConfigurationIdentity | None = None,
+    cancellation_signal: AVOCancellationSignal | None = None,
 ) -> Callable[[VariationRequest, Workspace, str], VariationResult]:
     """Build the production variation operator used by functional evolution.
 
@@ -54,6 +62,10 @@ def build_agentic_variation_operator(
     selected_budget = budget if budget is not None else AVOBudget()
     if not isinstance(selected_budget, AVOBudget):
         raise TypeError("budget must be an AVOBudget")
+    if checkpoint_root is not None and not isinstance(checkpoint_root, Path):
+        raise TypeError("checkpoint_root must be a Path")
+    if checkpoint_root is not None and configuration_identity is None:
+        raise ValueError("configuration_identity is required when checkpointing is enabled")
     runner = PydanticAIStructuredRunner(agent_model)
 
     def vary(request: VariationRequest, source: Workspace, child_candidate_id: str) -> VariationResult:
@@ -63,7 +75,10 @@ def build_agentic_variation_operator(
             raise ValueError("variation request cycle must be 1-based")
         development_cycle_index = request.cycle - 1
         host_experiment_id, host_trial_ids = _host_evidence_identity(request)
-        development_experiment_id = f"{development_experiment_prefix}-cycle-{request.cycle}-child-{child_candidate_id}"
+        run_digest = hashlib.sha256(request.run_id.encode("utf-8")).hexdigest()[:16]
+        development_experiment_id = (
+            f"{development_experiment_prefix}-cycle-{request.cycle}-run-{run_digest}-child-{child_candidate_id}"
+        )
         if development_experiment_id == host_experiment_id:
             development_experiment_id = f"{development_experiment_id}-development"
         planned_batch: CandidateEvaluationBatch | None = None
@@ -90,6 +105,12 @@ def build_agentic_variation_operator(
             host_experiment_id=host_experiment_id,
             host_trial_ids=host_trial_ids,
         )
+        variation_id = f"{request.run_id}:variation-{request.cycle}:child-{child_candidate_id}"
+        selected_checkpoint_path = (
+            None
+            if checkpoint_root is None
+            else checkpoint_path(checkpoint_root, run_id=request.run_id, variation_id=variation_id)
+        )
         return run_agentic_variation(
             request,
             source,
@@ -99,6 +120,10 @@ def build_agentic_variation_operator(
             budget=selected_budget,
             knowledge_source=lambda: _workspace_program(source),
             compaction_llm=compaction_llm,
+            variation_id=variation_id,
+            checkpoint_path=selected_checkpoint_path,
+            configuration_identity=configuration_identity,
+            cancellation_signal=cancellation_signal,
         )
 
     return vary

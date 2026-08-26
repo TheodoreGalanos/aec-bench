@@ -47,6 +47,7 @@ def _assignment() -> SwarmAssignment:
         "Use exact selected material",
     )
     return SwarmAssignment(
+        run_id="run-test",
         assignment_id="assignment-1",
         agent_id="agent-1",
         selection=selection,
@@ -116,6 +117,7 @@ def test_assignment_requires_exact_parent_and_inspiration_ids() -> None:
     assignment = _assignment()
     with pytest.raises(ValueError, match="parent_candidate_id"):
         SwarmAssignment(
+            run_id=assignment.run_id,
             assignment_id=assignment.assignment_id,
             agent_id=assignment.agent_id,
             selection=assignment.selection,
@@ -126,6 +128,7 @@ def test_assignment_requires_exact_parent_and_inspiration_ids() -> None:
         )
     with pytest.raises(ValueError, match="candidate IDs exactly"):
         SwarmAssignment(
+            run_id=assignment.run_id,
             assignment_id=assignment.assignment_id,
             agent_id=assignment.agent_id,
             selection=assignment.selection,

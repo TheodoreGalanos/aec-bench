@@ -26,6 +26,7 @@ from aec_bench.evolution.core import (
     VariationUsage,
 )
 from aec_bench.evolution.evaluation import CandidateEvaluationBatch
+from aec_bench.evolution.memory import AVOMemoryEntry
 from aec_bench.evolution.variation_operator import build_agentic_variation_operator
 from aec_bench.evolution.workspace import Workspace
 from aec_bench.tasks.instance import resolve_instance_paths
@@ -89,7 +90,13 @@ def _record(candidate_id: str, reward: float):
     )
 
 
-def _submitted_result(request, child: WorkspaceSnapshot, mutation: MutationSummary) -> VariationResult:
+def _submitted_result(
+    request,
+    child: WorkspaceSnapshot,
+    mutation: MutationSummary,
+    *,
+    memory: tuple[AVOMemoryEntry, ...] = (),
+) -> VariationResult:
     observations = tuple(
         observation.model_copy(update={"candidate_id": child.candidate_id})
         for observation in request.parent.observations
@@ -114,6 +121,7 @@ def _submitted_result(request, child: WorkspaceSnapshot, mutation: MutationSumma
         reasoning="test child",
         usage=VariationUsage(),
         attempt=attempt,
+        memory=memory,
     )
 
 
@@ -126,6 +134,7 @@ def _run(
     variation: object,
     config: EvolutionConfig,
     evaluated_candidates: list[str] | None = None,
+    run_id: str = "run-fixed",
 ):
     def evaluate(snapshot: WorkspaceSnapshot, _batch: CandidateEvaluationBatch):
         if evaluated_candidates is not None:
@@ -149,7 +158,7 @@ def _run(
         batch_planner=lambda _size, _cycle: batch,
         variation=variation,
         enrich=lambda observations: observations,
-        run_id="run-fixed",
+        run_id=run_id,
         clock=lambda: datetime(2026, 1, 1, tzinfo=UTC),
         archive_agent=select_archive if config.strategy == "qd" else None,
     )
@@ -261,6 +270,42 @@ def test_runs_configured_multi_cycle_count_and_projects_best_and_final_scores(tm
     assert result.final_score == 0.9
     assert result.best_score == 0.9
     assert result.score_history == [0.9, 0.9, 0.9]
+
+
+def test_direct_cycles_carry_structured_memory_without_changing_selection(tmp_path: Path) -> None:
+    workspace, batch = _setup(tmp_path)
+    seen_memory: list[tuple[AVOMemoryEntry, ...]] = []
+    entry = AVOMemoryEntry(
+        source_variation_id="run-fixed:variation-1:child-run-fixed:1",
+        source_attempt_id="run-fixed:variation-1:child-run-fixed:1:attempt-1",
+        hypothesis="Add a verification step.",
+        change_summary="system prompt modified",
+        evidence_summary="valid=True; batch_score=0.9; evaluation_cases=1; trials=1",
+        outcome="improved",
+        next_direction="Test one bounded follow-up.",
+    )
+
+    def submit(request, _source, child_id):
+        seen_memory.append(request.memory)
+        return _submitted_result(
+            request,
+            request.parent.snapshot.model_copy(update={"candidate_id": child_id}),
+            MutationSummary(prompt_modified=True),
+            memory=(entry,),
+        )
+
+    result = _run(
+        workspace,
+        batch,
+        parent_reward=0.5,
+        child_reward=0.9,
+        variation=submit,
+        config=_config(workspace.root, max_cycles=2),
+    )
+
+    assert seen_memory == [(), (entry,)]
+    assert result.cycle_records[0].selection.parent_candidate_id == "baseline"
+    assert result.cycle_records[1].selection.parent_candidate_id == "run-fixed:1"
 
 
 def test_stagnation_converges_before_configured_limit(tmp_path: Path) -> None:
@@ -413,3 +458,49 @@ def test_agentic_operator_creates_one_development_boundary_per_variation_call(tm
     assert all(
         trial.trial_id not in boundary.host_trial_ids for boundary in boundaries for trial in boundary.batch.trials
     )
+
+
+def test_agentic_operator_names_development_evidence_by_run(tmp_path: Path, monkeypatch) -> None:
+    workspace_one, batch_one = _setup(tmp_path / "one")
+    workspace_two, batch_two = _setup(tmp_path / "two")
+    boundaries = []
+
+    def capture(*args, **kwargs):
+        boundaries.append(kwargs["development_boundary"])
+        return VariationResult(
+            status=VariationStatus.ABSTAINED,
+            child=None,
+            mutation=None,
+            reasoning="No safe change.",
+            usage=VariationUsage(),
+        )
+
+    monkeypatch.setattr(variation_operator, "run_agentic_variation", capture)
+    operator = build_agentic_variation_operator(
+        agent_model=object(),
+        development_batch_planner=lambda _size, _cycle: batch_one,
+        development_evaluator=lambda _snapshot, _batch: (),
+        development_batch_size=1,
+    )
+
+    _run(
+        workspace_one,
+        batch_one,
+        parent_reward=0.5,
+        child_reward=0.5,
+        variation=operator,
+        config=_config(workspace_one.root),
+        run_id="run-one",
+    )
+    _run(
+        workspace_two,
+        batch_two,
+        parent_reward=0.5,
+        child_reward=0.5,
+        variation=operator,
+        config=_config(workspace_two.root),
+        run_id="run-two",
+    )
+
+    assert len(boundaries) == 2
+    assert boundaries[0].experiment_id != boundaries[1].experiment_id

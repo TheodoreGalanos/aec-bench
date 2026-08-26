@@ -491,6 +491,7 @@ class SwarmManager:
                 reasoning=f"Manager selected exact candidate source {parent_id}.",
             )
             return SwarmAssignment(
+                run_id=self._state.run_id,
                 assignment_id=self._assignment_id_factory(agent_id, cycle),
                 agent_id=agent_id,
                 selection=selection,
@@ -518,6 +519,7 @@ class SwarmManager:
             on_error=lambda exc: self._on_error(agent_id, exc),
             model=model,
             worktree_branch=f"coral/{agent_id}",
+            cancellation_signal=getattr(evolver, "cancellation_signal", None),
         )
 
     def _set_initial_agent_states(self, contexts: Sequence[AgentContext]) -> None:
@@ -671,10 +673,32 @@ class SwarmManager:
             )
 
         self._set_initial_agent_states(contexts)
-        # Run all agents concurrently. The explicit SwarmState is authoritative.
+        # Run explicit tasks so one cancellation/error cannot leave peer
+        # workers writing while their workspaces are being cleaned up.
+        tasks = [asyncio.create_task(run_agent_loop(ctx), name=f"swarm-{ctx.agent_id}") for ctx in contexts]
         try:
-            statuses: list[AgentStatus] = await asyncio.gather(*(run_agent_loop(ctx) for ctx in contexts))
-        finally:
+            statuses = list(await asyncio.gather(*tasks))
+        except BaseException as original_error:
+            for context in contexts:
+                signal = context.cancellation_signal
+                if signal is not None:
+                    signal.cancel("swarm run cancelled")
+            for task in tasks:
+                if not task.done():
+                    task.cancel()
+            await asyncio.gather(*tasks, return_exceptions=True)
+            try:
+                self._save_state()
+            except Exception:
+                logger.exception("Could not persist swarm state while leaving the run")
+            cleanup = getattr(self._factory, "cleanup", None)
+            if cleanup is not None:
+                try:
+                    cleanup()
+                except Exception:
+                    logger.exception("Could not clean up swarm workspaces after cancellation")
+            raise original_error
+        else:
             try:
                 self._save_state()
             except Exception:

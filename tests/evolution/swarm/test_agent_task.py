@@ -8,6 +8,7 @@ from datetime import UTC, datetime
 import pytest
 
 from aec_bench.contracts.evolution import AgentStatus, MutationStrategy, VariationUsage, WorkspaceSnapshot
+from aec_bench.evolution.checkpoint import AVOIncompleteExternalEffectError
 from aec_bench.evolution.core import SelectionPlan, VariationResult, VariationStatus
 from aec_bench.evolution.swarm.agent_task import AgentContext, run_agent_loop
 from aec_bench.evolution.swarm.core import AgentBudget, SwarmAgentResult, SwarmAssignment
@@ -16,6 +17,7 @@ from aec_bench.evolution.swarm.core import AgentBudget, SwarmAgentResult, SwarmA
 def _assignment(cycle: int, issued_at: datetime | None = None) -> SwarmAssignment:
     selection = SelectionPlan("parent", (), MutationStrategy.CONSERVATIVE, "Improve", "Exact source")
     return SwarmAssignment(
+        run_id="run-test",
         assignment_id=f"assignment-{cycle}",
         agent_id="agent-1",
         selection=selection,
@@ -130,3 +132,40 @@ async def test_agent_loop_handles_error() -> None:
     state = await run_agent_loop(ctx)
     assert error_count == 1
     assert state is AgentStatus.ERROR
+
+
+@pytest.mark.asyncio
+async def test_agent_loop_propagates_incomplete_external_effect_without_retry() -> None:
+    class IncompleteEvolver:
+        async def step(self, assignment: SwarmAssignment) -> SwarmAgentResult:
+            raise AVOIncompleteExternalEffectError()
+
+    assignments: list[SwarmAssignment] = []
+    error_count = 0
+
+    async def next_assignment() -> SwarmAssignment:
+        assignment = _assignment(len(assignments) + 1)
+        assignments.append(assignment)
+        return assignment
+
+    async def on_eval(_assignment: SwarmAssignment, _result: SwarmAgentResult) -> bool:
+        return True
+
+    async def on_error(_error: Exception) -> bool:
+        nonlocal error_count
+        error_count += 1
+        return True
+
+    ctx = AgentContext(
+        agent_id="agent-1",
+        evolver=IncompleteEvolver(),
+        next_assignment=next_assignment,
+        on_eval_complete=on_eval,
+        on_error=on_error,
+    )
+
+    with pytest.raises(AVOIncompleteExternalEffectError):
+        await run_agent_loop(ctx)
+
+    assert len(assignments) == 1
+    assert error_count == 0

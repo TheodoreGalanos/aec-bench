@@ -82,7 +82,7 @@ class TestRunEvolutionFromConfig:
             task_selector=TaskSelector(),
         )
 
-        result = run_evolution_from_config(config=config)
+        result = run_evolution_from_config(config=config, run_id="run/with unsafe spaces")
 
         assert result is expected
         assert builder["agent_model"] == "sonnet"
@@ -90,6 +90,12 @@ class TestRunEvolutionFromConfig:
         assert callable(builder["development_batch_planner"])
         assert callable(builder["development_evaluator"])
         assert builder["budget"].max_model_requests == 12
+        assert builder["checkpoint_root"] == ws_root
+        identity = builder["configuration_identity"]
+        assert identity.model_identity == "sonnet"
+        assert identity.development_evaluator_identity.startswith("local:")
+        assert "run/with unsafe spaces" not in identity.development_evaluator_identity
+        assert observed["run_id"] == "run/with unsafe spaces"
         assert callable(observed["variation"])
 
     def test_runs_from_config_with_solver(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

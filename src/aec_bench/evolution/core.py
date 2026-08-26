@@ -24,6 +24,7 @@ from aec_bench.contracts.evolution import (
 )
 from aec_bench.evolution.analysis import EvolutionAnalysis, GraduatedScope
 from aec_bench.evolution.graveyard import GraveyardEntry
+from aec_bench.evolution.memory import AVO_MEMORY_LIMIT, AVOMemoryEntry, validate_memory_entries
 
 
 def _require_text(value: str, field_name: str) -> None:
@@ -215,6 +216,7 @@ class ResolvedSelection:
 class VariationRequest:
     """Inputs supplied to a variation operator after parent evaluation."""
 
+    run_id: str
     selection: SelectionPlan
     parent: EvaluatedCandidate
     inspirations: tuple[WorkspaceSnapshot, ...]
@@ -223,8 +225,10 @@ class VariationRequest:
     history: tuple[EvolutionCycleRecord, ...]
     graveyard: tuple[GraveyardEntry, ...]
     cycle: int = 1
+    memory: tuple[AVOMemoryEntry, ...] = ()
 
     def __post_init__(self) -> None:
+        _require_text(self.run_id, "run_id")
         if self.parent.snapshot.candidate_id != self.selection.parent_candidate_id:
             raise ValueError("variation parent must match the selection parent_candidate_id")
         _require_positive_integer(self.cycle, "variation cycle")
@@ -234,6 +238,10 @@ class VariationRequest:
             raise ValueError("variation inspirations must match the selected candidate IDs exactly")
         object.__setattr__(self, "history", tuple(self.history))
         object.__setattr__(self, "graveyard", tuple(self.graveyard))
+        memory = validate_memory_entries(self.memory)
+        if len(memory) > AVO_MEMORY_LIMIT:
+            raise ValueError(f"variation memory must contain at most {AVO_MEMORY_LIMIT} entries")
+        object.__setattr__(self, "memory", memory)
 
 
 class VariationStatus(StrEnum):
@@ -242,6 +250,7 @@ class VariationStatus(StrEnum):
     SUBMITTED = "submitted"
     ABSTAINED = "abstained"
     BUDGET_EXHAUSTED = "budget_exhausted"
+    CANCELLED = "cancelled"
 
 
 @dataclass(frozen=True)
@@ -256,6 +265,7 @@ class AVOState:
     best_attempt_id: str | None = None
     consecutive_without_progress: int = 0
     consecutive_evaluation_errors: int = 0
+    memory: tuple[AVOMemoryEntry, ...] = ()
     usage: VariationUsage = VariationUsage()
     terminal_status: VariationStatus | None = None
     parent_snapshot: WorkspaceSnapshot | None = None
@@ -287,6 +297,10 @@ class AVOState:
             raise ValueError("best_attempt_id must reference an attempt")
         if not isinstance(self.usage, VariationUsage):
             raise TypeError("usage must be a VariationUsage")
+        memory = validate_memory_entries(self.memory)
+        if len(memory) > AVO_MEMORY_LIMIT:
+            raise ValueError(f"AVO state memory must contain at most {AVO_MEMORY_LIMIT} entries")
+        object.__setattr__(self, "memory", memory)
         if self.parent_snapshot is not None:
             if not isinstance(self.parent_snapshot, WorkspaceSnapshot):
                 raise TypeError("parent_snapshot must be a WorkspaceSnapshot")
@@ -378,6 +392,7 @@ class VariationResult:
     reasoning: str
     usage: VariationUsage
     attempt: DevelopmentAttempt | None = None
+    memory: tuple[AVOMemoryEntry, ...] = ()
 
     def __post_init__(self) -> None:
         status = VariationStatus(self.status)
@@ -385,6 +400,10 @@ class VariationResult:
         _require_text(self.reasoning, "reasoning")
         if not isinstance(self.usage, VariationUsage):
             raise TypeError("usage must be a VariationUsage")
+        memory = validate_memory_entries(self.memory)
+        if len(memory) > AVO_MEMORY_LIMIT:
+            raise ValueError(f"variation result memory must contain at most {AVO_MEMORY_LIMIT} entries")
+        object.__setattr__(self, "memory", memory)
         if status is VariationStatus.SUBMITTED:
             if self.child is None or self.mutation is None or self.attempt is None:
                 raise ValueError("submitted variation requires a child, mutation summary, and evaluated attempt")
@@ -522,6 +541,7 @@ def decide_candidate(
         reason = {
             VariationStatus.ABSTAINED: "variation abstained",
             VariationStatus.BUDGET_EXHAUSTED: "variation budget exhausted",
+            VariationStatus.CANCELLED: "variation cancelled",
         }[variation.status]
         return GateResult(
             decision=GateDecision.SKIPPED,

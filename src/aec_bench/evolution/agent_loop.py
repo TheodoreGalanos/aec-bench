@@ -6,6 +6,8 @@ from __future__ import annotations
 import time
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, replace
+from datetime import UTC, datetime
+from pathlib import Path
 from types import MappingProxyType
 from typing import Any
 
@@ -26,6 +28,19 @@ from aec_bench.evolution.agent_protocol import (
     PydanticAIStructuredRunner,
 )
 from aec_bench.evolution.analysis import GraduatedScope
+from aec_bench.evolution.cancellation import (
+    AVOCancellationCode,
+    AVOCancellationError,
+    AVOCancellationReason,
+    AVOCancellationSignal,
+)
+from aec_bench.evolution.checkpoint import (
+    AVOCheckpoint,
+    AVOConfigurationIdentity,
+    AVOExternalEffectOperation,
+    AVOIncompleteExternalEffect,
+    AVOIncompleteExternalEffectError,
+)
 from aec_bench.evolution.core import (
     AVOBudget,
     AVOState,
@@ -38,7 +53,14 @@ from aec_bench.evolution.core import (
 )
 from aec_bench.evolution.development import DevelopmentEvaluationBoundary
 from aec_bench.evolution.graveyard import GraveyardEntry
+from aec_bench.evolution.memory import AVOMemoryEntry, AVOMemoryOutcome, retain_memory
 from aec_bench.evolution.mutation import MutationAction, apply_mutations
+from aec_bench.evolution.resume import (
+    evaluation_batch_identity,
+    load_checkpoint_for_resume,
+    request_configuration_identity,
+    terminal_result_from_checkpoint,
+)
 from aec_bench.evolution.sanitiser import CompactionLLM, sanitise_workspace
 from aec_bench.evolution.workspace import Workspace, scratch_workspace_from
 
@@ -131,6 +153,9 @@ def run_agentic_variation(
     compaction_llm: CompactionLLM | None = None,
     development_evaluation_cost_usd: float | None = None,
     variation_id: str | None = None,
+    checkpoint_path: Path | None = None,
+    configuration_identity: AVOConfigurationIdentity | None = None,
+    cancellation_signal: AVOCancellationSignal | None = None,
     clock: Callable[[], float] = time.monotonic,
 ) -> VariationResult:
     """Run one bounded, self-directed variation call in isolated scratch.
@@ -148,21 +173,73 @@ def run_agentic_variation(
         raise TypeError("development_boundary must be a DevelopmentEvaluationBoundary")
     if not callable(agent_runner):
         raise TypeError("agent_runner must be callable")
+    if cancellation_signal is None:
+        cancellation_signal = AVOCancellationSignal()
+    if not isinstance(cancellation_signal, AVOCancellationSignal):
+        raise TypeError("cancellation_signal must be an AVOCancellationSignal")
     if budget is None:
         budget = AVOBudget()
     if not isinstance(budget, AVOBudget):
         raise TypeError("budget must be an AVOBudget")
     if development_evaluation_cost_usd is not None and development_evaluation_cost_usd < 0:
         raise ValueError("development_evaluation_cost_usd must be non-negative")
+    if checkpoint_path is not None:
+        if not isinstance(checkpoint_path, Path):
+            raise TypeError("checkpoint_path must be a Path")
+        if configuration_identity is None:
+            raise ValueError("configuration_identity is required when checkpointing is enabled")
     if variation_id is None:
-        variation_id = f"{request.parent.snapshot.candidate_id}->{child_candidate_id}"
-    if request.scope is GraduatedScope.SKIP:
+        variation_id = f"{request.run_id}:variation-{request.cycle}:child-{child_candidate_id}"
+    if cancellation_signal.is_set() and checkpoint_path is None:
+        # Do not even plan a development batch when cancellation is already
+        # known and there is no durable authority to publish.
+        cancellation_signal.raise_if_cancelled()
+    planned_batch = None
+    if checkpoint_path is not None or request.scope is not GraduatedScope.SKIP:
+        planned_batch = development_boundary.plan()
+    effective_configuration_identity = (
+        None
+        if configuration_identity is None
+        else request_configuration_identity(
+            configuration_identity,
+            request,
+            development_evaluation_cost_usd=development_evaluation_cost_usd,
+            development_batch_identity=(None if planned_batch is None else evaluation_batch_identity(planned_batch)),
+        )
+    )
+    resume_checkpoint: AVOCheckpoint | None = None
+    if checkpoint_path is not None and checkpoint_path.exists():
+        assert planned_batch is not None
+        assert effective_configuration_identity is not None
+        resume_checkpoint = load_checkpoint_for_resume(
+            checkpoint_path,
+            run_id=request.run_id,
+            variation_id=variation_id,
+            parent_snapshot=request.parent.snapshot,
+            final_child_candidate_id=child_candidate_id,
+            selection=request.selection,
+            development_case_ids=planned_batch.evaluation_case_ids,
+            budget=budget,
+            configuration_identity=effective_configuration_identity,
+        )
+        if resume_checkpoint.terminal_result is not None:
+            if resume_checkpoint.terminal_result.status is VariationStatus.CANCELLED:
+                cancellation_signal.cancel(
+                    AVOCancellationReason(
+                        code=resume_checkpoint.terminal_result.cancellation_code or AVOCancellationCode.REQUESTED,
+                        detail=resume_checkpoint.terminal_result.reasoning,
+                    )
+                )
+                cancellation_signal.raise_if_cancelled()
+            return terminal_result_from_checkpoint(resume_checkpoint)
+    if request.scope is GraduatedScope.SKIP and checkpoint_path is None and not cancellation_signal.is_set():
         return VariationResult(
             status=VariationStatus.ABSTAINED,
             child=None,
             mutation=None,
             reasoning="Variation scope does not permit a mutation.",
             usage=VariationUsage(),
+            memory=request.memory,
         )
 
     with scratch_workspace_from(source, request.parent.snapshot, child_candidate_id) as scratch:
@@ -177,6 +254,10 @@ def run_agentic_variation(
             development_evaluation_cost_usd=development_evaluation_cost_usd,
             variation_id=variation_id,
             clock=clock,
+            checkpoint_path=checkpoint_path,
+            configuration_identity=effective_configuration_identity,
+            resume_checkpoint=resume_checkpoint,
+            cancellation_signal=cancellation_signal,
         )
         return controller.run(agent_runner)
 
@@ -197,6 +278,10 @@ class _LoopController:
         development_evaluation_cost_usd: float | None,
         variation_id: str,
         clock: Callable[[], float],
+        checkpoint_path: Path | None,
+        configuration_identity: AVOConfigurationIdentity | None,
+        resume_checkpoint: AVOCheckpoint | None,
+        cancellation_signal: AVOCancellationSignal,
     ) -> None:
         self.request = request
         self.scratch = scratch
@@ -220,55 +305,211 @@ class _LoopController:
             parent_candidate_id=request.parent.snapshot.candidate_id,
             child_candidate_id=child_candidate_id,
             current_revision=0,
+            memory=request.memory,
             parent_snapshot=request.parent.snapshot,
         )
         self.parent_evidence: EvaluatedCandidate | None = None
         self.terminal_status: VariationStatus | None = None
         self.terminal_message = ""
+        self.cancellation_reason: AVOCancellationReason | None = None
+        self.checkpoint_path = checkpoint_path
+        self.configuration_identity = configuration_identity
+        self.resume_checkpoint = resume_checkpoint
+        self.cancellation_signal = cancellation_signal
+        self.incomplete_external_effects: tuple[AVOIncompleteExternalEffect, ...] = ()
 
     def run(self, runner: AgentRunner) -> VariationResult:
         """Evaluate the parent, then run agent requests until one terminal outcome."""
+        try:
+            if self.request.scope is GraduatedScope.SKIP:
+                self._check_cancellation()
+                self.terminal_status = VariationStatus.ABSTAINED
+                self.terminal_message = "Variation scope does not permit a mutation."
+                return self._terminal_result()
+            if self.resume_checkpoint is not None:
+                self._restore_checkpoint()
+            else:
+                self._start_new_call()
+
+            if self.terminal_status is not None:
+                return self._terminal_result()
+            tools = MappingProxyType(self._build_tools())
+            while self.terminal_status is None:
+                self._refresh_elapsed()
+                limit = self._loop_limit_reason()
+                if limit is not None:
+                    return self._exhausted(limit)
+                self._check_cancellation()
+                self._ensure_model_request_budget()
+                self._increment_usage(model_requests=1)
+                assert self.parent_evidence is not None
+                context = AgentContext(
+                    request=self.request,
+                    parent_evidence=self.parent_evidence,
+                    state=self.state,
+                    tools=tools,
+                    previous_tool_result=self.previous_tool_result,
+                    previous_tool_error=self.previous_tool_error,
+                    cancellation_signal=self.cancellation_signal,
+                )
+                effect = self._begin_external_effect("model_request", f"model-{self.state.usage.model_requests}")
+                try:
+                    response = runner(context)
+                except Exception as exc:
+                    # A provider exception cannot prove whether the request was
+                    # accepted. Leave the marker for explicit reconciliation.
+                    raise AVOIncompleteExternalEffectError(effect, exc) from exc
+                try:
+                    command, model_cost = _normalise_response(response)
+                    self._record_model_cost(model_cost)
+                finally:
+                    # The provider returned, so the marker can be cleared only
+                    # after its usage has been recorded durably.
+                    self._clear_external_effect(effect.effect_id)
+                self._check_cancellation()
+                if self.terminal_status is not None:
+                    break
+                try:
+                    self._dispatch(command, tools)
+                except AgentToolBudgetExceeded as exc:
+                    return self._exhausted(exc.limit)
+            return self._terminal_result()
+        except AVOCancellationError as exc:
+            return self._finish_cancellation(exc.reason)
+
+    def _start_new_call(self) -> None:
+        """Plan and evaluate the parent before the first checkpoint."""
         self._refresh_elapsed()
         limit = self._loop_limit_reason()
         if limit is not None:
-            return self._exhausted(limit)
+            self.terminal_status = VariationStatus.BUDGET_EXHAUSTED
+            self.terminal_message = f"Budget exhausted: {limit}."
+            return
         try:
             self.development_boundary.plan()
             self._ensure_effect_budget("max_development_evaluations")
-            self.parent_evidence = self.development_boundary.evaluate(self.request.parent.snapshot, revision=0)
+            self._check_cancellation()
+            effect = self._begin_external_effect("development_evaluation", "development-parent")
+            try:
+                self.parent_evidence = self.development_boundary.evaluate(self.request.parent.snapshot, revision=0)
+            except Exception as exc:
+                raise AVOIncompleteExternalEffectError(effect, exc) from exc
             self._record_development_evaluation()
+            self._clear_external_effect(effect.effect_id)
+            self._check_cancellation()
         except AgentToolBudgetExceeded as exc:
-            return self._exhausted(exc.limit)
+            self.terminal_status = VariationStatus.BUDGET_EXHAUSTED
+            self.terminal_message = f"Budget exhausted: {exc.limit}."
         except Exception:
             raise
 
-        tools = MappingProxyType(self._build_tools())
-        while self.terminal_status is None:
-            self._refresh_elapsed()
-            limit = self._loop_limit_reason()
-            if limit is not None:
-                return self._exhausted(limit)
-            self._ensure_model_request_budget()
-            self._increment_usage(model_requests=1)
-            assert self.parent_evidence is not None
-            context = AgentContext(
-                request=self.request,
-                parent_evidence=self.parent_evidence,
-                state=self.state,
-                tools=tools,
-                previous_tool_result=self.previous_tool_result,
-                previous_tool_error=self.previous_tool_error,
+    def _restore_checkpoint(self) -> None:
+        """Restore explicit state and scratch material from the validated checkpoint."""
+        assert self.resume_checkpoint is not None
+        checkpoint = self.resume_checkpoint
+        self.development_boundary.plan()
+        if checkpoint.parent_evidence is None:
+            raise AVOIncompleteExternalEffectError()
+        self.parent_evidence = checkpoint.parent_evidence.to_evaluated_candidate()
+        self.state = checkpoint.to_state()
+        self.scratch.apply_snapshot(checkpoint.current_snapshot)
+        self.started_at = self.clock() - checkpoint.usage.elapsed_seconds
+        saved_model_cost = checkpoint.usage.model_cost_usd
+        self._model_cost_known = saved_model_cost is not None or checkpoint.usage.model_requests == 0
+        self._model_cost_total = saved_model_cost or 0.0
+        current_attempt = next(
+            (item for item in self.state.attempts if item.revision == self.state.current_revision),
+            None,
+        )
+        if current_attempt is None:
+            self.last_mutation = _mutation_summary_for_material(
+                self.request.parent.snapshot,
+                checkpoint.current_snapshot,
             )
-            try:
-                response = runner(context)
-                command, model_cost = _normalise_response(response)
-                self._record_model_cost(model_cost)
-                if self.terminal_status is not None:
-                    break
-                self._dispatch(command, tools)
-            except AgentToolBudgetExceeded as exc:
-                return self._exhausted(exc.limit)
-        return self._terminal_result()
+            self.last_hypothesis = ""
+        else:
+            self.last_mutation = current_attempt.mutation
+            self.last_hypothesis = current_attempt.hypothesis
+        self.terminal_status = self.state.terminal_status
+        if self.terminal_status is not None:
+            self.terminal_message = checkpoint.terminal_result.reasoning if checkpoint.terminal_result else ""
+
+    def _check_cancellation(self) -> None:
+        """Raise the typed cancellation signal at an effect boundary."""
+        self.cancellation_signal.raise_if_cancelled()
+
+    def _begin_external_effect(
+        self,
+        operation: AVOExternalEffectOperation,
+        effect_id_suffix: str,
+    ) -> AVOIncompleteExternalEffect:
+        """Durably mark one provider or evaluator call before invoking it."""
+        self._check_cancellation()
+        effect = AVOIncompleteExternalEffect(
+            effect_id=f"{self.state.variation_id}:{effect_id_suffix}",
+            operation=operation,
+            reason=f"{operation} started; completion is not yet confirmed.",
+            observed_at=datetime.now(tz=UTC),
+        )
+        self.incomplete_external_effects = (*self.incomplete_external_effects, effect)
+        self._write_checkpoint()
+        return effect
+
+    def _clear_external_effect(self, effect_id: str) -> None:
+        """Clear one confirmed external effect and publish the updated state."""
+        self.incomplete_external_effects = tuple(
+            effect for effect in self.incomplete_external_effects if effect.effect_id != effect_id
+        )
+        self._write_checkpoint()
+
+    def _begin_compaction_effect(self, skill_name: str) -> None:
+        """Mark one compaction request before calling its external LLM."""
+        self._begin_external_effect("compaction", f"compaction-{skill_name}")
+
+    def _clear_compaction_effects(self) -> None:
+        """Clear all confirmed compactions after workspace reconciliation."""
+        for effect in tuple(self.incomplete_external_effects):
+            if effect.operation == "compaction":
+                self._clear_external_effect(effect.effect_id)
+
+    def _finish_cancellation(self, reason: AVOCancellationReason) -> VariationResult:
+        """Publish a truthful cancellation result before propagating it."""
+        self.cancellation_reason = reason
+        self.terminal_status = VariationStatus.CANCELLED
+        self.terminal_message = reason.detail
+        self._terminal_result()
+        error = AVOCancellationError(reason)
+        raise error
+
+    def _write_checkpoint(self, terminal_result: VariationResult | None = None) -> None:
+        """Persist the explicit call state when checkpointing is enabled."""
+        if self.checkpoint_path is None:
+            return
+        if self.configuration_identity is None:
+            raise RuntimeError("checkpoint requires configuration identity")
+        terminal_record = None
+        if terminal_result is not None:
+            from aec_bench.evolution.checkpoint import AVOCheckpointTerminalResult
+
+            terminal_record = AVOCheckpointTerminalResult.from_result(
+                terminal_result,
+                cancellation_code=(None if self.cancellation_reason is None else self.cancellation_reason.code),
+            )
+        from aec_bench.evolution.checkpoint import AVOCheckpoint, write_checkpoint
+
+        checkpoint = AVOCheckpoint.from_state(
+            run_id=self.request.run_id,
+            state=self.state,
+            parent_evidence=self.parent_evidence,
+            selection=self.request.selection.to_record(),
+            development_case_ids=self.development_boundary.batch.evaluation_case_ids,
+            configuration_identity=self.configuration_identity,
+            budget=self.budget,
+            current_snapshot=self.scratch.export_snapshot(self.child_candidate_id),
+            incomplete_external_effects=self.incomplete_external_effects,
+            terminal_result=terminal_record,
+        )
+        write_checkpoint(self.checkpoint_path, checkpoint)
 
     def _build_tools(self) -> dict[str, Callable[..., object]]:
         """Build the exact guarded tool surface for this loop."""
@@ -278,6 +519,7 @@ class _LoopController:
                 self.previous_tool_result = None
                 self.previous_tool_error = None
                 try:
+                    self._check_cancellation()
                     self._ensure_tool_budget(name)
                     self._increment_usage(tool_calls=1)
                     result = function(*args, **kwargs)
@@ -353,6 +595,7 @@ class _LoopController:
                 message=f"mutation scope exceeded ({scope_limit} actions permitted)",
             )
         before = self.scratch.export_snapshot(self.child_candidate_id)
+        previous_revision = self.state.current_revision
         try:
             apply_mutations([item.to_action() for item in mutations], self.scratch)
             raw_after = self.scratch.export_snapshot(self.child_candidate_id)
@@ -363,13 +606,31 @@ class _LoopController:
                     mutation=None,
                     message="mutation made no effective workspace change",
                 )
-            sanitise_workspace(self.scratch, compaction_llm=self.compaction_llm)
-        except Exception:
+            revisions = [self.state.current_revision, *(attempt.revision for attempt in self.state.attempts)]
+            self.state = replace(self.state, current_revision=max(revisions) + 1)
+            sanitise_workspace(
+                self.scratch,
+                compaction_llm=self.compaction_llm,
+                before_compaction=self._begin_compaction_effect,
+            )
+        except Exception as exc:
             self.scratch.apply_snapshot(before)
+            self.state = replace(self.state, current_revision=previous_revision)
+            compaction_effect = next(
+                (effect for effect in reversed(self.incomplete_external_effects) if effect.operation == "compaction"),
+                None,
+            )
+            if compaction_effect is not None:
+                self._write_checkpoint()
+                if isinstance(exc, AVOIncompleteExternalEffectError):
+                    raise
+                raise AVOIncompleteExternalEffectError(compaction_effect, exc) from exc
             raise
         after = self.scratch.export_snapshot(self.child_candidate_id)
         if _same_material(before, after):
             self.scratch.apply_snapshot(before)
+            self.state = replace(self.state, current_revision=previous_revision)
+            self._clear_compaction_effects()
             return MutationToolResult(
                 success=False,
                 revision=self.state.current_revision,
@@ -378,6 +639,8 @@ class _LoopController:
             )
         if _material_change_count(self.request.parent.snapshot, after) > scope_limit:
             self.scratch.apply_snapshot(before)
+            self.state = replace(self.state, current_revision=previous_revision)
+            self._clear_compaction_effects()
             return MutationToolResult(
                 success=False,
                 revision=self.state.current_revision,
@@ -386,10 +649,10 @@ class _LoopController:
             )
         cumulative_mutation = _mutation_summary_for_material(self.request.parent.snapshot, after)
         self.last_mutation = cumulative_mutation
-        revisions = [self.state.current_revision, *(attempt.revision for attempt in self.state.attempts)]
-        next_revision = max(revisions) + 1
-        self.state = replace(self.state, current_revision=next_revision)
         self.last_hypothesis = ""
+        self._clear_compaction_effects()
+        self._write_checkpoint()
+        self._check_cancellation()
         return MutationToolResult(
             success=True,
             revision=self.state.current_revision,
@@ -399,6 +662,7 @@ class _LoopController:
 
     def evaluate_current_revision(self, hypothesis: str) -> EvaluationToolResult:
         """Evaluate exact current scratch material on the fixed development batch."""
+        self._check_cancellation()
         if not isinstance(hypothesis, str) or not hypothesis.strip():
             return EvaluationToolResult(
                 success=False,
@@ -430,6 +694,10 @@ class _LoopController:
         evaluated_snapshot = snapshot.model_copy(
             update={"candidate_id": f"{self.child_candidate_id}:revision-{self.state.current_revision}"}
         )
+        effect = self._begin_external_effect(
+            "development_evaluation",
+            f"development-revision-{self.state.current_revision}",
+        )
         try:
             attempt = self.development_boundary.evaluate_revision(
                 evaluated_snapshot,
@@ -440,15 +708,7 @@ class _LoopController:
                 usage_after=self.state.usage,
             )
         except Exception as exc:
-            self.state = replace(
-                self.state,
-                consecutive_evaluation_errors=self.state.consecutive_evaluation_errors + 1,
-            )
-            return EvaluationToolResult(
-                success=False,
-                revision=self.state.current_revision,
-                message=f"development evaluation failed: {type(exc).__name__}: {exc}",
-            )
+            raise AVOIncompleteExternalEffectError(effect, exc) from exc
         self._refresh_elapsed()
         attempt = replace(attempt, usage_after=self.state.usage)
         attempts = (*self.state.attempts, attempt)
@@ -464,6 +724,9 @@ class _LoopController:
             consecutive_without_progress=0 if improved else self.state.consecutive_without_progress + 1,
             consecutive_evaluation_errors=0,
         )
+        self._remember(_memory_entry_for_attempt(self.state.variation_id, attempt, improved=improved))
+        self._clear_external_effect(effect.effect_id)
+        self._check_cancellation()
         return EvaluationToolResult(
             success=True,
             revision=self.state.current_revision,
@@ -473,6 +736,7 @@ class _LoopController:
 
     def restore_attempt(self, attempt_id: str | None = None, revision: int | None = None) -> RestoreToolResult:
         """Restore exact material from one persisted evaluated attempt."""
+        self._check_cancellation()
         if attempt_id is None and revision is None:
             return RestoreToolResult(False, self.state.current_revision, message="attempt_id or revision is required")
         attempt = next(
@@ -494,6 +758,8 @@ class _LoopController:
         )
         self.last_mutation = attempt.mutation
         self.last_hypothesis = attempt.hypothesis
+        self._write_checkpoint()
+        self._check_cancellation()
         return RestoreToolResult(
             success=True,
             revision=attempt.revision,
@@ -506,6 +772,7 @@ class _LoopController:
         reasoning: str = "Submitted the current evaluated revision.",
     ) -> SubmissionToolResult:
         """Select one current, evaluated, changed revision for host submission."""
+        self._check_cancellation()
         if not isinstance(reasoning, str) or not reasoning.strip():
             return SubmissionToolResult(False, self.state.current_revision, message="reasoning must not be blank")
         snapshot = self.scratch.export_snapshot(self.child_candidate_id)
@@ -549,6 +816,22 @@ class _LoopController:
 
     def _record_development_evaluation(self) -> None:
         self._increment_usage(development_evaluations=1)
+
+    def _remember(self, entry: AVOMemoryEntry) -> None:
+        """Replace one attempt fact and retain the bounded structured memory."""
+        existing = tuple(
+            item
+            for item in self.state.memory
+            if (item.source_variation_id, item.source_attempt_id)
+            != (entry.source_variation_id, entry.source_attempt_id)
+        )
+        self.state = replace(
+            self.state,
+            memory=retain_memory(
+                (*existing, entry),
+                best_attempt_id=self.state.best_attempt_id,
+            ),
+        )
 
     def _record_model_cost(self, cost: float | None) -> None:
         if cost is None:
@@ -661,26 +944,34 @@ class _LoopController:
         return self._terminal_result()
 
     def _terminal_result(self) -> VariationResult:
+        if self.terminal_status is not VariationStatus.CANCELLED:
+            self._check_cancellation()
         self._refresh_elapsed()
+        self.state = replace(self.state, terminal_status=self.terminal_status or VariationStatus.BUDGET_EXHAUSTED)
         usage = self.state.usage
         if self.terminal_status is VariationStatus.SUBMITTED:
             snapshot = self.scratch.export_snapshot(self.child_candidate_id)
             attempt = next(item for item in self.state.attempts if item.revision == self.state.current_revision)
-            return VariationResult(
+            result = VariationResult(
                 status=VariationStatus.SUBMITTED,
                 child=snapshot,
                 mutation=attempt.mutation,
                 reasoning=self.terminal_message,
                 usage=usage,
                 attempt=attempt,
+                memory=self.state.memory,
             )
-        return VariationResult(
-            status=self.terminal_status or VariationStatus.BUDGET_EXHAUSTED,
-            child=None,
-            mutation=None,
-            reasoning=self.terminal_message or "Variation ended without a submitted child.",
-            usage=usage,
-        )
+        else:
+            result = VariationResult(
+                status=self.terminal_status or VariationStatus.BUDGET_EXHAUSTED,
+                child=None,
+                mutation=None,
+                reasoning=self.terminal_message or "Variation ended without a submitted child.",
+                usage=usage,
+                memory=self.state.memory,
+            )
+        self._write_checkpoint(result)
+        return result
 
 
 def _normalise_response(response: AgentCommand | AgentResponse) -> tuple[AgentCommand, float | None]:
@@ -747,6 +1038,81 @@ def _mutation_summary_for_material(parent: WorkspaceSnapshot, current: Workspace
             name for name in parent_skills.keys() & current_skills.keys() if parent_skills[name] != current_skills[name]
         ),
         skills_removed=sorted(parent_skills.keys() - current_skills.keys()),
+    )
+
+
+def _change_summary(mutation: MutationSummary) -> str:
+    """Summarise mutation material without retaining model or tool text."""
+    changes: list[str] = []
+    if mutation.prompt_modified:
+        changes.append("system prompt modified")
+    if mutation.skills_added:
+        changes.append(f"skills added: {', '.join(mutation.skills_added)}")
+    if mutation.skills_modified:
+        changes.append(f"skills modified: {', '.join(mutation.skills_modified)}")
+    if mutation.skills_removed:
+        changes.append(f"skills removed: {', '.join(mutation.skills_removed)}")
+    return "; ".join(changes) if changes else "no workspace material change"
+
+
+def _evidence_summary(attempt: DevelopmentAttempt) -> str:
+    """Summarise only the explicit assessment values for structured memory."""
+    assessment = attempt.evaluated.assessment
+    return (
+        f"valid={assessment.valid}; batch_score={assessment.batch_score:.6g}; "
+        f"evaluation_cases={len(assessment.evaluation_case_ids)}; trials={len(assessment.trial_ids)}"
+    )
+
+
+def _memory_entry_for_attempt(
+    variation_id: str,
+    attempt: DevelopmentAttempt,
+    *,
+    improved: bool,
+) -> AVOMemoryEntry:
+    """Build a deterministic fact from one completed development evaluation."""
+    assessment = attempt.evaluated.assessment
+    if not assessment.valid:
+        outcome = AVOMemoryOutcome.INVALID
+        failure_category = "invalid_candidate"
+        next_direction = "Correct the invalid result before another evaluation."
+    elif improved:
+        outcome = AVOMemoryOutcome.IMPROVED
+        failure_category = None
+        next_direction = "Preserve the successful change and test one bounded follow-up."
+    else:
+        outcome = AVOMemoryOutcome.NOT_IMPROVED
+        failure_category = "no_improvement"
+        next_direction = "Try a different bounded change direction."
+    return AVOMemoryEntry(
+        source_variation_id=variation_id,
+        source_attempt_id=attempt.attempt_id,
+        hypothesis=attempt.hypothesis,
+        change_summary=_change_summary(attempt.mutation),
+        evidence_summary=_evidence_summary(attempt),
+        outcome=outcome,
+        failure_category=failure_category,
+        next_direction=next_direction,
+    )
+
+
+def _memory_entry_for_evaluation_error(
+    *,
+    variation_id: str,
+    attempt_id: str,
+    hypothesis: str,
+    mutation: MutationSummary,
+) -> AVOMemoryEntry:
+    """Build a coarse fact for an evaluator exception without its text."""
+    return AVOMemoryEntry(
+        source_variation_id=variation_id,
+        source_attempt_id=attempt_id,
+        hypothesis=hypothesis or "Evaluation hypothesis was not recorded.",
+        change_summary=_change_summary(mutation),
+        evidence_summary="development evaluation did not produce evidence",
+        outcome=AVOMemoryOutcome.EVALUATION_ERROR,
+        failure_category="evaluation_error",
+        next_direction="Retry the same bounded change only after the evaluator is available.",
     )
 
 
