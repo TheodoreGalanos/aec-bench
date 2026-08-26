@@ -3,11 +3,15 @@
 
 from __future__ import annotations
 
+import json
 import math
-from dataclasses import dataclass
+import time
+from dataclasses import asdict, dataclass
 from enum import StrEnum
+from importlib import import_module
+from typing import Any
 
-from aec_bench.contracts.evolution import MutationStrategy
+from aec_bench.contracts.evolution import MutationStrategy, VariationUsage
 from aec_bench.evolution.core import AVOBudget, AVOState
 from aec_bench.evolution.memory import AVO_MEMORY_LIMIT, AVOMemoryEntry, validate_memory_entries
 
@@ -56,6 +60,10 @@ class AVORemainingBudget:
     remaining_supervisor_interventions: int
     cost_limit_usd: float | None
     remaining_cost_usd: float | None
+    remaining_input_tokens: int | None = None
+    remaining_output_tokens: int | None = None
+    input_token_limit: int | None = None
+    output_token_limit: int | None = None
 
     def __post_init__(self) -> None:
         for field_name in (
@@ -66,6 +74,20 @@ class AVORemainingBudget:
         ):
             _require_non_negative_integer(getattr(self, f"remaining_{field_name}"), f"remaining_{field_name}")
         _require_finite_non_negative(self.remaining_elapsed_seconds, "remaining_elapsed_seconds")
+        for field_name in ("remaining_input_tokens", "remaining_output_tokens"):
+            tokens = getattr(self, field_name)
+            if tokens is not None:
+                _require_non_negative_integer(tokens, field_name)
+        for field_name, remaining_name in (
+            ("input_token_limit", "remaining_input_tokens"),
+            ("output_token_limit", "remaining_output_tokens"),
+        ):
+            limit = getattr(self, field_name)
+            if limit is not None:
+                _require_non_negative_integer(limit, field_name)
+                remaining = getattr(self, remaining_name)
+                if remaining is not None and remaining > limit:
+                    raise ValueError(f"{remaining_name} cannot exceed {field_name}")
         if self.cost_limit_usd is not None:
             _require_finite_non_negative(self.cost_limit_usd, "cost_limit_usd")
         if self.remaining_cost_usd is not None:
@@ -135,6 +157,268 @@ class AVOSupervisionAdvice:
         _require_text(self.reasoning, "reasoning")
 
 
+class AVOSupervisionFailureCode(StrEnum):
+    """Confirmed supervisor failures that do not represent provider failure."""
+
+    OUTPUT_VALIDATION_REJECTED = "output_validation_rejected"
+
+
+@dataclass(frozen=True)
+class AVOSupervisionFailure:
+    """One confirmed failure produced by supervisor output validation."""
+
+    code: AVOSupervisionFailureCode
+    detail: str
+
+    def __post_init__(self) -> None:
+        try:
+            code = AVOSupervisionFailureCode(self.code)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"unsupported supervisor failure code: {self.code!r}") from exc
+        object.__setattr__(self, "code", code)
+        _require_text(self.detail, "detail")
+
+
+@dataclass(frozen=True)
+class AVOSupervisionResult:
+    """Immutable supervisor output and the usage delta for that one call."""
+
+    output: AVOSupervisionAdvice | AVOSupervisionFailure
+    usage: VariationUsage
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.output, AVOSupervisionAdvice | AVOSupervisionFailure):
+            raise TypeError("output must be AVOSupervisionAdvice or AVOSupervisionFailure")
+        if not isinstance(self.usage, VariationUsage):
+            raise TypeError("usage must be a VariationUsage")
+        if self.usage.model_requests != 1 or self.usage.supervisor_interventions != 1:
+            raise ValueError("supervision result usage must describe exactly one request and intervention")
+        if self.usage.tool_calls or self.usage.development_evaluations:
+            raise ValueError("supervision result usage must not include tools or development evaluations")
+
+
+class AVOSupervisionBudgetError(ValueError):
+    """Raised when a supervisor reservation or reconciliation exceeds AVO authority."""
+
+
+def _validate_usage_within_budget(
+    usage: VariationUsage,
+    budget: AVOBudget,
+    *,
+    allow_reserved_unknown_tokens: bool = False,
+    allow_reserved_unknown_cost: bool = False,
+) -> None:
+    """Fail closed when known usage exceeds a configured hard limit."""
+    if usage.model_requests > budget.max_model_requests:
+        raise AVOSupervisionBudgetError("max_model_requests")
+    if usage.supervisor_interventions > budget.max_supervisor_interventions:
+        raise AVOSupervisionBudgetError("max_supervisor_interventions")
+    if usage.elapsed_seconds > budget.max_elapsed_seconds:
+        raise AVOSupervisionBudgetError("max_elapsed_seconds")
+    for name, observed, limit in (
+        ("max_input_tokens", usage.input_tokens, budget.max_input_tokens),
+        ("max_output_tokens", usage.output_tokens, budget.max_output_tokens),
+    ):
+        if limit is not None:
+            if observed is None:
+                if allow_reserved_unknown_tokens and usage.model_requests == 1:
+                    continue
+                raise AVOSupervisionBudgetError(f"{name}_unknown")
+            if observed > limit:
+                raise AVOSupervisionBudgetError(name)
+    if budget.max_cost_usd is not None:
+        total_cost = usage.total_cost_usd
+        if total_cost is None:
+            if allow_reserved_unknown_cost and usage.model_requests == 1:
+                return
+            raise AVOSupervisionBudgetError("max_cost_usd_unknown")
+        if total_cost > budget.max_cost_usd:
+            raise AVOSupervisionBudgetError("max_cost_usd")
+
+
+def reserve_supervision_usage(usage: VariationUsage, budget: AVOBudget) -> VariationUsage:
+    """Reserve one model request and intervention before a supervisor call."""
+    if not isinstance(usage, VariationUsage):
+        raise TypeError("usage must be a VariationUsage")
+    if not isinstance(budget, AVOBudget):
+        raise TypeError("budget must be an AVOBudget")
+    if usage.model_requests >= budget.max_model_requests:
+        raise AVOSupervisionBudgetError("max_model_requests")
+    if usage.supervisor_interventions >= budget.max_supervisor_interventions:
+        raise AVOSupervisionBudgetError("max_supervisor_interventions")
+    if usage.elapsed_seconds >= budget.max_elapsed_seconds:
+        raise AVOSupervisionBudgetError("max_elapsed_seconds")
+    reserved = VariationUsage(
+        model_requests=usage.model_requests + 1,
+        tool_calls=usage.tool_calls,
+        development_evaluations=usage.development_evaluations,
+        supervisor_interventions=usage.supervisor_interventions + 1,
+        input_tokens=usage.input_tokens,
+        output_tokens=usage.output_tokens,
+        model_cost_usd=usage.model_cost_usd,
+        development_evaluation_cost_usd=usage.development_evaluation_cost_usd,
+        elapsed_seconds=usage.elapsed_seconds,
+    )
+    _validate_usage_within_budget(
+        reserved,
+        budget,
+        allow_reserved_unknown_tokens=usage.model_requests == 0,
+        allow_reserved_unknown_cost=usage.model_requests == 0 and usage.total_cost_usd is not None,
+    )
+    return reserved
+
+
+def reconcile_supervision_usage(
+    usage_before: VariationUsage,
+    budget: AVOBudget,
+    supervisor_usage: VariationUsage,
+) -> VariationUsage:
+    """Merge one validated supervisor usage delta into the shared AVO usage."""
+    reserved = reserve_supervision_usage(usage_before, budget)
+    if not isinstance(supervisor_usage, VariationUsage):
+        raise TypeError("supervisor_usage must be a VariationUsage")
+    if (
+        supervisor_usage.model_requests != 1
+        or supervisor_usage.supervisor_interventions != 1
+        or supervisor_usage.tool_calls != 0
+        or supervisor_usage.development_evaluations != 0
+    ):
+        raise ValueError("supervisor usage must describe exactly one request and intervention")
+
+    def merge_tokens(previous: int | None, added: int | None) -> int | None:
+        if usage_before.model_requests == 0:
+            return added
+        if previous is None or added is None:
+            return None
+        return previous + added
+
+    def merge_cost(previous: float | None, added: float | None) -> float | None:
+        if usage_before.model_requests == 0:
+            return added
+        if previous is None or added is None:
+            return None
+        return previous + added
+
+    reconciled = VariationUsage(
+        model_requests=reserved.model_requests,
+        tool_calls=reserved.tool_calls,
+        development_evaluations=reserved.development_evaluations,
+        supervisor_interventions=reserved.supervisor_interventions,
+        input_tokens=merge_tokens(usage_before.input_tokens, supervisor_usage.input_tokens),
+        output_tokens=merge_tokens(usage_before.output_tokens, supervisor_usage.output_tokens),
+        model_cost_usd=merge_cost(usage_before.model_cost_usd, supervisor_usage.model_cost_usd),
+        development_evaluation_cost_usd=usage_before.development_evaluation_cost_usd,
+        elapsed_seconds=reserved.elapsed_seconds + supervisor_usage.elapsed_seconds,
+    )
+    _validate_usage_within_budget(reconciled, budget)
+    return reconciled
+
+
+class PydanticAISupervisionRunner:
+    """Provider adapter with only one typed, read-only supervisor request."""
+
+    def __init__(self, model: Any, *, model_identity: str, system_prompt: str = "") -> None:
+        if model is None:
+            raise ValueError("supervisor model must be explicit")
+        _require_text(model_identity, "model_identity")
+        if system_prompt and not isinstance(system_prompt, str):
+            raise TypeError("system_prompt must be a string")
+        self.model = model
+        self.model_identity = model_identity.strip()
+        self.system_prompt = system_prompt.strip() or _DEFAULT_SUPERVISOR_SYSTEM_PROMPT
+
+    def __call__(self, request: AVOSupervisionRequest) -> AVOSupervisionResult:
+        if not isinstance(request, AVOSupervisionRequest):
+            raise TypeError("request must be an AVOSupervisionRequest")
+        pydantic_ai = import_module("pydantic_ai")
+        usage_module = import_module("pydantic_ai.usage")
+        started_at = time.monotonic()
+        agent = pydantic_ai.Agent(
+            self.model,
+            system_prompt=self.system_prompt,
+            output_type=AVOSupervisionAdvice,
+            retries=0,
+        )
+        result = agent.run_sync(
+            _render_supervision_prompt(request),
+            usage_limits=usage_module.UsageLimits(request_limit=1),
+        )
+
+        usage = result.usage()
+        if usage.requests != 1:
+            raise RuntimeError("supervisor provider request count must be exactly one")
+        return AVOSupervisionResult(
+            output=result.output,
+            usage=VariationUsage(
+                model_requests=1,
+                supervisor_interventions=1,
+                input_tokens=usage.input_tokens,
+                output_tokens=usage.output_tokens,
+                elapsed_seconds=max(0.0, time.monotonic() - started_at),
+            ),
+        )
+
+
+@dataclass(frozen=True)
+class AVOSupervisionComposition:
+    """Immutable pairing of an isolated supervisor runner and exact identity."""
+
+    runner: PydanticAISupervisionRunner
+    model_identity: str
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.runner, PydanticAISupervisionRunner):
+            raise TypeError("runner must be a PydanticAISupervisionRunner")
+        _require_text(self.model_identity, "model_identity")
+        identity = self.model_identity.strip()
+        if self.runner.model_identity != identity:
+            raise ValueError("supervisor runner identity must match composition identity")
+        object.__setattr__(self, "model_identity", identity)
+
+
+def build_supervision_composition(
+    model: Any,
+    *,
+    model_identity: str,
+    system_prompt: str = "",
+) -> AVOSupervisionComposition:
+    """Build one explicit supervisor runner without composing loop state or tools."""
+    runner = PydanticAISupervisionRunner(model, model_identity=model_identity, system_prompt=system_prompt)
+    return AVOSupervisionComposition(runner=runner, model_identity=runner.model_identity)
+
+
+_DEFAULT_SUPERVISOR_SYSTEM_PROMPT = (
+    "You are a bounded AEC-Bench supervisor. Return only validated advice with one to three distinct directions. "
+    "You cannot edit workspaces, call tools, evaluate candidates, or change budgets."
+)
+
+
+def _render_supervision_prompt(request: AVOSupervisionRequest) -> str:
+    """Render only immutable request facts for the isolated supervisor."""
+    summaries = [
+        {
+            "source_variation_id": entry.source_variation_id,
+            "source_attempt_id": entry.source_attempt_id,
+            "hypothesis": entry.hypothesis,
+            "change_summary": entry.change_summary,
+            "evidence_summary": entry.evidence_summary,
+            "outcome": entry.outcome.value,
+            "failure_category": entry.failure_category,
+            "next_direction": entry.next_direction,
+        }
+        for entry in request.attempt_summaries
+    ]
+    payload = {
+        "goal": request.goal,
+        "selected_parent_id": request.selected_parent_id,
+        "strategy": request.strategy.value,
+        "attempt_summaries": summaries,
+        "remaining_budget": asdict(request.remaining_budget),
+        "trigger_reason": request.trigger_reason.value,
+    }
+    return json.dumps(payload, ensure_ascii=True, sort_keys=True)
+
+
 def project_remaining_budget(budget: AVOBudget, state: AVOState) -> AVORemainingBudget:
     """Project non-negative remaining AVO allowances without adding authority."""
     if not isinstance(budget, AVOBudget):
@@ -155,6 +439,26 @@ def project_remaining_budget(budget: AVOBudget, state: AVOState) -> AVORemaining
         remaining_supervisor_interventions=max(0, budget.max_supervisor_interventions - usage.supervisor_interventions),
         cost_limit_usd=budget.max_cost_usd,
         remaining_cost_usd=remaining_cost,
+        remaining_input_tokens=(
+            budget.max_input_tokens
+            if budget.max_input_tokens is not None and usage.model_requests == 0 and usage.input_tokens is None
+            else (
+                None
+                if budget.max_input_tokens is None or usage.input_tokens is None
+                else max(0, budget.max_input_tokens - usage.input_tokens)
+            )
+        ),
+        remaining_output_tokens=(
+            budget.max_output_tokens
+            if budget.max_output_tokens is not None and usage.model_requests == 0 and usage.output_tokens is None
+            else (
+                None
+                if budget.max_output_tokens is None or usage.output_tokens is None
+                else max(0, budget.max_output_tokens - usage.output_tokens)
+            )
+        ),
+        input_token_limit=budget.max_input_tokens,
+        output_token_limit=budget.max_output_tokens,
     )
 
 
@@ -234,11 +538,20 @@ def _has_consecutive_invalid_or_failed_evaluations(state: AVOState) -> bool:
 
 
 __all__ = (
+    "AVOSupervisionBudgetError",
+    "AVOSupervisionComposition",
+    "AVOSupervisionFailure",
+    "AVOSupervisionFailureCode",
+    "AVOSupervisionResult",
     "AVORemainingBudget",
     "AVOSupervisionAdvice",
     "AVOSupervisionRequest",
     "AVOSupervisionTrigger",
+    "PydanticAISupervisionRunner",
+    "build_supervision_composition",
     "project_remaining_budget",
+    "reconcile_supervision_usage",
+    "reserve_supervision_usage",
     "should_trigger_supervision",
     "supervision_trigger_reason",
 )

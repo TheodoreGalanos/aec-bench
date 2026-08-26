@@ -10,7 +10,7 @@ from enum import StrEnum
 from importlib import import_module
 from typing import Any, Literal, Protocol
 
-from pydantic import ConfigDict, Field, model_validator
+from pydantic import ConfigDict, Field, field_validator, model_validator
 
 from aec_bench.contracts.validators import NonEmptyStr, StrictModel
 from aec_bench.evolution.cancellation import AVOCancellationSignal
@@ -85,12 +85,21 @@ class AgentResponse(StrictModel):
 
     command: AgentCommand
     model_cost_usd: float | None = None
+    input_tokens: int | None = None
+    output_tokens: int | None = None
 
     @model_validator(mode="after")
     def validate_cost(self) -> AgentResponse:
         if self.model_cost_usd is not None and (not math.isfinite(self.model_cost_usd) or self.model_cost_usd < 0):
             raise ValueError("model_cost_usd must be finite and non-negative")
         return self
+
+    @field_validator("input_tokens", "output_tokens")
+    @classmethod
+    def validate_tokens(cls, value: int | None) -> int | None:
+        if value is not None and (isinstance(value, bool) or not isinstance(value, int) or value < 0):
+            raise ValueError("token counts must be non-negative integers")
+        return value
 
 
 class AgentContext:
@@ -161,7 +170,13 @@ class PydanticAIStructuredRunner:
             retries=0,
         )
         result = agent.run_sync(_render_agent_prompt(context), usage_limits=usage_module.UsageLimits(request_limit=1))
-        return AgentResponse(command=result.output, model_cost_usd=None)
+        usage = result.usage()
+        return AgentResponse(
+            command=result.output,
+            model_cost_usd=None,
+            input_tokens=usage.input_tokens,
+            output_tokens=usage.output_tokens,
+        )
 
 
 def _render_agent_prompt(context: AgentContext) -> str:

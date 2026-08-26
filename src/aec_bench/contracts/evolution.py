@@ -45,6 +45,8 @@ class VariationUsage:
     tool_calls: int = 0
     development_evaluations: int = 0
     supervisor_interventions: int = 0
+    input_tokens: int | None = None
+    output_tokens: int | None = None
     model_cost_usd: float | None = None
     development_evaluation_cost_usd: float | None = None
     elapsed_seconds: float = 0.0
@@ -57,6 +59,10 @@ class VariationUsage:
             "supervisor_interventions",
         ):
             _require_usage_integer(getattr(self, field_name), field_name)
+        for field_name in ("input_tokens", "output_tokens"):
+            tokens = getattr(self, field_name)
+            if tokens is not None:
+                _require_usage_integer(tokens, field_name)
         _require_usage_number(self.elapsed_seconds, "elapsed_seconds")
         for field_name in ("model_cost_usd", "development_evaluation_cost_usd"):
             cost = getattr(self, field_name)

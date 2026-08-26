@@ -360,8 +360,9 @@ class _LoopController:
                     # accepted. Leave the marker for explicit reconciliation.
                     raise AVOIncompleteExternalEffectError(effect, exc) from exc
                 try:
-                    command, model_cost = _normalise_response(response)
+                    command, model_cost, input_tokens, output_tokens = _normalise_response(response)
                     self._record_model_cost(model_cost)
+                    self._record_model_tokens(input_tokens, output_tokens)
                 finally:
                     # The provider returned, so the marker can be cleared only
                     # after its usage has been recorded durably.
@@ -842,6 +843,25 @@ class _LoopController:
             self._model_cost_total += cost
             self._set_usage(model_cost_usd=self._model_cost_total)
 
+    def _record_model_tokens(self, input_tokens: int | None, output_tokens: int | None) -> None:
+        """Aggregate one response's token counts, retaining unknown values."""
+        usage = self.state.usage
+        previous_requests = usage.model_requests - 1
+
+        def merge(previous: int | None, added: int | None) -> int | None:
+            if added is None:
+                return None
+            if previous_requests == 0:
+                return added
+            if previous is None:
+                return None
+            return previous + added
+
+        self._set_usage(
+            input_tokens=merge(usage.input_tokens, input_tokens),
+            output_tokens=merge(usage.output_tokens, output_tokens),
+        )
+
     def _set_usage(self, **updates: int | float | None) -> None:
         usage = self.state.usage
         self.state = replace(
@@ -851,6 +871,8 @@ class _LoopController:
                 tool_calls=_as_int(updates.get("tool_calls"), usage.tool_calls),
                 development_evaluations=_as_int(updates.get("development_evaluations"), usage.development_evaluations),
                 supervisor_interventions=usage.supervisor_interventions,
+                input_tokens=_as_optional_int(updates.get("input_tokens", usage.input_tokens)),
+                output_tokens=_as_optional_int(updates.get("output_tokens", usage.output_tokens)),
                 model_cost_usd=updates.get("model_cost_usd", usage.model_cost_usd),
                 development_evaluation_cost_usd=updates.get(
                     "development_evaluation_cost_usd", usage.development_evaluation_cost_usd
@@ -897,6 +919,9 @@ class _LoopController:
             raise AgentToolBudgetExceeded("max_tool_calls")
         if usage.elapsed_seconds >= self.budget.max_elapsed_seconds:
             raise AgentToolBudgetExceeded("max_elapsed_seconds")
+        limit = self._known_token_limit()
+        if limit is not None:
+            raise AgentToolBudgetExceeded(limit)
         limit = self._known_cost_limit()
         if limit is not None:
             raise AgentToolBudgetExceeded(limit)
@@ -926,7 +951,25 @@ class _LoopController:
             return "max_tool_calls"
         if usage.elapsed_seconds >= self.budget.max_elapsed_seconds:
             return "max_elapsed_seconds"
+        token_limit = self._known_token_limit()
+        if token_limit is not None:
+            return token_limit
         return self._known_cost_limit()
+
+    def _known_token_limit(self) -> str | None:
+        usage = self.state.usage
+        if usage.model_requests == 0:
+            return None
+        for name, observed, limit in (
+            ("max_input_tokens", usage.input_tokens, self.budget.max_input_tokens),
+            ("max_output_tokens", usage.output_tokens, self.budget.max_output_tokens),
+        ):
+            if limit is not None:
+                if observed is None:
+                    return f"{name}_unknown"
+                if observed >= limit:
+                    return name
+        return None
 
     def _known_cost_limit(self) -> str | None:
         if self.budget.max_cost_usd is None:
@@ -974,11 +1017,13 @@ class _LoopController:
         return result
 
 
-def _normalise_response(response: AgentCommand | AgentResponse) -> tuple[AgentCommand, float | None]:
+def _normalise_response(
+    response: AgentCommand | AgentResponse,
+) -> tuple[AgentCommand, float | None, int | None, int | None]:
     if isinstance(response, AgentResponse):
-        return response.command, response.model_cost_usd
+        return response.command, response.model_cost_usd, response.input_tokens, response.output_tokens
     if isinstance(response, AgentCommand):
-        return response, None
+        return response, None, None, None
     raise TypeError("agent runner must return AgentCommand or AgentResponse")
 
 
@@ -1122,6 +1167,10 @@ def _as_int(value: int | float | None, default: int) -> int:
 
 def _as_float(value: int | float | None, default: float) -> float:
     return default if value is None else float(value)
+
+
+def _as_optional_int(value: int | float | None) -> int | None:
+    return None if value is None else int(value)
 
 
 __all__ = (

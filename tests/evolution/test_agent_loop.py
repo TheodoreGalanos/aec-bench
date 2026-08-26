@@ -28,6 +28,7 @@ from aec_bench.evolution.agent_loop import (
     PydanticAIStructuredRunner,
     run_agentic_variation,
 )
+from aec_bench.evolution.agent_protocol import AgentResponse
 from aec_bench.evolution.analysis import BehavioralPattern, EvolutionAnalysis, GraduatedScope
 from aec_bench.evolution.checkpoint import AVOConfigurationIdentity, AVOIncompleteExternalEffectError, read_checkpoint
 from aec_bench.evolution.core import (
@@ -162,6 +163,7 @@ def _boundary(
 def _checkpoint_identity() -> AVOConfigurationIdentity:
     return AVOConfigurationIdentity(
         model_identity="test-model",
+        supervisor_model_identity="test-supervisor-model",
         tool_identity="avo-tools:1",
         development_evaluator_identity="development-evaluator:test",
         configuration_identity="test-config:1",
@@ -710,6 +712,31 @@ def test_hard_limit_exhausts_without_silent_submission(tmp_path: Path) -> None:
     assert result.usage.development_evaluations == 1
 
 
+def test_token_limit_blocks_model_selected_tool_effect(tmp_path: Path) -> None:
+    workspace = _workspace(tmp_path / "workspace")
+    request = _request(workspace)
+
+    result = run_agentic_variation(
+        request,
+        workspace,
+        "child",
+        development_boundary=_boundary(tmp_path),
+        agent_runner=lambda _context: AgentResponse(
+            command=_command(
+                AgentToolName.APPLY_MUTATION,
+                mutation={"type": "modify_prompt", "content": "Must not be applied."},
+            ),
+            input_tokens=11,
+            output_tokens=1,
+        ),
+        budget=AVOBudget(max_input_tokens=10),
+    )
+
+    assert result.status is VariationStatus.BUDGET_EXHAUSTED
+    assert workspace.export_snapshot("parent").system_prompt == request.parent.snapshot.system_prompt
+    assert result.usage.input_tokens == 11
+
+
 def test_invalid_development_evidence_cannot_become_best_attempt(tmp_path: Path) -> None:
     workspace = _workspace(tmp_path / "workspace")
     request = _request(workspace)
@@ -752,6 +779,15 @@ def test_provider_failure_propagates(tmp_path: Path) -> None:
 def test_typed_mutation_rejects_unknown_action() -> None:
     with pytest.raises(ValueError):
         MutationInput.model_validate({"type": "shell", "command": "rm -rf /"})
+
+
+@pytest.mark.parametrize("field_name", ["input_tokens", "output_tokens"])
+def test_agent_response_rejects_negative_token_usage(field_name: str) -> None:
+    with pytest.raises(ValueError, match="non-negative integers"):
+        AgentResponse(
+            command=AgentCommand(tool=AgentToolName.ABSTAIN, arguments={"reasoning": "No change."}),
+            **{field_name: -1},
+        )
 
 
 def test_pydantic_ai_runner_is_a_provider_boundary() -> None:

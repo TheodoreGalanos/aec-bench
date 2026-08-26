@@ -141,11 +141,18 @@ class AVOUsageSnapshot(StrictModel):
     tool_calls: int = 0
     development_evaluations: int = 0
     supervisor_interventions: int = 0
+    input_tokens: int | None = None
+    output_tokens: int | None = None
     model_cost_usd: float | None = None
     development_evaluation_cost_usd: float | None = None
     elapsed_seconds: float = 0.0
 
-    @field_validator("model_requests", "tool_calls", "development_evaluations", "supervisor_interventions")
+    @field_validator(
+        "model_requests",
+        "tool_calls",
+        "development_evaluations",
+        "supervisor_interventions",
+    )
     @classmethod
     def validate_counters(cls, value: int) -> int:
         if isinstance(value, bool) or not isinstance(value, int) or value < 0:
@@ -159,6 +166,13 @@ class AVOUsageSnapshot(StrictModel):
             return None
         if isinstance(value, bool) or not isinstance(value, int | float) or not math.isfinite(value) or value < 0:
             raise ValueError("checkpoint usage values must be finite and non-negative")
+        return value
+
+    @field_validator("input_tokens", "output_tokens")
+    @classmethod
+    def validate_token_counts(cls, value: int | None) -> int | None:
+        if value is not None and (isinstance(value, bool) or not isinstance(value, int) or value < 0):
+            raise ValueError("checkpoint token counts must be non-negative integers")
         return value
 
     @classmethod
@@ -181,10 +195,12 @@ class AVOBudgetSnapshot(StrictModel):
     max_model_requests: int = 12
     max_tool_calls: int = 40
     max_development_evaluations: int = 7
+    max_input_tokens: int | None = None
+    max_output_tokens: int | None = None
     max_elapsed_seconds: float = 1800.0
     max_consecutive_evaluation_errors: int = 2
     max_stagnant_evaluations: int = 3
-    max_supervisor_interventions: int = 0
+    max_supervisor_interventions: int = 1
     max_cost_usd: float | None = None
 
     @field_validator(
@@ -216,6 +232,13 @@ class AVOBudgetSnapshot(StrictModel):
             raise ValueError("checkpoint active budget values must be finite and positive")
         return value
 
+    @field_validator("max_input_tokens", "max_output_tokens")
+    @classmethod
+    def validate_token_limits(cls, value: int | None) -> int | None:
+        if value is not None and (isinstance(value, bool) or not isinstance(value, int) or value <= 0):
+            raise ValueError("checkpoint token limits must be positive integers")
+        return value
+
     @classmethod
     def from_budget(cls, budget: AVOBudget) -> AVOBudgetSnapshot:
         """Convert one runtime budget."""
@@ -234,6 +257,7 @@ class AVOConfigurationIdentity(StrictModel):
     """Explicit behavior-affecting identity required for checkpoint compatibility."""
 
     model_identity: NonEmptyStr
+    supervisor_model_identity: NonEmptyStr
     tool_identity: NonEmptyStr
     development_evaluator_identity: NonEmptyStr
     configuration_identity: NonEmptyStr

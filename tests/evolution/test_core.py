@@ -191,7 +191,7 @@ class TestAVOContracts:
         assert budget.max_tool_calls == 40
         assert budget.max_development_evaluations == 7
         assert budget.max_elapsed_seconds == 1800.0
-        assert budget.max_supervisor_interventions == 0
+        assert budget.max_supervisor_interventions == 1
 
     @pytest.mark.parametrize(
         "field_name",
@@ -211,6 +211,11 @@ class TestAVOContracts:
 
     def test_supervisor_limit_zero_disables_supervision(self) -> None:
         assert AVOBudget(max_supervisor_interventions=0).max_supervisor_interventions == 0
+
+    @pytest.mark.parametrize("field_name", ["max_input_tokens", "max_output_tokens"])
+    def test_budget_rejects_non_positive_token_limits(self, field_name: str) -> None:
+        with pytest.raises(ValueError, match="positive integer"):
+            AVOBudget(**{field_name: 0})
 
     @pytest.mark.parametrize("field_name", ["max_elapsed_seconds", "max_cost_usd"])
     def test_budget_rejects_non_finite_limits(self, field_name: str) -> None:

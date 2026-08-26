@@ -63,10 +63,12 @@ class AVOBudget:
     max_model_requests: int = 12
     max_tool_calls: int = 40
     max_development_evaluations: int = 7
+    max_input_tokens: int | None = None
+    max_output_tokens: int | None = None
     max_elapsed_seconds: float = 1800.0
     max_consecutive_evaluation_errors: int = 2
     max_stagnant_evaluations: int = 3
-    max_supervisor_interventions: int = 0
+    max_supervisor_interventions: int = 1
     max_cost_usd: float | None = None
 
     def __post_init__(self) -> None:
@@ -80,6 +82,10 @@ class AVOBudget:
             _require_positive_integer(getattr(self, field_name), field_name)
         _require_finite_positive(self.max_elapsed_seconds, "max_elapsed_seconds")
         _require_non_negative_integer(self.max_supervisor_interventions, "max_supervisor_interventions")
+        for field_name in ("max_input_tokens", "max_output_tokens"):
+            limit = getattr(self, field_name)
+            if limit is not None:
+                _require_positive_integer(limit, field_name)
         if self.max_cost_usd is not None:
             _require_finite_positive(self.max_cost_usd, "max_cost_usd")
 
@@ -368,6 +374,16 @@ def budget_exhaustion_reason(budget: AVOBudget, state: AVOState) -> str | None:
     for name, observed, limit in limits:
         if limit > 0 and observed >= limit:
             return name
+    token_limits: tuple[tuple[str, int | None, int | None], ...] = (
+        ("max_input_tokens", usage.input_tokens, budget.max_input_tokens),
+        ("max_output_tokens", usage.output_tokens, budget.max_output_tokens),
+    )
+    for token_name, token_observed, token_limit in token_limits:
+        if token_limit is not None:
+            if token_observed is None and usage.model_requests > 0:
+                return f"{token_name}_unknown"
+            if token_observed is not None and token_observed >= token_limit:
+                return token_name
     if budget.max_cost_usd is not None:
         total_cost = usage.total_cost_usd
         if total_cost is None:

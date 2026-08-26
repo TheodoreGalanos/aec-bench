@@ -156,6 +156,7 @@ def _checkpoint(
         development_case_ids=("case-1",),
         configuration_identity=AVOConfigurationIdentity(
             model_identity="provider:model",
+            supervisor_model_identity="provider:supervisor-model",
             tool_identity="avo-tools:1",
             development_evaluator_identity="evaluator:1",
             configuration_identity="config:1",
@@ -170,6 +171,38 @@ def _validated_update(checkpoint: AVOCheckpoint, **updates: object) -> AVOCheckp
     payload = checkpoint.model_dump(mode="python")
     payload.update(updates)
     return AVOCheckpoint.model_validate(payload)
+
+
+def test_checkpoint_snapshots_round_trip_supervisor_identity_tokens_and_limits() -> None:
+    usage = VariationUsage(
+        model_requests=2,
+        supervisor_interventions=1,
+        input_tokens=120,
+        output_tokens=30,
+        model_cost_usd=0.6,
+    )
+    budget = AVOBudgetSnapshot(
+        max_input_tokens=200,
+        max_output_tokens=60,
+        max_supervisor_interventions=1,
+    ).to_budget()
+    identity = AVOConfigurationIdentity(
+        model_identity="provider:main",
+        supervisor_model_identity="provider:supervisor",
+        tool_identity="avo-tools:1",
+        development_evaluator_identity="evaluator:1",
+        configuration_identity="config:1",
+    )
+
+    assert AVOUsageSnapshot.from_usage(usage).to_usage() == usage
+    assert AVOBudgetSnapshot.from_budget(budget).to_budget() == budget
+    assert identity.model_dump(mode="json")["supervisor_model_identity"] == "provider:supervisor"
+
+
+@pytest.mark.parametrize("field_name", ["max_input_tokens", "max_output_tokens"])
+def test_checkpoint_rejects_non_positive_token_limits(field_name: str) -> None:
+    with pytest.raises(ValidationError, match="positive integers"):
+        AVOBudgetSnapshot(**{field_name: 0})
 
 
 def test_checkpoint_round_trips_exact_attempt_evidence_and_trace_enrichment(tmp_path: Path) -> None:

@@ -311,6 +311,7 @@ class SwarmEvolverFactory:
             checkpoint_root=self._workspace_source,
             configuration_identity=AVOConfigurationIdentity(
                 model_identity=evolver_model_name,
+                supervisor_model_identity=evolver_model_name,
                 tool_identity="avo-tools:1",
                 development_evaluator_identity=(
                     f"local:{development_experiment_id}:{self._adapter}:{solver_model}:timeout-{self._timeout}"

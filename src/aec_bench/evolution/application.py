@@ -451,6 +451,7 @@ def run_evolution_from_config(
     ).hexdigest()
     avo_configuration_identity = AVOConfigurationIdentity(
         model_identity=config.models.evolver,
+        supervisor_model_identity=config.models.evolver,
         tool_identity="avo-tools:1",
         development_evaluator_identity=(
             f"{config.backend}:{development_experiment_id}:{adapter}:{model}:timeout-{config.timeout}"
