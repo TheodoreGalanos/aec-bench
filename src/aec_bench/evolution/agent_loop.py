@@ -40,6 +40,7 @@ from aec_bench.evolution.core import (
 )
 from aec_bench.evolution.development import DevelopmentEvaluationBoundary
 from aec_bench.evolution.graveyard import GraveyardEntry
+from aec_bench.evolution.memory import AVOMemoryEntry, AVOMemoryOutcome, retain_memory
 from aec_bench.evolution.mutation import MutationAction, apply_mutations
 from aec_bench.evolution.resume import (
     evaluation_batch_identity,
@@ -208,6 +209,7 @@ def run_agentic_variation(
             mutation=None,
             reasoning="Variation scope does not permit a mutation.",
             usage=VariationUsage(),
+            memory=request.memory,
         )
 
     with scratch_workspace_from(source, request.parent.snapshot, child_candidate_id) as scratch:
@@ -271,6 +273,7 @@ class _LoopController:
             parent_candidate_id=request.parent.snapshot.candidate_id,
             child_candidate_id=child_candidate_id,
             current_revision=0,
+            memory=request.memory,
             parent_snapshot=request.parent.snapshot,
         )
         self.parent_evidence: EvaluatedCandidate | None = None
@@ -567,6 +570,14 @@ class _LoopController:
                 self.state,
                 consecutive_evaluation_errors=self.state.consecutive_evaluation_errors + 1,
             )
+            self._remember(
+                _memory_entry_for_evaluation_error(
+                    variation_id=self.state.variation_id,
+                    attempt_id=f"{self.state.variation_id}:attempt-{self.state.current_revision}",
+                    hypothesis=self.last_hypothesis,
+                    mutation=self.last_mutation,
+                )
+            )
             self._write_checkpoint()
             return EvaluationToolResult(
                 success=False,
@@ -588,6 +599,7 @@ class _LoopController:
             consecutive_without_progress=0 if improved else self.state.consecutive_without_progress + 1,
             consecutive_evaluation_errors=0,
         )
+        self._remember(_memory_entry_for_attempt(self.state.variation_id, attempt, improved=improved))
         self._write_checkpoint()
         return EvaluationToolResult(
             success=True,
@@ -675,6 +687,22 @@ class _LoopController:
 
     def _record_development_evaluation(self) -> None:
         self._increment_usage(development_evaluations=1)
+
+    def _remember(self, entry: AVOMemoryEntry) -> None:
+        """Replace one attempt fact and retain the bounded structured memory."""
+        existing = tuple(
+            item
+            for item in self.state.memory
+            if (item.source_variation_id, item.source_attempt_id)
+            != (entry.source_variation_id, entry.source_attempt_id)
+        )
+        self.state = replace(
+            self.state,
+            memory=retain_memory(
+                (*existing, entry),
+                best_attempt_id=self.state.best_attempt_id,
+            ),
+        )
 
     def _record_model_cost(self, cost: float | None) -> None:
         if cost is None:
@@ -800,6 +828,7 @@ class _LoopController:
                 reasoning=self.terminal_message,
                 usage=usage,
                 attempt=attempt,
+                memory=self.state.memory,
             )
         else:
             result = VariationResult(
@@ -808,6 +837,7 @@ class _LoopController:
                 mutation=None,
                 reasoning=self.terminal_message or "Variation ended without a submitted child.",
                 usage=usage,
+                memory=self.state.memory,
             )
         self._write_checkpoint(result)
         return result
@@ -877,6 +907,81 @@ def _mutation_summary_for_material(parent: WorkspaceSnapshot, current: Workspace
             name for name in parent_skills.keys() & current_skills.keys() if parent_skills[name] != current_skills[name]
         ),
         skills_removed=sorted(parent_skills.keys() - current_skills.keys()),
+    )
+
+
+def _change_summary(mutation: MutationSummary) -> str:
+    """Summarise mutation material without retaining model or tool text."""
+    changes: list[str] = []
+    if mutation.prompt_modified:
+        changes.append("system prompt modified")
+    if mutation.skills_added:
+        changes.append(f"skills added: {', '.join(mutation.skills_added)}")
+    if mutation.skills_modified:
+        changes.append(f"skills modified: {', '.join(mutation.skills_modified)}")
+    if mutation.skills_removed:
+        changes.append(f"skills removed: {', '.join(mutation.skills_removed)}")
+    return "; ".join(changes) if changes else "no workspace material change"
+
+
+def _evidence_summary(attempt: DevelopmentAttempt) -> str:
+    """Summarise only the explicit assessment values for structured memory."""
+    assessment = attempt.evaluated.assessment
+    return (
+        f"valid={assessment.valid}; batch_score={assessment.batch_score:.6g}; "
+        f"evaluation_cases={len(assessment.evaluation_case_ids)}; trials={len(assessment.trial_ids)}"
+    )
+
+
+def _memory_entry_for_attempt(
+    variation_id: str,
+    attempt: DevelopmentAttempt,
+    *,
+    improved: bool,
+) -> AVOMemoryEntry:
+    """Build a deterministic fact from one completed development evaluation."""
+    assessment = attempt.evaluated.assessment
+    if not assessment.valid:
+        outcome = AVOMemoryOutcome.INVALID
+        failure_category = "invalid_candidate"
+        next_direction = "Correct the invalid result before another evaluation."
+    elif improved:
+        outcome = AVOMemoryOutcome.IMPROVED
+        failure_category = None
+        next_direction = "Preserve the successful change and test one bounded follow-up."
+    else:
+        outcome = AVOMemoryOutcome.NOT_IMPROVED
+        failure_category = "no_improvement"
+        next_direction = "Try a different bounded change direction."
+    return AVOMemoryEntry(
+        source_variation_id=variation_id,
+        source_attempt_id=attempt.attempt_id,
+        hypothesis=attempt.hypothesis,
+        change_summary=_change_summary(attempt.mutation),
+        evidence_summary=_evidence_summary(attempt),
+        outcome=outcome,
+        failure_category=failure_category,
+        next_direction=next_direction,
+    )
+
+
+def _memory_entry_for_evaluation_error(
+    *,
+    variation_id: str,
+    attempt_id: str,
+    hypothesis: str,
+    mutation: MutationSummary,
+) -> AVOMemoryEntry:
+    """Build a coarse fact for an evaluator exception without its text."""
+    return AVOMemoryEntry(
+        source_variation_id=variation_id,
+        source_attempt_id=attempt_id,
+        hypothesis=hypothesis or "Evaluation hypothesis was not recorded.",
+        change_summary=_change_summary(mutation),
+        evidence_summary="development evaluation did not produce evidence",
+        outcome=AVOMemoryOutcome.EVALUATION_ERROR,
+        failure_category="evaluation_error",
+        next_direction="Retry the same bounded change only after the evaluator is available.",
     )
 
 

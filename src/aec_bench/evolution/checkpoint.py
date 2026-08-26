@@ -38,6 +38,7 @@ from aec_bench.evolution.core import (
     VariationResult,
     VariationStatus,
 )
+from aec_bench.evolution.memory import AVO_MEMORY_LIMIT, AVOMemoryEntry, validate_memory_entries
 from aec_bench.ledger.durability import mkdir_durable, replace_file_bytes_durable
 
 AVO_CHECKPOINT_SCHEMA_VERSION: Literal[1] = 1
@@ -216,15 +217,6 @@ class AVOConfigurationIdentity(StrictModel):
     configuration_identity: NonEmptyStr
 
 
-class AVOMemoryEntry(StrictModel):
-    """One bounded structured memory item; T3 defines retention policy."""
-
-    source_variation_id: NonEmptyStr
-    source_attempt_id: NonEmptyStr
-    category: NonEmptyStr
-    summary: NonEmptyStr
-
-
 class AVOIncompleteExternalEffect(StrictModel):
     """An external operation whose completion is not yet confirmed."""
 
@@ -323,8 +315,9 @@ class AVOCheckpoint(StrictModel):
     @field_validator("structured_memory")
     @classmethod
     def validate_memory_limit(cls, value: tuple[AVOMemoryEntry, ...]) -> tuple[AVOMemoryEntry, ...]:
-        if len(value) > 24:
-            raise ValueError("checkpoint structured_memory must contain at most 24 entries")
+        validate_memory_entries(value)
+        if len(value) > AVO_MEMORY_LIMIT:
+            raise ValueError(f"checkpoint structured_memory must contain at most {AVO_MEMORY_LIMIT} entries")
         return value
 
     @field_validator("incomplete_external_effects")
@@ -422,6 +415,7 @@ class AVOCheckpoint(StrictModel):
             raise ValueError("checkpoint evidence trial IDs must be unique across parent and attempts")
         if self.best_attempt_id is not None and self.best_attempt_id not in attempt_ids:
             raise ValueError("checkpoint best_attempt_id must reference an attempt")
+        validate_memory_entries(self.structured_memory)
         for attempt in self.evaluated_attempts:
             if attempt.evaluated.assessment.evaluation_case_ids != self.development_case_ids:
                 raise ValueError("checkpoint attempt evaluation cases must match development_case_ids exactly")
@@ -485,7 +479,7 @@ class AVOCheckpoint(StrictModel):
         configuration_identity: AVOConfigurationIdentity,
         budget: AVOBudget,
         current_snapshot: WorkspaceSnapshot,
-        structured_memory: tuple[AVOMemoryEntry, ...] = (),
+        structured_memory: tuple[AVOMemoryEntry, ...] | None = None,
         incomplete_external_effects: tuple[AVOIncompleteExternalEffect, ...] = (),
         terminal_result: AVOCheckpointTerminalResult | None = None,
     ) -> AVOCheckpoint:
@@ -493,6 +487,13 @@ class AVOCheckpoint(StrictModel):
 
         if state.parent_snapshot is None:
             raise ValueError("AVOState must contain parent_snapshot for checkpointing")
+        state_memory = validate_memory_entries(state.memory)
+        if structured_memory is None:
+            structured_memory = state_memory
+        else:
+            structured_memory = validate_memory_entries(structured_memory)
+            if structured_memory != state_memory:
+                raise ValueError("checkpoint structured_memory must match AVOState memory")
         if state.terminal_status is None:
             if terminal_result is not None:
                 raise ValueError("checkpoint terminal result requires matching AVOState terminal_status")
@@ -561,6 +562,7 @@ class AVOCheckpoint(StrictModel):
             best_attempt_id=self.best_attempt_id,
             consecutive_without_progress=self.consecutive_without_progress,
             consecutive_evaluation_errors=self.consecutive_evaluation_errors,
+            memory=self.structured_memory,
             usage=self.usage.to_usage(),
             terminal_status=self.terminal_result.status if self.terminal_result is not None else None,
             parent_snapshot=self.parent_snapshot,
@@ -620,7 +622,6 @@ __all__ = (
     "AVOCheckpointTurn",
     "AVOConfigurationIdentity",
     "AVOIncompleteExternalEffect",
-    "AVOMemoryEntry",
     "AVOUsageSnapshot",
     "read_checkpoint",
     "write_checkpoint",

@@ -62,6 +62,7 @@ def request_configuration_identity(
         "scope": request.scope.value,
         "history": _jsonable(request.history),
         "graveyard": _jsonable(request.graveyard),
+        "memory": _jsonable(request.memory),
         "cycle": request.cycle,
         "development_evaluation_cost_usd": development_evaluation_cost_usd,
         "development_batch_identity": development_batch_identity,
@@ -174,6 +175,7 @@ def terminal_result_from_checkpoint(checkpoint: AVOCheckpoint) -> VariationResul
         reasoning=terminal.reasoning,
         usage=terminal.usage.to_usage(),
         attempt=attempt,
+        memory=checkpoint.structured_memory,
     )
 
 

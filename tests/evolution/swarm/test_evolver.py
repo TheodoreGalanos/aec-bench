@@ -18,6 +18,7 @@ from aec_bench.contracts.experiment_manifest import AgentConfig, ComputeConfig, 
 from aec_bench.contracts.trial_record import CostRecord
 from aec_bench.evolution.core import DevelopmentAttempt, SelectionPlan, VariationResult, VariationStatus
 from aec_bench.evolution.evaluation import CandidateEvaluationBatch, bind_evaluated_candidate
+from aec_bench.evolution.memory import AVOMemoryEntry
 from aec_bench.evolution.swarm.core import AgentBudget, SwarmAgentResult, SwarmAssignment
 from aec_bench.evolution.swarm.evolver import (
     SwarmAgentEvolver,
@@ -109,7 +110,14 @@ def _setup_evolution_inputs(tmp_path: Path) -> tuple[Workspace, CandidateEvaluat
     )
 
 
-def _submitted_variation(request, child_id: str, prompt: str, cost: float) -> VariationResult:
+def _submitted_variation(
+    request,
+    child_id: str,
+    prompt: str,
+    cost: float,
+    *,
+    memory: tuple[AVOMemoryEntry, ...] = (),
+) -> VariationResult:
     child = request.parent.snapshot.model_copy(update={"candidate_id": child_id, "system_prompt": prompt})
     usage = VariationUsage(
         model_requests=1,
@@ -135,6 +143,7 @@ def _submitted_variation(request, child_id: str, prompt: str, cost: float) -> Va
         reasoning="submitted test child",
         usage=usage,
         attempt=attempt,
+        memory=memory,
     )
 
 
@@ -207,6 +216,89 @@ def test_evolver_returns_exact_assignment_result_without_host_evidence(tmp_path:
     assert not hasattr(result, "score")
     assert not hasattr(result, "bd")
     assert workspace.read_prompt() == parent.system_prompt
+
+
+def test_evolver_memory_is_private_to_each_agent_and_carries_between_cycles(tmp_path: Path) -> None:
+    workspace, batch = _setup_evolution_inputs(tmp_path)
+    config = EvolutionConfig(
+        workspace_path=str(workspace.root),
+        models={"classifier": "test", "evolver": "test"},
+        task_selector=TaskSelector(),
+        batch_size=1,
+        max_cycles=1,
+    )
+    parent = workspace.export_snapshot("parent")
+    assignment = SwarmAssignment(
+        run_id="run-test",
+        assignment_id="assignment-1",
+        agent_id="agent-1",
+        selection=SelectionPlan("parent", (), "conservative", "Improve", "Use exact material"),
+        parent=parent,
+        inspirations=(),
+        budget=AgentBudget(2.0),
+        issued_at=datetime.now(UTC),
+    )
+    other_assignment = SwarmAssignment(
+        run_id="run-test",
+        assignment_id="assignment-2",
+        agent_id="agent-2",
+        selection=SelectionPlan("parent", (), "conservative", "Improve", "Use exact material"),
+        parent=parent,
+        inspirations=(),
+        budget=AgentBudget(2.0),
+        issued_at=datetime.now(UTC),
+    )
+    seen: list[tuple[str, tuple[AVOMemoryEntry, ...]]] = []
+
+    def submit(request, _source, child_id, **_kwargs):
+        seen.append((request.selection.parent_candidate_id, request.memory))
+        entry = AVOMemoryEntry(
+            source_variation_id=request.run_id,
+            source_attempt_id=f"{request.run_id}:{request.cycle}",
+            hypothesis="Use the exact parent material.",
+            change_summary="system prompt modified",
+            evidence_summary="valid=True; batch_score=0.5; evaluation_cases=1; trials=1",
+            outcome="improved",
+            next_direction="Try one bounded follow-up.",
+        )
+        return _submitted_variation(request, child_id, "child prompt", 0.0, memory=(entry,))
+
+    def evaluate(snapshot, _batch):
+        return (
+            make_trial_record(
+                trial_id=f"{snapshot.candidate_id}-trial",
+                task_id="electrical/voltage-drop/case",
+                evaluation={
+                    "reward": 0.5,
+                    "validity": {"output_parseable": True, "schema_valid": True, "verifier_completed": True},
+                },
+            ),
+        )
+
+    first = SwarmAgentEvolver(
+        workspace=workspace,
+        config=config,
+        batch_planner=lambda _size, _cycle: batch,
+        solve_fn=evaluate,
+        classifier_llm=StubClassifierLLM(),
+        variation_operator=submit,
+    )
+    second = SwarmAgentEvolver(
+        workspace=workspace,
+        config=config,
+        batch_planner=lambda _size, _cycle: batch,
+        solve_fn=evaluate,
+        classifier_llm=StubClassifierLLM(),
+        variation_operator=submit,
+    )
+
+    first._sync_step(assignment)
+    first._sync_step(assignment)
+    second._sync_step(other_assignment)
+
+    assert seen[0][1] == ()
+    assert seen[1][1] != ()
+    assert seen[2][1] == ()
 
 
 # ---------------------------------------------------------------------------

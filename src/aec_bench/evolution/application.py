@@ -55,6 +55,7 @@ from aec_bench.evolution.evaluation import (
     build_candidate_assessment,
 )
 from aec_bench.evolution.graveyard import GraveyardEntry, MutationGraveyard
+from aec_bench.evolution.memory import AVOMemoryEntry
 from aec_bench.evolution.model_provider import build_pydantic_model
 from aec_bench.evolution.selection import (
     CellSelectionStat,
@@ -110,6 +111,7 @@ def _execute_evolution_cycle(
     archive: QDArchive | None = None,
     planned_batch: CandidateEvaluationBatch | None = None,
     evaluated_parent: EvaluatedCandidate | None = None,
+    memory: tuple[AVOMemoryEntry, ...] = (),
 ) -> EvolutionCycleExecution:
     """Execute one cycle through the same functional path as ``run_evolution``.
 
@@ -138,6 +140,7 @@ def _execute_evolution_cycle(
         history=tuple(history),
         graveyard=tuple(graveyard.browse(limit=graveyard.size)),
         cycle=cycle,
+        memory=memory,
     )
     child_candidate_id = candidate_id_factory(run_id, cycle)
     variation_result = variation(request, workspace, child_candidate_id)
@@ -270,6 +273,7 @@ def run_evolution(
     history: list[EvolutionCycleRecord] = []
     snapshots: dict[str, WorkspaceSnapshot] = {"baseline": workspace.export_snapshot("baseline")}
     state: EvolutionState | None = None
+    variation_memory: tuple[AVOMemoryEntry, ...] = ()
 
     baseline_batch = batch_planner(config.batch_size, 0)
     baseline = bind_candidate_evaluation(
@@ -337,10 +341,12 @@ def run_evolution(
             archive=archive,
             planned_batch=baseline_batch if cycle == 1 else None,
             evaluated_parent=baseline if cycle == 1 and selection.parent_candidate_id == "baseline" else None,
+            memory=variation_memory,
         )
         record = execution.record
         history.append(record)
         state = execution.state
+        variation_memory = execution.outcome.variation.memory
         if config.strategy == "qd":
             assert archive is not None and qd_state is not None
             qd_state = replace(qd_state, cycle=cycle)

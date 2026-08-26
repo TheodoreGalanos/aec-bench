@@ -353,23 +353,30 @@ def test_checkpoint_preserves_unknown_cost_and_typed_memory() -> None:
             {
                 "source_variation_id": "variation-1",
                 "source_attempt_id": "attempt-1",
-                "category": "direction",
-                "summary": "Use stronger checks.",
+                "hypothesis": "Use stronger checks.",
+                "change_summary": "system prompt modified",
+                "evidence_summary": "valid=True; batch_score=0.5; evaluation_cases=1; trials=1",
+                "outcome": "improved",
+                "next_direction": "Test the next bounded follow-up.",
             },
         ),
     )
 
     assert checkpoint.usage.model_cost_usd is None
     assert checkpoint.structured_memory[0].source_attempt_id == "attempt-1"
+    assert checkpoint.structured_memory[0].hypothesis == "Use stronger checks."
 
 
 def test_checkpoint_rejects_more_than_24_memory_entries() -> None:
     entries = tuple(
         {
             "source_variation_id": "variation-1",
-            "source_attempt_id": "attempt-1",
-            "category": f"failure-{index}",
-            "summary": "Keep the evidence exact.",
+            "source_attempt_id": f"attempt-{index}",
+            "hypothesis": "Keep the evidence exact.",
+            "change_summary": "system prompt modified",
+            "evidence_summary": "valid=False; batch_score=0; evaluation_cases=1; trials=1",
+            "outcome": "invalid",
+            "failure_category": f"failure-{index}",
         }
         for index in range(25)
     )

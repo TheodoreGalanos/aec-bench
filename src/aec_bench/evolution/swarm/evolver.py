@@ -28,6 +28,7 @@ from aec_bench.evolution.core import AVOBudget, EvolutionState, VariationRequest
 from aec_bench.evolution.enrichment import enrich_observations
 from aec_bench.evolution.evaluation import CandidateBatchPlanner, CandidateEvaluationBatch, bind_candidate_evaluation
 from aec_bench.evolution.graveyard import MutationGraveyard
+from aec_bench.evolution.memory import AVOMemoryEntry
 from aec_bench.evolution.model_provider import build_pydantic_model
 from aec_bench.evolution.swarm.core import SwarmAgentResult, SwarmAssignment
 from aec_bench.evolution.variation_operator import build_agentic_variation_operator
@@ -59,6 +60,7 @@ class SwarmAgentEvolver:
         self._cycle = 0
         self._history: list[EvolutionCycleRecord] = []
         self._graveyard = MutationGraveyard()
+        self._memory: tuple[AVOMemoryEntry, ...] = ()
 
     async def step(self, assignment: SwarmAssignment) -> SwarmAgentResult:
         """Run one evolution cycle asynchronously.
@@ -101,8 +103,10 @@ class SwarmAgentEvolver:
             history=tuple(self._history),
             graveyard=tuple(self._graveyard.browse(limit=self._graveyard.size)),
             cycle=self._cycle,
+            memory=self._memory,
         )
         variation = self._variation_operator(request, self._workspace, assignment.assignment_id)
+        self._memory = variation.memory
         parent_costs = tuple(
             None
             if observation.trial.cost is None or observation.trial.cost.estimated_cost_usd is None
