@@ -7,7 +7,7 @@ import logging
 from collections.abc import Callable, Sequence
 
 from aec_bench.contracts.evolution import MutationStrategy
-from aec_bench.evolution.archive import QDArchive
+from aec_bench.evolution.archive import ArchiveView
 from aec_bench.evolution.core import SelectionPlan
 from aec_bench.evolution.graveyard import MutationGraveyard
 
@@ -37,7 +37,7 @@ _STRATEGY_GOALS: dict[MutationStrategy, str] = {
 
 
 def build_archive_tools(
-    archive: QDArchive,
+    archive: ArchiveView,
     graveyard: MutationGraveyard,
 ) -> dict[str, Callable[..., str]]:
     """Build archive-exploration tool functions as closures over archive and graveyard.
@@ -55,7 +55,7 @@ def build_archive_tools(
         if sort_by == "frontier":
             entries = archive.frontier(k=limit)
         else:
-            candidates = archive.top_k(k=limit * 2)
+            candidates = list(archive.top_k(k=limit * 2))
             valid_fields = {
                 "reward",
                 "token_cost",
@@ -398,7 +398,7 @@ REASON: <one sentence explaining your choice>
 
 def run_archive_selection(
     model_name: str,
-    archive: QDArchive,
+    archive: ArchiveView,
     graveyard: MutationGraveyard,
     shortlist: list[str],
     current_score: float,

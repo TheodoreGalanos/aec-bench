@@ -8,7 +8,7 @@ from types import SimpleNamespace
 import pytest
 
 from aec_bench.contracts.evolution import BehaviourDescriptor, MutationStrategy, SkillEntry, WorkspaceSnapshot
-from aec_bench.evolution.archive import QDArchive
+from aec_bench.evolution.archive import ArchiveView, QDArchive
 from aec_bench.evolution.archive_agent import _parse_selection, build_archive_tools, run_archive_selection
 from aec_bench.evolution.graveyard import GraveyardEntry, MutationGraveyard
 
@@ -112,7 +112,7 @@ def _populated_graveyard() -> MutationGraveyard:
 def test_browse_archive_returns_entries() -> None:
     archive = _populated_archive()
     graveyard = MutationGraveyard()
-    tools = build_archive_tools(archive, graveyard)
+    tools = build_archive_tools(archive.view(), graveyard)
 
     result = tools["browse_archive"](sort_by="reward", limit=3)
 
@@ -125,7 +125,7 @@ def test_browse_archive_returns_entries() -> None:
 def test_browse_archive_frontier_sort() -> None:
     archive = _populated_archive()
     graveyard = MutationGraveyard()
-    tools = build_archive_tools(archive, graveyard)
+    tools = build_archive_tools(archive.view(), graveyard)
 
     result = tools["browse_archive"](sort_by="frontier", limit=3)
 
@@ -137,7 +137,7 @@ def test_browse_archive_frontier_sort() -> None:
 def test_browse_archive_empty_returns_message() -> None:
     archive = QDArchive(n_centroids=50, seed=0)
     graveyard = MutationGraveyard()
-    tools = build_archive_tools(archive, graveyard)
+    tools = build_archive_tools(archive.view(), graveyard)
 
     result = tools["browse_archive"]()
 
@@ -152,7 +152,7 @@ def test_browse_archive_empty_returns_message() -> None:
 def test_compare_cells_shows_diff() -> None:
     archive = _populated_archive()
     graveyard = MutationGraveyard()
-    tools = build_archive_tools(archive, graveyard)
+    tools = build_archive_tools(archive.view(), graveyard)
 
     result = tools["compare_cells"]("v_high", "v_mid")
 
@@ -167,7 +167,7 @@ def test_compare_cells_shows_diff() -> None:
 def test_compare_cells_not_found() -> None:
     archive = _populated_archive()
     graveyard = MutationGraveyard()
-    tools = build_archive_tools(archive, graveyard)
+    tools = build_archive_tools(archive.view(), graveyard)
 
     result = tools["compare_cells"]("v_missing", "v_high")
 
@@ -189,7 +189,7 @@ def test_compare_cells_shows_skill_diff() -> None:
         _make_snapshot("v_with_b", skills=[skill_b]),
     )
     graveyard = MutationGraveyard()
-    tools = build_archive_tools(archive, graveyard)
+    tools = build_archive_tools(archive.view(), graveyard)
 
     result = tools["compare_cells"]("v_with_a", "v_with_b")
 
@@ -207,7 +207,7 @@ def test_compare_cells_shows_skill_diff() -> None:
 def test_inspect_cell_shows_detail() -> None:
     archive = _populated_archive()
     graveyard = MutationGraveyard()
-    tools = build_archive_tools(archive, graveyard)
+    tools = build_archive_tools(archive.view(), graveyard)
 
     result = tools["inspect_cell"]("v_high")
 
@@ -221,7 +221,7 @@ def test_inspect_cell_shows_detail() -> None:
 def test_inspect_cell_not_found() -> None:
     archive = _populated_archive()
     graveyard = MutationGraveyard()
-    tools = build_archive_tools(archive, graveyard)
+    tools = build_archive_tools(archive.view(), graveyard)
 
     result = tools["inspect_cell"]("v_nonexistent")
 
@@ -237,7 +237,7 @@ def test_inspect_cell_shows_skills() -> None:
         _make_snapshot("v_skilled", skills=[skill]),
     )
     graveyard = MutationGraveyard()
-    tools = build_archive_tools(archive, graveyard)
+    tools = build_archive_tools(archive.view(), graveyard)
 
     result = tools["inspect_cell"]("v_skilled")
 
@@ -253,7 +253,7 @@ def test_inspect_cell_shows_skills() -> None:
 def test_coverage_gaps_shows_empty_regions() -> None:
     archive = _populated_archive()
     graveyard = MutationGraveyard()
-    tools = build_archive_tools(archive, graveyard)
+    tools = build_archive_tools(archive.view(), graveyard)
 
     result = tools["coverage_gaps"]()
 
@@ -265,7 +265,7 @@ def test_coverage_gaps_shows_empty_regions() -> None:
 def test_coverage_gaps_empty_archive() -> None:
     archive = QDArchive(n_centroids=100, seed=0)
     graveyard = MutationGraveyard()
-    tools = build_archive_tools(archive, graveyard)
+    tools = build_archive_tools(archive.view(), graveyard)
 
     result = tools["coverage_gaps"]()
 
@@ -281,7 +281,7 @@ def test_coverage_gaps_empty_archive() -> None:
 def test_read_graveyard_empty() -> None:
     archive = QDArchive(n_centroids=50, seed=0)
     graveyard = MutationGraveyard()
-    tools = build_archive_tools(archive, graveyard)
+    tools = build_archive_tools(archive.view(), graveyard)
 
     result = tools["read_graveyard"]()
 
@@ -291,7 +291,7 @@ def test_read_graveyard_empty() -> None:
 def test_read_graveyard_with_entries() -> None:
     archive = QDArchive(n_centroids=50, seed=0)
     graveyard = _populated_graveyard()
-    tools = build_archive_tools(archive, graveyard)
+    tools = build_archive_tools(archive.view(), graveyard)
 
     result = tools["read_graveyard"](limit=5)
 
@@ -304,10 +304,11 @@ def test_read_graveyard_with_entries() -> None:
 
 def test_run_archive_selection_passes_host_context_and_real_graveyard(monkeypatch: pytest.MonkeyPatch) -> None:
     archive = _populated_archive()
+    archive_view = archive.view()
     graveyard = _populated_graveyard()
     captured: dict[str, object] = {}
 
-    def fake_build_tools(actual_archive: QDArchive, actual_graveyard: MutationGraveyard) -> dict[str, object]:
+    def fake_build_tools(actual_archive: ArchiveView, actual_graveyard: MutationGraveyard) -> dict[str, object]:
         captured["archive"] = actual_archive
         captured["graveyard"] = actual_graveyard
         return {}
@@ -328,7 +329,7 @@ def test_run_archive_selection_passes_host_context_and_real_graveyard(monkeypatc
 
     result = run_archive_selection(
         "test-model",
-        archive,
+        archive_view,
         graveyard,
         ["v_high", "v_mid"],
         0.8,
@@ -338,7 +339,7 @@ def test_run_archive_selection_passes_host_context_and_real_graveyard(monkeypatc
 
     assert result.parent_candidate_id == "v_high"
     assert result.strategy is MutationStrategy.CONSERVATIVE
-    assert captured["archive"] is archive
+    assert captured["archive"] is archive_view
     assert captured["graveyard"] is graveyard
     assert "Host-selected mutation strategy: conservative" in captured["brief"]
     assert "Maximum inspirations: 1" in captured["brief"]
