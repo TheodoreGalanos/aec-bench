@@ -7,6 +7,7 @@ import json
 from datetime import UTC, datetime
 from pathlib import Path
 
+import pytest
 import yaml
 
 from aec_bench.contracts.evolution import (
@@ -17,6 +18,7 @@ from aec_bench.contracts.evolution import (
 from aec_bench.contracts.experiment_manifest import AgentConfig, ComputeConfig, TaskSelector
 from aec_bench.evolution import variation_operator
 from aec_bench.evolution.application import run_evolution
+from aec_bench.evolution.checkpoint import AVOConfigurationIdentity
 from aec_bench.evolution.core import (
     DevelopmentAttempt,
     EvaluatedCandidate,
@@ -393,6 +395,7 @@ def test_agentic_operator_creates_one_development_boundary_per_variation_call(tm
     workspace, batch = _setup(tmp_path)
     planned_cycles: list[int] = []
     boundaries = []
+    budgets = []
 
     def development_plan(_size: int, cycle: int) -> CandidateEvaluationBatch:
         planned_cycles.append(cycle)
@@ -419,11 +422,14 @@ def test_agentic_operator_creates_one_development_boundary_per_variation_call(tm
 
     def capture(*args, **kwargs):
         boundaries.append(kwargs["development_boundary"])
+        budgets.append(kwargs["budget"])
         return original_run(*args, **kwargs)
 
     monkeypatch.setattr(variation_operator, "run_agentic_variation", capture)
     operator = build_agentic_variation_operator(
         agent_model=TestModel(custom_output_args={"tool": "abstain", "arguments": {"reasoning": "No safe change."}}),
+        supervisor_model=TestModel(),
+        supervisor_model_identity="test-supervisor",
         development_batch_planner=development_plan,
         development_evaluator=development_evaluate,
         development_batch_size=1,
@@ -447,6 +453,7 @@ def test_agentic_operator_creates_one_development_boundary_per_variation_call(tm
     assert result.cycles_completed == 2
     assert planned_cycles == [0, 1]
     assert len(boundaries) == 2
+    assert all(budget.max_supervisor_interventions == 1 for budget in budgets)
     assert boundaries[0] is not boundaries[1]
     assert all(boundary.role.value == "development" for boundary in boundaries)
     assert all(boundary.host_experiment_id == "experiment-001" for boundary in boundaries)
@@ -478,6 +485,8 @@ def test_agentic_operator_names_development_evidence_by_run(tmp_path: Path, monk
     monkeypatch.setattr(variation_operator, "run_agentic_variation", capture)
     operator = build_agentic_variation_operator(
         agent_model=object(),
+        supervisor_model=object(),
+        supervisor_model_identity="test-supervisor",
         development_batch_planner=lambda _size, _cycle: batch_one,
         development_evaluator=lambda _snapshot, _batch: (),
         development_batch_size=1,
@@ -504,3 +513,36 @@ def test_agentic_operator_names_development_evidence_by_run(tmp_path: Path, monk
 
     assert len(boundaries) == 2
     assert boundaries[0].experiment_id != boundaries[1].experiment_id
+
+
+def test_agentic_operator_requires_explicit_matching_supervisor_identity(tmp_path: Path) -> None:
+    identity = AVOConfigurationIdentity(
+        model_identity="test-model",
+        supervisor_model_identity="test-supervisor",
+        tool_identity="avo-tools:1",
+        development_evaluator_identity="development-evaluator:test",
+        configuration_identity="test-config:1",
+    )
+    common = {
+        "development_batch_planner": lambda _size, _cycle: None,
+        "development_evaluator": lambda _snapshot, _batch: (),
+        "development_batch_size": 1,
+        "configuration_identity": identity,
+    }
+
+    with pytest.raises(ValueError, match="supervisor_model_identity must match"):
+        build_agentic_variation_operator(
+            agent_model=object(),
+            supervisor_model=object(),
+            supervisor_model_identity="wrong-supervisor",
+            **common,
+        )
+
+    model = object()
+    operator = build_agentic_variation_operator(
+        agent_model=model,
+        supervisor_model=model,
+        supervisor_model_identity="test-supervisor",
+        **common,
+    )
+    assert callable(operator)

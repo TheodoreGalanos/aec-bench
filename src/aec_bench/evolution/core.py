@@ -8,7 +8,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from aec_bench.contracts.evolution import (
     CandidateAssessment,
@@ -25,6 +25,9 @@ from aec_bench.contracts.evolution import (
 from aec_bench.evolution.analysis import EvolutionAnalysis, GraduatedScope
 from aec_bench.evolution.graveyard import GraveyardEntry
 from aec_bench.evolution.memory import AVO_MEMORY_LIMIT, AVOMemoryEntry, validate_memory_entries
+
+if TYPE_CHECKING:
+    from aec_bench.evolution.supervision import AVOSupervisionRecord
 
 
 def _require_text(value: str, field_name: str) -> None:
@@ -63,6 +66,8 @@ class AVOBudget:
     max_model_requests: int = 12
     max_tool_calls: int = 40
     max_development_evaluations: int = 7
+    max_input_tokens: int | None = None
+    max_output_tokens: int | None = None
     max_elapsed_seconds: float = 1800.0
     max_consecutive_evaluation_errors: int = 2
     max_stagnant_evaluations: int = 3
@@ -80,6 +85,10 @@ class AVOBudget:
             _require_positive_integer(getattr(self, field_name), field_name)
         _require_finite_positive(self.max_elapsed_seconds, "max_elapsed_seconds")
         _require_non_negative_integer(self.max_supervisor_interventions, "max_supervisor_interventions")
+        for field_name in ("max_input_tokens", "max_output_tokens"):
+            limit = getattr(self, field_name)
+            if limit is not None:
+                _require_positive_integer(limit, field_name)
         if self.max_cost_usd is not None:
             _require_finite_positive(self.max_cost_usd, "max_cost_usd")
 
@@ -265,6 +274,8 @@ class AVOState:
     best_attempt_id: str | None = None
     consecutive_without_progress: int = 0
     consecutive_evaluation_errors: int = 0
+    exhausted_direction_requested: bool = False
+    supervision_records: tuple[AVOSupervisionRecord, ...] = ()
     memory: tuple[AVOMemoryEntry, ...] = ()
     usage: VariationUsage = VariationUsage()
     terminal_status: VariationStatus | None = None
@@ -276,6 +287,25 @@ class AVOState:
         _require_non_negative_integer(self.current_revision, "current_revision")
         _require_non_negative_integer(self.consecutive_without_progress, "consecutive_without_progress")
         _require_non_negative_integer(self.consecutive_evaluation_errors, "consecutive_evaluation_errors")
+        if not isinstance(self.exhausted_direction_requested, bool):
+            raise TypeError("exhausted_direction_requested must be a boolean")
+        if not isinstance(self.usage, VariationUsage):
+            raise TypeError("usage must be a VariationUsage")
+        records = tuple(self.supervision_records)
+        if any(record is None for record in records):
+            raise TypeError("supervision_records must not contain None")
+        if records:
+            # Keep the foundational core independent from the supervision
+            # adapter while still rejecting untyped state at this boundary.
+            from aec_bench.evolution.supervision import AVOSupervisionRecord
+
+            if any(not isinstance(record, AVOSupervisionRecord) for record in records):
+                raise TypeError("supervision_records must contain AVOSupervisionRecord values")
+        if len(records) > self.usage.supervisor_interventions:
+            raise ValueError("supervision_records cannot exceed supervisor_interventions usage")
+        if self.terminal_status is not None and self.exhausted_direction_requested:
+            raise ValueError("terminal AVO state cannot retain a pending exhausted-direction request")
+        object.__setattr__(self, "supervision_records", records)
         attempts = tuple(self.attempts)
         if any(not isinstance(attempt, DevelopmentAttempt) for attempt in attempts):
             raise TypeError("attempts must contain DevelopmentAttempt values")
@@ -295,8 +325,6 @@ class AVOState:
             raise ValueError("development attempt trial IDs must be unique")
         if self.best_attempt_id is not None and self.best_attempt_id not in attempt_ids:
             raise ValueError("best_attempt_id must reference an attempt")
-        if not isinstance(self.usage, VariationUsage):
-            raise TypeError("usage must be a VariationUsage")
         memory = validate_memory_entries(self.memory)
         if len(memory) > AVO_MEMORY_LIMIT:
             raise ValueError(f"AVO state memory must contain at most {AVO_MEMORY_LIMIT} entries")
@@ -363,11 +391,20 @@ def budget_exhaustion_reason(budget: AVOBudget, state: AVOState) -> str | None:
             state.consecutive_without_progress,
             budget.max_stagnant_evaluations,
         ),
-        ("max_supervisor_interventions", usage.supervisor_interventions, budget.max_supervisor_interventions),
     )
     for name, observed, limit in limits:
         if limit > 0 and observed >= limit:
             return name
+    token_limits: tuple[tuple[str, int | None, int | None], ...] = (
+        ("max_input_tokens", usage.input_tokens, budget.max_input_tokens),
+        ("max_output_tokens", usage.output_tokens, budget.max_output_tokens),
+    )
+    for token_name, token_observed, token_limit in token_limits:
+        if token_limit is not None:
+            if token_observed is None and usage.model_requests > 0:
+                return f"{token_name}_unknown"
+            if token_observed is not None and token_observed >= token_limit:
+                return token_name
     if budget.max_cost_usd is not None:
         total_cost = usage.total_cost_usd
         if total_cost is None:

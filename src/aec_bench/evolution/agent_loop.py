@@ -62,6 +62,17 @@ from aec_bench.evolution.resume import (
     terminal_result_from_checkpoint,
 )
 from aec_bench.evolution.sanitiser import CompactionLLM, sanitise_workspace
+from aec_bench.evolution.supervision import (
+    AVOSupervisionAdvice,
+    AVOSupervisionRecord,
+    AVOSupervisionRequest,
+    AVOSupervisionResult,
+    SupervisorRunner,
+    project_remaining_budget,
+    reconcile_supervision_usage,
+    reserve_supervision_usage,
+    supervision_trigger_reason,
+)
 from aec_bench.evolution.workspace import Workspace, scratch_workspace_from
 
 _TOOL_NAMES = (
@@ -148,6 +159,7 @@ def run_agentic_variation(
     *,
     development_boundary: DevelopmentEvaluationBoundary,
     agent_runner: AgentRunner,
+    supervisor_runner: SupervisorRunner | None = None,
     budget: AVOBudget | None = None,
     knowledge_source: ApprovedKnowledgeSource | None = None,
     compaction_llm: CompactionLLM | None = None,
@@ -173,6 +185,8 @@ def run_agentic_variation(
         raise TypeError("development_boundary must be a DevelopmentEvaluationBoundary")
     if not callable(agent_runner):
         raise TypeError("agent_runner must be callable")
+    if supervisor_runner is not None and not callable(supervisor_runner):
+        raise TypeError("supervisor_runner must be callable")
     if cancellation_signal is None:
         cancellation_signal = AVOCancellationSignal()
     if not isinstance(cancellation_signal, AVOCancellationSignal):
@@ -181,6 +195,8 @@ def run_agentic_variation(
         budget = AVOBudget()
     if not isinstance(budget, AVOBudget):
         raise TypeError("budget must be an AVOBudget")
+    if supervisor_runner is None and budget.max_supervisor_interventions > 0:
+        raise ValueError("supervisor_runner is required when supervisor interventions are enabled")
     if development_evaluation_cost_usd is not None and development_evaluation_cost_usd < 0:
         raise ValueError("development_evaluation_cost_usd must be non-negative")
     if checkpoint_path is not None:
@@ -258,6 +274,7 @@ def run_agentic_variation(
             configuration_identity=effective_configuration_identity,
             resume_checkpoint=resume_checkpoint,
             cancellation_signal=cancellation_signal,
+            supervisor_runner=supervisor_runner,
         )
         return controller.run(agent_runner)
 
@@ -282,6 +299,7 @@ class _LoopController:
         configuration_identity: AVOConfigurationIdentity | None,
         resume_checkpoint: AVOCheckpoint | None,
         cancellation_signal: AVOCancellationSignal,
+        supervisor_runner: SupervisorRunner | None,
     ) -> None:
         self.request = request
         self.scratch = scratch
@@ -316,6 +334,7 @@ class _LoopController:
         self.configuration_identity = configuration_identity
         self.resume_checkpoint = resume_checkpoint
         self.cancellation_signal = cancellation_signal
+        self.supervisor_runner = supervisor_runner
         self.incomplete_external_effects: tuple[AVOIncompleteExternalEffect, ...] = ()
 
     def run(self, runner: AgentRunner) -> VariationResult:
@@ -328,13 +347,22 @@ class _LoopController:
                 return self._terminal_result()
             if self.resume_checkpoint is not None:
                 self._restore_checkpoint()
+                if self.terminal_status is None:
+                    try:
+                        # A crash can occur after a deterministic trigger was
+                        # checkpointed but before the normal post-command
+                        # supervision turn. Resolve that trigger first so the
+                        # next main-agent context contains the outcome.
+                        self._maybe_run_supervision()
+                    except AgentToolBudgetExceeded as exc:
+                        return self._exhausted(exc.limit)
             else:
                 self._start_new_call()
 
             if self.terminal_status is not None:
                 return self._terminal_result()
-            tools = MappingProxyType(self._build_tools())
             while self.terminal_status is None:
+                tools = MappingProxyType(self._build_tools())
                 self._refresh_elapsed()
                 limit = self._loop_limit_reason()
                 if limit is not None:
@@ -360,8 +388,9 @@ class _LoopController:
                     # accepted. Leave the marker for explicit reconciliation.
                     raise AVOIncompleteExternalEffectError(effect, exc) from exc
                 try:
-                    command, model_cost = _normalise_response(response)
+                    command, model_cost, input_tokens, output_tokens = _normalise_response(response)
                     self._record_model_cost(model_cost)
+                    self._record_model_tokens(input_tokens, output_tokens)
                 finally:
                     # The provider returned, so the marker can be cleared only
                     # after its usage has been recorded durably.
@@ -373,6 +402,11 @@ class _LoopController:
                     self._dispatch(command, tools)
                 except AgentToolBudgetExceeded as exc:
                     return self._exhausted(exc.limit)
+                if self.terminal_status is None:
+                    try:
+                        self._maybe_run_supervision()
+                    except AgentToolBudgetExceeded as exc:
+                        return self._exhausted(exc.limit)
             return self._terminal_result()
         except AVOCancellationError as exc:
             return self._finish_cancellation(exc.reason)
@@ -442,9 +476,12 @@ class _LoopController:
         self,
         operation: AVOExternalEffectOperation,
         effect_id_suffix: str,
+        *,
+        check_cancellation: bool = True,
     ) -> AVOIncompleteExternalEffect:
         """Durably mark one provider or evaluator call before invoking it."""
-        self._check_cancellation()
+        if check_cancellation:
+            self._check_cancellation()
         effect = AVOIncompleteExternalEffect(
             effect_id=f"{self.state.variation_id}:{effect_id_suffix}",
             operation=operation,
@@ -474,6 +511,10 @@ class _LoopController:
 
     def _finish_cancellation(self, reason: AVOCancellationReason) -> VariationResult:
         """Publish a truthful cancellation result before propagating it."""
+        # A pending host request is a trigger, not a terminal outcome. Clear
+        # it before publishing cancellation so the terminal checkpoint is a
+        # valid consumed state even when cancellation wins before supervision.
+        self.state = replace(self.state, exhausted_direction_requested=False)
         self.cancellation_reason = reason
         self.terminal_status = VariationStatus.CANCELLED
         self.terminal_message = reason.detail
@@ -550,7 +591,13 @@ class _LoopController:
             "submit_current_revision": guarded("submit_current_revision", self.submit_current_revision),
             "abstain": guarded("abstain", self.abstain),
         }
-        if tuple(tools) != _TOOL_NAMES:
+        if (
+            self.supervisor_runner is not None
+            and self.budget.max_supervisor_interventions > self.state.usage.supervisor_interventions
+        ):
+            tools["request_supervision"] = guarded("request_supervision", self.request_supervision)
+        expected_names = _TOOL_NAMES + (("request_supervision",) if "request_supervision" in tools else ())
+        if tuple(tools) != expected_names:
             raise AssertionError("agent tool surface does not match the approved AVO contract")
         return tools
 
@@ -797,9 +844,20 @@ class _LoopController:
         self.terminal_message = self.explicit_reasoning
         return AbstentionToolResult(True, self.explicit_reasoning)
 
+    def request_supervision(self) -> str:
+        """Persist the main agent's request for a new direction."""
+        if (
+            self.supervisor_runner is None
+            or self.state.usage.supervisor_interventions >= self.budget.max_supervisor_interventions
+        ):
+            return "Supervisor intervention is unavailable within the configured budget."
+        self.state = replace(self.state, exhausted_direction_requested=True)
+        self._write_checkpoint()
+        return "The exhausted-direction request was recorded for host supervision."
+
     def _dispatch(self, command: AgentCommand, tools: Mapping[str, Callable[..., object]]) -> None:
-        function = tools[command.tool.value]
         try:
+            function = tools[command.tool.value]
             function(**command.arguments)
         except AgentToolBudgetExceeded:
             raise
@@ -807,6 +865,71 @@ class _LoopController:
             # Typed argument errors are returned to the next model request.
             # Provider and evaluation failures use their own propagation rules.
             return
+
+    def _maybe_run_supervision(self) -> None:
+        """Run one host-owned intervention after a completed main-agent outcome."""
+        trigger_reason = supervision_trigger_reason(
+            self.state,
+            self.budget,
+            exhausted_direction_requested=self.state.exhausted_direction_requested,
+        )
+        if trigger_reason is None or self.supervisor_runner is None:
+            return
+
+        self._check_cancellation()
+        usage_before = self.state.usage
+        try:
+            reserved_usage = reserve_supervision_usage(usage_before, self.budget)
+        except ValueError as exc:
+            raise AgentToolBudgetExceeded(str(exc)) from exc
+        reserved_state = replace(self.state, usage=reserved_usage)
+        request = AVOSupervisionRequest(
+            goal=self.request.selection.goal,
+            selected_parent_id=reserved_state.parent_candidate_id,
+            strategy=self.request.selection.strategy,
+            attempt_summaries=reserved_state.memory,
+            remaining_budget=project_remaining_budget(self.budget, reserved_state),
+            trigger_reason=trigger_reason,
+        )
+        self.state = reserved_state
+        effect = self._begin_external_effect(
+            "supervisor_request",
+            f"supervisor-{reserved_usage.supervisor_interventions}",
+            check_cancellation=False,
+        )
+        try:
+            result = self.supervisor_runner(request)
+            if not isinstance(result, AVOSupervisionResult):
+                raise TypeError("supervisor runner must return AVOSupervisionResult")
+            reconciled_usage = reconcile_supervision_usage(usage_before, self.budget, result.usage)
+            self._model_cost_known = reconciled_usage.model_cost_usd is not None
+            self._model_cost_total = reconciled_usage.model_cost_usd or 0.0
+            if isinstance(result.output, AVOSupervisionAdvice):
+                record = AVOSupervisionRecord(trigger_reason=trigger_reason, advice=result.output)
+            else:
+                record = AVOSupervisionRecord(trigger_reason=trigger_reason, failure=result.output)
+            self.state = replace(
+                self.state,
+                usage=reconciled_usage,
+                supervision_records=(*self.state.supervision_records, record),
+                exhausted_direction_requested=False,
+                consecutive_without_progress=0,
+                consecutive_evaluation_errors=0,
+            )
+            # Publish the confirmed outcome, exact usage, and marker removal in
+            # one atomic checkpoint replacement. A crash before this write
+            # retains the prior incomplete marker and therefore fails closed.
+            self.incomplete_external_effects = tuple(
+                item for item in self.incomplete_external_effects if item.effect_id != effect.effect_id
+            )
+            self._write_checkpoint()
+        except AVOIncompleteExternalEffectError:
+            raise
+        except Exception as exc:
+            # A provider, transport, malformed adapter, or reconciliation
+            # failure is not safe to retry because completion is unknown.
+            raise AVOIncompleteExternalEffectError(effect, exc) from exc
+        self._check_cancellation()
 
     def _best_score(self) -> float:
         if self.state.best_attempt_id is None:
@@ -842,6 +965,25 @@ class _LoopController:
             self._model_cost_total += cost
             self._set_usage(model_cost_usd=self._model_cost_total)
 
+    def _record_model_tokens(self, input_tokens: int | None, output_tokens: int | None) -> None:
+        """Aggregate one response's token counts, retaining unknown values."""
+        usage = self.state.usage
+        previous_requests = usage.model_requests - 1
+
+        def merge(previous: int | None, added: int | None) -> int | None:
+            if added is None:
+                return None
+            if previous_requests == 0:
+                return added
+            if previous is None:
+                return None
+            return previous + added
+
+        self._set_usage(
+            input_tokens=merge(usage.input_tokens, input_tokens),
+            output_tokens=merge(usage.output_tokens, output_tokens),
+        )
+
     def _set_usage(self, **updates: int | float | None) -> None:
         usage = self.state.usage
         self.state = replace(
@@ -851,6 +993,8 @@ class _LoopController:
                 tool_calls=_as_int(updates.get("tool_calls"), usage.tool_calls),
                 development_evaluations=_as_int(updates.get("development_evaluations"), usage.development_evaluations),
                 supervisor_interventions=usage.supervisor_interventions,
+                input_tokens=_as_optional_int(updates.get("input_tokens", usage.input_tokens)),
+                output_tokens=_as_optional_int(updates.get("output_tokens", usage.output_tokens)),
                 model_cost_usd=updates.get("model_cost_usd", usage.model_cost_usd),
                 development_evaluation_cost_usd=updates.get(
                     "development_evaluation_cost_usd", usage.development_evaluation_cost_usd
@@ -897,6 +1041,9 @@ class _LoopController:
             raise AgentToolBudgetExceeded("max_tool_calls")
         if usage.elapsed_seconds >= self.budget.max_elapsed_seconds:
             raise AgentToolBudgetExceeded("max_elapsed_seconds")
+        limit = self._known_token_limit()
+        if limit is not None:
+            raise AgentToolBudgetExceeded(limit)
         limit = self._known_cost_limit()
         if limit is not None:
             raise AgentToolBudgetExceeded(limit)
@@ -926,7 +1073,25 @@ class _LoopController:
             return "max_tool_calls"
         if usage.elapsed_seconds >= self.budget.max_elapsed_seconds:
             return "max_elapsed_seconds"
+        token_limit = self._known_token_limit()
+        if token_limit is not None:
+            return token_limit
         return self._known_cost_limit()
+
+    def _known_token_limit(self) -> str | None:
+        usage = self.state.usage
+        if usage.model_requests == 0:
+            return None
+        for name, observed, limit in (
+            ("max_input_tokens", usage.input_tokens, self.budget.max_input_tokens),
+            ("max_output_tokens", usage.output_tokens, self.budget.max_output_tokens),
+        ):
+            if limit is not None:
+                if observed is None:
+                    return f"{name}_unknown"
+                if observed >= limit:
+                    return name
+        return None
 
     def _known_cost_limit(self) -> str | None:
         if self.budget.max_cost_usd is None:
@@ -974,11 +1139,13 @@ class _LoopController:
         return result
 
 
-def _normalise_response(response: AgentCommand | AgentResponse) -> tuple[AgentCommand, float | None]:
+def _normalise_response(
+    response: AgentCommand | AgentResponse,
+) -> tuple[AgentCommand, float | None, int | None, int | None]:
     if isinstance(response, AgentResponse):
-        return response.command, response.model_cost_usd
+        return response.command, response.model_cost_usd, response.input_tokens, response.output_tokens
     if isinstance(response, AgentCommand):
-        return response, None
+        return response, None, None, None
     raise TypeError("agent runner must return AgentCommand or AgentResponse")
 
 
@@ -1122,6 +1289,10 @@ def _as_int(value: int | float | None, default: int) -> int:
 
 def _as_float(value: int | float | None, default: float) -> float:
     return default if value is None else float(value)
+
+
+def _as_optional_int(value: int | float | None) -> int | None:
+    return None if value is None else int(value)
 
 
 __all__ = (

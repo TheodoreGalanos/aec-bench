@@ -32,7 +32,6 @@ from aec_bench.evolution.archive import ArchiveBatchOutcome, ArchiveView, QDArch
 from aec_bench.evolution.archive_agent import run_archive_selection
 from aec_bench.evolution.checkpoint import AVOConfigurationIdentity
 from aec_bench.evolution.core import (
-    AVOBudget,
     CycleOutcome,
     EvaluatedCandidate,
     EvolutionState,
@@ -451,6 +450,7 @@ def run_evolution_from_config(
     ).hexdigest()
     avo_configuration_identity = AVOConfigurationIdentity(
         model_identity=config.models.evolver,
+        supervisor_model_identity=config.models.evolver,
         tool_identity="avo-tools:1",
         development_evaluator_identity=(
             f"{config.backend}:{development_experiment_id}:{adapter}:{model}:timeout-{config.timeout}"
@@ -496,13 +496,15 @@ def run_evolution_from_config(
         development_batch_planner = _empty_batch_planner
         development_evaluate = make_stub_candidate_evaluator(())
 
+    evolver_model = build_pydantic_model(config.models.evolver)
     variation = build_agentic_variation_operator(
-        agent_model=build_pydantic_model(config.models.evolver),
+        agent_model=evolver_model,
+        supervisor_model=evolver_model,
+        supervisor_model_identity=avo_configuration_identity.supervisor_model_identity,
         development_batch_planner=development_batch_planner,
         development_evaluator=development_evaluate,
         development_batch_size=config.batch_size,
         development_experiment_prefix=development_experiment_id,
-        budget=AVOBudget(),
         compaction_llm=classifier_llm,
         checkpoint_root=workspace.root,
         configuration_identity=avo_configuration_identity,

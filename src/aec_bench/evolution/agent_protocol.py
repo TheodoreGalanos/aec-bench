@@ -10,13 +10,18 @@ from enum import StrEnum
 from importlib import import_module
 from typing import Any, Literal, Protocol
 
-from pydantic import ConfigDict, Field, model_validator
+from pydantic import ConfigDict, Field, field_validator, model_validator
 
 from aec_bench.contracts.validators import NonEmptyStr, StrictModel
 from aec_bench.evolution.cancellation import AVOCancellationSignal
 from aec_bench.evolution.core import AVOState, EvaluatedCandidate, VariationRequest
 from aec_bench.evolution.memory import AVOMemoryEntry
 from aec_bench.evolution.mutation import MutationAction
+from aec_bench.evolution.supervision import (
+    AVOSupervisionAdvice,
+    AVOSupervisionFailure,
+    AVOSupervisionRecord,
+)
 
 
 class AgentToolName(StrEnum):
@@ -33,6 +38,7 @@ class AgentToolName(StrEnum):
     RESTORE_ATTEMPT = "restore_attempt"
     SUBMIT_CURRENT_REVISION = "submit_current_revision"
     ABSTAIN = "abstain"
+    REQUEST_SUPERVISION = "request_supervision"
 
 
 class MutationInput(StrictModel):
@@ -85,12 +91,21 @@ class AgentResponse(StrictModel):
 
     command: AgentCommand
     model_cost_usd: float | None = None
+    input_tokens: int | None = None
+    output_tokens: int | None = None
 
     @model_validator(mode="after")
     def validate_cost(self) -> AgentResponse:
         if self.model_cost_usd is not None and (not math.isfinite(self.model_cost_usd) or self.model_cost_usd < 0):
             raise ValueError("model_cost_usd must be finite and non-negative")
         return self
+
+    @field_validator("input_tokens", "output_tokens")
+    @classmethod
+    def validate_tokens(cls, value: int | None) -> int | None:
+        if value is not None and (isinstance(value, bool) or not isinstance(value, int) or value < 0):
+            raise ValueError("token counts must be non-negative integers")
+        return value
 
 
 class AgentContext:
@@ -119,6 +134,21 @@ class AgentContext:
         self.previous_tool_error = previous_tool_error
         self.cancellation_signal = cancellation_signal
         self.memory: tuple[AVOMemoryEntry, ...] = state.memory
+        self.supervision_records: tuple[AVOSupervisionRecord, ...] = state.supervision_records
+
+    @property
+    def latest_supervision_advice(self) -> AVOSupervisionAdvice | None:
+        """Return the latest advice, without treating it as an instruction."""
+        if not self.supervision_records:
+            return None
+        return self.supervision_records[-1].advice
+
+    @property
+    def latest_supervision_failure(self) -> AVOSupervisionFailure | None:
+        """Return the latest confirmed supervisor failure, when present."""
+        if not self.supervision_records:
+            return None
+        return self.supervision_records[-1].failure
 
 
 class AgentRunner(Protocol):
@@ -161,7 +191,13 @@ class PydanticAIStructuredRunner:
             retries=0,
         )
         result = agent.run_sync(_render_agent_prompt(context), usage_limits=usage_module.UsageLimits(request_limit=1))
-        return AgentResponse(command=result.output, model_cost_usd=None)
+        usage = result.usage()
+        return AgentResponse(
+            command=result.output,
+            model_cost_usd=None,
+            input_tokens=usage.input_tokens,
+            output_tokens=usage.output_tokens,
+        )
 
 
 def _render_agent_prompt(context: AgentContext) -> str:
@@ -190,6 +226,37 @@ def _render_agent_prompt(context: AgentContext) -> str:
         ensure_ascii=True,
         sort_keys=True,
     )
+    supervision = "No confirmed supervisor outcome is available."
+    if context.latest_supervision_advice is not None:
+        supervision = json.dumps(
+            {
+                "directions": context.latest_supervision_advice.directions,
+                "reasoning": context.latest_supervision_advice.reasoning,
+                "authority": (
+                    "optional advisory guidance only; it does not itself perform or authorize workspace edits, "
+                    "evaluation, or submission, or alter selection, parent, strategy, goal, or budgets; use it only "
+                    "through existing bounded tools and authority"
+                ),
+            },
+            ensure_ascii=True,
+            sort_keys=True,
+        )
+    elif context.latest_supervision_failure is not None:
+        supervision = json.dumps(
+            {
+                "failure_code": context.latest_supervision_failure.code.value,
+                "detail": context.latest_supervision_failure.detail,
+                "authority": "confirmed fact only; do not retry supervision",
+            },
+            ensure_ascii=True,
+            sort_keys=True,
+        )
+    host_command = (
+        "The host command `request_supervision` takes no arguments and records that the current direction "
+        "is exhausted. "
+        if "request_supervision" in context.tools
+        else ""
+    )
     return (
         f"Goal: {request.selection.goal}\n"
         f"Strategy: {request.selection.strategy.value}\n"
@@ -199,11 +266,13 @@ def _render_agent_prompt(context: AgentContext) -> str:
         f"development evaluations {context.state.usage.development_evaluations}.\n"
         f"Structured memory (bounded facts only): {memory}\n"
         f"Approved tools: {names}. Each command uses `tool` plus an `arguments` object. "
+        f"{host_command}"
         "For apply_mutation, arguments are {mutation: {type, name, description, discipline, body, or content}}. "
         "For evaluate_current_revision, arguments are {hypothesis: string}. For restore_attempt, "
         "arguments are {attempt_id: string} or {revision: integer}. For submit_current_revision and "
         "abstain, arguments are {reasoning: string}.\n"
         f"{previous}\n"
+        f"Latest supervisor outcome (advisory guidance or confirmed fact only): {supervision}\n"
         "Return the next AgentCommand."
     )
 

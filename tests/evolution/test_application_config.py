@@ -86,10 +86,12 @@ class TestRunEvolutionFromConfig:
 
         assert result is expected
         assert builder["agent_model"] == "sonnet"
+        assert builder["supervisor_model"] == builder["agent_model"]
+        assert builder["supervisor_model_identity"] == "sonnet"
         assert builder["development_batch_size"] == config.batch_size
         assert callable(builder["development_batch_planner"])
         assert callable(builder["development_evaluator"])
-        assert builder["budget"].max_model_requests == 12
+        assert "budget" not in builder
         assert builder["checkpoint_root"] == ws_root
         identity = builder["configuration_identity"]
         assert identity.model_identity == "sonnet"

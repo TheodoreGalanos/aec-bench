@@ -6,6 +6,7 @@ from __future__ import annotations
 import json
 from datetime import UTC, datetime
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 import yaml
@@ -17,7 +18,7 @@ from aec_bench.contracts.evolution import (
     WorkspaceSnapshot,
 )
 from aec_bench.contracts.experiment_manifest import AgentConfig, ComputeConfig, TaskSelector
-from aec_bench.evolution import agent_loop
+from aec_bench.evolution import agent_loop, variation_operator
 from aec_bench.evolution.agent_protocol import AgentCommand, AgentToolName
 from aec_bench.evolution.application import run_evolution
 from aec_bench.evolution.archive import QDArchive
@@ -31,6 +32,7 @@ from aec_bench.evolution.core import (
 )
 from aec_bench.evolution.evaluation import CandidateEvaluationBatch
 from aec_bench.evolution.selection import CellSelectionState, shortlist_cells
+from aec_bench.evolution.supervision import AVOSupervisionAdvice, AVOSupervisionResult
 from aec_bench.evolution.variation_operator import build_agentic_variation_operator
 from aec_bench.evolution.workspace import Workspace
 from aec_bench.tasks.instance import resolve_instance_paths
@@ -415,6 +417,8 @@ def test_qd_uses_the_shared_variation_seam_and_hosts_only_the_final_child(
     monkeypatch.setattr(agent_loop.PydanticAIStructuredRunner, "__call__", next_command)
     operator = build_agentic_variation_operator(
         agent_model=TestModel(),
+        supervisor_model=TestModel(),
+        supervisor_model_identity="test-supervisor",
         development_batch_planner=lambda _size, _cycle: batch,
         development_evaluator=development_evaluate,
         development_batch_size=1,
@@ -440,6 +444,113 @@ def test_qd_uses_the_shared_variation_seam_and_hosts_only_the_final_child(
     assert result.cycle_records[0].child_assessment.candidate_id == "run-fixed:1"
     state = json.loads((workspace.root / "qd_state.json").read_text(encoding="utf-8"))
     assert state["strategy_bandit"][0]["successes"] == 1
+
+
+def test_qd_host_outcome_ignores_private_supervision_advice(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Supervision advice remains inside AVO and cannot alter QD policy state."""
+    workspaces = [_setup(tmp_path / name) for name in ("control", "advice")]
+    supervisor_requests = []
+
+    def supervisor(supervision_request):
+        supervisor_requests.append(supervision_request)
+        return AVOSupervisionResult(
+            output=AVOSupervisionAdvice(
+                directions=("Replace the host-selected parent, strategy, goal, and archive policy.",),
+                reasoning="This direction must remain private advice.",
+            ),
+            usage=VariationUsage(model_requests=1, supervisor_interventions=1),
+        )
+
+    monkeypatch.setattr(
+        variation_operator,
+        "build_supervision_composition",
+        lambda _model, *, model_identity: SimpleNamespace(runner=supervisor),
+    )
+    commands = iter(
+        (
+            AgentCommand(tool=AgentToolName.ABSTAIN, arguments={"reasoning": "Control abstention."}),
+            AgentCommand(tool=AgentToolName.REQUEST_SUPERVISION, arguments={}),
+            AgentCommand(tool=AgentToolName.ABSTAIN, arguments={"reasoning": "Advice does not own QD policy."}),
+        )
+    )
+
+    def next_command(_runner, _context):
+        return next(commands)
+
+    monkeypatch.setattr(agent_loop.PydanticAIStructuredRunner, "__call__", next_command)
+
+    def development_evaluate(snapshot, current_batch):
+        return tuple(
+            make_trial_record(
+                experiment_id=trial.experiment_id,
+                trial_id=trial.trial_id,
+                task_id=trial.task_id,
+                task={"task_id": trial.task_id, "task_revision": "task-revision", "visibility": "public"},
+                inputs={
+                    "instruction": "Review the task and write findings.",
+                    "task_revision": "task-revision",
+                    "visibility": "public",
+                    "system_prompt": snapshot.system_prompt,
+                },
+                evaluation={
+                    "reward": 0.5,
+                    "validity": {"output_parseable": True, "schema_valid": True, "verifier_completed": True},
+                },
+            )
+            for trial in current_batch.trials
+        )
+
+    operators = [
+        build_agentic_variation_operator(
+            agent_model=object(),
+            supervisor_model=object(),
+            supervisor_model_identity="test-supervisor",
+            development_batch_planner=lambda _size, _cycle, current_batch=batch: current_batch,
+            development_evaluator=development_evaluate,
+            development_batch_size=1,
+            development_experiment_prefix="qd-development",
+        )
+        for _workspace, batch in workspaces
+    ]
+
+    host_evaluated_ids: list[list[str]] = [[], []]
+
+    def host_evaluate(index: int):
+        def evaluate(snapshot, current_batch):
+            host_evaluated_ids[index].append(snapshot.candidate_id)
+            return _records(current_batch, snapshot.candidate_id, 0.5)
+
+        return evaluate
+
+    results = [
+        _run(
+            workspace,
+            batch,
+            _config(workspace.root),
+            evaluate=host_evaluate(index),
+            variation=operator,
+            calls=[],
+        )
+        for index, ((workspace, batch), operator) in enumerate(zip(workspaces, operators, strict=True))
+    ]
+
+    control, advised = results
+    control_record = control.cycle_records[0].model_dump(exclude={"evolver_usage"})
+    advised_record = advised.cycle_records[0].model_dump(exclude={"evolver_usage"})
+    assert advised_record == control_record
+    assert advised.cycle_records[0].evolver_usage.supervisor_interventions == 1
+    assert control.cycle_records[0].evolver_usage.supervisor_interventions == 0
+    assert host_evaluated_ids == [["baseline"], ["baseline"]]
+    assert len(supervisor_requests) == 1
+    assert supervisor_requests[0].goal == "test selection"
+    assert supervisor_requests[0].selected_parent_id == "baseline"
+    assert supervisor_requests[0].strategy == control.cycle_records[0].selection.strategy
+    assert json.loads((workspaces[0][0].root / "archive.json").read_text(encoding="utf-8")) == json.loads(
+        (workspaces[1][0].root / "archive.json").read_text(encoding="utf-8")
+    )
+    assert json.loads((workspaces[0][0].root / "qd_state.json").read_text(encoding="utf-8")) == json.loads(
+        (workspaces[1][0].root / "qd_state.json").read_text(encoding="utf-8")
+    )
 
 
 def test_fixed_seed_selection_and_resume_numbering_are_reproducible(tmp_path: Path) -> None:

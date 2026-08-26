@@ -40,12 +40,13 @@ from aec_bench.evolution.core import (
     VariationStatus,
 )
 from aec_bench.evolution.memory import AVO_MEMORY_LIMIT, AVOMemoryEntry, validate_memory_entries
+from aec_bench.evolution.supervision import AVOSupervisionRecord
 from aec_bench.ledger.durability import mkdir_durable, replace_file_bytes_durable
 
-AVO_CHECKPOINT_SCHEMA_VERSION: Literal[1] = 1
+AVO_CHECKPOINT_SCHEMA_VERSION: Literal[2] = 2
 """The only persisted checkpoint schema currently accepted by the reader."""
 
-AVOExternalEffectOperation = Literal["model_request", "development_evaluation", "compaction"]
+AVOExternalEffectOperation = Literal["model_request", "development_evaluation", "compaction", "supervisor_request"]
 """External operations that require durable incomplete-effect reconciliation."""
 
 
@@ -141,11 +142,18 @@ class AVOUsageSnapshot(StrictModel):
     tool_calls: int = 0
     development_evaluations: int = 0
     supervisor_interventions: int = 0
+    input_tokens: int | None = None
+    output_tokens: int | None = None
     model_cost_usd: float | None = None
     development_evaluation_cost_usd: float | None = None
     elapsed_seconds: float = 0.0
 
-    @field_validator("model_requests", "tool_calls", "development_evaluations", "supervisor_interventions")
+    @field_validator(
+        "model_requests",
+        "tool_calls",
+        "development_evaluations",
+        "supervisor_interventions",
+    )
     @classmethod
     def validate_counters(cls, value: int) -> int:
         if isinstance(value, bool) or not isinstance(value, int) or value < 0:
@@ -159,6 +167,13 @@ class AVOUsageSnapshot(StrictModel):
             return None
         if isinstance(value, bool) or not isinstance(value, int | float) or not math.isfinite(value) or value < 0:
             raise ValueError("checkpoint usage values must be finite and non-negative")
+        return value
+
+    @field_validator("input_tokens", "output_tokens")
+    @classmethod
+    def validate_token_counts(cls, value: int | None) -> int | None:
+        if value is not None and (isinstance(value, bool) or not isinstance(value, int) or value < 0):
+            raise ValueError("checkpoint token counts must be non-negative integers")
         return value
 
     @classmethod
@@ -181,6 +196,8 @@ class AVOBudgetSnapshot(StrictModel):
     max_model_requests: int = 12
     max_tool_calls: int = 40
     max_development_evaluations: int = 7
+    max_input_tokens: int | None = None
+    max_output_tokens: int | None = None
     max_elapsed_seconds: float = 1800.0
     max_consecutive_evaluation_errors: int = 2
     max_stagnant_evaluations: int = 3
@@ -216,6 +233,13 @@ class AVOBudgetSnapshot(StrictModel):
             raise ValueError("checkpoint active budget values must be finite and positive")
         return value
 
+    @field_validator("max_input_tokens", "max_output_tokens")
+    @classmethod
+    def validate_token_limits(cls, value: int | None) -> int | None:
+        if value is not None and (isinstance(value, bool) or not isinstance(value, int) or value <= 0):
+            raise ValueError("checkpoint token limits must be positive integers")
+        return value
+
     @classmethod
     def from_budget(cls, budget: AVOBudget) -> AVOBudgetSnapshot:
         """Convert one runtime budget."""
@@ -234,6 +258,7 @@ class AVOConfigurationIdentity(StrictModel):
     """Explicit behavior-affecting identity required for checkpoint compatibility."""
 
     model_identity: NonEmptyStr
+    supervisor_model_identity: NonEmptyStr
     tool_identity: NonEmptyStr
     development_evaluator_identity: NonEmptyStr
     configuration_identity: NonEmptyStr
@@ -305,7 +330,7 @@ class AVOCheckpointTerminalResult(StrictModel):
 class AVOCheckpoint(StrictModel):
     """The sole validated resume authority for one durable AVO call."""
 
-    schema_version: Literal[1] = AVO_CHECKPOINT_SCHEMA_VERSION
+    schema_version: Literal[2] = AVO_CHECKPOINT_SCHEMA_VERSION
     run_id: NonEmptyStr
     variation_id: NonEmptyStr
     parent_candidate_id: NonEmptyStr
@@ -323,9 +348,11 @@ class AVOCheckpoint(StrictModel):
     best_attempt_id: NonEmptyStr | None = None
     consecutive_without_progress: int = 0
     consecutive_evaluation_errors: int = 0
+    exhausted_direction_requested: bool = False
     budget: AVOBudgetSnapshot
     usage: AVOUsageSnapshot
     structured_memory: tuple[AVOMemoryEntry, ...] = ()
+    supervision_records: tuple[AVOSupervisionRecord, ...] = ()
     incomplete_external_effects: tuple[AVOIncompleteExternalEffect, ...] = ()
     terminal_result: AVOCheckpointTerminalResult | None = None
 
@@ -334,6 +361,13 @@ class AVOCheckpoint(StrictModel):
     def validate_counters(cls, value: int) -> int:
         if isinstance(value, bool) or not isinstance(value, int) or value < 0:
             raise ValueError("checkpoint state counters must be non-negative integers")
+        return value
+
+    @field_validator("exhausted_direction_requested")
+    @classmethod
+    def validate_direction_request(cls, value: bool) -> bool:
+        if not isinstance(value, bool):
+            raise TypeError("checkpoint exhausted_direction_requested must be a boolean")
         return value
 
     @field_validator("development_case_ids")
@@ -376,6 +410,25 @@ class AVOCheckpoint(StrictModel):
             raise ValueError("checkpoint current_snapshot must match final_child_candidate_id")
         if self.terminal_result is not None and self.incomplete_external_effects:
             raise ValueError("terminal checkpoint must not retain incomplete external effects")
+        in_flight_supervisions = tuple(
+            effect for effect in self.incomplete_external_effects if effect.operation == "supervisor_request"
+        )
+        if len(in_flight_supervisions) > 1:
+            raise ValueError("checkpoint may contain at most one incomplete supervisor request")
+        if len(self.supervision_records) > self.budget.max_supervisor_interventions:
+            raise ValueError("checkpoint supervision_records exceed the configured supervisor intervention budget")
+        if len(self.supervision_records) + len(in_flight_supervisions) != self.usage.supervisor_interventions:
+            raise ValueError("checkpoint supervision_records and incomplete requests must match supervisor usage")
+        if (
+            self.exhausted_direction_requested
+            and self.usage.supervisor_interventions >= self.budget.max_supervisor_interventions
+            and not in_flight_supervisions
+        ):
+            raise ValueError(
+                "checkpoint exhausted_direction_requested cannot remain after supervisor budget is consumed"
+            )
+        if self.terminal_result is not None and self.exhausted_direction_requested:
+            raise ValueError("terminal checkpoint cannot retain a pending exhausted-direction request")
 
         # Parent development evidence is absent only before the first baseline
         # evaluation. This shape is needed to durably represent cancellation or
@@ -630,9 +683,11 @@ class AVOCheckpoint(StrictModel):
             best_attempt_id=state.best_attempt_id,
             consecutive_without_progress=state.consecutive_without_progress,
             consecutive_evaluation_errors=state.consecutive_evaluation_errors,
+            exhausted_direction_requested=state.exhausted_direction_requested,
             budget=AVOBudgetSnapshot.from_budget(budget),
             usage=AVOUsageSnapshot.from_usage(state.usage),
             structured_memory=structured_memory,
+            supervision_records=tuple(state.supervision_records),
             incomplete_external_effects=incomplete_external_effects,
             terminal_result=terminal_result,
         )
@@ -649,6 +704,8 @@ class AVOCheckpoint(StrictModel):
             best_attempt_id=self.best_attempt_id,
             consecutive_without_progress=self.consecutive_without_progress,
             consecutive_evaluation_errors=self.consecutive_evaluation_errors,
+            exhausted_direction_requested=self.exhausted_direction_requested,
+            supervision_records=self.supervision_records,
             memory=self.structured_memory,
             usage=self.usage.to_usage(),
             terminal_status=self.terminal_result.status if self.terminal_result is not None else None,
@@ -711,6 +768,7 @@ __all__ = (
     "AVOExternalEffectOperation",
     "AVOIncompleteExternalEffect",
     "AVOIncompleteExternalEffectError",
+    "AVOSupervisionRecord",
     "AVOUsageSnapshot",
     "read_checkpoint",
     "write_checkpoint",
