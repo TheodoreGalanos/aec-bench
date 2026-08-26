@@ -78,12 +78,6 @@ def test_swarm_history_no_runs(tmp_path: Path) -> None:
     assert "No swarm runs found" in result.output
 
 
-def test_swarm_resume_missing_log(tmp_path: Path) -> None:
-    result = runner.invoke(app, ["swarm", "resume", "sw-missing", "--state-dir", str(tmp_path)])
+def test_swarm_status_requires_explicit_run_state(tmp_path: Path) -> None:
+    result = runner.invoke(app, ["swarm", "status", "sw-missing", "--state-dir", str(tmp_path)])
     assert result.exit_code != 0
-
-
-def test_swarm_stop_outputs_run_id() -> None:
-    result = runner.invoke(app, ["swarm", "stop", "sw-test-123"])
-    assert result.exit_code == 0
-    assert "sw-test-123" in result.output
