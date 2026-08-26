@@ -192,7 +192,7 @@ class TestWorkspaceSnapshot:
         root = _scaffold_workspace(tmp_path / "ws")
         ws = Workspace(root)
         snapshot = ws.export_snapshot(candidate_id="run:1")
-        assert snapshot.skills == []
+        assert snapshot.skills == ()
         assert snapshot.candidate_id == "run:1"
 
 
