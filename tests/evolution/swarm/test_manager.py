@@ -3,20 +3,32 @@
 
 from __future__ import annotations
 
+import asyncio
+import json
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Any
 
 import pytest
 
-from aec_bench.contracts.evolution import BehaviourDescriptor, SwarmEventType
+from aec_bench.contracts.evaluation_result import EvaluationResult, ValidityCheck
+from aec_bench.contracts.evolution import EvolutionObservation, MutationSummary, SwarmEventType, WorkspaceSnapshot
+from aec_bench.contracts.experiment_manifest import AgentConfig, ComputeConfig
+from aec_bench.evolution.core import VariationResult, VariationStatus
+from aec_bench.evolution.evaluation import CandidateEvaluationBatch
 from aec_bench.evolution.swarm.config import (
     SwarmAgentConfig,
     SwarmBudgetConfig,
     SwarmConfig,
     SwarmTaskConfig,
 )
+from aec_bench.evolution.swarm.core import SwarmAgentResult
 from aec_bench.evolution.swarm.events import SwarmEventReader
 from aec_bench.evolution.swarm.manager import SwarmManager
+from aec_bench.evolution.swarm.resume import load_resumed_state
+from aec_bench.tasks.instance import resolve_instance_paths
+from aec_bench.trials import PlannedTrial
+from tests.support.task_factories import make_task_definition
+from tests.support.trial_record_factories import make_trial_record
 
 
 def _make_config(agent_count: int = 2, max_cost: float = 10.0, eval_budget: float = 5.0) -> SwarmConfig:
@@ -30,45 +42,84 @@ def _make_config(agent_count: int = 2, max_cost: float = 10.0, eval_budget: floa
 _call_counter = 0
 
 
-class FakeResult:
-    """Minimal result object returned by FakeEvolver.step()."""
-
-    def __init__(self, score: float, cost: float = 0.5) -> None:
-        global _call_counter
-        _call_counter += 1
-        self.score = score
-        self.cost_usd = cost
-        self.candidate_id = f"v-{_call_counter}"
-        self.bd = BehaviourDescriptor(
-            token_cost=float(_call_counter * 10_000),
-            verification_depth=min(score, 1.0),
-            tool_density=1.0,
-            exploration_ratio=0.3,
-            deliberation_ratio=0.2,
-            reward=score,
-        )
-        self.parent_candidate_id = ""
-
-
 class FakeEvolverFactory:
     """Creates fake evolvers that return predetermined scores."""
 
-    def __init__(self, scores_per_agent: dict[str, list[float]]) -> None:
+    def __init__(self, scores_per_agent: dict[str, list[float]], state_dir: Path | None = None) -> None:
+        self._state_dir = state_dir or Path("/private/tmp/aec-bench-swarm-test")
         self._scores = scores_per_agent
+        self._scores_by_candidate: dict[str, float] = {}
+        self.lock_probe: asyncio.Lock | None = None
+        self.lock_probe_states: list[bool] = []
 
-    def create(self, agent_id: str, model_override: str | None = None) -> Any:
+    def create(self, agent_id: str, model_override: str | None = None):
         scores = self._scores.get(agent_id, [0.5])
 
         class _FakeEvolver:
             def __init__(self) -> None:
                 self._i = 0
 
-            async def step(self) -> FakeResult:
+            async def step(self, assignment):
                 s = scores[self._i % len(scores)]
                 self._i += 1
-                return FakeResult(score=s)
+                candidate_id = f"{agent_id}-child-{self._i}"
+                self._factory._scores_by_candidate[candidate_id] = s
+                return SwarmAgentResult(
+                    agent_id=agent_id,
+                    assignment_id=assignment.assignment_id,
+                    variation=VariationResult(
+                        VariationStatus.SUBMITTED,
+                        WorkspaceSnapshot(system_prompt=f"{candidate_id} prompt", candidate_id=candidate_id),
+                        MutationSummary(prompt_modified=True),
+                        "Apply exact host-evaluated mutation",
+                        0.5,
+                    ),
+                    agent_cost_usd=0.5,
+                )
 
-        return _FakeEvolver()
+        evolver = _FakeEvolver()
+        evolver._factory = self
+        return evolver
+
+    def plan_batch(self, batch_size: int, cycle: int) -> CandidateEvaluationBatch:
+        task_dir = self._state_dir / "task"
+        task_dir.mkdir(parents=True, exist_ok=True)
+        task_id = "electrical/check/swarm"
+        resolved = resolve_instance_paths(make_task_definition(task_id=task_id), task_dir)
+        planned = PlannedTrial(
+            trial_id=f"planned-{cycle}",
+            experiment_id="swarm-test",
+            task_id=task_id,
+            agent=AgentConfig(name="agent", adapter="direct", model="test"),
+            compute=ComputeConfig(backend="local"),
+            repetition=1,
+        )
+        return CandidateEvaluationBatch((resolved,), (planned,), (f"case-{cycle}",), cycle=cycle)
+
+    def evaluate(self, snapshot: WorkspaceSnapshot, batch: CandidateEvaluationBatch):
+        if self.lock_probe is not None:
+            self.lock_probe_states.append(self.lock_probe.locked())
+        score = self._scores_by_candidate.get(snapshot.candidate_id, 0.5)
+        return tuple(
+            make_trial_record(
+                trial_id=f"{snapshot.candidate_id}-trial",
+                task_id=trial.task_id,
+                evaluation=EvaluationResult(
+                    reward=score,
+                    validity=ValidityCheck(output_parseable=True, schema_valid=True, verifier_completed=True),
+                ),
+            )
+            for trial in batch.trials
+        )
+
+    def enrich(self, observations: Sequence[EvolutionObservation]) -> Sequence[EvolutionObservation]:
+        return observations
+
+    def baseline_snapshot(self) -> WorkspaceSnapshot:
+        return WorkspaceSnapshot(system_prompt="baseline prompt", candidate_id="baseline")
+
+    def cleanup(self) -> None:
+        return None
 
 
 @pytest.mark.asyncio
@@ -81,6 +132,58 @@ async def test_manager_runs_and_completes(tmp_path: Path) -> None:
     assert result.run_id != ""
     assert result.total_evals > 0
     assert len(result.agents) == 2
+
+
+@pytest.mark.asyncio
+async def test_concurrent_completions_reduce_without_lost_state(tmp_path: Path) -> None:
+    config = _make_config(agent_count=2, max_cost=1.0)
+    factory = FakeEvolverFactory({"agent-0": [0.6], "agent-1": [0.7]})
+    manager = SwarmManager(config=config, state_dir=tmp_path, evolver_factory=factory)
+    factory.lock_probe = manager._lock
+    result = await manager.run()
+
+    assert result.total_evals >= 2
+    assert result.total_cost_usd == pytest.approx(result.total_evals * 0.5)
+    assert len(factory.lock_probe_states) == result.total_evals * 2
+    assert not any(factory.lock_probe_states)
+    eval_events = [
+        event
+        for event in SwarmEventReader(tmp_path / "events.jsonl").read_all()
+        if event.event_type == SwarmEventType.EVAL_COMPLETED
+    ]
+    assert len(eval_events) == result.total_evals
+    persisted = json.loads((tmp_path / "swarm_state.json").read_text())
+    assert persisted["total_evaluations"] == result.total_evals
+
+
+@pytest.mark.asyncio
+async def test_cancellation_persists_state_and_cleans_agent_resources(tmp_path: Path) -> None:
+    class BlockingFactory(FakeEvolverFactory):
+        def __init__(self) -> None:
+            super().__init__({"agent-0": [0.5]})
+            self.cleaned = False
+
+        def create(self, agent_id: str, model_override: str | None = None):
+            class BlockingEvolver:
+                async def step(self, assignment):
+                    await asyncio.Event().wait()
+
+            return BlockingEvolver()
+
+        def cleanup(self) -> None:
+            self.cleaned = True
+
+    factory = BlockingFactory()
+    manager = SwarmManager(config=_make_config(agent_count=1), state_dir=tmp_path, evolver_factory=factory)
+    run_task = asyncio.create_task(manager.run())
+    await asyncio.sleep(0.05)
+    run_task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await run_task
+
+    assert factory.cleaned
+    assert (tmp_path / "swarm_state.json").exists()
+    assert load_resumed_state(tmp_path).run_id == manager._run_id
 
 
 @pytest.mark.asyncio
@@ -153,11 +256,15 @@ async def test_manager_saves_state_every_eval(tmp_path: Path) -> None:
     config = _make_config(agent_count=1, max_cost=3.0)
     factory = FakeEvolverFactory({"agent-0": [0.7]})
     manager = SwarmManager(config=config, state_dir=tmp_path, evolver_factory=factory)
-    await manager.run()
+    result = await manager.run()
 
     assert (tmp_path / "archive.json").exists()
     assert (tmp_path / "graveyard.json").exists()
     assert (tmp_path / "lineage.json").exists()
+    resumed = load_resumed_state(tmp_path)
+    assert resumed.run_id == result.run_id
+    assert resumed.initial_candidate_id == "baseline"
+    assert resumed.candidates["baseline"].system_prompt == "baseline prompt"
 
 
 @pytest.mark.asyncio

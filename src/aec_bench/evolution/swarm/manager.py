@@ -16,6 +16,7 @@ from typing import Protocol, runtime_checkable
 from aec_bench.contracts.evolution import (
     AgentStatus,
     ConsolidationReport,
+    EvolutionObservation,
     LineageNarrative,
     LineageRecord,
     MutationStrategy,
@@ -30,7 +31,7 @@ from aec_bench.contracts.trial_record import TrialRecord
 from aec_bench.evolution.archive import QDArchive
 from aec_bench.evolution.behaviour import extract_behaviour_descriptor
 from aec_bench.evolution.core import SelectionPlan, VariationStatus, assessment_score
-from aec_bench.evolution.evaluation import CandidateBatchPlanner, CandidateEvaluator
+from aec_bench.evolution.evaluation import CandidateBatchPlanner, CandidateEvaluationBatch, CandidateEvaluator
 from aec_bench.evolution.swarm.agent_task import AgentContext, Evolver, run_agent_loop
 from aec_bench.evolution.swarm.budget import BudgetLedger
 from aec_bench.evolution.swarm.config import SwarmConfig
@@ -45,7 +46,6 @@ from aec_bench.evolution.swarm.core import (
     reduce_swarm_outcome,
 )
 from aec_bench.evolution.swarm.events import SwarmEventWriter
-from aec_bench.evolution.swarm.evolver import SwarmEvolverFactory
 from aec_bench.evolution.swarm.lineage import LineageTracker
 from aec_bench.evolution.swarm.notes import NoteStore
 from aec_bench.evolution.swarm.processing import (
@@ -68,6 +68,21 @@ class EvolverFactory(Protocol):
         agent_id: str,
         model_override: str | None = None,
     ) -> Evolver: ...
+
+
+@runtime_checkable
+class HostRuntime(Protocol):
+    """Host-owned services required to evaluate exact swarm candidates."""
+
+    def plan_batch(self, batch_size: int, cycle: int) -> CandidateEvaluationBatch: ...
+
+    def evaluate(self, snapshot: WorkspaceSnapshot, batch: CandidateEvaluationBatch) -> tuple[TrialRecord, ...]: ...
+
+    def enrich(self, observations: Sequence[EvolutionObservation]) -> Sequence[EvolutionObservation]: ...
+
+    def baseline_snapshot(self) -> WorkspaceSnapshot: ...
+
+    def cleanup(self) -> None: ...
 
 
 AssignmentIdFactory = Callable[[str, int], str]
@@ -130,10 +145,13 @@ class SwarmManager:
         self._monotonic_clock = monotonic_clock or time.monotonic
         self._assignment_id_factory = assignment_id_factory or _default_assignment_id
         self._initial_snapshot = initial_snapshot
-        if isinstance(evolver_factory, SwarmEvolverFactory):
-            batch_planner = batch_planner or evolver_factory.plan_batch
-            evaluator = evaluator or evolver_factory.evaluate
-            enricher = enricher or evolver_factory.enrich
+        host_runtime = evolver_factory if isinstance(evolver_factory, HostRuntime) else None
+        if batch_planner is None and host_runtime is not None:
+            batch_planner = host_runtime.plan_batch
+        if evaluator is None and host_runtime is not None:
+            evaluator = host_runtime.evaluate
+        if enricher is None and host_runtime is not None:
+            enricher = host_runtime.enrich
         if batch_planner is None or evaluator is None or enricher is None:
             raise ValueError("host batch_planner, evaluator, and enricher are required")
         self._batch_planner = batch_planner
@@ -220,8 +238,13 @@ class SwarmManager:
     async def _on_result(self, assignment: SwarmAssignment, result: SwarmAgentResult) -> bool:
         """Evaluate and reduce one typed result; model work stays outside the lock."""
         if result.variation.status is VariationStatus.SUBMITTED:
-            batch = self._batch_planner(self._config.evolution.batch_size, self._agent_cycles[assignment.agent_id] - 1)
-            evaluated = evaluate_swarm_result(
+            batch = await asyncio.to_thread(
+                self._batch_planner,
+                self._config.evolution.batch_size,
+                self._agent_cycles[assignment.agent_id] - 1,
+            )
+            evaluated = await asyncio.to_thread(
+                evaluate_swarm_result,
                 assignment=assignment,
                 agent_result=result,
                 batch=batch,
@@ -249,7 +272,10 @@ class SwarmManager:
             if outcome.evaluated_candidate is not None:
                 child = outcome.evaluated_candidate
                 self._candidate_snapshots[child.snapshot.candidate_id] = child.snapshot
-                self._budget.record_eval_spend(sum(_trial_cost(obs.trial) for obs in child.observations))
+                eval_cost = sum(_trial_cost(obs.trial) for obs in child.observations)
+                if evaluated.parent is not None:
+                    eval_cost += sum(_trial_cost(obs.trial) for obs in evaluated.parent.observations)
+                self._budget.record_eval_spend(eval_cost)
             self._budget.record_agent_spend(assignment.agent_id, result.agent_cost_usd)
             self._agent_consecutive_errors[assignment.agent_id] = 0
             budget = BudgetSnapshot(
@@ -271,6 +297,11 @@ class SwarmManager:
             )
             inserted = outcome.archive_outcome.added if outcome.archive_outcome is not None else False
             candidate_id = outcome.evaluated_candidate.snapshot.candidate_id if outcome.evaluated_candidate else None
+            descriptor = (
+                extract_behaviour_descriptor(outcome.evaluated_candidate.observations[0])
+                if outcome.evaluated_candidate is not None
+                else None
+            )
             self._emit(
                 SwarmEventType.EVAL_COMPLETED,
                 assignment.agent_id,
@@ -281,6 +312,7 @@ class SwarmManager:
                     "inserted": inserted,
                     "budget_phase": self._budget.phase,
                     "score": score,
+                    "bd": descriptor.model_dump(mode="json") if descriptor is not None else None,
                 },
             )
             if decision.pivot is not None:
@@ -291,7 +323,7 @@ class SwarmManager:
                 )
             if inserted and outcome.evaluated_candidate is not None:
                 child = outcome.evaluated_candidate
-                descriptor = extract_behaviour_descriptor(child.observations[0])
+                assert descriptor is not None
                 self._emit(
                     SwarmEventType.ARCHIVE_UPDATED,
                     assignment.agent_id,
@@ -351,10 +383,11 @@ class SwarmManager:
                     SwarmEventType.CONSOLIDATION_PRODUCED,
                     payload={"report_id": self._latest_report.report_id},
                 )
-            self._save_state()
             if decision.stop:
                 self._emit(SwarmEventType.AGENT_RETIRED, assignment.agent_id, {"reason": decision.reason})
-            return decision.continue_agent
+            should_continue = decision.continue_agent
+        self._save_state()
+        return should_continue
 
     async def _on_error(self, agent_id: str, exc: Exception) -> bool:
         """Callback invoked when an agent step raises an exception.
@@ -505,9 +538,24 @@ class SwarmManager:
         self._graveyard.save(self._state_dir / "graveyard.json")
         self._lineage.save(self._state_dir / "lineage.json")
         self._notes.save(self._state_dir / "notes.json")
+        (self._state_dir / "candidates.json").write_text(
+            json.dumps(
+                {
+                    "initial_candidate_id": self._initial_candidate_id,
+                    "snapshots": [snapshot.model_dump(mode="json") for snapshot in self._candidate_snapshots.values()],
+                },
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
         (self._state_dir / "budget.json").write_text(
             json.dumps(
-                {"agent_spend": dict(self._budget.agent_spend), "eval_spend": self._budget.eval_spend},
+                {
+                    "max_cost_usd": self._budget.max_cost_usd,
+                    "eval_budget_usd": self._budget.eval_budget_usd,
+                    "agent_spend": dict(self._budget.agent_spend),
+                    "eval_spend": self._budget.eval_spend,
+                },
                 indent=2,
             ),
             encoding="utf-8",
@@ -591,7 +639,7 @@ class SwarmManager:
 
         # Register exact source material before issuing any assignment.
         baseline = self._initial_snapshot
-        if baseline is None and isinstance(self._factory, SwarmEvolverFactory):
+        if baseline is None and isinstance(self._factory, HostRuntime):
             baseline = self._factory.baseline_snapshot()
         if baseline is None:
             raise ValueError("an exact initial_snapshot is required for swarm assignments")
@@ -612,7 +660,17 @@ class SwarmManager:
 
         self._set_initial_agent_states(contexts)
         # Run all agents concurrently. The explicit SwarmState is authoritative.
-        statuses: list[AgentStatus] = await asyncio.gather(*(run_agent_loop(ctx) for ctx in contexts))
+        try:
+            statuses: list[AgentStatus] = await asyncio.gather(*(run_agent_loop(ctx) for ctx in contexts))
+        finally:
+            try:
+                self._save_state()
+            except Exception:
+                logger.exception("Could not persist swarm state while leaving the run")
+            finally:
+                cleanup = getattr(self._factory, "cleanup", None)
+                if cleanup is not None:
+                    cleanup()
 
         elapsed = self._monotonic_clock() - self._start_time
         self._state = SwarmState(

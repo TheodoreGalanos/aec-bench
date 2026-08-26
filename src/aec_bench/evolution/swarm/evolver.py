@@ -105,11 +105,16 @@ class SwarmAgentEvolver:
             evolver_llm=self._evolver_llm,
             compaction_llm=self._classifier_llm,
         )
+        parent_cost = sum(
+            float(observation.trial.cost.estimated_cost_usd)
+            for observation in parent.observations
+            if observation.trial.cost is not None and observation.trial.cost.estimated_cost_usd is not None
+        )
         return SwarmAgentResult(
             agent_id=assignment.agent_id,
             assignment_id=assignment.assignment_id,
             variation=variation,
-            agent_cost_usd=variation.model_cost_usd,
+            agent_cost_usd=parent_cost + variation.model_cost_usd,
         )
 
 
