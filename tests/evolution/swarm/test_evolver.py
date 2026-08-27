@@ -17,22 +17,29 @@ import yaml
 from aec_bench.contracts.evolution import (
     EvolutionConfig,
     MutationSummary,
-    VariationUsage,
+    ProposalUsage,
 )
 from aec_bench.contracts.experiment_manifest import AgentConfig, ComputeConfig, TaskSelector
 from aec_bench.contracts.trial_record import CostRecord
-from aec_bench.evolution import variation_operator
-from aec_bench.evolution.cancellation import AVOCancellationSignal
-from aec_bench.evolution.core import DevelopmentAttempt, SelectionPlan, VariationResult, VariationStatus
-from aec_bench.evolution.evaluation import CandidateEvaluationBatch, bind_evaluated_candidate
-from aec_bench.evolution.memory import AVOMemoryEntry
-from aec_bench.evolution.supervision import (
+from aec_bench.evolution import proposer as proposer_module
+from aec_bench.evolution.advice import (
+    AVOAdvice,
+    AVOAdviceRequest,
+    AVOAdviceResult,
+    AVOAdviceTrigger,
     AVORemainingBudget,
-    AVOSupervisionAdvice,
-    AVOSupervisionRequest,
-    AVOSupervisionResult,
-    AVOSupervisionTrigger,
 )
+from aec_bench.evolution.cancellation import AVOCancellationSignal
+from aec_bench.evolution.core import (
+    CandidateProposal,
+    EvaluatedCandidate,
+    ProposalStatus,
+    RevisionAttempt,
+    SelectionPlan,
+)
+from aec_bench.evolution.enrichment import enrich_observations
+from aec_bench.evolution.evaluation import CandidateChecks, CandidateEvaluationBatch
+from aec_bench.evolution.memory import AVOMemoryEntry
 from aec_bench.evolution.swarm import evolver as swarm_evolver_module
 from aec_bench.evolution.swarm.core import AgentBudget, SwarmAgentResult, SwarmAssignment
 from aec_bench.evolution.swarm.evolver import (
@@ -52,17 +59,15 @@ def test_evolver_timeout_waits_for_cooperative_executor_worker() -> None:
     evolver = SwarmAgentEvolver(
         workspace=None,
         config=None,
-        batch_planner=None,
-        solve_fn=None,
-        classifier_llm=None,
-        variation_operator=lambda _request, _workspace, _child: None,
+        checks=None,
+        propose=lambda _request, _workspace, _child: None,
         cancellation_signal=AVOCancellationSignal(),
         timeout=0.01,
     )
 
     def worker(_assignment: object) -> object:
         started.set()
-        while not evolver.cancellation_signal.is_set():
+        while not evolver.cancellation_signal.cancelled:
             time.sleep(0.001)
         return None
 
@@ -158,6 +163,15 @@ def _setup_evolution_inputs(tmp_path: Path) -> tuple[Workspace, CandidateEvaluat
     )
 
 
+def _checks(batch: CandidateEvaluationBatch, evaluate) -> CandidateChecks:  # noqa: ANN001
+    classifier = StubClassifierLLM()
+    return CandidateChecks(
+        plan=lambda _size, _cycle: batch,
+        run=evaluate,
+        enrich=lambda observations: enrich_observations(observations, classifier_llm=classifier),
+    )
+
+
 def _submitted_variation(
     request,
     child_id: str,
@@ -165,9 +179,9 @@ def _submitted_variation(
     cost: float,
     *,
     memory: tuple[AVOMemoryEntry, ...] = (),
-) -> VariationResult:
+) -> CandidateProposal:
     child = request.parent.snapshot.model_copy(update={"candidate_id": child_id, "system_prompt": prompt})
-    usage = VariationUsage(
+    usage = ProposalUsage(
         model_requests=1,
         model_cost_usd=cost,
         development_evaluations=1,
@@ -175,8 +189,8 @@ def _submitted_variation(
     )
     observations = tuple(item.model_copy(update={"candidate_id": child_id}) for item in request.parent.observations)
     assessment = request.parent.assessment.model_copy(update={"candidate_id": child_id})
-    evaluated = bind_evaluated_candidate(child, observations, assessment)
-    attempt = DevelopmentAttempt(
+    evaluated = EvaluatedCandidate(child, observations, assessment)
+    attempt = RevisionAttempt(
         attempt_id=f"{request.parent.snapshot.candidate_id}:attempt-1",
         revision=1,
         evaluated=evaluated,
@@ -184,8 +198,8 @@ def _submitted_variation(
         hypothesis="Submitted test child",
         usage_after=usage,
     )
-    return VariationResult(
-        status=VariationStatus.SUBMITTED,
+    return CandidateProposal(
+        status=ProposalStatus.SUBMITTED,
         child=child,
         mutation=attempt.mutation,
         reasoning="submitted test child",
@@ -246,10 +260,8 @@ def test_evolver_returns_exact_assignment_result_without_host_evidence(tmp_path:
     evolver = SwarmAgentEvolver(
         workspace=workspace,
         config=config,
-        batch_planner=lambda _size, _cycle: batch,
-        solve_fn=evaluate,
-        classifier_llm=StubClassifierLLM(),
-        variation_operator=submit,
+        checks=_checks(batch, evaluate),
+        propose=submit,
     )
 
     result = evolver._sync_step(assignment)
@@ -257,9 +269,9 @@ def test_evolver_returns_exact_assignment_result_without_host_evidence(tmp_path:
     assert isinstance(result, SwarmAgentResult)
     assert result.agent_id == assignment.agent_id
     assert result.assignment_id == assignment.assignment_id
-    assert result.variation.status is VariationStatus.SUBMITTED
-    assert result.variation.child is not None
-    assert result.variation.child.candidate_id == assignment.assignment_id
+    assert result.proposal.status is ProposalStatus.SUBMITTED
+    assert result.proposal.child is not None
+    assert result.proposal.child.candidate_id == assignment.assignment_id
     assert result.agent_usage.total_cost_usd == 0.25
     assert not hasattr(result, "score")
     assert not hasattr(result, "bd")
@@ -326,18 +338,14 @@ def test_evolver_memory_is_private_to_each_agent_and_carries_between_cycles(tmp_
     first = SwarmAgentEvolver(
         workspace=workspace,
         config=config,
-        batch_planner=lambda _size, _cycle: batch,
-        solve_fn=evaluate,
-        classifier_llm=StubClassifierLLM(),
-        variation_operator=submit,
+        checks=_checks(batch, evaluate),
+        propose=submit,
     )
     second = SwarmAgentEvolver(
         workspace=workspace,
         config=config,
-        batch_planner=lambda _size, _cycle: batch,
-        solve_fn=evaluate,
-        classifier_llm=StubClassifierLLM(),
-        variation_operator=submit,
+        checks=_checks(batch, evaluate),
+        propose=submit,
     )
 
     first._sync_step(assignment)
@@ -408,10 +416,7 @@ def test_factory_isolates_supervisor_state_and_checkpoint_paths_per_agent(
 
     monkeypatch.setattr(swarm_evolver_module, "build_pydantic_model", build_model)
 
-    def batch_planner(**_kwargs):
-        return lambda _size, _cycle: batch
-
-    def candidate_evaluator(**_kwargs):
+    def build_checks(**_kwargs):
         def evaluate(snapshot, current_batch):
             return tuple(
                 make_trial_record(
@@ -429,25 +434,24 @@ def test_factory_isolates_supervisor_state_and_checkpoint_paths_per_agent(
                 for trial in current_batch.trials
             )
 
-        return evaluate
+        return CandidateChecks(plan=lambda _size, _cycle: batch, run=evaluate)
 
-    monkeypatch.setattr(swarm_evolver_module, "make_local_candidate_batch_planner", batch_planner)
-    monkeypatch.setattr(swarm_evolver_module, "make_local_candidate_evaluator", candidate_evaluator)
+    monkeypatch.setattr(swarm_evolver_module, "build_local_checks", build_checks)
 
     class RecordingSupervisor:
         def __init__(self, label: str, model: object) -> None:
             self.label = label
             self.model = model
-            self.requests: list[AVOSupervisionRequest] = []
+            self.requests: list[AVOAdviceRequest] = []
 
-        def __call__(self, request: AVOSupervisionRequest) -> AVOSupervisionResult:
+        def __call__(self, request: AVOAdviceRequest) -> AVOAdviceResult:
             self.requests.append(request)
-            return AVOSupervisionResult(
-                output=AVOSupervisionAdvice(
+            return AVOAdviceResult(
+                output=AVOAdvice(
                     directions=(f"Private direction for {self.label}.",),
                     reasoning="Advice must stay inside this agent's call.",
                 ),
-                usage=VariationUsage(model_requests=1, supervisor_interventions=1),
+                usage=ProposalUsage(model_requests=1, supervisor_interventions=1),
             )
 
     def build_supervisor(model: object, *, model_identity: str) -> SimpleNamespace:
@@ -455,7 +459,7 @@ def test_factory_isolates_supervisor_state_and_checkpoint_paths_per_agent(
         supervisor_runners.append(runner)
         return SimpleNamespace(runner=runner)
 
-    monkeypatch.setattr(variation_operator, "build_supervision_composition", build_supervisor)
+    monkeypatch.setattr(proposer_module, "build_avo_advisor", build_supervisor)
 
     def capture_run(
         request,
@@ -463,12 +467,12 @@ def test_factory_isolates_supervisor_state_and_checkpoint_paths_per_agent(
         child_candidate_id,
         *,
         agent_runner,
-        supervisor_runner,
-        checkpoint_path,
+        advisor_runner,
+        avo_checkpoint_path,
         cancellation_signal,
         **_kwargs,
-    ) -> VariationResult:
-        supervision_request = AVOSupervisionRequest(
+    ) -> CandidateProposal:
+        advice_request = AVOAdviceRequest(
             goal=request.selection.goal,
             selected_parent_id=request.selection.parent_candidate_id,
             strategy=request.selection.strategy,
@@ -482,28 +486,28 @@ def test_factory_isolates_supervisor_state_and_checkpoint_paths_per_agent(
                 cost_limit_usd=None,
                 remaining_cost_usd=None,
             ),
-            trigger_reason=AVOSupervisionTrigger.EXHAUSTED_DIRECTION_REQUEST,
+            trigger_reason=AVOAdviceTrigger.EXHAUSTED_DIRECTION_REQUEST,
         )
-        advice = supervisor_runner(supervision_request).output
+        advice = advisor_runner(advice_request).output
         captures.append(
             {
                 "agent_runner": agent_runner,
-                "supervisor_runner": supervisor_runner,
+                "advisor_runner": advisor_runner,
                 "cancellation_signal": cancellation_signal,
-                "checkpoint_path": checkpoint_path,
+                "avo_checkpoint_path": avo_checkpoint_path,
                 "advice": advice,
                 "child_candidate_id": child_candidate_id,
             }
         )
-        return VariationResult(
-            status=VariationStatus.ABSTAINED,
+        return CandidateProposal(
+            status=ProposalStatus.ABSTAINED,
             child=None,
             mutation=None,
             reasoning=advice.directions[0],
-            usage=VariationUsage(),
+            usage=ProposalUsage(),
         )
 
-    monkeypatch.setattr(variation_operator, "run_agentic_variation", capture_run)
+    monkeypatch.setattr(proposer_module, "run_avo", capture_run)
     factory = SwarmEvolverFactory(
         workspace_source=source,
         task_dirs=[task_dir],
@@ -545,17 +549,17 @@ def test_factory_isolates_supervisor_state_and_checkpoint_paths_per_agent(
     assert supervisor_runners[0].model is models[0]
     assert supervisor_runners[1].model is models[1]
     assert supervisor_runners[0] is not supervisor_runners[1]
-    assert first._variation_operator is not second._variation_operator
+    assert first._propose is not second._propose
     assert first.cancellation_signal is not second.cancellation_signal
     assert len(captures) == 2
     assert captures[0]["agent_runner"] is not captures[1]["agent_runner"]
-    assert captures[0]["supervisor_runner"] is supervisor_runners[0]
-    assert captures[1]["supervisor_runner"] is supervisor_runners[1]
+    assert captures[0]["advisor_runner"] is supervisor_runners[0]
+    assert captures[1]["advisor_runner"] is supervisor_runners[1]
     assert captures[0]["cancellation_signal"] is first.cancellation_signal
     assert captures[1]["cancellation_signal"] is second.cancellation_signal
-    assert captures[0]["checkpoint_path"] != captures[1]["checkpoint_path"]
-    assert captures[0]["checkpoint_path"].parent.parent == source / "_avo_checkpoints"
-    assert captures[1]["checkpoint_path"].parent.parent == source / "_avo_checkpoints"
+    assert captures[0]["avo_checkpoint_path"] != captures[1]["avo_checkpoint_path"]
+    assert captures[0]["avo_checkpoint_path"].parent.parent == source / "_avo_checkpoints"
+    assert captures[1]["avo_checkpoint_path"].parent.parent == source / "_avo_checkpoints"
     assert captures[0]["advice"].directions != captures[1]["advice"].directions
     assert len(supervisor_runners[0].requests) == 1
     assert len(supervisor_runners[1].requests) == 1
@@ -593,10 +597,8 @@ def test_evolver_returns_submitted_child_without_mutating_canonical_workspace(tm
     evolver = SwarmAgentEvolver(
         workspace=workspace,
         config=config,
-        batch_planner=lambda _size, _cycle: batch,
-        solve_fn=evaluate,
-        classifier_llm=StubClassifierLLM(),
-        variation_operator=submit,
+        checks=_checks(batch, evaluate),
+        propose=submit,
     )
 
     assignment = SwarmAssignment(
@@ -612,6 +614,6 @@ def test_evolver_returns_submitted_child_without_mutating_canonical_workspace(tm
     result = evolver._sync_step(assignment)
 
     assert result.assignment_id == assignment.assignment_id
-    assert result.variation.child is not None
-    assert result.variation.child.system_prompt == "accepted prompt"
+    assert result.proposal.child is not None
+    assert result.proposal.child.system_prompt == "accepted prompt"
     assert workspace.read_prompt() == "You are a helpful engineering agent. Solve the task.\n"

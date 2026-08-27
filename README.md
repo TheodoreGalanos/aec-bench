@@ -901,57 +901,64 @@ Evolution workspaces use candidate IDs for lineage and full Git commits for
 source. Git tags are optional immutable labels. History displays the Git commit
 time; it does not create a new time when it reads old candidates.
 
-Evolution runs use one functional cycle. The host selects a parent and any
-inspirations, plans one shared evaluation batch, evaluates the exact parent,
-creates a child in scratch, evaluates the exact child against that same batch,
-then applies the search-specific acceptance and state transition. The
-canonical workspace changes only after acceptance. The current variation
-operator is bounded agentic variation (AVO). It runs one call in scratch and
-returns `submitted`, `abstained`, or `budget_exhausted`. Cooperative
+Evolution runs use one functional cycle. The search selects a parent and any
+inspirations. `CandidateChecks` then plans one shared batch and checks the exact
+parent and child against it. A candidate proposer creates the child in scratch.
+The search policy decides what to keep. The canonical workspace changes only
+after acceptance.
+
+The built-in proposer is bounded agentic variation (AVO). It runs one call in
+scratch and returns `submitted`, `abstained`, or `budget_exhausted`. Cooperative
 cancellation first stores an exact `cancelled` terminal checkpoint and then
 raises `AVOCancellationError`. AVO never writes the canonical source material
-or commits a candidate. The host owns final child evaluation, acceptance,
+or commits a candidate. The application owns final child checks, acceptance,
 commit, archive, graveyard, and lineage effects.
 
-AVO plans one fixed public development batch for each call, evaluates the
-selected parent first, and then permits bounded scratch revisions. A submitted
-child is the exact current revision with its own development evidence. AVO
+Three names describe the evaluation purpose:
+
+- **Selection checks** compare parent and child and decide which material can persist.
+- **Revision checks** give AVO private feedback while it edits one candidate. They use public tasks.
+- **Qualification checks** are a separate holdout run after development. They never adapt the candidate.
+
+AVO plans one fixed public revision batch for each call, checks the selected
+parent first, and then permits bounded scratch revisions. A submitted child is
+the exact current revision with its own evidence. AVO
 memory is bounded structured attempt evidence. The application can pass that
-memory to the next variation call; it does not change parent selection,
+memory to the next proposal call; it does not change parent selection,
 strategy, `EvolutionState`, `QDState`, or swarm decisions. See the
 [architecture](docs/ARCHITECTURE.md), [contracts](docs/CONTRACTS.md), and
 [invariants](docs/INVARIANTS.md) for the ownership and evidence rules.
 
 The core `AVOBudget` defaults are 12 model requests, 40 tool calls, 7
-development evaluations, 1,800 seconds, two consecutive evaluation errors, and
-three stagnant evaluations, and zero supervisor interventions. Token and cost
-limits are optional. The composed production variation operator enables one
-conditional supervisor intervention by default; a direct
-`run_agentic_variation` caller must provide a supervisor runner when it enables
-interventions. A supervisor receives only the bounded request fields, returns
+revision evaluations, 1,800 seconds, two consecutive evaluation errors, three
+stagnant evaluations, and zero advisor interventions. Token and cost limits are
+optional. The composed AVO proposer enables one conditional advisor call by
+default. A direct `run_avo` caller must provide an `advisor_runner` when it
+enables interventions. An advisor receives only the bounded request fields, returns
 one to three advisory directions or a confirmed output failure, and cannot
 change outer search state. Advice stays inside that AVO call and is not part of
-`VariationResult`.
+`CandidateProposal`.
 
 Usage is fail-closed when a configured limit needs an unknown value. An
 explicit `0.0` cost means free; `None` means unknown. The cycle record keeps
 the full AVO usage, and an aggregate cost remains unknown when any used cost
 plane is unknown. A durable call uses checkpoint schema `2` as its sole resume
-authority. Resume rejects changed run, variation, parent, selection,
-development case order, budget, configuration identity, or scratch material;
+authority. Resume rejects a changed run, AVO call, parent, selection,
+revision-case order, budget, configuration identity, or scratch material;
 an incomplete external effect must be reconciled before retry.
 
-Hill-climb accepts a valid child when its trusted score clears the configured
-improvement threshold. QD accepts a valid child when it enters a new archive
+Direct search accepts a valid child until the configured stagnation window is
+reached. Clearing the improvement threshold resets that counter and updates the
+best candidate. QD accepts a valid child when it enters a new archive
 cell or improves an occupied cell; global-best improvement is not required.
 The QD host allocates mutation strategies with the strategy bandit and limits
 the archive agent to the host shortlist and chosen strategy. Bandit feedback is
 updated once from the archive outcome. Graveyard rescue uses only actual
 rejected candidate material with a matching candidate ID.
 
-Swarm agents receive exact `SwarmAssignment` values and return variation plus
-agent cost. They do not score candidates or update the archive. The host
-evaluates parent and child, binds exact `TrialRecord` evidence, and applies
+Swarm agents receive exact `SwarmAssignment` values and return a proposal plus
+agent cost. They do not score candidates or update the archive. Selection
+checks evaluate parent and child, bind exact `TrialRecord` evidence, and apply
 archive, graveyard, budget, and reducer effects. The async manager owns
 concurrency. Its immutable `SwarmState` owns decisions, while the event log
 reports them. Swarm state and candidate snapshots are persisted with the
@@ -962,13 +969,46 @@ runs select the parent in the host. QD keeps strategy and shortlist selection
 in the host, then permits its archive agent to choose only within those
 constraints. QD archive cells and strategy-bandit feedback remain in `QDState`;
 AVO only proposes a child. Swarm composition gives each agent its own
-workspace, variation operator, cancellation signal, call-local memory, and
+workspace, candidate proposer, cancellation signal, call-local memory, and
 checkpoint identity. The manager remains the owner of shared budget, archive,
 graveyard, lineage, reducer, and pivot state.
 
 Local provider-free tests prove the AVO protocol and deterministic boundaries.
 They do not qualify a paid or hosted model route. Do not run paid provider or
 hosted qualification until an explicit approval covers that run and its cost.
+
+The YAML command is the shortest supported path. The Python API is for callers
+that want to replace a check set or proposer without replacing the evolution
+loop:
+
+```python
+from aec_bench.evolution import CandidateChecks, build_avo, build_local_checks, run_evolution
+
+result = run_evolution(
+    workspace=workspace,
+    config=config,
+    selection_checks=selection_checks,
+    propose=propose,
+)
+```
+
+`selection_checks` is one `CandidateChecks(plan=..., run=..., enrich=...)`
+value. `propose` is any callable that accepts a `CandidateProposalRequest` and
+returns a `CandidateProposal`. Use `build_local_checks(...)` and
+`build_avo(...)` for the built-in local composition.
+
+| API | Meaning |
+| --- | --- |
+| `CandidateChecks` | Plan and run one consistent set of candidate checks |
+| `build_local_checks()` | Use local AEC-Bench tasks as a `CandidateChecks` value |
+| `build_avo()` | Create the built-in candidate proposer |
+| `gate_candidate()` | Return the pure accept, reject, or skip decision |
+| `next_evolution_state()` | Return state after that decision, without effects |
+| `run_evolution()` | Coordinate checks, proposals, decisions, and persistence |
+
+Checkpoint schema `2` and usage records keep their existing `development_*`
+and `supervisor_*` field names. These are protected wire names. The Python
+composition uses the clearer revision-check and advisor terms.
 
 ```bash
 # Create and run a workspace

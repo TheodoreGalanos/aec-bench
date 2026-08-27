@@ -8,8 +8,8 @@ from pathlib import Path
 
 import pytest
 
-from aec_bench.evolution.agent_loop import AgentCommand, AgentContext, run_agentic_variation
-from aec_bench.evolution.agent_protocol import AgentToolName
+from aec_bench.evolution.agent_loop import AVOCommand, AVOContext, run_avo
+from aec_bench.evolution.agent_protocol import AVOTool
 from aec_bench.evolution.analysis import GraduatedScope
 from aec_bench.evolution.cancellation import (
     AVOCancellationCode,
@@ -21,9 +21,9 @@ from aec_bench.evolution.checkpoint import (
     AVOIncompleteExternalEffectError,
     read_checkpoint,
 )
-from aec_bench.evolution.core import AVOBudget, VariationStatus
-from aec_bench.evolution.development import DevelopmentEvaluationBoundary
-from aec_bench.evolution.resume import checkpoint_path
+from aec_bench.evolution.core import AVOBudget, ProposalStatus
+from aec_bench.evolution.resume import avo_checkpoint_path
+from aec_bench.evolution.revision import RevisionEvaluation
 from tests.evolution.test_agent_loop import _boundary, _checkpoint_identity, _command, _request, _workspace
 
 
@@ -32,16 +32,18 @@ def test_cancel_before_model_writes_prebaseline_terminal_checkpoint(tmp_path: Pa
     request = _request(workspace)
     signal = AVOCancellationSignal()
     signal.cancel(AVOCancellationReason(AVOCancellationCode.TIMEOUT, "test timeout"))
-    path = checkpoint_path(tmp_path / "state", run_id=request.run_id, variation_id="run-test:variation-1:child-child")
+    path = avo_checkpoint_path(
+        tmp_path / "state", run_id=request.run_id, variation_id="run-test:variation-1:child-child"
+    )
 
     with pytest.raises(AVOCancellationError) as raised:
-        run_agentic_variation(
+        run_avo(
             request,
             workspace,
             "child",
-            development_boundary=_boundary(tmp_path / "boundary"),
+            revision_evaluation=_boundary(tmp_path / "boundary"),
             agent_runner=lambda _context: (_ for _ in ()).throw(AssertionError("model must not run")),
-            checkpoint_path=path,
+            avo_checkpoint_path=path,
             configuration_identity=_checkpoint_identity(),
             cancellation_signal=signal,
         )
@@ -59,20 +61,22 @@ def test_cancel_before_tool_dispatch_reconciles_provider_return(tmp_path: Path) 
     workspace = _workspace(tmp_path / "workspace")
     request = _request(workspace)
     signal = AVOCancellationSignal()
-    path = checkpoint_path(tmp_path / "state", run_id=request.run_id, variation_id="run-test:variation-1:child-child")
+    path = avo_checkpoint_path(
+        tmp_path / "state", run_id=request.run_id, variation_id="run-test:variation-1:child-child"
+    )
 
-    def runner(_context: AgentContext) -> AgentCommand:
+    def runner(_context: AVOContext) -> AVOCommand:
         signal.cancel("stop before mutation")
-        return _command(AgentToolName.APPLY_MUTATION, mutation={"type": "modify_prompt", "content": "must not apply"})
+        return _command(AVOTool.EDIT_CANDIDATE, mutation={"type": "modify_prompt", "content": "must not apply"})
 
     with pytest.raises(AVOCancellationError):
-        run_agentic_variation(
+        run_avo(
             request,
             workspace,
             "child",
-            development_boundary=_boundary(tmp_path / "boundary"),
+            revision_evaluation=_boundary(tmp_path / "boundary"),
             agent_runner=runner,
-            checkpoint_path=path,
+            avo_checkpoint_path=path,
             configuration_identity=_checkpoint_identity(),
             cancellation_signal=signal,
         )
@@ -95,23 +99,25 @@ def test_cancel_after_evaluator_return_reconciles_parent_evidence(tmp_path: Path
         signal.cancel("stop after baseline evaluation")
         return result
 
-    boundary = DevelopmentEvaluationBoundary(
+    boundary = RevisionEvaluation(
         planner=delegate.planner,
         evaluator=evaluate,
         batch_size=1,
         experiment_id="development-experiment",
-        host_experiment_id="host-experiment",
+        selection_experiment_id="host-experiment",
     )
-    path = checkpoint_path(tmp_path / "state", run_id=request.run_id, variation_id="run-test:variation-1:child-child")
+    path = avo_checkpoint_path(
+        tmp_path / "state", run_id=request.run_id, variation_id="run-test:variation-1:child-child"
+    )
 
     with pytest.raises(AVOCancellationError):
-        run_agentic_variation(
+        run_avo(
             request,
             workspace,
             "child",
-            development_boundary=boundary,
+            revision_evaluation=boundary,
             agent_runner=lambda _context: (_ for _ in ()).throw(AssertionError("model must not run")),
-            checkpoint_path=path,
+            avo_checkpoint_path=path,
             configuration_identity=_checkpoint_identity(),
             cancellation_signal=signal,
         )
@@ -125,30 +131,32 @@ def test_cancel_after_evaluator_return_reconciles_parent_evidence(tmp_path: Path
 def test_incomplete_provider_effect_fails_closed_on_resume(tmp_path: Path) -> None:
     workspace = _workspace(tmp_path / "workspace")
     request = _request(workspace)
-    path = checkpoint_path(tmp_path / "state", run_id=request.run_id, variation_id="run-test:variation-1:child-child")
+    path = avo_checkpoint_path(
+        tmp_path / "state", run_id=request.run_id, variation_id="run-test:variation-1:child-child"
+    )
     boundary = _boundary(tmp_path / "boundary")
 
     with pytest.raises(AVOIncompleteExternalEffectError):
-        run_agentic_variation(
+        run_avo(
             request,
             workspace,
             "child",
-            development_boundary=boundary,
+            revision_evaluation=boundary,
             agent_runner=lambda _context: (_ for _ in ()).throw(RuntimeError("ambiguous provider")),
-            checkpoint_path=path,
+            avo_checkpoint_path=path,
             configuration_identity=_checkpoint_identity(),
         )
 
     saved = read_checkpoint(path)
     assert saved.incomplete_external_effects[0].operation == "model_request"
     with pytest.raises(AVOIncompleteExternalEffectError):
-        run_agentic_variation(
+        run_avo(
             request,
             workspace,
             "child",
-            development_boundary=_boundary(tmp_path / "resume-boundary", batch=boundary.batch),
+            revision_evaluation=_boundary(tmp_path / "resume-boundary", batch=boundary.batch),
             agent_runner=lambda _context: (_ for _ in ()).throw(AssertionError("model must not retry")),
-            checkpoint_path=path,
+            avo_checkpoint_path=path,
             configuration_identity=_checkpoint_identity(),
         )
 
@@ -156,26 +164,28 @@ def test_incomplete_provider_effect_fails_closed_on_resume(tmp_path: Path) -> No
 def test_incomplete_baseline_effect_fails_closed_on_resume(tmp_path: Path) -> None:
     workspace = _workspace(tmp_path / "workspace")
     request = _request(workspace)
-    path = checkpoint_path(tmp_path / "state", run_id=request.run_id, variation_id="run-test:variation-1:child-child")
+    path = avo_checkpoint_path(
+        tmp_path / "state", run_id=request.run_id, variation_id="run-test:variation-1:child-child"
+    )
 
     def fail(_snapshot: object, _batch: object):
         raise RuntimeError("ambiguous evaluator")
 
-    boundary = DevelopmentEvaluationBoundary(
+    boundary = RevisionEvaluation(
         planner=lambda _size, _cycle: _boundary(tmp_path / "plan").batch,
         evaluator=fail,
         batch_size=1,
         experiment_id="development-experiment",
-        host_experiment_id="host-experiment",
+        selection_experiment_id="host-experiment",
     )
     with pytest.raises(AVOIncompleteExternalEffectError):
-        run_agentic_variation(
+        run_avo(
             request,
             workspace,
             "child",
-            development_boundary=boundary,
-            agent_runner=lambda _context: _command(AgentToolName.ABSTAIN, reasoning="unused"),
-            checkpoint_path=path,
+            revision_evaluation=boundary,
+            agent_runner=lambda _context: _command(AVOTool.ABSTAIN, reasoning="unused"),
+            avo_checkpoint_path=path,
             configuration_identity=_checkpoint_identity(),
         )
 
@@ -183,19 +193,19 @@ def test_incomplete_baseline_effect_fails_closed_on_resume(tmp_path: Path) -> No
     assert saved.parent_evidence is None
     assert saved.incomplete_external_effects[0].operation == "development_evaluation"
     with pytest.raises(AVOIncompleteExternalEffectError):
-        run_agentic_variation(
+        run_avo(
             request,
             workspace,
             "child",
-            development_boundary=DevelopmentEvaluationBoundary(
+            revision_evaluation=RevisionEvaluation(
                 planner=lambda _size, _cycle: boundary.batch,
                 evaluator=fail,
                 batch_size=1,
                 experiment_id="development-experiment",
-                host_experiment_id="host-experiment",
+                selection_experiment_id="host-experiment",
             ),
             agent_runner=lambda _context: (_ for _ in ()).throw(AssertionError("model must not run")),
-            checkpoint_path=path,
+            avo_checkpoint_path=path,
             configuration_identity=_checkpoint_identity(),
         )
 
@@ -203,31 +213,33 @@ def test_incomplete_baseline_effect_fails_closed_on_resume(tmp_path: Path) -> No
 def test_terminal_cancellation_resume_is_idempotent_and_preserves_reason(tmp_path: Path) -> None:
     workspace = _workspace(tmp_path / "workspace")
     request = _request(workspace)
-    path = checkpoint_path(tmp_path / "state", run_id=request.run_id, variation_id="run-test:variation-1:child-child")
+    path = avo_checkpoint_path(
+        tmp_path / "state", run_id=request.run_id, variation_id="run-test:variation-1:child-child"
+    )
     signal = AVOCancellationSignal()
     signal.cancel(AVOCancellationReason(AVOCancellationCode.TIMEOUT, "deadline reached"))
 
     with pytest.raises(AVOCancellationError):
-        run_agentic_variation(
+        run_avo(
             request,
             workspace,
             "child",
-            development_boundary=_boundary(tmp_path / "boundary"),
+            revision_evaluation=_boundary(tmp_path / "boundary"),
             agent_runner=lambda _context: (_ for _ in ()).throw(AssertionError("model must not run")),
-            checkpoint_path=path,
+            avo_checkpoint_path=path,
             configuration_identity=_checkpoint_identity(),
             cancellation_signal=signal,
         )
 
     resumed_signal = AVOCancellationSignal()
     with pytest.raises(AVOCancellationError) as resumed:
-        run_agentic_variation(
+        run_avo(
             request,
             workspace,
             "child",
-            development_boundary=_boundary(tmp_path / "resume", batch=_boundary(tmp_path / "boundary").batch),
+            revision_evaluation=_boundary(tmp_path / "resume", batch=_boundary(tmp_path / "boundary").batch),
             agent_runner=lambda _context: (_ for _ in ()).throw(AssertionError("terminal model must not run")),
-            checkpoint_path=path,
+            avo_checkpoint_path=path,
             configuration_identity=_checkpoint_identity(),
             cancellation_signal=resumed_signal,
         )
@@ -237,69 +249,73 @@ def test_terminal_cancellation_resume_is_idempotent_and_preserves_reason(tmp_pat
 def test_scope_skip_writes_idempotent_prebaseline_abstention_checkpoint(tmp_path: Path) -> None:
     workspace = _workspace(tmp_path / "workspace")
     request = replace(_request(workspace), scope=GraduatedScope.SKIP)
-    path = checkpoint_path(tmp_path / "state", run_id=request.run_id, variation_id="run-test:variation-1:child-child")
+    path = avo_checkpoint_path(
+        tmp_path / "state", run_id=request.run_id, variation_id="run-test:variation-1:child-child"
+    )
     boundary = _boundary(tmp_path / "boundary")
 
-    result = run_agentic_variation(
+    result = run_avo(
         request,
         workspace,
         "child",
-        development_boundary=boundary,
+        revision_evaluation=boundary,
         agent_runner=lambda _context: (_ for _ in ()).throw(AssertionError("skip must not evaluate or call model")),
-        checkpoint_path=path,
+        avo_checkpoint_path=path,
         configuration_identity=_checkpoint_identity(),
     )
-    assert result.status is VariationStatus.ABSTAINED
+    assert result.status is ProposalStatus.ABSTAINED
     saved = read_checkpoint(path)
     assert saved.parent_evidence is None
     assert saved.terminal_result is not None
-    assert saved.terminal_result.status is VariationStatus.ABSTAINED
+    assert saved.terminal_result.status is ProposalStatus.ABSTAINED
 
-    resumed = run_agentic_variation(
+    resumed = run_avo(
         request,
         workspace,
         "child",
-        development_boundary=_boundary(tmp_path / "resume-boundary", batch=boundary.batch),
+        revision_evaluation=_boundary(tmp_path / "resume-boundary", batch=boundary.batch),
         agent_runner=lambda _context: (_ for _ in ()).throw(AssertionError("terminal skip must not call model")),
-        checkpoint_path=path,
+        avo_checkpoint_path=path,
         configuration_identity=_checkpoint_identity(),
     )
-    assert resumed.status is VariationStatus.ABSTAINED
+    assert resumed.status is ProposalStatus.ABSTAINED
 
 
 def test_budget_exhaustion_before_parent_evaluation_is_idempotent(tmp_path: Path) -> None:
     workspace = _workspace(tmp_path / "workspace")
     request = _request(workspace)
-    path = checkpoint_path(tmp_path / "state", run_id=request.run_id, variation_id="run-test:variation-1:child-child")
+    path = avo_checkpoint_path(
+        tmp_path / "state", run_id=request.run_id, variation_id="run-test:variation-1:child-child"
+    )
     boundary = _boundary(tmp_path / "boundary")
     clock_values = iter((0.0, 2.0, 2.0))
 
-    result = run_agentic_variation(
+    result = run_avo(
         request,
         workspace,
         "child",
-        development_boundary=boundary,
+        revision_evaluation=boundary,
         agent_runner=lambda _context: (_ for _ in ()).throw(AssertionError("model must not run")),
         budget=AVOBudget(max_elapsed_seconds=1.0),
-        checkpoint_path=path,
+        avo_checkpoint_path=path,
         configuration_identity=_checkpoint_identity(),
         clock=lambda: next(clock_values),
     )
 
-    assert result.status is VariationStatus.BUDGET_EXHAUSTED
+    assert result.status is ProposalStatus.BUDGET_EXHAUSTED
     saved = read_checkpoint(path)
     assert saved.parent_evidence is None
     assert saved.terminal_result is not None
-    assert saved.terminal_result.status is VariationStatus.BUDGET_EXHAUSTED
+    assert saved.terminal_result.status is ProposalStatus.BUDGET_EXHAUSTED
 
-    resumed = run_agentic_variation(
+    resumed = run_avo(
         request,
         workspace,
         "child",
-        development_boundary=_boundary(tmp_path / "resume-boundary", batch=boundary.batch),
+        revision_evaluation=_boundary(tmp_path / "resume-boundary", batch=boundary.batch),
         agent_runner=lambda _context: (_ for _ in ()).throw(AssertionError("terminal model must not run")),
         budget=AVOBudget(max_elapsed_seconds=1.0),
-        checkpoint_path=path,
+        avo_checkpoint_path=path,
         configuration_identity=_checkpoint_identity(),
     )
 
@@ -309,12 +325,14 @@ def test_budget_exhaustion_before_parent_evaluation_is_idempotent(tmp_path: Path
 def test_compaction_marker_is_reconciled_after_an_existing_attempt(tmp_path: Path) -> None:
     workspace = _workspace(tmp_path / "workspace")
     request = _request(workspace)
-    path = checkpoint_path(tmp_path / "state", run_id=request.run_id, variation_id="run-test:variation-1:child-child")
+    path = avo_checkpoint_path(
+        tmp_path / "state", run_id=request.run_id, variation_id="run-test:variation-1:child-child"
+    )
     commands = [
-        _command(AgentToolName.APPLY_MUTATION, mutation={"type": "modify_prompt", "content": "revision one"}),
-        _command(AgentToolName.EVALUATE_CURRENT_REVISION, hypothesis="Evaluate revision one."),
+        _command(AVOTool.EDIT_CANDIDATE, mutation={"type": "modify_prompt", "content": "revision one"}),
+        _command(AVOTool.TEST_CANDIDATE, hypothesis="Evaluate revision one."),
         _command(
-            AgentToolName.APPLY_MUTATION,
+            AVOTool.EDIT_CANDIDATE,
             mutation={
                 "type": "write_skill",
                 "name": "large-skill",
@@ -322,7 +340,7 @@ def test_compaction_marker_is_reconciled_after_an_existing_attempt(tmp_path: Pat
                 "body": "engineering data " * 1500,
             },
         ),
-        _command(AgentToolName.ABSTAIN, reasoning="No further change."),
+        _command(AVOTool.ABSTAIN, reasoning="No further change."),
     ]
 
     class Compactor:
@@ -330,17 +348,17 @@ def test_compaction_marker_is_reconciled_after_an_existing_attempt(tmp_path: Pat
             del temperature, max_tokens
             return "Compacted engineering data with verification guidance."
 
-    def runner(_context: AgentContext) -> AgentCommand:
+    def runner(_context: AVOContext) -> AVOCommand:
         return commands.pop(0)
 
-    result = run_agentic_variation(
+    result = run_avo(
         request,
         workspace,
         "child",
-        development_boundary=_boundary(tmp_path / "boundary"),
+        revision_evaluation=_boundary(tmp_path / "boundary"),
         agent_runner=runner,
         compaction_llm=Compactor(),
-        checkpoint_path=path,
+        avo_checkpoint_path=path,
         configuration_identity=_checkpoint_identity(),
     )
     assert result.status.value == "abstained"

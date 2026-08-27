@@ -22,10 +22,10 @@ from aec_bench.evolution.checkpoint import (
 )
 from aec_bench.evolution.core import (
     AVOBudget,
+    CandidateProposal,
+    CandidateProposalRequest,
+    ProposalStatus,
     SelectionPlan,
-    VariationRequest,
-    VariationResult,
-    VariationStatus,
 )
 from aec_bench.evolution.evaluation import CandidateEvaluationBatch
 from aec_bench.trials import planned_trial_to_data
@@ -35,7 +35,7 @@ class AVOResumeMismatchError(ValueError):
     """Raised when a checkpoint cannot resume the requested variation call."""
 
 
-def checkpoint_path(root: Path, *, run_id: str, variation_id: str) -> Path:
+def avo_checkpoint_path(root: Path, *, run_id: str, variation_id: str) -> Path:
     """Return a deterministic checkpoint path without using IDs as path segments."""
 
     _require_text(run_id, "run_id")
@@ -45,9 +45,9 @@ def checkpoint_path(root: Path, *, run_id: str, variation_id: str) -> Path:
     return Path(root) / "_avo_checkpoints" / run_digest / f"{variation_digest}.json"
 
 
-def request_configuration_identity(
+def configuration_identity_for_request(
     base: AVOConfigurationIdentity,
-    request: VariationRequest,
+    request: CandidateProposalRequest,
     *,
     development_evaluation_cost_usd: float | None = None,
     development_batch_identity: str | None = None,
@@ -73,7 +73,7 @@ def request_configuration_identity(
     return base.model_copy(update={"configuration_identity": f"{base.configuration_identity}:request-{context_digest}"})
 
 
-def evaluation_batch_identity(batch: CandidateEvaluationBatch) -> str:
+def evaluation_batch_digest(batch: CandidateEvaluationBatch) -> str:
     """Return a deterministic identity for the complete development batch."""
 
     if not isinstance(batch, CandidateEvaluationBatch):
@@ -102,7 +102,7 @@ def evaluation_batch_identity(batch: CandidateEvaluationBatch) -> str:
     return hashlib.sha256(encoded).hexdigest()
 
 
-def validate_checkpoint_for_resume(
+def require_resumable_checkpoint(
     checkpoint: AVOCheckpoint,
     *,
     run_id: str,
@@ -142,14 +142,14 @@ def validate_checkpoint_for_resume(
         raise AVOResumeMismatchError("checkpoint current revision material does not match the request")
 
 
-def load_checkpoint_for_resume(
+def load_resumable_checkpoint(
     path: Path,
     **compatibility: Any,
 ) -> AVOCheckpoint:
     """Read one validated checkpoint, then apply explicit resume compatibility checks."""
 
     checkpoint = read_checkpoint(path)
-    validate_checkpoint_for_resume(checkpoint, **compatibility)
+    require_resumable_checkpoint(checkpoint, **compatibility)
     if checkpoint.incomplete_external_effects:
         # An event log cannot prove whether the provider or evaluator completed.
         # Never retry an effect until its owner reconciles this marker.
@@ -157,14 +157,14 @@ def load_checkpoint_for_resume(
     return checkpoint
 
 
-def terminal_result_from_checkpoint(checkpoint: AVOCheckpoint) -> VariationResult:
+def terminal_result_from_checkpoint(checkpoint: AVOCheckpoint) -> CandidateProposal:
     """Restore a recorded terminal result without model or evaluator calls."""
 
     terminal = checkpoint.terminal_result
     if not isinstance(terminal, AVOCheckpointTerminalResult):
         raise ValueError("checkpoint has no terminal result")
     attempt = None
-    if terminal.status is VariationStatus.SUBMITTED:
+    if terminal.status is ProposalStatus.SUBMITTED:
         assert terminal.attempt_id is not None
         selected = next(
             (item for item in checkpoint.evaluated_attempts if item.attempt_id == terminal.attempt_id),
@@ -173,7 +173,7 @@ def terminal_result_from_checkpoint(checkpoint: AVOCheckpoint) -> VariationResul
         if selected is None:
             raise AVOResumeMismatchError("checkpoint terminal attempt is missing")
         attempt = selected.to_attempt()
-    return VariationResult(
+    return CandidateProposal(
         status=terminal.status,
         child=terminal.child,
         mutation=terminal.mutation,
@@ -238,10 +238,10 @@ def _jsonable(value: Any) -> Any:
 
 __all__ = (
     "AVOResumeMismatchError",
-    "checkpoint_path",
-    "evaluation_batch_identity",
-    "load_checkpoint_for_resume",
-    "request_configuration_identity",
+    "avo_checkpoint_path",
+    "evaluation_batch_digest",
+    "load_resumable_checkpoint",
+    "configuration_identity_for_request",
     "terminal_result_from_checkpoint",
-    "validate_checkpoint_for_resume",
+    "require_resumable_checkpoint",
 )

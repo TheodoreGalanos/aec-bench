@@ -18,8 +18,8 @@ from aec_bench.contracts.evolution import (
     GateDecision,
     MutationStrategy,
     MutationSummary,
+    ProposalUsage,
     SelectionRecord,
-    VariationUsage,
     WorkspaceSnapshot,
 )
 from aec_bench.evolution.analysis import EvolutionAnalysis, GraduatedScope
@@ -27,7 +27,7 @@ from aec_bench.evolution.graveyard import GraveyardEntry
 from aec_bench.evolution.memory import AVO_MEMORY_LIMIT, AVOMemoryEntry, validate_memory_entries
 
 if TYPE_CHECKING:
-    from aec_bench.evolution.supervision import AVOSupervisionRecord
+    from aec_bench.evolution.advice import AVOAdviceRecord
 
 
 def _require_text(value: str, field_name: str) -> None:
@@ -61,7 +61,7 @@ def _same_workspace_material(left: WorkspaceSnapshot, right: WorkspaceSnapshot) 
 
 @dataclass(frozen=True)
 class AVOBudget:
-    """Hard limits for one bounded agentic variation call."""
+    """Hard limits for one bounded AVO call."""
 
     max_model_requests: int = 12
     max_tool_calls: int = 40
@@ -141,15 +141,15 @@ class EvaluatedCandidate:
 
 
 @dataclass(frozen=True)
-class DevelopmentAttempt:
-    """One exact scratch revision and its development evaluation evidence."""
+class RevisionAttempt:
+    """One exact scratch revision and its evaluation evidence."""
 
     attempt_id: str
     revision: int
     evaluated: EvaluatedCandidate
     mutation: MutationSummary
     hypothesis: str
-    usage_after: VariationUsage
+    usage_after: ProposalUsage
 
     def __post_init__(self) -> None:
         _require_text(self.attempt_id, "attempt_id")
@@ -159,15 +159,15 @@ class DevelopmentAttempt:
         if not isinstance(self.mutation, MutationSummary):
             raise TypeError("mutation must be a MutationSummary")
         _require_text(self.hypothesis, "hypothesis")
-        if not isinstance(self.usage_after, VariationUsage):
-            raise TypeError("usage_after must be a VariationUsage")
+        if not isinstance(self.usage_after, ProposalUsage):
+            raise TypeError("usage_after must be a ProposalUsage")
         if self.usage_after.development_evaluations < 1:
-            raise ValueError("development attempt usage must include one development evaluation")
+            raise ValueError("revision attempt usage must include one revision check")
 
 
 @dataclass(frozen=True)
 class SelectionPlan:
-    """The validated parent and inspiration request for one variation cycle."""
+    """The validated parent and inspiration request for one proposal cycle."""
 
     parent_candidate_id: str
     inspiration_candidate_ids: tuple[str, ...]
@@ -222,8 +222,8 @@ class ResolvedSelection:
 
 
 @dataclass(frozen=True)
-class VariationRequest:
-    """Inputs supplied to a variation operator after parent evaluation."""
+class CandidateProposalRequest:
+    """Inputs supplied to a candidate proposer after parent evaluation."""
 
     run_id: str
     selection: SelectionPlan
@@ -239,22 +239,22 @@ class VariationRequest:
     def __post_init__(self) -> None:
         _require_text(self.run_id, "run_id")
         if self.parent.snapshot.candidate_id != self.selection.parent_candidate_id:
-            raise ValueError("variation parent must match the selection parent_candidate_id")
-        _require_positive_integer(self.cycle, "variation cycle")
+            raise ValueError("proposal parent must match the selection parent_candidate_id")
+        _require_positive_integer(self.cycle, "proposal cycle")
         object.__setattr__(self, "inspirations", tuple(self.inspirations))
         inspiration_ids = tuple(snapshot.candidate_id for snapshot in self.inspirations)
         if inspiration_ids != self.selection.inspiration_candidate_ids:
-            raise ValueError("variation inspirations must match the selected candidate IDs exactly")
+            raise ValueError("proposal inspirations must match the selected candidate IDs exactly")
         object.__setattr__(self, "history", tuple(self.history))
         object.__setattr__(self, "graveyard", tuple(self.graveyard))
         memory = validate_memory_entries(self.memory)
         if len(memory) > AVO_MEMORY_LIMIT:
-            raise ValueError(f"variation memory must contain at most {AVO_MEMORY_LIMIT} entries")
+            raise ValueError(f"proposal memory must contain at most {AVO_MEMORY_LIMIT} entries")
         object.__setattr__(self, "memory", memory)
 
 
-class VariationStatus(StrEnum):
-    """Status values returned by a variation operator."""
+class ProposalStatus(StrEnum):
+    """Status values returned by a candidate proposer."""
 
     SUBMITTED = "submitted"
     ABSTAINED = "abstained"
@@ -264,21 +264,21 @@ class VariationStatus(StrEnum):
 
 @dataclass(frozen=True)
 class AVOState:
-    """Explicit state for one bounded agentic variation call."""
+    """Explicit state for one bounded AVO call."""
 
     variation_id: str
     parent_candidate_id: str
     child_candidate_id: str
     current_revision: int
-    attempts: tuple[DevelopmentAttempt, ...] = ()
+    attempts: tuple[RevisionAttempt, ...] = ()
     best_attempt_id: str | None = None
     consecutive_without_progress: int = 0
     consecutive_evaluation_errors: int = 0
     exhausted_direction_requested: bool = False
-    supervision_records: tuple[AVOSupervisionRecord, ...] = ()
+    supervision_records: tuple[AVOAdviceRecord, ...] = ()
     memory: tuple[AVOMemoryEntry, ...] = ()
-    usage: VariationUsage = VariationUsage()
-    terminal_status: VariationStatus | None = None
+    usage: ProposalUsage = ProposalUsage()
+    terminal_status: ProposalStatus | None = None
     parent_snapshot: WorkspaceSnapshot | None = None
 
     def __post_init__(self) -> None:
@@ -289,26 +289,26 @@ class AVOState:
         _require_non_negative_integer(self.consecutive_evaluation_errors, "consecutive_evaluation_errors")
         if not isinstance(self.exhausted_direction_requested, bool):
             raise TypeError("exhausted_direction_requested must be a boolean")
-        if not isinstance(self.usage, VariationUsage):
-            raise TypeError("usage must be a VariationUsage")
+        if not isinstance(self.usage, ProposalUsage):
+            raise TypeError("usage must be a ProposalUsage")
         records = tuple(self.supervision_records)
         if any(record is None for record in records):
             raise TypeError("supervision_records must not contain None")
         if records:
-            # Keep the foundational core independent from the supervision
+            # Keep the foundational core independent from the advisor
             # adapter while still rejecting untyped state at this boundary.
-            from aec_bench.evolution.supervision import AVOSupervisionRecord
+            from aec_bench.evolution.advice import AVOAdviceRecord
 
-            if any(not isinstance(record, AVOSupervisionRecord) for record in records):
-                raise TypeError("supervision_records must contain AVOSupervisionRecord values")
+            if any(not isinstance(record, AVOAdviceRecord) for record in records):
+                raise TypeError("supervision_records must contain AVOAdviceRecord values")
         if len(records) > self.usage.supervisor_interventions:
             raise ValueError("supervision_records cannot exceed supervisor_interventions usage")
         if self.terminal_status is not None and self.exhausted_direction_requested:
             raise ValueError("terminal AVO state cannot retain a pending exhausted-direction request")
         object.__setattr__(self, "supervision_records", records)
         attempts = tuple(self.attempts)
-        if any(not isinstance(attempt, DevelopmentAttempt) for attempt in attempts):
-            raise TypeError("attempts must contain DevelopmentAttempt values")
+        if any(not isinstance(attempt, RevisionAttempt) for attempt in attempts):
+            raise TypeError("attempts must contain RevisionAttempt values")
         attempt_ids = tuple(attempt.attempt_id for attempt in attempts)
         if len(attempt_ids) != len(set(attempt_ids)):
             raise ValueError("attempt IDs must be unique")
@@ -317,12 +317,12 @@ class AVOState:
             raise ValueError("attempt revisions must be unique")
         snapshot_ids = tuple(attempt.evaluated.snapshot.candidate_id for attempt in attempts)
         if len(snapshot_ids) != len(set(snapshot_ids)):
-            raise ValueError("development attempt snapshot IDs must be unique")
+            raise ValueError("revision attempt snapshot IDs must be unique")
         trial_ids = tuple(
             observation.trial.trial_id for attempt in attempts for observation in attempt.evaluated.observations
         )
         if len(trial_ids) != len(set(trial_ids)):
-            raise ValueError("development attempt trial IDs must be unique")
+            raise ValueError("revision attempt trial IDs must be unique")
         if self.best_attempt_id is not None and self.best_attempt_id not in attempt_ids:
             raise ValueError("best_attempt_id must reference an attempt")
         memory = validate_memory_entries(self.memory)
@@ -346,8 +346,8 @@ def is_revision_valid(
 ) -> bool:
     """Return whether an evaluated revision can be submitted now.
 
-    A revision is eligible only when it is current, has exact development
-    evidence, and is not the host-selected parent material.
+    A revision is eligible only when it is current, has exact revision-check
+    evidence, and differs from the selected parent material.
     """
     if not isinstance(state, AVOState):
         raise TypeError("state must be an AVOState")
@@ -414,41 +414,36 @@ def budget_exhaustion_reason(budget: AVOBudget, state: AVOState) -> str | None:
     return None
 
 
-def budget_exhausted(budget: AVOBudget, state: AVOState) -> bool:
-    """Return whether one of the configured hard limits has been reached."""
-    return budget_exhaustion_reason(budget, state) is not None
-
-
 @dataclass(frozen=True)
-class VariationResult:
-    """One submitted child or an explicit variation non-submission."""
+class CandidateProposal:
+    """One submitted child or an explicit non-submission."""
 
-    status: VariationStatus
+    status: ProposalStatus
     child: WorkspaceSnapshot | None
     mutation: MutationSummary | None
     reasoning: str
-    usage: VariationUsage
-    attempt: DevelopmentAttempt | None = None
+    usage: ProposalUsage
+    attempt: RevisionAttempt | None = None
     memory: tuple[AVOMemoryEntry, ...] = ()
 
     def __post_init__(self) -> None:
-        status = VariationStatus(self.status)
+        status = ProposalStatus(self.status)
         object.__setattr__(self, "status", status)
         _require_text(self.reasoning, "reasoning")
-        if not isinstance(self.usage, VariationUsage):
-            raise TypeError("usage must be a VariationUsage")
+        if not isinstance(self.usage, ProposalUsage):
+            raise TypeError("usage must be a ProposalUsage")
         memory = validate_memory_entries(self.memory)
         if len(memory) > AVO_MEMORY_LIMIT:
-            raise ValueError(f"variation result memory must contain at most {AVO_MEMORY_LIMIT} entries")
+            raise ValueError(f"proposal memory must contain at most {AVO_MEMORY_LIMIT} entries")
         object.__setattr__(self, "memory", memory)
-        if status is VariationStatus.SUBMITTED:
+        if status is ProposalStatus.SUBMITTED:
             if self.child is None or self.mutation is None or self.attempt is None:
-                raise ValueError("submitted variation requires a child, mutation summary, and evaluated attempt")
+                raise ValueError("submitted proposal requires a child, mutation summary, and evaluated attempt")
             if not _same_workspace_material(self.attempt.evaluated.snapshot, self.child):
                 raise ValueError("submitted child must match the exact evaluated attempt snapshot")
             return
         if self.child is not None or self.mutation is not None or self.attempt is not None:
-            raise ValueError(f"{status.value} variation must not contain child, mutation, or attempt")
+            raise ValueError(f"{status.value} proposal must not contain child, mutation, or attempt")
 
 
 @dataclass(frozen=True)
@@ -513,12 +508,12 @@ class GateResult:
 
 @dataclass(frozen=True)
 class CycleOutcome:
-    """Complete functional outcome from one parent-selection and variation cycle."""
+    """Complete functional outcome from one parent-selection and proposal cycle."""
 
     cycle: int
     selection: SelectionPlan
     parent: EvaluatedCandidate
-    variation: VariationResult
+    proposal: CandidateProposal
     child: EvaluatedCandidate | None
     decision: GateResult
     active_candidate_id_after: str
@@ -529,13 +524,13 @@ class CycleOutcome:
             raise ValueError("cycle must be positive")
         if self.parent.snapshot.candidate_id != self.selection.parent_candidate_id:
             raise ValueError("cycle parent must match the selection parent_candidate_id")
-        if self.variation.status is VariationStatus.SUBMITTED and self.child is None:
-            raise ValueError("submitted variation requires a bound evaluated child")
-        if self.child is not None and self.variation.child is not None:
+        if self.proposal.status is ProposalStatus.SUBMITTED and self.child is None:
+            raise ValueError("submitted proposal requires a bound evaluated child")
+        if self.child is not None and self.proposal.child is not None:
             if self.child.snapshot.candidate_id == self.parent.snapshot.candidate_id:
                 raise ValueError("submitted child candidate_id must differ from the parent")
-            if self.child.snapshot.candidate_id != self.variation.child.candidate_id:
-                raise ValueError("evaluated child must match the submitted variation child")
+            if self.child.snapshot.candidate_id != self.proposal.child.candidate_id:
+                raise ValueError("evaluated child must match the submitted proposal child")
         _require_text(self.active_candidate_id_after, "active_candidate_id_after")
         _require_text(self.best_candidate_id_after, "best_candidate_id_after")
 
@@ -546,13 +541,13 @@ class CycleOutcome:
             selection=self.selection.to_record(),
             parent_assessment=self.parent.assessment,
             child_assessment=None if self.child is None else self.child.assessment,
-            mutation=self.variation.mutation,
+            mutation=self.proposal.mutation,
             gate_decision=self.decision.decision,
             gate_reason=self.decision.reason,
             active_candidate_id_after=self.active_candidate_id_after,
             best_candidate_id_after=self.best_candidate_id_after,
             timestamp=timestamp,
-            evolver_usage=self.variation.usage,
+            evolver_usage=self.proposal.usage,
         )
 
 
@@ -565,30 +560,30 @@ def assessment_score(assessment: CandidateAssessment, *, structural_weight: floa
     return assessment.batch_score * (1.0 - structural_weight) + assessment.structural_score * structural_weight
 
 
-def decide_candidate(
+def gate_candidate(
     *,
     parent: EvaluatedCandidate,
     child: EvaluatedCandidate | None,
-    variation: VariationResult,
+    proposal: CandidateProposal,
     state: EvolutionState,
     config: EvolutionConfig,
 ) -> GateResult:
     """Apply configured acceptance and stagnation policy without side effects."""
-    if variation.status is not VariationStatus.SUBMITTED:
+    if proposal.status is not ProposalStatus.SUBMITTED:
         reason = {
-            VariationStatus.ABSTAINED: "variation abstained",
-            VariationStatus.BUDGET_EXHAUSTED: "variation budget exhausted",
-            VariationStatus.CANCELLED: "variation cancelled",
-        }[variation.status]
+            ProposalStatus.ABSTAINED: "proposal abstained",
+            ProposalStatus.BUDGET_EXHAUSTED: "proposal budget exhausted",
+            ProposalStatus.CANCELLED: "proposal cancelled",
+        }[proposal.status]
         return GateResult(
             decision=GateDecision.SKIPPED,
             reason=reason,
             cycles_without_improvement=state.cycles_without_improvement,
         )
-    if child is None or variation.child is None:
-        raise ValueError("submitted variation requires an evaluated child")
-    if child.snapshot.candidate_id != variation.child.candidate_id:
-        raise ValueError("evaluated child must match the submitted variation child")
+    if child is None or proposal.child is None:
+        raise ValueError("submitted proposal requires an evaluated child")
+    if child.snapshot.candidate_id != proposal.child.candidate_id:
+        raise ValueError("evaluated child must match the submitted proposal child")
     if child.snapshot.candidate_id == parent.snapshot.candidate_id:
         raise ValueError("submitted child candidate_id must differ from the parent")
     if parent.assessment.evaluation_case_ids != child.assessment.evaluation_case_ids:
@@ -624,7 +619,7 @@ def decide_candidate(
     )
 
 
-def rebase_evolution_state_for_parent(
+def state_for_selected_parent(
     state: EvolutionState,
     parent: EvaluatedCandidate,
     *,
@@ -641,7 +636,7 @@ def rebase_evolution_state_for_parent(
     )
 
 
-def reduce_evolution_state(
+def next_evolution_state(
     *,
     state: EvolutionState,
     parent: EvaluatedCandidate,

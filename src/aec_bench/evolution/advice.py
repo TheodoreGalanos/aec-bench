@@ -1,4 +1,4 @@
-# ABOUTME: Defines bounded, read-only contracts for conditional AVO supervision.
+# ABOUTME: Defines bounded, read-only contracts for conditional AVO advice.
 # ABOUTME: Computes deterministic intervention triggers and projects existing AVO budget only.
 
 from __future__ import annotations
@@ -13,7 +13,7 @@ from typing import Any, Protocol
 
 from pydantic import model_validator
 
-from aec_bench.contracts.evolution import MutationStrategy, VariationUsage
+from aec_bench.contracts.evolution import MutationStrategy, ProposalUsage
 from aec_bench.contracts.validators import FrozenStrictModel
 from aec_bench.evolution.core import AVOBudget, AVOState
 from aec_bench.evolution.memory import AVO_MEMORY_LIMIT, AVOMemoryEntry, validate_memory_entries
@@ -37,7 +37,7 @@ def _require_finite_non_negative(value: float, field_name: str) -> None:
         raise ValueError(f"{field_name} must be a finite non-negative number")
 
 
-class AVOSupervisionTrigger(StrEnum):
+class AVOAdviceTrigger(StrEnum):
     """Stable reasons that can admit one bounded supervisor intervention."""
 
     VALID_DEVELOPMENT_STAGNATION = "three_valid_development_evaluations_without_progress"
@@ -102,7 +102,7 @@ class AVORemainingBudget:
 
 
 @dataclass(frozen=True)
-class AVOSupervisionRequest:
+class AVOAdviceRequest:
     """Structured, read-only input supplied to one supervisor invocation."""
 
     goal: str
@@ -110,7 +110,7 @@ class AVOSupervisionRequest:
     strategy: MutationStrategy
     attempt_summaries: tuple[AVOMemoryEntry, ...]
     remaining_budget: AVORemainingBudget
-    trigger_reason: AVOSupervisionTrigger
+    trigger_reason: AVOAdviceTrigger
 
     def __post_init__(self) -> None:
         _require_text(self.goal, "goal")
@@ -129,14 +129,14 @@ class AVOSupervisionRequest:
         if not isinstance(self.remaining_budget, AVORemainingBudget):
             raise TypeError("remaining_budget must be an AVORemainingBudget")
         try:
-            trigger_reason = AVOSupervisionTrigger(self.trigger_reason)
+            trigger_reason = AVOAdviceTrigger(self.trigger_reason)
         except (TypeError, ValueError) as exc:
-            raise ValueError(f"unsupported supervision trigger reason: {self.trigger_reason!r}") from exc
+            raise ValueError(f"unsupported advice trigger reason: {self.trigger_reason!r}") from exc
         object.__setattr__(self, "trigger_reason", trigger_reason)
 
 
 @dataclass(frozen=True)
-class AVOSupervisionAdvice:
+class AVOAdvice:
     """Validated guidance that cannot mutate AVO or outer evolution state."""
 
     directions: tuple[str, ...]
@@ -145,89 +145,89 @@ class AVOSupervisionAdvice:
     def __post_init__(self) -> None:
         directions = tuple(self.directions)
         if not 1 <= len(directions) <= 3:
-            raise ValueError("supervision advice must contain one to three directions")
+            raise ValueError("AVO advice must contain one to three directions")
         normalised: list[str] = []
         for direction in directions:
             if not isinstance(direction, str):
-                raise TypeError("supervision advice directions must be strings")
+                raise TypeError("AVO advice directions must be strings")
             value = direction.strip()
             if not value:
-                raise ValueError("supervision advice directions must not be blank")
+                raise ValueError("AVO advice directions must not be blank")
             normalised.append(value)
         if len(normalised) != len(set(normalised)):
-            raise ValueError("supervision advice directions must be unique")
+            raise ValueError("AVO advice directions must be unique")
         object.__setattr__(self, "directions", tuple(normalised))
         _require_text(self.reasoning, "reasoning")
 
 
-class AVOSupervisionFailureCode(StrEnum):
+class AVOAdviceFailureCode(StrEnum):
     """Confirmed supervisor failures that do not represent provider failure."""
 
     OUTPUT_VALIDATION_REJECTED = "output_validation_rejected"
 
 
 @dataclass(frozen=True)
-class AVOSupervisionFailure:
+class AVOAdviceFailure:
     """One confirmed failure produced by supervisor output validation."""
 
-    code: AVOSupervisionFailureCode
+    code: AVOAdviceFailureCode
     detail: str
 
     def __post_init__(self) -> None:
         try:
-            code = AVOSupervisionFailureCode(self.code)
+            code = AVOAdviceFailureCode(self.code)
         except (TypeError, ValueError) as exc:
             raise ValueError(f"unsupported supervisor failure code: {self.code!r}") from exc
         object.__setattr__(self, "code", code)
         _require_text(self.detail, "detail")
 
 
-class AVOSupervisionRecord(FrozenStrictModel):
+class AVOAdviceRecord(FrozenStrictModel):
     """One confirmed intervention outcome retained in AVO state."""
 
-    trigger_reason: AVOSupervisionTrigger
-    advice: AVOSupervisionAdvice | None = None
-    failure: AVOSupervisionFailure | None = None
+    trigger_reason: AVOAdviceTrigger
+    advice: AVOAdvice | None = None
+    failure: AVOAdviceFailure | None = None
 
     @model_validator(mode="after")
-    def validate_outcome(self) -> AVOSupervisionRecord:
+    def validate_outcome(self) -> AVOAdviceRecord:
         if (self.advice is None) == (self.failure is None):
-            raise ValueError("supervision record requires advice or confirmed failure, but not both")
+            raise ValueError("advice record requires advice or confirmed failure, but not both")
         return self
 
 
 @dataclass(frozen=True)
-class AVOSupervisionResult:
+class AVOAdviceResult:
     """Immutable supervisor output and the usage delta for that one call."""
 
-    output: AVOSupervisionAdvice | AVOSupervisionFailure
-    usage: VariationUsage
+    output: AVOAdvice | AVOAdviceFailure
+    usage: ProposalUsage
 
     def __post_init__(self) -> None:
-        if not isinstance(self.output, AVOSupervisionAdvice | AVOSupervisionFailure):
-            raise TypeError("output must be AVOSupervisionAdvice or AVOSupervisionFailure")
-        if not isinstance(self.usage, VariationUsage):
-            raise TypeError("usage must be a VariationUsage")
+        if not isinstance(self.output, AVOAdvice | AVOAdviceFailure):
+            raise TypeError("output must be AVOAdvice or AVOAdviceFailure")
+        if not isinstance(self.usage, ProposalUsage):
+            raise TypeError("usage must be a ProposalUsage")
         if self.usage.model_requests != 1 or self.usage.supervisor_interventions != 1:
-            raise ValueError("supervision result usage must describe exactly one request and intervention")
+            raise ValueError("advisor usage must describe exactly one request and intervention")
         if self.usage.tool_calls or self.usage.development_evaluations:
-            raise ValueError("supervision result usage must not include tools or development evaluations")
+            raise ValueError("advisor usage must not include tools or revision evaluations")
         if self.usage.development_evaluation_cost_usd is not None:
-            raise ValueError("supervision result usage must not include development evaluation cost")
+            raise ValueError("advisor usage must not include revision evaluation cost")
 
 
-class AVOSupervisionBudgetError(ValueError):
+class AVOAdviceBudgetError(ValueError):
     """Raised when a supervisor reservation or reconciliation exceeds AVO authority."""
 
 
-class SupervisorRunner(Protocol):
+class AVOAdvisorRunner(Protocol):
     """Narrow provider boundary for one non-recursive supervisor request."""
 
-    def __call__(self, request: AVOSupervisionRequest) -> AVOSupervisionResult: ...
+    def __call__(self, request: AVOAdviceRequest) -> AVOAdviceResult: ...
 
 
 def _validate_usage_within_budget(
-    usage: VariationUsage,
+    usage: ProposalUsage,
     budget: AVOBudget,
     *,
     allow_reserved_unknown_tokens: bool = False,
@@ -235,11 +235,11 @@ def _validate_usage_within_budget(
 ) -> None:
     """Fail closed when known usage exceeds a configured hard limit."""
     if usage.model_requests > budget.max_model_requests:
-        raise AVOSupervisionBudgetError("max_model_requests")
+        raise AVOAdviceBudgetError("max_model_requests")
     if usage.supervisor_interventions > budget.max_supervisor_interventions:
-        raise AVOSupervisionBudgetError("max_supervisor_interventions")
+        raise AVOAdviceBudgetError("max_supervisor_interventions")
     if usage.elapsed_seconds > budget.max_elapsed_seconds:
-        raise AVOSupervisionBudgetError("max_elapsed_seconds")
+        raise AVOAdviceBudgetError("max_elapsed_seconds")
     for name, observed, limit in (
         ("max_input_tokens", usage.input_tokens, budget.max_input_tokens),
         ("max_output_tokens", usage.output_tokens, budget.max_output_tokens),
@@ -248,32 +248,32 @@ def _validate_usage_within_budget(
             if observed is None:
                 if allow_reserved_unknown_tokens and usage.model_requests == 1:
                     continue
-                raise AVOSupervisionBudgetError(f"{name}_unknown")
+                raise AVOAdviceBudgetError(f"{name}_unknown")
             if observed > limit:
-                raise AVOSupervisionBudgetError(name)
+                raise AVOAdviceBudgetError(name)
     if budget.max_cost_usd is not None:
         total_cost = usage.total_cost_usd
         if total_cost is None:
             if allow_reserved_unknown_cost and usage.model_requests == 1:
                 return
-            raise AVOSupervisionBudgetError("max_cost_usd_unknown")
+            raise AVOAdviceBudgetError("max_cost_usd_unknown")
         if total_cost > budget.max_cost_usd:
-            raise AVOSupervisionBudgetError("max_cost_usd")
+            raise AVOAdviceBudgetError("max_cost_usd")
 
 
-def reserve_supervision_usage(usage: VariationUsage, budget: AVOBudget) -> VariationUsage:
-    """Reserve one model request and intervention before a supervisor call."""
-    if not isinstance(usage, VariationUsage):
-        raise TypeError("usage must be a VariationUsage")
+def reserve_advisor_budget(usage: ProposalUsage, budget: AVOBudget) -> ProposalUsage:
+    """Reserve one model request and intervention before an advisor call."""
+    if not isinstance(usage, ProposalUsage):
+        raise TypeError("usage must be a ProposalUsage")
     if not isinstance(budget, AVOBudget):
         raise TypeError("budget must be an AVOBudget")
     if usage.model_requests >= budget.max_model_requests:
-        raise AVOSupervisionBudgetError("max_model_requests")
+        raise AVOAdviceBudgetError("max_model_requests")
     if usage.supervisor_interventions >= budget.max_supervisor_interventions:
-        raise AVOSupervisionBudgetError("max_supervisor_interventions")
+        raise AVOAdviceBudgetError("max_supervisor_interventions")
     if usage.elapsed_seconds >= budget.max_elapsed_seconds:
-        raise AVOSupervisionBudgetError("max_elapsed_seconds")
-    reserved = VariationUsage(
+        raise AVOAdviceBudgetError("max_elapsed_seconds")
+    reserved = ProposalUsage(
         model_requests=usage.model_requests + 1,
         tool_calls=usage.tool_calls,
         development_evaluations=usage.development_evaluations,
@@ -293,23 +293,23 @@ def reserve_supervision_usage(usage: VariationUsage, budget: AVOBudget) -> Varia
     return reserved
 
 
-def reconcile_supervision_usage(
-    usage_before: VariationUsage,
+def complete_advisor_usage(
+    usage_before: ProposalUsage,
     budget: AVOBudget,
-    supervisor_usage: VariationUsage,
-) -> VariationUsage:
-    """Merge one validated supervisor usage delta into the shared AVO usage."""
-    reserved = reserve_supervision_usage(usage_before, budget)
-    if not isinstance(supervisor_usage, VariationUsage):
-        raise TypeError("supervisor_usage must be a VariationUsage")
+    advisor_usage: ProposalUsage,
+) -> ProposalUsage:
+    """Merge one validated advisor usage delta into the shared AVO usage."""
+    reserved = reserve_advisor_budget(usage_before, budget)
+    if not isinstance(advisor_usage, ProposalUsage):
+        raise TypeError("advisor_usage must be a ProposalUsage")
     if (
-        supervisor_usage.model_requests != 1
-        or supervisor_usage.supervisor_interventions != 1
-        or supervisor_usage.tool_calls != 0
-        or supervisor_usage.development_evaluations != 0
-        or supervisor_usage.development_evaluation_cost_usd is not None
+        advisor_usage.model_requests != 1
+        or advisor_usage.supervisor_interventions != 1
+        or advisor_usage.tool_calls != 0
+        or advisor_usage.development_evaluations != 0
+        or advisor_usage.development_evaluation_cost_usd is not None
     ):
-        raise ValueError("supervisor usage must describe exactly one request and intervention")
+        raise ValueError("advisor usage must describe exactly one request and intervention")
 
     def merge_tokens(previous: int | None, added: int | None) -> int | None:
         if usage_before.model_requests == 0:
@@ -325,56 +325,56 @@ def reconcile_supervision_usage(
             return None
         return previous + added
 
-    reconciled = VariationUsage(
+    reconciled = ProposalUsage(
         model_requests=reserved.model_requests,
         tool_calls=reserved.tool_calls,
         development_evaluations=reserved.development_evaluations,
         supervisor_interventions=reserved.supervisor_interventions,
-        input_tokens=merge_tokens(usage_before.input_tokens, supervisor_usage.input_tokens),
-        output_tokens=merge_tokens(usage_before.output_tokens, supervisor_usage.output_tokens),
-        model_cost_usd=merge_cost(usage_before.model_cost_usd, supervisor_usage.model_cost_usd),
+        input_tokens=merge_tokens(usage_before.input_tokens, advisor_usage.input_tokens),
+        output_tokens=merge_tokens(usage_before.output_tokens, advisor_usage.output_tokens),
+        model_cost_usd=merge_cost(usage_before.model_cost_usd, advisor_usage.model_cost_usd),
         development_evaluation_cost_usd=usage_before.development_evaluation_cost_usd,
-        elapsed_seconds=reserved.elapsed_seconds + supervisor_usage.elapsed_seconds,
+        elapsed_seconds=reserved.elapsed_seconds + advisor_usage.elapsed_seconds,
     )
     return reconciled
 
 
-class PydanticAISupervisionRunner:
-    """Provider adapter with only one typed, read-only supervisor request."""
+class PydanticAIAdvisor:
+    """Provider adapter with one typed, read-only advice request."""
 
     def __init__(self, model: Any, *, model_identity: str, system_prompt: str = "") -> None:
         if model is None:
-            raise ValueError("supervisor model must be explicit")
+            raise ValueError("advisor model must be explicit")
         _require_text(model_identity, "model_identity")
         if system_prompt and not isinstance(system_prompt, str):
             raise TypeError("system_prompt must be a string")
         self.model = model
         self.model_identity = model_identity.strip()
-        self.system_prompt = system_prompt.strip() or _DEFAULT_SUPERVISOR_SYSTEM_PROMPT
+        self.system_prompt = system_prompt.strip() or _DEFAULT_ADVISOR_SYSTEM_PROMPT
 
-    def __call__(self, request: AVOSupervisionRequest) -> AVOSupervisionResult:
-        if not isinstance(request, AVOSupervisionRequest):
-            raise TypeError("request must be an AVOSupervisionRequest")
+    def __call__(self, request: AVOAdviceRequest) -> AVOAdviceResult:
+        if not isinstance(request, AVOAdviceRequest):
+            raise TypeError("request must be an AVOAdviceRequest")
         pydantic_ai = import_module("pydantic_ai")
         usage_module = import_module("pydantic_ai.usage")
         started_at = time.monotonic()
         agent = pydantic_ai.Agent(
             self.model,
             system_prompt=self.system_prompt,
-            output_type=AVOSupervisionAdvice,
+            output_type=AVOAdvice,
             retries=0,
         )
         result = agent.run_sync(
-            _render_supervision_prompt(request),
+            _render_advice_prompt(request),
             usage_limits=usage_module.UsageLimits(request_limit=1),
         )
 
         usage = result.usage()
         if usage.requests != 1:
-            raise RuntimeError("supervisor provider request count must be exactly one")
-        return AVOSupervisionResult(
+            raise RuntimeError("advisor provider request count must be exactly one")
+        return AVOAdviceResult(
             output=result.output,
-            usage=VariationUsage(
+            usage=ProposalUsage(
                 model_requests=1,
                 supervisor_interventions=1,
                 input_tokens=usage.input_tokens,
@@ -385,41 +385,41 @@ class PydanticAISupervisionRunner:
 
 
 @dataclass(frozen=True)
-class AVOSupervisionComposition:
-    """Immutable pairing of an isolated supervisor runner and exact identity."""
+class AVOAdvisor:
+    """Immutable pairing of an isolated advisor runner and exact identity."""
 
-    runner: PydanticAISupervisionRunner
+    runner: PydanticAIAdvisor
     model_identity: str
 
     def __post_init__(self) -> None:
-        if not isinstance(self.runner, PydanticAISupervisionRunner):
-            raise TypeError("runner must be a PydanticAISupervisionRunner")
+        if not isinstance(self.runner, PydanticAIAdvisor):
+            raise TypeError("runner must be a PydanticAIAdvisor")
         _require_text(self.model_identity, "model_identity")
         identity = self.model_identity.strip()
         if self.runner.model_identity != identity:
-            raise ValueError("supervisor runner identity must match composition identity")
+            raise ValueError("advisor runner identity must match composition identity")
         object.__setattr__(self, "model_identity", identity)
 
 
-def build_supervision_composition(
+def build_avo_advisor(
     model: Any,
     *,
     model_identity: str,
     system_prompt: str = "",
-) -> AVOSupervisionComposition:
-    """Build one explicit supervisor runner without composing loop state or tools."""
-    runner = PydanticAISupervisionRunner(model, model_identity=model_identity, system_prompt=system_prompt)
-    return AVOSupervisionComposition(runner=runner, model_identity=runner.model_identity)
+) -> AVOAdvisor:
+    """Build one explicit advisor runner without composing loop state or tools."""
+    runner = PydanticAIAdvisor(model, model_identity=model_identity, system_prompt=system_prompt)
+    return AVOAdvisor(runner=runner, model_identity=runner.model_identity)
 
 
-_DEFAULT_SUPERVISOR_SYSTEM_PROMPT = (
-    "You are a bounded AEC-Bench supervisor. Return only validated advice with one to three distinct directions. "
+_DEFAULT_ADVISOR_SYSTEM_PROMPT = (
+    "You are a bounded AEC-Bench advisor. Return only validated advice with one to three distinct directions. "
     "You cannot edit workspaces, call tools, evaluate candidates, or change budgets."
 )
 
 
-def _render_supervision_prompt(request: AVOSupervisionRequest) -> str:
-    """Render only immutable request facts for the isolated supervisor."""
+def _render_advice_prompt(request: AVOAdviceRequest) -> str:
+    """Render only immutable request facts for the isolated advisor."""
     summaries = [
         {
             "source_variation_id": entry.source_variation_id,
@@ -444,7 +444,7 @@ def _render_supervision_prompt(request: AVOSupervisionRequest) -> str:
     return json.dumps(payload, ensure_ascii=True, sort_keys=True)
 
 
-def project_remaining_budget(budget: AVOBudget, state: AVOState) -> AVORemainingBudget:
+def remaining_avo_budget(budget: AVOBudget, state: AVOState) -> AVORemainingBudget:
     """Project non-negative remaining AVO allowances without adding authority."""
     if not isinstance(budget, AVOBudget):
         raise TypeError("budget must be an AVOBudget")
@@ -487,16 +487,16 @@ def project_remaining_budget(budget: AVOBudget, state: AVOState) -> AVORemaining
     )
 
 
-def supervision_trigger_reason(
+def advice_trigger(
     state: AVOState,
     budget: AVOBudget,
     *,
     exhausted_direction_requested: bool = False,
-) -> AVOSupervisionTrigger | None:
+) -> AVOAdviceTrigger | None:
     """Return the deterministic trigger reason admitted by explicit AVO state.
 
     Valid stagnation uses the explicit ``consecutive_without_progress``
-    counter, and confirms that its latest three development attempts are valid
+    counter, and confirms that its latest three revision attempts are valid
     evidence. Invalid attempts and evaluator failures use their respective
     explicit state counters. Trigger order is stable when more than one
     condition is true. Reaching the hard intervention limit always suppresses
@@ -514,29 +514,12 @@ def supervision_trigger_reason(
         return None
 
     if _has_valid_stagnation(state):
-        return AVOSupervisionTrigger.VALID_DEVELOPMENT_STAGNATION
+        return AVOAdviceTrigger.VALID_DEVELOPMENT_STAGNATION
     if _has_consecutive_invalid_or_failed_evaluations(state):
-        return AVOSupervisionTrigger.CONSECUTIVE_INVALID_OR_FAILED_EVALUATIONS
+        return AVOAdviceTrigger.CONSECUTIVE_INVALID_OR_FAILED_EVALUATIONS
     if exhausted_direction_requested:
-        return AVOSupervisionTrigger.EXHAUSTED_DIRECTION_REQUEST
+        return AVOAdviceTrigger.EXHAUSTED_DIRECTION_REQUEST
     return None
-
-
-def should_trigger_supervision(
-    state: AVOState,
-    budget: AVOBudget,
-    *,
-    exhausted_direction_requested: bool = False,
-) -> bool:
-    """Return whether one supervisor intervention is currently admitted."""
-    return (
-        supervision_trigger_reason(
-            state,
-            budget,
-            exhausted_direction_requested=exhausted_direction_requested,
-        )
-        is not None
-    )
 
 
 def _has_valid_stagnation(state: AVOState) -> bool:
@@ -563,22 +546,21 @@ def _has_consecutive_invalid_or_failed_evaluations(state: AVOState) -> bool:
 
 
 __all__ = (
-    "AVOSupervisionBudgetError",
-    "AVOSupervisionComposition",
-    "AVOSupervisionFailure",
-    "AVOSupervisionFailureCode",
-    "AVOSupervisionRecord",
-    "AVOSupervisionResult",
+    "AVOAdviceBudgetError",
+    "AVOAdvisor",
+    "AVOAdviceFailure",
+    "AVOAdviceFailureCode",
+    "AVOAdviceRecord",
+    "AVOAdviceResult",
     "AVORemainingBudget",
-    "AVOSupervisionAdvice",
-    "AVOSupervisionRequest",
-    "AVOSupervisionTrigger",
-    "PydanticAISupervisionRunner",
-    "SupervisorRunner",
-    "build_supervision_composition",
-    "project_remaining_budget",
-    "reconcile_supervision_usage",
-    "reserve_supervision_usage",
-    "should_trigger_supervision",
-    "supervision_trigger_reason",
+    "AVOAdvice",
+    "AVOAdviceRequest",
+    "AVOAdviceTrigger",
+    "PydanticAIAdvisor",
+    "AVOAdvisorRunner",
+    "build_avo_advisor",
+    "remaining_avo_budget",
+    "complete_advisor_usage",
+    "reserve_advisor_budget",
+    "advice_trigger",
 )

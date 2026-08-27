@@ -8,14 +8,12 @@ import pytest
 from aec_bench.contracts.evolution import MutationSummary, WorkspaceSnapshot
 from aec_bench.contracts.experiment_manifest import AgentConfig, ComputeConfig
 from aec_bench.contracts.task_definition import Visibility
-from aec_bench.evolution.core import VariationUsage
-from aec_bench.evolution.development import (
-    DevelopmentEvaluationBoundary,
-    EvaluationRole,
-    make_deterministic_development_batch_planner,
-    make_deterministic_development_evaluator,
-)
+from aec_bench.evolution.core import ProposalUsage
 from aec_bench.evolution.evaluation import CandidateEvaluationBatch
+from aec_bench.evolution.revision import (
+    EvaluationRole,
+    RevisionEvaluation,
+)
 from aec_bench.tasks.instance import resolve_instance_paths
 from aec_bench.trials import PlannedTrial
 from tests.support.task_factories import make_task_definition
@@ -64,6 +62,22 @@ def _record(
     )
 
 
+def _fixed_plan(batch: CandidateEvaluationBatch):
+    def plan(_batch_size: int, _cycle: int) -> CandidateEvaluationBatch:
+        return batch
+
+    return plan
+
+
+def _fixed_run(records):
+    fixed = tuple(records)
+
+    def run(_snapshot: WorkspaceSnapshot, _batch: CandidateEvaluationBatch):
+        return fixed
+
+    return run
+
+
 def test_planner_is_called_once_and_returns_one_fixed_public_batch(tmp_path: Path) -> None:
     batch = _batch(tmp_path)
     calls: list[tuple[int, int]] = []
@@ -72,13 +86,13 @@ def test_planner_is_called_once_and_returns_one_fixed_public_batch(tmp_path: Pat
         calls.append((batch_size, cycle))
         return batch
 
-    boundary = DevelopmentEvaluationBoundary(
+    boundary = RevisionEvaluation(
         planner=planner,
-        evaluator=make_deterministic_development_evaluator((_record(),)),
+        evaluator=_fixed_run((_record(),)),
         batch_size=1,
         cycle=2,
         experiment_id="development-experiment",
-        host_experiment_id="host-experiment",
+        selection_experiment_id="host-experiment",
     )
 
     assert boundary.plan() is batch
@@ -96,72 +110,72 @@ def test_holdout_batch_is_rejected_before_evaluation(tmp_path: Path) -> None:
         evaluated = True
         return (_record(),)
 
-    boundary = DevelopmentEvaluationBoundary(planner=lambda _size, _cycle: batch, evaluator=evaluate, batch_size=1)
+    boundary = RevisionEvaluation(planner=lambda _size, _cycle: batch, evaluator=evaluate, batch_size=1)
 
     with pytest.raises(ValueError, match="only PUBLIC tasks"):
         boundary.plan()
     assert evaluated is False
 
 
-def test_development_role_and_experiment_are_distinct_from_host(tmp_path: Path) -> None:
+def test_revision_experiment_is_distinct_from_selection(tmp_path: Path) -> None:
     batch = _batch(tmp_path)
-    boundary = DevelopmentEvaluationBoundary(
-        planner=make_deterministic_development_batch_planner(batch),
-        evaluator=make_deterministic_development_evaluator((_record(),)),
+    boundary = RevisionEvaluation(
+        planner=_fixed_plan(batch),
+        evaluator=_fixed_run((_record(),)),
         batch_size=1,
         experiment_id="development-experiment",
-        host_experiment_id="host-experiment",
+        selection_experiment_id="host-experiment",
     )
 
     assert boundary.role is EvaluationRole.DEVELOPMENT
     assert EvaluationRole.DEVELOPMENT is not EvaluationRole.HOST
 
-    host_record_boundary = DevelopmentEvaluationBoundary(
-        planner=make_deterministic_development_batch_planner(batch),
-        evaluator=make_deterministic_development_evaluator((_record(experiment_id="host-experiment"),)),
+    selection_record_boundary = RevisionEvaluation(
+        planner=_fixed_plan(batch),
+        evaluator=_fixed_run((_record(experiment_id="host-experiment"),)),
         batch_size=1,
         experiment_id="development-experiment",
-        host_experiment_id="host-experiment",
+        selection_experiment_id="host-experiment",
     )
-    with pytest.raises(ValueError, match="host experiment identity"):
-        host_record_boundary.evaluate(WorkspaceSnapshot(system_prompt="Prompt.", candidate_id="candidate-1"))
+    with pytest.raises(ValueError, match="selection experiment identity"):
+        selection_record_boundary.evaluate(WorkspaceSnapshot(system_prompt="Prompt.", candidate_id="candidate-1"))
 
 
-def test_returned_record_must_use_the_planned_development_experiment(tmp_path: Path) -> None:
+def test_returned_record_must_use_the_planned_revision_experiment(tmp_path: Path) -> None:
     batch = _batch(tmp_path)
-    boundary = DevelopmentEvaluationBoundary(
-        planner=make_deterministic_development_batch_planner(batch),
-        evaluator=make_deterministic_development_evaluator((_record(experiment_id="different-experiment"),)),
+    boundary = RevisionEvaluation(
+        planner=_fixed_plan(batch),
+        evaluator=_fixed_run((_record(experiment_id="different-experiment"),)),
         batch_size=1,
         experiment_id="development-experiment",
     )
 
-    with pytest.raises(ValueError, match="match the planned development experiment identity"):
+    with pytest.raises(ValueError, match="match the planned revision experiment identity"):
         boundary.evaluate(WorkspaceSnapshot(system_prompt="Prompt.", candidate_id="candidate-1"))
 
 
-def test_returned_record_must_not_reuse_a_host_trial_identity(tmp_path: Path) -> None:
+def test_returned_record_must_not_reuse_a_selection_trial_identity(tmp_path: Path) -> None:
     batch = _batch(tmp_path)
-    boundary = DevelopmentEvaluationBoundary(
-        planner=make_deterministic_development_batch_planner(batch),
-        evaluator=make_deterministic_development_evaluator((_record(trial_id="host-trial-1"),)),
+    boundary = RevisionEvaluation(
+        planner=_fixed_plan(batch),
+        evaluator=_fixed_run((_record(trial_id="host-trial-1"),)),
         batch_size=1,
         experiment_id="development-experiment",
-        host_trial_ids=("host-trial-1",),
+        selection_trial_ids=("host-trial-1",),
     )
 
-    with pytest.raises(ValueError, match="collide with a host trial identity"):
+    with pytest.raises(ValueError, match="collide with a selection trial identity"):
         boundary.evaluate(WorkspaceSnapshot(system_prompt="Prompt.", candidate_id="candidate-1"))
 
 
 def test_revision_is_bound_to_exact_trial_evidence_and_development_provenance(tmp_path: Path) -> None:
     batch = _batch(tmp_path)
-    boundary = DevelopmentEvaluationBoundary(
-        planner=make_deterministic_development_batch_planner(batch),
-        evaluator=make_deterministic_development_evaluator((_record(),)),
+    boundary = RevisionEvaluation(
+        planner=_fixed_plan(batch),
+        evaluator=_fixed_run((_record(),)),
         batch_size=1,
         experiment_id="development-experiment",
-        host_experiment_id="host-experiment",
+        selection_experiment_id="host-experiment",
     )
     snapshot = WorkspaceSnapshot(system_prompt="Candidate prompt.", candidate_id="candidate-1")
 
@@ -171,7 +185,7 @@ def test_revision_is_bound_to_exact_trial_evidence_and_development_provenance(tm
         revision=1,
         mutation=MutationSummary(prompt_modified=True),
         hypothesis="Use a clearer verification step.",
-        usage_after=VariationUsage(development_evaluations=1),
+        usage_after=ProposalUsage(development_evaluations=1),
     )
 
     assert attempt.evaluated.snapshot == snapshot
@@ -187,9 +201,9 @@ def test_revision_is_bound_to_exact_trial_evidence_and_development_provenance(tm
 
 def test_returned_holdout_trial_record_is_rejected(tmp_path: Path) -> None:
     batch = _batch(tmp_path)
-    boundary = DevelopmentEvaluationBoundary(
-        planner=make_deterministic_development_batch_planner(batch),
-        evaluator=make_deterministic_development_evaluator((_record(visibility=Visibility.HOLDOUT),)),
+    boundary = RevisionEvaluation(
+        planner=_fixed_plan(batch),
+        evaluator=_fixed_run((_record(visibility=Visibility.HOLDOUT),)),
         batch_size=1,
     )
 

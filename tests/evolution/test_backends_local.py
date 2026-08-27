@@ -1,4 +1,4 @@
-# ABOUTME: Tests the local evolution CandidateEvaluator composition boundary.
+# ABOUTME: Tests the local evolution CandidateChecks composition boundary.
 # ABOUTME: Proves snapshots become agent input and fitness trials use run_experiment.
 
 from pathlib import Path
@@ -7,11 +7,8 @@ from typing import Any
 import pytest
 
 from aec_bench.contracts.evolution import SkillEntry, WorkspaceSnapshot
-from aec_bench.contracts.experiment_manifest import AgentConfig, ComputeConfig
 from aec_bench.evolution.backends import local
-from aec_bench.evolution.evaluation import CandidateEvaluationBatch
 from aec_bench.tasks.instance import resolve_instance_paths
-from aec_bench.trials import PlannedTrial
 from tests.support.task_factories import make_task_definition
 from tests.support.trial_record_factories import make_trial_record
 
@@ -37,31 +34,7 @@ def _resolved_task(tmp_path: Path, task_id: str):  # noqa: ANN202
     return resolve_instance_paths(make_task_definition(task_id=task_id), task_dir)
 
 
-def test_stub_candidate_evaluator_returns_fixed_records(tmp_path: Path) -> None:
-    records = [make_trial_record(trial_id="trial-1", attempt=1), make_trial_record(trial_id="trial-2", attempt=2)]
-    first = _resolved_task(tmp_path, "electrical/voltage-drop/au-office-fitout")
-    first_agent = AgentConfig(name="evolution-agent", adapter="direct", model="test-model")
-    first_compute = ComputeConfig(backend="local")
-    batch = CandidateEvaluationBatch(
-        tasks=(first,),
-        trials=tuple(
-            PlannedTrial(
-                trial_id=record.trial_id,
-                experiment_id="evolution-test",
-                task_id=first.task.task_id,
-                agent=first_agent,
-                compute=first_compute,
-                repetition=index,
-            )
-            for index, record in enumerate(records, start=1)
-        ),
-        evaluation_case_ids=("case-1", "case-2"),
-    )
-
-    assert local.make_stub_candidate_evaluator(records)(_snapshot(), batch) == tuple(records)
-
-
-def test_local_candidate_evaluator_plans_and_runs_snapshot_as_explicit_agent_input(
+def test_local_checks_plan_and_run_snapshot_as_explicit_agent_input(
     tmp_path: Path,
     monkeypatch,
 ) -> None:  # noqa: ANN001
@@ -71,15 +44,14 @@ def test_local_candidate_evaluator_plans_and_runs_snapshot_as_explicit_agent_inp
     observed: dict[str, Any] = {}
     monkeypatch.setattr(local, "_resolve_task_directories", lambda _paths: [first, second])
 
-    planner = local.make_local_candidate_batch_planner(
+    checks = local.build_local_checks(
         task_dirs=[first.instance_dir, second.instance_dir],
         model="test-model",
         experiment_id="evolution-test",
         adapter="direct",
         timeout=25,
     )
-    batch = planner(1, 0)
-    solve = local.make_local_candidate_evaluator()
+    batch = checks.plan_batch(1, 0)
 
     record = record.model_copy(update={"trial_id": batch.evaluation_case_ids[0], "task_id": batch.trials[0].task_id})
 
@@ -88,7 +60,7 @@ def test_local_candidate_evaluator_plans_and_runs_snapshot_as_explicit_agent_inp
         return [record]
 
     monkeypatch.setattr(local, "run_experiment", fake_run_experiment)
-    assert solve(_snapshot(), batch) == (record,)
+    assert checks.run(_snapshot(), batch) == (record,)
 
     assert observed["tasks"] == batch.tasks
     trial = observed["trials"][0]
@@ -101,18 +73,18 @@ def test_local_candidate_evaluator_plans_and_runs_snapshot_as_explicit_agent_inp
     assert "voltage-check" in trial.agent.system_prompt
 
 
-def test_local_candidate_evaluator_rotates_task_batches(tmp_path: Path, monkeypatch) -> None:  # noqa: ANN001
+def test_local_checks_rotate_task_batches(tmp_path: Path, monkeypatch) -> None:  # noqa: ANN001
     first = _resolved_task(tmp_path, "electrical/voltage-drop/one")
     second = _resolved_task(tmp_path, "electrical/voltage-drop/two")
     monkeypatch.setattr(local, "_resolve_task_directories", lambda _paths: [first, second])
-    planner = local.make_local_candidate_batch_planner(
+    checks = local.build_local_checks(
         task_dirs=[first.instance_dir, second.instance_dir],
         model="test-model",
         experiment_id="evolution-test",
     )
 
-    first_batch = planner(1, 0)
-    second_batch = planner(1, 1)
+    first_batch = checks.plan_batch(1, 0)
+    second_batch = checks.plan_batch(1, 1)
 
     assert [first_batch.tasks[0].task.task_id, second_batch.tasks[0].task.task_id] == [
         first.task.task_id,
@@ -120,7 +92,7 @@ def test_local_candidate_evaluator_rotates_task_batches(tmp_path: Path, monkeypa
     ]
 
 
-def test_local_candidate_evaluator_uses_workspace_agent_config_file(tmp_path: Path, monkeypatch) -> None:  # noqa: ANN001
+def test_local_checks_use_workspace_agent_config_file(tmp_path: Path, monkeypatch) -> None:  # noqa: ANN001
     task = _resolved_task(tmp_path, "electrical/voltage-drop/one")
     workspace_root = tmp_path / "evolution-workspace"
     workspace_root.mkdir()
@@ -139,20 +111,20 @@ def test_local_candidate_evaluator_uses_workspace_agent_config_file(tmp_path: Pa
         ]
 
     monkeypatch.setattr(local, "run_experiment", fake_run_experiment)
-    planner = local.make_local_candidate_batch_planner(
+    checks = local.build_local_checks(
         task_dirs=[task.instance_dir],
         model="test-model",
         experiment_id="evolution-test",
+        workspace_root=workspace_root,
     )
-    batch = planner(1, 0)
-    solve = local.make_local_candidate_evaluator(workspace_root=workspace_root)
-    solve(_snapshot(), batch)
+    batch = checks.plan_batch(1, 0)
+    checks.run(_snapshot(), batch)
 
     assert observed["runtime"]._agent_files == {"tool_loop.toml": config}
 
 
-def test_local_candidate_evaluator_returns_empty_for_no_tasks() -> None:
-    planner = local.make_local_candidate_batch_planner(task_dirs=[], model="test-model", experiment_id="evolution-test")
+def test_local_checks_reject_no_tasks() -> None:
+    checks = local.build_local_checks(task_dirs=[], model="test-model", experiment_id="evolution-test")
 
     with pytest.raises(ValueError, match="requires at least one"):
-        planner(5, 0)
+        checks.plan_batch(5, 0)

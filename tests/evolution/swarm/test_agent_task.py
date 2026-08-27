@@ -7,9 +7,9 @@ from datetime import UTC, datetime
 
 import pytest
 
-from aec_bench.contracts.evolution import AgentStatus, MutationStrategy, VariationUsage, WorkspaceSnapshot
+from aec_bench.contracts.evolution import AgentStatus, MutationStrategy, ProposalUsage, WorkspaceSnapshot
 from aec_bench.evolution.checkpoint import AVOIncompleteExternalEffectError
-from aec_bench.evolution.core import SelectionPlan, VariationResult, VariationStatus
+from aec_bench.evolution.core import CandidateProposal, ProposalStatus, SelectionPlan
 from aec_bench.evolution.swarm.agent_task import AgentContext, run_agent_loop
 from aec_bench.evolution.swarm.core import AgentBudget, SwarmAgentResult, SwarmAssignment
 
@@ -36,8 +36,8 @@ class FakeEvolver:
     async def step(self, assignment: SwarmAssignment) -> SwarmAgentResult:
         self._index += 1
         cost = self._scores[(self._index - 1) % len(self._scores)]
-        usage = VariationUsage(model_requests=1, model_cost_usd=cost)
-        variation = VariationResult(VariationStatus.ABSTAINED, None, None, "No child", usage)
+        usage = ProposalUsage(model_requests=1, model_cost_usd=cost)
+        variation = CandidateProposal(ProposalStatus.ABSTAINED, None, None, "No child", usage)
         return SwarmAgentResult("agent-1", assignment.assignment_id, variation, usage)
 
 

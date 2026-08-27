@@ -18,20 +18,21 @@ from aec_bench.contracts.evolution import (
     WorkspaceSnapshot,
 )
 from aec_bench.contracts.experiment_manifest import AgentConfig, ComputeConfig, TaskSelector
-from aec_bench.evolution import application, variation_operator
+from aec_bench.evolution import application
+from aec_bench.evolution import proposer as proposer_module
 from aec_bench.evolution.application import run_evolution, run_evolution_from_config
 from aec_bench.evolution.checkpoint import AVOConfigurationIdentity
 from aec_bench.evolution.core import (
-    DevelopmentAttempt,
+    CandidateProposal,
     EvaluatedCandidate,
+    ProposalStatus,
+    ProposalUsage,
+    RevisionAttempt,
     SelectionPlan,
-    VariationResult,
-    VariationStatus,
-    VariationUsage,
 )
-from aec_bench.evolution.evaluation import CandidateEvaluationBatch
+from aec_bench.evolution.evaluation import CandidateChecks, CandidateEvaluationBatch
 from aec_bench.evolution.memory import AVOMemoryEntry
-from aec_bench.evolution.variation_operator import build_agentic_variation_operator
+from aec_bench.evolution.proposer import build_avo
 from aec_bench.evolution.workspace import Workspace
 from aec_bench.tasks.instance import resolve_instance_paths
 from aec_bench.trials import PlannedTrial
@@ -112,7 +113,7 @@ def _submitted_result(
     mutation: MutationSummary,
     *,
     memory: tuple[AVOMemoryEntry, ...] = (),
-) -> VariationResult:
+) -> CandidateProposal:
     observations = tuple(
         observation.model_copy(update={"candidate_id": child.candidate_id})
         for observation in request.parent.observations
@@ -122,20 +123,20 @@ def _submitted_result(
         observations=observations,
         assessment=request.parent.assessment.model_copy(update={"candidate_id": child.candidate_id}),
     )
-    attempt = DevelopmentAttempt(
+    attempt = RevisionAttempt(
         attempt_id=f"{child.candidate_id}-attempt",
         revision=1,
         evaluated=evaluated,
         mutation=mutation,
         hypothesis="The test mutation improves the candidate.",
-        usage_after=VariationUsage(development_evaluations=1),
+        usage_after=ProposalUsage(development_evaluations=1),
     )
-    return VariationResult(
-        status=VariationStatus.SUBMITTED,
+    return CandidateProposal(
+        status=ProposalStatus.SUBMITTED,
         child=child,
         mutation=mutation,
         reasoning="test child",
-        usage=VariationUsage(),
+        usage=ProposalUsage(),
         attempt=attempt,
         memory=memory,
     )
@@ -147,7 +148,7 @@ def _run(
     *,
     parent_reward: float,
     child_reward: float,
-    variation: object,
+    proposal: object,
     config: EvolutionConfig,
     evaluated_candidates: list[str] | None = None,
     run_id: str = "run-fixed",
@@ -170,10 +171,8 @@ def _run(
     return run_evolution(
         workspace=workspace,
         config=config,
-        evaluate=evaluate,
-        batch_planner=lambda _size, _cycle: batch,
-        variation=variation,
-        enrich=lambda observations: observations,
+        selection_checks=CandidateChecks(plan=lambda _size, _cycle: batch, run=evaluate),
+        propose=proposal,
         run_id=run_id,
         clock=lambda: datetime(2026, 1, 1, tzinfo=UTC),
         archive_agent=select_archive if config.strategy == "qd" else None,
@@ -208,7 +207,7 @@ def test_config_rejects_holdout_before_model_or_evolution_composition(
         unexpected_effect,
     )
     monkeypatch.setattr(application, "build_pydantic_model", unexpected_effect)
-    monkeypatch.setattr(application, "build_agentic_variation_operator", unexpected_effect)
+    monkeypatch.setattr(application, "build_avo", unexpected_effect)
     monkeypatch.setattr(application, "run_evolution", unexpected_effect)
 
     with pytest.raises(ValueError, match="only PUBLIC tasks are permitted"):
@@ -231,7 +230,7 @@ def test_child_is_evaluated_before_commit_and_both_evidence_sets_persist(tmp_pat
         batch,
         parent_reward=0.5,
         child_reward=0.9,
-        variation=submit,
+        proposal=submit,
         config=_config(workspace.root),
         evaluated_candidates=candidates_seen_during_eval,
     )
@@ -259,7 +258,7 @@ def test_rejected_child_keeps_canonical_workspace_and_exact_graveyard_snapshot(t
         batch,
         parent_reward=0.5,
         child_reward=0.6,
-        variation=submit,
+        proposal=submit,
         config=_config(workspace.root, threshold=0.9, stagnation=1),
     )
     assert result.cycle_records[0].gate_decision.value == "rejected"
@@ -278,12 +277,12 @@ def test_abstention_creates_no_child_version(tmp_path: Path) -> None:
     workspace, batch = _setup(tmp_path)
 
     def abstain(_request, _source, _child_id):
-        return VariationResult(
-            status=VariationStatus.ABSTAINED,
+        return CandidateProposal(
+            status=ProposalStatus.ABSTAINED,
             child=None,
             mutation=None,
             reasoning="no change",
-            usage=VariationUsage(),
+            usage=ProposalUsage(),
         )
 
     result = _run(
@@ -291,7 +290,7 @@ def test_abstention_creates_no_child_version(tmp_path: Path) -> None:
         batch,
         parent_reward=0.5,
         child_reward=0.5,
-        variation=abstain,
+        proposal=abstain,
         config=_config(workspace.root),
     )
     assert result.cycle_records[0].gate_decision.value == "skipped"
@@ -314,7 +313,7 @@ def test_runs_configured_multi_cycle_count_and_projects_best_and_final_scores(tm
         batch,
         parent_reward=0.5,
         child_reward=0.9,
-        variation=submit,
+        proposal=submit,
         config=_config(workspace.root, max_cycles=3),
     )
     assert result.cycles_completed == 3
@@ -350,7 +349,7 @@ def test_direct_cycles_carry_structured_memory_without_changing_selection(tmp_pa
         batch,
         parent_reward=0.5,
         child_reward=0.9,
-        variation=submit,
+        proposal=submit,
         config=_config(workspace.root, max_cycles=2),
     )
 
@@ -374,7 +373,7 @@ def test_stagnation_converges_before_configured_limit(tmp_path: Path) -> None:
         batch,
         parent_reward=0.5,
         child_reward=0.5,
-        variation=submit,
+        proposal=submit,
         config=_config(workspace.root, max_cycles=10, stagnation=2),
     )
     assert result.converged is True
@@ -399,12 +398,12 @@ def test_graveyard_loads_and_saves_existing_entries(tmp_path: Path) -> None:
         batch,
         parent_reward=0.5,
         child_reward=0.5,
-        variation=lambda _request, _source, _child_id: VariationResult(
-            status=VariationStatus.ABSTAINED,
+        proposal=lambda _request, _source, _child_id: CandidateProposal(
+            status=ProposalStatus.ABSTAINED,
             child=None,
             mutation=None,
             reasoning="no change",
-            usage=VariationUsage(),
+            usage=ProposalUsage(),
         ),
         config=_config(workspace.root),
     )
@@ -420,12 +419,12 @@ def test_qd_strategy_persists_archive_summary_on_functional_path(tmp_path: Path)
         batch,
         parent_reward=0.7,
         child_reward=0.7,
-        variation=lambda _request, _source, _child_id: VariationResult(
-            status=VariationStatus.ABSTAINED,
+        proposal=lambda _request, _source, _child_id: CandidateProposal(
+            status=ProposalStatus.ABSTAINED,
             child=None,
             mutation=None,
             reasoning="no change",
-            usage=VariationUsage(),
+            usage=ProposalUsage(),
         ),
         config=_config(workspace.root, strategy="qd"),
     )
@@ -438,7 +437,7 @@ def test_qd_strategy_persists_archive_summary_on_functional_path(tmp_path: Path)
     assert qd_state["cycle"] == 1
 
 
-def test_agentic_operator_creates_one_development_boundary_per_variation_call(tmp_path: Path, monkeypatch) -> None:
+def test_avo_proposer_creates_one_revision_boundary_per_call(tmp_path: Path, monkeypatch) -> None:
     from pydantic_ai.models.test import TestModel
 
     workspace, batch = _setup(tmp_path)
@@ -467,22 +466,22 @@ def test_agentic_operator_creates_one_development_boundary_per_variation_call(tm
             ),
         )
 
-    original_run = variation_operator.run_agentic_variation
+    original_run = proposer_module.run_avo
 
     def capture(*args, **kwargs):
-        boundaries.append(kwargs["development_boundary"])
+        boundaries.append(kwargs["revision_evaluation"])
         budgets.append(kwargs["budget"])
         return original_run(*args, **kwargs)
 
-    monkeypatch.setattr(variation_operator, "run_agentic_variation", capture)
-    operator = build_agentic_variation_operator(
-        agent_model=TestModel(custom_output_args={"tool": "abstain", "arguments": {"reasoning": "No safe change."}}),
-        supervisor_model=TestModel(),
-        supervisor_model_identity="test-supervisor",
-        development_batch_planner=development_plan,
-        development_evaluator=development_evaluate,
-        development_batch_size=1,
-        development_experiment_prefix="functional-development",
+    monkeypatch.setattr(proposer_module, "run_avo", capture)
+    operator = build_avo(
+        model=TestModel(custom_output_args={"tool": "abstain", "arguments": {"reasoning": "No safe change."}}),
+        model_identity="test-agent",
+        advisor_model=TestModel(),
+        advisor_model_identity="test-supervisor",
+        revision_checks=CandidateChecks(plan=development_plan, run=development_evaluate),
+        batch_size=1,
+        revision_experiment_prefix="functional-development",
     )
 
     def host_evaluate(snapshot: WorkspaceSnapshot, _batch: CandidateEvaluationBatch):
@@ -491,10 +490,8 @@ def test_agentic_operator_creates_one_development_boundary_per_variation_call(tm
     result = run_evolution(
         workspace=workspace,
         config=_config(workspace.root, max_cycles=2),
-        evaluate=host_evaluate,
-        batch_planner=lambda _size, _cycle: batch,
-        variation=operator,
-        enrich=lambda observations: observations,
+        selection_checks=CandidateChecks(plan=lambda _size, _cycle: batch, run=host_evaluate),
+        propose=operator,
         run_id="run-fixed",
         clock=lambda: datetime(2026, 1, 1, tzinfo=UTC),
     )
@@ -505,40 +502,41 @@ def test_agentic_operator_creates_one_development_boundary_per_variation_call(tm
     assert all(budget.max_supervisor_interventions == 1 for budget in budgets)
     assert boundaries[0] is not boundaries[1]
     assert all(boundary.role.value == "development" for boundary in boundaries)
-    assert all(boundary.host_experiment_id == "experiment-001" for boundary in boundaries)
-    assert all(boundary.experiment_id != boundary.host_experiment_id for boundary in boundaries)
+    assert all(boundary.selection_experiment_id == "experiment-001" for boundary in boundaries)
+    assert all(boundary.experiment_id != boundary.selection_experiment_id for boundary in boundaries)
     assert all(boundary.experiment_id.startswith("functional-development-cycle-") for boundary in boundaries)
     assert all(
         trial.experiment_id == boundary.experiment_id for boundary in boundaries for trial in boundary.batch.trials
     )
     assert all(
-        trial.trial_id not in boundary.host_trial_ids for boundary in boundaries for trial in boundary.batch.trials
+        trial.trial_id not in boundary.selection_trial_ids for boundary in boundaries for trial in boundary.batch.trials
     )
 
 
-def test_agentic_operator_names_development_evidence_by_run(tmp_path: Path, monkeypatch) -> None:
+def test_avo_proposer_names_revision_evidence_by_run(tmp_path: Path, monkeypatch) -> None:
     workspace_one, batch_one = _setup(tmp_path / "one")
     workspace_two, batch_two = _setup(tmp_path / "two")
     boundaries = []
 
     def capture(*args, **kwargs):
-        boundaries.append(kwargs["development_boundary"])
-        return VariationResult(
-            status=VariationStatus.ABSTAINED,
+        boundaries.append(kwargs["revision_evaluation"])
+        return CandidateProposal(
+            status=ProposalStatus.ABSTAINED,
             child=None,
             mutation=None,
             reasoning="No safe change.",
-            usage=VariationUsage(),
+            usage=ProposalUsage(),
         )
 
-    monkeypatch.setattr(variation_operator, "run_agentic_variation", capture)
-    operator = build_agentic_variation_operator(
-        agent_model=object(),
-        supervisor_model=object(),
-        supervisor_model_identity="test-supervisor",
-        development_batch_planner=lambda _size, _cycle: batch_one,
-        development_evaluator=lambda _snapshot, _batch: (),
-        development_batch_size=1,
+    monkeypatch.setattr(proposer_module, "run_avo", capture)
+    operator = build_avo(
+        model=object(),
+        model_identity="test-agent",
+        revision_checks=CandidateChecks(
+            plan=lambda _size, _cycle: batch_one,
+            run=lambda _snapshot, _batch: (),
+        ),
+        batch_size=1,
     )
 
     _run(
@@ -546,7 +544,7 @@ def test_agentic_operator_names_development_evidence_by_run(tmp_path: Path, monk
         batch_one,
         parent_reward=0.5,
         child_reward=0.5,
-        variation=operator,
+        proposal=operator,
         config=_config(workspace_one.root),
         run_id="run-one",
     )
@@ -555,7 +553,7 @@ def test_agentic_operator_names_development_evidence_by_run(tmp_path: Path, monk
         batch_two,
         parent_reward=0.5,
         child_reward=0.5,
-        variation=operator,
+        proposal=operator,
         config=_config(workspace_two.root),
         run_id="run-two",
     )
@@ -564,7 +562,7 @@ def test_agentic_operator_names_development_evidence_by_run(tmp_path: Path, monk
     assert boundaries[0].experiment_id != boundaries[1].experiment_id
 
 
-def test_agentic_operator_requires_explicit_matching_supervisor_identity(tmp_path: Path) -> None:
+def test_avo_proposer_requires_matching_advisor_identity_for_checkpoints(tmp_path: Path) -> None:
     identity = AVOConfigurationIdentity(
         model_identity="test-model",
         supervisor_model_identity="test-supervisor",
@@ -573,25 +571,38 @@ def test_agentic_operator_requires_explicit_matching_supervisor_identity(tmp_pat
         configuration_identity="test-config:1",
     )
     common = {
-        "development_batch_planner": lambda _size, _cycle: None,
-        "development_evaluator": lambda _snapshot, _batch: (),
-        "development_batch_size": 1,
+        "revision_checks": CandidateChecks(
+            plan=lambda _size, _cycle: None,
+            run=lambda _snapshot, _batch: (),
+        ),
+        "batch_size": 1,
         "configuration_identity": identity,
     }
 
-    with pytest.raises(ValueError, match="supervisor_model_identity must match"):
-        build_agentic_variation_operator(
-            agent_model=object(),
-            supervisor_model=object(),
-            supervisor_model_identity="wrong-supervisor",
+    with pytest.raises(ValueError, match="model_identity must match"):
+        build_avo(
+            model=object(),
+            model_identity="wrong-model",
+            advisor_model=object(),
+            advisor_model_identity="test-supervisor",
+            **common,
+        )
+
+    with pytest.raises(ValueError, match="advisor_model_identity must match"):
+        build_avo(
+            model=object(),
+            model_identity="test-model",
+            advisor_model=object(),
+            advisor_model_identity="wrong-supervisor",
             **common,
         )
 
     model = object()
-    operator = build_agentic_variation_operator(
-        agent_model=model,
-        supervisor_model=model,
-        supervisor_model_identity="test-supervisor",
+    operator = build_avo(
+        model=model,
+        model_identity="test-model",
+        advisor_model=model,
+        advisor_model_identity="test-supervisor",
         **common,
     )
     assert callable(operator)

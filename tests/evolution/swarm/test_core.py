@@ -12,18 +12,17 @@ from aec_bench.contracts.evolution import (
     MutationStrategy,
     MutationSummary,
     ObservationEnrichment,
+    ProposalUsage,
     SwarmAgentState,
-    VariationUsage,
     WorkspaceSnapshot,
 )
 from aec_bench.evolution.core import (
-    DevelopmentAttempt,
+    CandidateProposal,
     EvaluatedCandidate,
+    ProposalStatus,
+    RevisionAttempt,
     SelectionPlan,
-    VariationResult,
-    VariationStatus,
 )
-from aec_bench.evolution.evaluation import bind_evaluated_candidate
 from aec_bench.evolution.swarm.core import (
     AgentBudget,
     AgentPivotState,
@@ -74,25 +73,25 @@ def _candidate(candidate_id: str) -> EvaluatedCandidate:
         evaluation_case_ids=(f"{candidate_id}-case",),
         valid=True,
     )
-    return bind_evaluated_candidate(
+    return EvaluatedCandidate(
         WorkspaceSnapshot(system_prompt="Candidate prompt", candidate_id=candidate_id),
         (observation,),
         assessment,
     )
 
 
-def _usage() -> VariationUsage:
-    return VariationUsage(model_requests=1, model_cost_usd=0.1)
+def _usage() -> ProposalUsage:
+    return ProposalUsage(model_requests=1, model_cost_usd=0.1)
 
 
-def _attempt(candidate: EvaluatedCandidate) -> DevelopmentAttempt:
-    return DevelopmentAttempt(
+def _attempt(candidate: EvaluatedCandidate) -> RevisionAttempt:
+    return RevisionAttempt(
         attempt_id="attempt-1",
         revision=1,
         evaluated=candidate,
         mutation=MutationSummary(prompt_modified=True),
         hypothesis="Try a changed prompt.",
-        usage_after=VariationUsage(development_evaluations=1, development_evaluation_cost_usd=0.1),
+        usage_after=ProposalUsage(development_evaluations=1, development_evaluation_cost_usd=0.1),
     )
 
 
@@ -101,7 +100,7 @@ def _result(assignment: SwarmAssignment | None = None) -> SwarmAgentResult:
     return SwarmAgentResult(
         agent_id=assignment.agent_id,
         assignment_id=assignment.assignment_id,
-        variation=VariationResult(VariationStatus.ABSTAINED, None, None, "No child", _usage()),
+        proposal=CandidateProposal(ProposalStatus.ABSTAINED, None, None, "No child", _usage()),
         agent_usage=_usage(),
     )
 
@@ -147,12 +146,12 @@ def test_budget_rejects_unbounded_or_invalid_cost(value: float) -> None:
 
 def test_agent_result_has_only_variation_and_cost() -> None:
     result = _result()
-    assert result.variation.child is None
+    assert result.proposal.child is None
     with pytest.raises(TypeError):
         SwarmAgentResult(
             agent_id="agent-1",
             assignment_id="assignment-1",
-            variation=result.variation,
+            proposal=result.proposal,
             agent_usage=result.agent_usage,
             score=0.8,  # type: ignore[call-arg]
         )
@@ -210,7 +209,7 @@ def test_outcome_requires_assignment_and_result_identity() -> None:
     mismatched = SwarmAgentResult(
         agent_id="agent-2",
         assignment_id=assignment.assignment_id,
-        variation=result.variation,
+        proposal=result.proposal,
         agent_usage=result.agent_usage,
     )
     with pytest.raises(ValueError, match="agent_id"):
@@ -224,8 +223,8 @@ def test_outcome_requires_host_evaluation_for_submitted_child() -> None:
     result = SwarmAgentResult(
         agent_id=assignment.agent_id,
         assignment_id=assignment.assignment_id,
-        variation=VariationResult(
-            status=VariationStatus.SUBMITTED,
+        proposal=CandidateProposal(
+            status=ProposalStatus.SUBMITTED,
             child=child,
             mutation=attempt.mutation,
             reasoning="Child",

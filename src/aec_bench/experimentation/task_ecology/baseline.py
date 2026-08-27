@@ -15,7 +15,7 @@ import yaml
 
 from aec_bench.contracts.evolution import WorkspaceSnapshot
 from aec_bench.contracts.trial_record import TrialRecord
-from aec_bench.evolution.backends.local import make_local_candidate_evaluator
+from aec_bench.evolution.backends.local import build_local_checks
 
 DEFAULT_BASELINE_PROMPT = (
     "You are an expert engineering agent. Solve the task carefully, use the available "
@@ -104,7 +104,7 @@ def run_baseline_dataset(
         if task.task_id in completed_ids:
             continue
         print(f"[{index}/{len(tasks)}] {task.task_id}", flush=True)
-        solve = make_local_candidate_evaluator(
+        checks = build_local_checks(
             task_dirs=[task.task_dir],
             model=model,
             experiment_id=experiment_id,
@@ -112,7 +112,7 @@ def run_baseline_dataset(
             timeout=timeout,
             workspace_root=workspace_root,
         )
-        records = solve(snapshot, 1)
+        records = checks.run(snapshot, checks.plan_batch(batch_size=1, cycle=index - 1))
         row = (
             baseline_row_from_record(
                 records[0],

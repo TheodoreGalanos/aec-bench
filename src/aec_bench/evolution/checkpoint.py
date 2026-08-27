@@ -14,8 +14,8 @@ from pydantic import Field, field_validator, model_validator
 
 from aec_bench.contracts.evolution import (
     MutationSummary,
+    ProposalUsage,
     SelectionRecord,
-    VariationUsage,
     WorkspaceSnapshot,
 )
 from aec_bench.contracts.trial_record import RunManifest
@@ -30,17 +30,17 @@ from aec_bench.evolution._checkpoint_evidence import (
     AVOCheckpointTurn,
     _candidate_evidence_refs,
 )
+from aec_bench.evolution.advice import AVOAdviceRecord
 from aec_bench.evolution.cancellation import AVOCancellationCode
 from aec_bench.evolution.core import (
     AVOBudget,
     AVOState,
-    DevelopmentAttempt,
+    CandidateProposal,
     EvaluatedCandidate,
-    VariationResult,
-    VariationStatus,
+    ProposalStatus,
+    RevisionAttempt,
 )
 from aec_bench.evolution.memory import AVO_MEMORY_LIMIT, AVOMemoryEntry, validate_memory_entries
-from aec_bench.evolution.supervision import AVOSupervisionRecord
 from aec_bench.ledger.durability import mkdir_durable, replace_file_bytes_durable
 
 AVO_CHECKPOINT_SCHEMA_VERSION: Literal[2] = 2
@@ -97,7 +97,7 @@ class AVOCheckpointAttempt(StrictModel):
 
     @model_validator(mode="after")
     def validate_runtime_attempt(self) -> AVOCheckpointAttempt:
-        DevelopmentAttempt(
+        RevisionAttempt(
             attempt_id=self.attempt_id,
             revision=self.revision,
             evaluated=self.evaluated.to_evaluated_candidate(),
@@ -108,11 +108,11 @@ class AVOCheckpointAttempt(StrictModel):
         return self
 
     @classmethod
-    def from_attempt(cls, attempt: DevelopmentAttempt) -> AVOCheckpointAttempt:
+    def from_attempt(cls, attempt: RevisionAttempt) -> AVOCheckpointAttempt:
         """Convert one runtime development attempt."""
 
-        if not isinstance(attempt, DevelopmentAttempt):
-            raise TypeError("attempt must be a DevelopmentAttempt")
+        if not isinstance(attempt, RevisionAttempt):
+            raise TypeError("attempt must be a RevisionAttempt")
         return cls(
             attempt_id=attempt.attempt_id,
             revision=attempt.revision,
@@ -122,10 +122,10 @@ class AVOCheckpointAttempt(StrictModel):
             usage_after=AVOUsageSnapshot.from_usage(attempt.usage_after),
         )
 
-    def to_attempt(self) -> DevelopmentAttempt:
+    def to_attempt(self) -> RevisionAttempt:
         """Restore one runtime development attempt."""
 
-        return DevelopmentAttempt(
+        return RevisionAttempt(
             attempt_id=self.attempt_id,
             revision=self.revision,
             evaluated=self.evaluated.to_evaluated_candidate(),
@@ -177,17 +177,17 @@ class AVOUsageSnapshot(StrictModel):
         return value
 
     @classmethod
-    def from_usage(cls, usage: VariationUsage) -> AVOUsageSnapshot:
+    def from_usage(cls, usage: ProposalUsage) -> AVOUsageSnapshot:
         """Convert exact runtime usage, retaining unknown costs as ``None``."""
 
-        if not isinstance(usage, VariationUsage):
-            raise TypeError("usage must be a VariationUsage")
+        if not isinstance(usage, ProposalUsage):
+            raise TypeError("usage must be a ProposalUsage")
         return cls(**asdict(usage))
 
-    def to_usage(self) -> VariationUsage:
+    def to_usage(self) -> ProposalUsage:
         """Restore exact runtime usage."""
 
-        return VariationUsage(**self.model_dump())
+        return ProposalUsage(**self.model_dump())
 
 
 class AVOBudgetSnapshot(StrictModel):
@@ -284,7 +284,7 @@ class AVOIncompleteExternalEffect(StrictModel):
 class AVOCheckpointTerminalResult(StrictModel):
     """Terminal result retained with a checkpoint for idempotent later restore."""
 
-    status: VariationStatus
+    status: ProposalStatus
     reasoning: NonEmptyStr
     usage: AVOUsageSnapshot
     child: WorkspaceSnapshot | None = None
@@ -294,28 +294,28 @@ class AVOCheckpointTerminalResult(StrictModel):
 
     @model_validator(mode="after")
     def validate_terminal_shape(self) -> AVOCheckpointTerminalResult:
-        if self.status is VariationStatus.SUBMITTED:
+        if self.status is ProposalStatus.SUBMITTED:
             if self.child is None or self.mutation is None or self.attempt_id is None:
                 raise ValueError("submitted checkpoint result requires child, mutation, and attempt_id")
         elif self.child is not None or self.mutation is not None or self.attempt_id is not None:
             raise ValueError(f"{self.status.value} checkpoint result must not contain child, mutation, or attempt")
-        if self.status is VariationStatus.CANCELLED and self.cancellation_code is None:
+        if self.status is ProposalStatus.CANCELLED and self.cancellation_code is None:
             raise ValueError("cancelled checkpoint result requires a cancellation_code")
-        if self.status is not VariationStatus.CANCELLED and self.cancellation_code is not None:
+        if self.status is not ProposalStatus.CANCELLED and self.cancellation_code is not None:
             raise ValueError("cancellation_code is only valid for a cancelled checkpoint result")
         return self
 
     @classmethod
     def from_result(
         cls,
-        result: VariationResult,
+        result: CandidateProposal,
         *,
         cancellation_code: AVOCancellationCode | None = None,
     ) -> AVOCheckpointTerminalResult:
         """Convert one terminal runtime result."""
 
-        if not isinstance(result, VariationResult):
-            raise TypeError("result must be a VariationResult")
+        if not isinstance(result, CandidateProposal):
+            raise TypeError("result must be a CandidateProposal")
         return cls(
             status=result.status,
             reasoning=result.reasoning,
@@ -352,7 +352,7 @@ class AVOCheckpoint(StrictModel):
     budget: AVOBudgetSnapshot
     usage: AVOUsageSnapshot
     structured_memory: tuple[AVOMemoryEntry, ...] = ()
-    supervision_records: tuple[AVOSupervisionRecord, ...] = ()
+    supervision_records: tuple[AVOAdviceRecord, ...] = ()
     incomplete_external_effects: tuple[AVOIncompleteExternalEffect, ...] = ()
     terminal_result: AVOCheckpointTerminalResult | None = None
 
@@ -465,12 +465,12 @@ class AVOCheckpoint(StrictModel):
                     raise ValueError(
                         "checkpoint without parent evidence must have the parent development incomplete marker"
                     )
-            elif self.terminal_result.status is VariationStatus.BUDGET_EXHAUSTED:
+            elif self.terminal_result.status is ProposalStatus.BUDGET_EXHAUSTED:
                 if self.usage.elapsed_seconds < self.budget.max_elapsed_seconds:
                     raise ValueError(
                         "pre-baseline budget exhaustion requires elapsed_seconds to reach max_elapsed_seconds"
                     )
-            elif self.terminal_result.status not in (VariationStatus.CANCELLED, VariationStatus.ABSTAINED):
+            elif self.terminal_result.status not in (ProposalStatus.CANCELLED, ProposalStatus.ABSTAINED):
                 raise ValueError(
                     "checkpoint without parent evidence may only be terminal cancellation, abstention, "
                     "or budget exhaustion"
@@ -574,7 +574,7 @@ class AVOCheckpoint(StrictModel):
         if self.terminal_result is not None:
             if self.terminal_result.usage != self.usage:
                 raise ValueError("checkpoint terminal result usage must match checkpoint usage")
-            if self.terminal_result.status is VariationStatus.SUBMITTED:
+            if self.terminal_result.status is ProposalStatus.SUBMITTED:
                 assert self.terminal_result.child is not None
                 assert self.terminal_result.attempt_id is not None
                 if self.terminal_result.child.candidate_id != self.final_child_candidate_id:
@@ -768,7 +768,7 @@ __all__ = (
     "AVOExternalEffectOperation",
     "AVOIncompleteExternalEffect",
     "AVOIncompleteExternalEffectError",
-    "AVOSupervisionRecord",
+    "AVOAdviceRecord",
     "AVOUsageSnapshot",
     "read_checkpoint",
     "write_checkpoint",

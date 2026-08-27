@@ -33,7 +33,7 @@ def _require_usage_number(value: float, field_name: str) -> None:
 
 
 @dataclass(frozen=True)
-class VariationUsage:
+class ProposalUsage:
     """Exact usage consumed by one variation call.
 
     Cost is optional because a provider or evaluator can report usage without
@@ -436,7 +436,7 @@ class EvolutionCycleRecord(StrictModel):
     active_candidate_id_after: NonEmptyStr
     best_candidate_id_after: NonEmptyStr
     timestamp: datetime
-    evolver_usage: VariationUsage
+    evolver_usage: ProposalUsage
 
     @field_validator("timestamp")
     @classmethod

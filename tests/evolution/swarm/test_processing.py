@@ -16,18 +16,24 @@ from aec_bench.contracts.evolution import (
     MutationStrategy,
     MutationSummary,
     ObservationEnrichment,
+    ProposalUsage,
     SkillEntry,
-    VariationUsage,
     WorkspaceSnapshot,
 )
 from aec_bench.contracts.experiment_manifest import AgentConfig, ComputeConfig
 from aec_bench.evolution.archive import ArchiveInsertionStatus, QDArchive
-from aec_bench.evolution.core import DevelopmentAttempt, SelectionPlan, VariationResult, VariationStatus
-from aec_bench.evolution.evaluation import CandidateEvaluationBatch, bind_evaluated_candidate
+from aec_bench.evolution.core import (
+    CandidateProposal,
+    EvaluatedCandidate,
+    ProposalStatus,
+    RevisionAttempt,
+    SelectionPlan,
+)
+from aec_bench.evolution.evaluation import CandidateChecks, CandidateEvaluationBatch
 from aec_bench.evolution.swarm.core import AgentBudget, SwarmAgentResult, SwarmAssignment
 from aec_bench.evolution.swarm.processing import (
-    evaluate_swarm_result,
-    process_swarm_result,
+    apply_swarm_evaluation,
+    evaluate_assignment,
 )
 from aec_bench.evolution.swarm.shared_graveyard import SharedGraveyard
 from aec_bench.tasks.instance import resolve_instance_paths
@@ -85,7 +91,7 @@ def _assignment(parent: WorkspaceSnapshot | None = None) -> SwarmAssignment:
 
 
 def _result(assignment: SwarmAssignment, child: WorkspaceSnapshot | None) -> SwarmAgentResult:
-    usage = VariationUsage(
+    usage = ProposalUsage(
         model_requests=1,
         development_evaluations=1 if child is not None else 0,
         model_cost_usd=0.1,
@@ -109,8 +115,8 @@ def _result(assignment: SwarmAssignment, child: WorkspaceSnapshot | None) -> Swa
             evaluation_case_ids=("case-0",),
             valid=True,
         )
-        evaluated = bind_evaluated_candidate(child, (observation,), assessment)
-        attempt = DevelopmentAttempt(
+        evaluated = EvaluatedCandidate(child, (observation,), assessment)
+        attempt = RevisionAttempt(
             attempt_id=f"{assignment.assignment_id}:attempt-1",
             revision=1,
             evaluated=evaluated,
@@ -118,8 +124,8 @@ def _result(assignment: SwarmAssignment, child: WorkspaceSnapshot | None) -> Swa
             hypothesis="Apply the proposed prompt change",
             usage_after=usage,
         )
-    variation = VariationResult(
-        status=VariationStatus.SUBMITTED if child is not None else VariationStatus.ABSTAINED,
+    variation = CandidateProposal(
+        status=ProposalStatus.SUBMITTED if child is not None else ProposalStatus.ABSTAINED,
         child=child,
         mutation=MutationSummary(prompt_modified=True) if child is not None else None,
         reasoning="Apply the proposed prompt change",
@@ -129,7 +135,7 @@ def _result(assignment: SwarmAssignment, child: WorkspaceSnapshot | None) -> Swa
     return SwarmAgentResult(
         agent_id=assignment.agent_id,
         assignment_id=assignment.assignment_id,
-        variation=variation,
+        proposal=variation,
         agent_usage=usage,
     )
 
@@ -174,14 +180,26 @@ def _process(
 ):
     assignment = _assignment()
     result = _result(assignment, child)
-    return process_swarm_result(
+    archive = archive or QDArchive(n_centroids=20)
+    graveyard = graveyard or SharedGraveyard()
+    batch = _batch(tmp_path, batch_count)
+    evaluated = evaluate_assignment(
         assignment=assignment,
         agent_result=result,
-        batch=_batch(tmp_path, batch_count),
-        evaluate=evaluate or _evaluator(),
-        enrich=_identity_enricher,
-        archive=archive or QDArchive(n_centroids=20),
-        graveyard=graveyard or SharedGraveyard(),
+        batch=batch,
+        checks=CandidateChecks(
+            plan=lambda _size, _cycle: batch,
+            run=evaluate or _evaluator(),
+            enrich=_identity_enricher,
+        ),
+        run_id="run-1",
+        cycle=3,
+        now=_NOW,
+    )
+    return apply_swarm_evaluation(
+        evaluated=evaluated,
+        archive=archive,
+        graveyard=graveyard,
         run_id="run-1",
         cycle=3,
         now=_NOW,
@@ -206,21 +224,22 @@ def test_identity_mismatch_fails_before_evaluation_or_effects(tmp_path: Path) ->
     mismatched = SwarmAgentResult(
         agent_id=assignment.agent_id,
         assignment_id="other-assignment",
-        variation=_result(assignment, None).variation,
+        proposal=_result(assignment, None).proposal,
         agent_usage=_result(assignment, None).agent_usage,
     )
     calls: list[str] = []
     archive = QDArchive(n_centroids=20)
     graveyard = SharedGraveyard()
     with pytest.raises(ValueError, match="assignment_id"):
-        process_swarm_result(
+        evaluate_assignment(
             assignment=assignment,
             agent_result=mismatched,
             batch=_batch(tmp_path),
-            evaluate=lambda snapshot, batch: calls.append(snapshot.candidate_id) or (),
-            enrich=_identity_enricher,
-            archive=archive,
-            graveyard=graveyard,
+            checks=CandidateChecks(
+                plan=lambda _size, _cycle: _batch(tmp_path),
+                run=lambda snapshot, batch: calls.append(snapshot.candidate_id) or (),
+                enrich=_identity_enricher,
+            ),
             run_id="run-1",
             cycle=3,
             now=_NOW,
@@ -234,31 +253,32 @@ def test_child_with_non_submitted_status_fails_before_effects(tmp_path: Path) ->
     assignment = _assignment()
     child = WorkspaceSnapshot(system_prompt="Child", candidate_id="child")
     # Construct a malformed boundary value to keep the host-side validation
-    # regression. Normal VariationResult construction rejects this shape.
-    variation = object.__new__(VariationResult)
-    object.__setattr__(variation, "status", VariationStatus.BUDGET_EXHAUSTED)
+    # regression. Normal CandidateProposal construction rejects this shape.
+    variation = object.__new__(CandidateProposal)
+    object.__setattr__(variation, "status", ProposalStatus.BUDGET_EXHAUSTED)
     object.__setattr__(variation, "child", child)
     object.__setattr__(variation, "mutation", None)
     object.__setattr__(variation, "reasoning", "Budget ended after material was returned")
-    object.__setattr__(variation, "usage", VariationUsage(model_requests=1, model_cost_usd=0.1))
+    object.__setattr__(variation, "usage", ProposalUsage(model_requests=1, model_cost_usd=0.1))
     object.__setattr__(variation, "attempt", None)
     result = SwarmAgentResult(
         agent_id=assignment.agent_id,
         assignment_id=assignment.assignment_id,
-        variation=variation,
+        proposal=variation,
         agent_usage=variation.usage,
     )
     archive = QDArchive(n_centroids=20)
     graveyard = SharedGraveyard()
-    with pytest.raises(ValueError, match="submitted variation status"):
-        process_swarm_result(
+    with pytest.raises(ValueError, match="submitted proposal status"):
+        evaluate_assignment(
             assignment=assignment,
             agent_result=result,
             batch=_batch(tmp_path),
-            evaluate=_evaluator(),
-            enrich=_identity_enricher,
-            archive=archive,
-            graveyard=graveyard,
+            checks=CandidateChecks(
+                plan=lambda _size, _cycle: _batch(tmp_path),
+                run=_evaluator(),
+                enrich=_identity_enricher,
+            ),
             run_id="run-1",
             cycle=3,
             now=_NOW,
@@ -277,12 +297,11 @@ def test_parent_and_child_use_the_same_explicit_batch(tmp_path: Path) -> None:
         return _evaluator()(snapshot, candidate_batch)
 
     assignment = _assignment()
-    evaluation = evaluate_swarm_result(
+    evaluation = evaluate_assignment(
         assignment=assignment,
         agent_result=_result(assignment, child),
         batch=batch,
-        evaluate=evaluate,
-        enrich=_identity_enricher,
+        checks=CandidateChecks(plan=lambda _size, _cycle: batch, run=evaluate, enrich=_identity_enricher),
         run_id="run-1",
         cycle=3,
         now=_NOW,

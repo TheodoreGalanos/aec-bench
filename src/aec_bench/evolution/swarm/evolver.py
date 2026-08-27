@@ -8,42 +8,40 @@ import logging
 import math
 import shutil
 import tempfile
-from collections.abc import Callable, Sequence
+from collections.abc import Callable
 from pathlib import Path
 from threading import Lock
 
 from aec_bench.contracts.evolution import (
     EvolutionConfig,
     EvolutionCycleRecord,
-    EvolutionObservation,
     EvolverModelConfig,
-    VariationUsage,
+    ProposalUsage,
     WorkspaceSnapshot,
 )
 from aec_bench.contracts.experiment_manifest import AgentConfig, TaskSelector
-from aec_bench.contracts.trial_record import TrialRecord
 from aec_bench.evaluation.behavioral import BehavioralLLMClient
-from aec_bench.evolution.application import CandidateEvaluator, _build_analysis, _enrich_candidate
-from aec_bench.evolution.backends.local import make_local_candidate_batch_planner, make_local_candidate_evaluator
+from aec_bench.evolution.application import _build_analysis
+from aec_bench.evolution.backends.local import build_local_checks
 from aec_bench.evolution.cancellation import (
     AVOCancellationCode,
     AVOCancellationReason,
     AVOCancellationSignal,
 )
 from aec_bench.evolution.checkpoint import AVOConfigurationIdentity
-from aec_bench.evolution.core import EvolutionState, VariationRequest, VariationResult
+from aec_bench.evolution.core import CandidateProposal, CandidateProposalRequest, EvolutionState
 from aec_bench.evolution.enrichment import enrich_observations
-from aec_bench.evolution.evaluation import CandidateBatchPlanner, CandidateEvaluationBatch, bind_candidate_evaluation
+from aec_bench.evolution.evaluation import CandidateChecks
 from aec_bench.evolution.graveyard import MutationGraveyard
 from aec_bench.evolution.memory import AVOMemoryEntry
 from aec_bench.evolution.model_provider import build_pydantic_model
+from aec_bench.evolution.proposer import build_avo
 from aec_bench.evolution.swarm.core import SwarmAgentResult, SwarmAssignment
-from aec_bench.evolution.variation_operator import build_agentic_variation_operator
 from aec_bench.evolution.workspace import Workspace
 
 _log = logging.getLogger(__name__)
 
-VariationOperator = Callable[[VariationRequest, Workspace, str], VariationResult]
+CandidateProposer = Callable[[CandidateProposalRequest, Workspace, str], CandidateProposal]
 
 
 class SwarmAgentEvolver:
@@ -53,19 +51,15 @@ class SwarmAgentEvolver:
         self,
         workspace: Workspace,
         config: EvolutionConfig,
-        batch_planner: CandidateBatchPlanner,
-        solve_fn: CandidateEvaluator,
-        classifier_llm: BehavioralLLMClient,
-        variation_operator: VariationOperator,
+        checks: CandidateChecks,
+        propose: CandidateProposer,
         cancellation_signal: AVOCancellationSignal | None = None,
         timeout: float = 1800,
     ) -> None:
         self._workspace = workspace
         self._config = config
-        self._batch_planner = batch_planner
-        self._solve_fn = solve_fn
-        self._classifier_llm = classifier_llm
-        self._variation_operator = variation_operator
+        self._checks = checks
+        self._propose = propose
         self._cancellation_signal = cancellation_signal or AVOCancellationSignal()
         if (
             isinstance(timeout, bool)
@@ -131,29 +125,19 @@ class SwarmAgentEvolver:
             return self._active_future is not None and not self._active_future.done()
 
     def _sync_step(self, assignment: SwarmAssignment) -> SwarmAgentResult:
-        """Run variation for one exact assignment and return no evaluation evidence."""
+        """Propose one candidate for an exact assignment without selection evidence."""
         self._cancellation_signal.raise_if_cancelled()
         self._cycle += 1
-        batch = self._batch_planner(self._config.batch_size, self._cycle - 1)
+        batch = self._checks.plan_batch(self._config.batch_size, self._cycle - 1)
         self._cancellation_signal.raise_if_cancelled()
-        parent = bind_candidate_evaluation(
-            assignment.parent,
-            batch,
-            self._solve_fn(assignment.parent, batch),
-        )
-        self._cancellation_signal.raise_if_cancelled()
-        parent = _enrich_candidate(
-            parent,
-            batch,
-            lambda observations: enrich_observations(observations, classifier_llm=self._classifier_llm),
-        )
+        parent = self._checks.assess(assignment.parent, batch)
         self._cancellation_signal.raise_if_cancelled()
         evolution_state = EvolutionState.from_baseline(
             parent,
             structural_weight=self._config.structural_weight,
         )
         analysis = _build_analysis(parent, evolution_state)
-        request = VariationRequest(
+        request = CandidateProposalRequest(
             run_id=assignment.run_id,
             selection=assignment.selection,
             parent=parent,
@@ -166,9 +150,9 @@ class SwarmAgentEvolver:
             memory=self._memory,
         )
         self._cancellation_signal.raise_if_cancelled()
-        variation = self._variation_operator(request, self._workspace, assignment.assignment_id)
+        proposal = self._propose(request, self._workspace, assignment.assignment_id)
         self._cancellation_signal.raise_if_cancelled()
-        self._memory = variation.memory
+        self._memory = proposal.memory
         parent_costs = tuple(
             None
             if observation.trial.cost is None or observation.trial.cost.estimated_cost_usd is None
@@ -180,27 +164,27 @@ class SwarmAgentEvolver:
             parent_cost_value: float | None = None
         else:
             parent_cost_value = parent_cost
-        variation_usage = variation.usage
-        development_cost = variation_usage.development_evaluation_cost_usd
-        if variation_usage.development_evaluations and development_cost is None:
+        proposal_usage = proposal.usage
+        development_cost = proposal_usage.development_evaluation_cost_usd
+        if proposal_usage.development_evaluations and development_cost is None:
             combined_development_cost = None
         elif parent_cost_value is None:
             combined_development_cost = None
         else:
             combined_development_cost = (development_cost or 0.0) + parent_cost_value
-        agent_usage = VariationUsage(
-            model_requests=variation_usage.model_requests,
-            tool_calls=variation_usage.tool_calls,
-            development_evaluations=variation_usage.development_evaluations + 1,
-            supervisor_interventions=variation_usage.supervisor_interventions,
-            model_cost_usd=variation_usage.model_cost_usd,
+        agent_usage = ProposalUsage(
+            model_requests=proposal_usage.model_requests,
+            tool_calls=proposal_usage.tool_calls,
+            development_evaluations=proposal_usage.development_evaluations + 1,
+            supervisor_interventions=proposal_usage.supervisor_interventions,
+            model_cost_usd=proposal_usage.model_cost_usd,
             development_evaluation_cost_usd=combined_development_cost,
-            elapsed_seconds=variation_usage.elapsed_seconds,
+            elapsed_seconds=proposal_usage.elapsed_seconds,
         )
         return SwarmAgentResult(
             agent_id=assignment.agent_id,
             assignment_id=assignment.assignment_id,
-            variation=variation,
+            proposal=proposal,
             agent_usage=agent_usage,
         )
 
@@ -211,7 +195,7 @@ class SwarmEvolverFactory:
     Each agent gets:
     - An independent workspace copy (shutil.copytree from source)
     - Its own explicit functional evolution state
-    - Its own local candidate evaluator
+    - Its own local selection checks
     LLM clients are shared across agents (stateless, thread-safe).
     """
 
@@ -241,6 +225,19 @@ class SwarmEvolverFactory:
         self._structural_weight = structural_weight
         self._agent_workspaces: dict[str, Path] = {}
         self._agent_evolvers: dict[str, SwarmAgentEvolver] = {}
+        local_checks = build_local_checks(
+            task_dirs=self._task_dirs,
+            model=self._model,
+            experiment_id="swarm-selection",
+            workspace_root=self._workspace_source,
+            adapter=self._adapter,
+            timeout=self._timeout,
+        )
+        self._selection_checks = CandidateChecks(
+            plan=local_checks.plan,
+            run=local_checks.run,
+            enrich=lambda observations: enrich_observations(observations, classifier_llm=self._classifier_llm),
+        )
 
     def create(self, agent_id: str, model_override: str | None = None) -> SwarmAgentEvolver:
         """Create a fully-wired evolver for a single swarm agent.
@@ -274,38 +271,37 @@ class SwarmEvolverFactory:
 
         # 4. Compose the candidate-independent plan and evaluator.
         experiment_id = f"swarm-{agent_id}"
-        batch_planner = make_local_candidate_batch_planner(
+        selection_checks = build_local_checks(
             task_dirs=self._task_dirs,
             model=solver_model,
             experiment_id=experiment_id,
+            workspace_root=agent_ws_path,
             adapter=self._adapter,
             timeout=self._timeout,
         )
-        solve_fn = make_local_candidate_evaluator(
-            workspace_root=agent_ws_path,
+        selection_checks = CandidateChecks(
+            plan=selection_checks.plan,
+            run=selection_checks.run,
+            enrich=lambda observations: enrich_observations(observations, classifier_llm=classifier_llm),
         )
         development_experiment_id = f"{experiment_id}-development"
-        development_batch_planner = make_local_candidate_batch_planner(
+        revision_checks = build_local_checks(
             task_dirs=self._task_dirs,
             model=solver_model,
             experiment_id=development_experiment_id,
+            workspace_root=agent_ws_path,
+            candidate_identity=False,
             adapter=self._adapter,
             timeout=self._timeout,
         )
-        development_evaluator = make_local_candidate_evaluator(
-            workspace_root=agent_ws_path,
-            candidate_identity=False,
-        )
         cancellation_signal = AVOCancellationSignal()
         evolver_model = build_pydantic_model(evolver_model_name)
-        variation_operator = build_agentic_variation_operator(
-            agent_model=evolver_model,
-            supervisor_model=evolver_model,
-            supervisor_model_identity=evolver_model_name,
-            development_batch_planner=development_batch_planner,
-            development_evaluator=development_evaluator,
-            development_batch_size=self._batch_size,
-            development_experiment_prefix=development_experiment_id,
+        avo = build_avo(
+            model=evolver_model,
+            model_identity=evolver_model_name,
+            revision_checks=revision_checks,
+            batch_size=self._batch_size,
+            revision_experiment_prefix=development_experiment_id,
             compaction_llm=classifier_llm,
             # Agent workspaces are disposable copies. Keep the checkpoint in
             # the factory's source workspace so cleanup cannot remove the
@@ -340,39 +336,22 @@ class SwarmEvolverFactory:
         evolver = SwarmAgentEvolver(
             workspace=workspace,
             config=config,
-            batch_planner=batch_planner,
-            solve_fn=solve_fn,
-            classifier_llm=classifier_llm,
-            variation_operator=variation_operator,
+            checks=selection_checks,
+            propose=avo,
             cancellation_signal=cancellation_signal,
             timeout=self._timeout,
         )
         self._agent_evolvers[agent_id] = evolver
         return evolver
 
-    def plan_batch(self, batch_size: int, cycle: int) -> CandidateEvaluationBatch:
-        """Plan one candidate-independent host evaluation batch."""
-        planner = make_local_candidate_batch_planner(
-            task_dirs=self._task_dirs,
-            model=self._model,
-            experiment_id="swarm-host",
-            adapter=self._adapter,
-            timeout=self._timeout,
-        )
-        return planner(batch_size, cycle)
+    @property
+    def selection_checks(self) -> CandidateChecks:
+        """Return the checks used for shared swarm decisions."""
+        return self._selection_checks
 
     def baseline_snapshot(self) -> WorkspaceSnapshot:
         """Return the exact source workspace material for the first assignment."""
         return Workspace(self._workspace_source).export_snapshot("baseline")
-
-    def evaluate(self, snapshot: WorkspaceSnapshot, batch: CandidateEvaluationBatch) -> tuple[TrialRecord, ...]:
-        """Evaluate an exact submitted snapshot in the host runtime."""
-        evaluator = make_local_candidate_evaluator(workspace_root=self._workspace_source)
-        return evaluator(snapshot, batch)
-
-    def enrich(self, observations: Sequence[EvolutionObservation]) -> tuple[EvolutionObservation, ...]:
-        """Attach trusted behavioural evidence to host observations."""
-        return enrich_observations(observations, classifier_llm=self._classifier_llm)
 
     def cleanup(self) -> None:
         """Remove agent workspace copies only after all workers have stopped."""

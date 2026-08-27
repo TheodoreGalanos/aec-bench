@@ -15,7 +15,6 @@ from pathlib import Path
 from aec_bench.contracts.evolution import (
     EvolutionConfig,
     EvolutionCycleRecord,
-    EvolutionObservation,
     EvolutionResult,
     GateDecision,
     MutationStrategy,
@@ -32,31 +31,29 @@ from aec_bench.evolution.analysis import (
 from aec_bench.evolution.archive import ArchiveBatchOutcome, ArchiveView, QDArchive
 from aec_bench.evolution.archive_agent import run_archive_selection
 from aec_bench.evolution.checkpoint import AVOConfigurationIdentity
+from aec_bench.evolution.convergence import is_converged
 from aec_bench.evolution.core import (
+    CandidateProposal,
+    CandidateProposalRequest,
     CycleOutcome,
     EvaluatedCandidate,
     EvolutionState,
+    ProposalStatus,
     ResolvedSelection,
     SelectionPlan,
-    VariationRequest,
-    VariationResult,
-    VariationStatus,
     assessment_score,
-    decide_candidate,
-    reduce_evolution_state,
+    gate_candidate,
+    next_evolution_state,
 )
 from aec_bench.evolution.enrichment import enrich_observations
 from aec_bench.evolution.evaluation import (
-    CandidateBatchPlanner,
+    CandidateChecks,
     CandidateEvaluationBatch,
-    CandidateEvaluator,
-    bind_candidate_evaluation,
-    bind_evaluated_candidate,
-    build_candidate_assessment,
 )
 from aec_bench.evolution.graveyard import GraveyardEntry, MutationGraveyard
 from aec_bench.evolution.memory import AVOMemoryEntry
 from aec_bench.evolution.model_provider import build_pydantic_model
+from aec_bench.evolution.proposer import build_avo
 from aec_bench.evolution.selection import (
     CellSelectionStat,
     CellSelectionState,
@@ -67,7 +64,6 @@ from aec_bench.evolution.selection import (
     update_cell_selection_state,
     update_strategy_bandit_state,
 )
-from aec_bench.evolution.variation_operator import build_agentic_variation_operator
 from aec_bench.evolution.workspace import Workspace
 from aec_bench.generation.application import generate_template_instances, resolve_template
 from aec_bench.tasks.loader import load_task_definition
@@ -76,8 +72,7 @@ logger = logging.getLogger(__name__)
 
 ReportWriter = Callable[[Path], Path]
 CandidateIdFactory = Callable[[str, int], str]
-VariationOperator = Callable[[VariationRequest, Workspace, str], VariationResult]
-ObservationEnricher = Callable[[Sequence[EvolutionObservation]], Sequence[EvolutionObservation]]
+CandidateProposer = Callable[[CandidateProposalRequest, Workspace, str], CandidateProposal]
 ArchiveAgent = Callable[[str, ArchiveView, MutationGraveyard, list[str], float, MutationStrategy, int], SelectionPlan]
 
 
@@ -96,10 +91,8 @@ def _execute_evolution_cycle(
     *,
     workspace: Workspace,
     config: EvolutionConfig,
-    evaluate: CandidateEvaluator,
-    batch_planner: CandidateBatchPlanner,
-    variation: VariationOperator,
-    enrich: ObservationEnricher,
+    checks: CandidateChecks,
+    propose: CandidateProposer,
     graveyard: MutationGraveyard,
     history: list[EvolutionCycleRecord],
     snapshots: dict[str, WorkspaceSnapshot],
@@ -121,17 +114,16 @@ def _execute_evolution_cycle(
     """
     selection = resolved_selection.plan
     parent_snapshot = resolved_selection.parent
-    batch = planned_batch or batch_planner(config.batch_size, cycle - 1)
+    batch = planned_batch or checks.plan_batch(config.batch_size, cycle - 1)
     parent = evaluated_parent
     if parent is None or parent.snapshot.candidate_id != parent_snapshot.candidate_id:
-        parent = bind_candidate_evaluation(parent_snapshot, batch, evaluate(parent_snapshot, batch))
-        parent = _enrich_candidate(parent, batch, enrich)
+        parent = checks.assess(parent_snapshot, batch)
     if state is None:
         state = EvolutionState.from_baseline(parent, structural_weight=config.structural_weight)
 
     analysis = _build_analysis(parent, state)
     inspirations = resolved_selection.inspirations
-    request = VariationRequest(
+    request = CandidateProposalRequest(
         run_id=run_id,
         selection=selection,
         parent=parent,
@@ -144,22 +136,17 @@ def _execute_evolution_cycle(
         memory=memory,
     )
     child_candidate_id = candidate_id_factory(run_id, cycle)
-    variation_result = variation(request, workspace, child_candidate_id)
+    proposal = propose(request, workspace, child_candidate_id)
     child: EvaluatedCandidate | None = None
-    if variation_result.status is VariationStatus.SUBMITTED:
-        if variation_result.child is None:
-            raise ValueError("submitted variation did not provide a child snapshot")
-        child = bind_candidate_evaluation(
-            variation_result.child,
-            batch,
-            evaluate(variation_result.child, batch),
-        )
-        child = _enrich_candidate(child, batch, enrich)
+    if proposal.status is ProposalStatus.SUBMITTED:
+        if proposal.child is None:
+            raise ValueError("submitted proposal did not provide a child snapshot")
+        child = checks.assess(proposal.child, batch)
 
-    decision = decide_candidate(
+    decision = gate_candidate(
         parent=parent,
         child=child,
-        variation=variation_result,
+        proposal=proposal,
         state=state,
         config=config,
     )
@@ -195,12 +182,12 @@ def _execute_evolution_cycle(
                 decision=GateDecision.REJECTED,
                 reason="candidate did not enter or improve a quality-diversity archive cell",
             )
-    next_state = reduce_evolution_state(state=state, parent=parent, child=child, decision=decision)
+    next_state = next_evolution_state(state=state, parent=parent, child=child, decision=decision)
     outcome = CycleOutcome(
         cycle=cycle,
         selection=selection,
         parent=parent,
-        variation=variation_result,
+        proposal=proposal,
         child=child,
         decision=decision,
         active_candidate_id_after=next_state.active_candidate_id,
@@ -250,10 +237,8 @@ def run_evolution(
     *,
     workspace: Workspace,
     config: EvolutionConfig,
-    evaluate: CandidateEvaluator,
-    batch_planner: CandidateBatchPlanner,
-    variation: VariationOperator,
-    enrich: ObservationEnricher,
+    selection_checks: CandidateChecks,
+    propose: CandidateProposer,
     report_writer: ReportWriter | None = None,
     clock: Callable[[], datetime] | None = None,
     run_id: str | None = None,
@@ -264,7 +249,7 @@ def run_evolution(
 
     Evaluation is planned once per cycle and both candidates use that exact
     plan. The canonical workspace is changed only after an accepted child.
-    Observation enrichment and variation are explicit application dependencies.
+    Candidate checks and proposal are explicit application dependencies.
     """
     workspace.init_versioning()
     now = clock or (lambda: datetime.now(tz=UTC))
@@ -274,13 +259,10 @@ def run_evolution(
     history: list[EvolutionCycleRecord] = []
     snapshots: dict[str, WorkspaceSnapshot] = {"baseline": workspace.export_snapshot("baseline")}
     state: EvolutionState | None = None
-    variation_memory: tuple[AVOMemoryEntry, ...] = ()
+    proposal_memory: tuple[AVOMemoryEntry, ...] = ()
 
-    baseline_batch = batch_planner(config.batch_size, 0)
-    baseline = bind_candidate_evaluation(
-        snapshots["baseline"], baseline_batch, evaluate(snapshots["baseline"], baseline_batch)
-    )
-    baseline = _enrich_candidate(baseline, baseline_batch, enrich)
+    baseline_batch = selection_checks.plan_batch(config.batch_size, 0)
+    baseline = selection_checks.assess(snapshots["baseline"], baseline_batch)
     state = EvolutionState.from_baseline(baseline, structural_weight=config.structural_weight)
 
     archive: QDArchive | None = None
@@ -326,10 +308,8 @@ def run_evolution(
         execution = _execute_evolution_cycle(
             workspace=workspace,
             config=config,
-            evaluate=evaluate,
-            batch_planner=batch_planner,
-            variation=variation,
-            enrich=enrich,
+            checks=selection_checks,
+            propose=propose,
             graveyard=graveyard,
             history=history,
             snapshots=snapshots,
@@ -342,16 +322,16 @@ def run_evolution(
             archive=archive,
             planned_batch=baseline_batch if cycle == 1 else None,
             evaluated_parent=baseline if cycle == 1 and selection.parent_candidate_id == "baseline" else None,
-            memory=variation_memory,
+            memory=proposal_memory,
         )
         record = execution.record
         history.append(record)
         state = execution.state
-        variation_memory = execution.outcome.variation.memory
+        proposal_memory = execution.outcome.proposal.memory
         if config.strategy == "qd":
             assert archive is not None and qd_state is not None
             qd_state = replace(qd_state, cycle=cycle)
-            if parent_cell_index is not None and execution.outcome.variation.status is VariationStatus.SUBMITTED:
+            if parent_cell_index is not None and execution.outcome.proposal.status is ProposalStatus.SUBMITTED:
                 inserted = execution.archive_outcome.added if execution.archive_outcome is not None else False
                 qd_state = replace(
                     qd_state,
@@ -376,7 +356,7 @@ def run_evolution(
             execution.outcome.parent.snapshot.candidate_id,
             execution.outcome.child.snapshot.candidate_id if execution.outcome.child else "none",
         )
-        if _is_converged(state, config):
+        if is_converged(state, config):
             break
 
     assert state is not None
@@ -396,7 +376,7 @@ def run_evolution(
         best_score=state.best_score,
         best_candidate_id=state.best_candidate_id,
         score_history=_project_score_history(history, config),
-        converged=_is_converged(state, config),
+        converged=is_converged(state, config),
         total_trials=sum(len(record.parent_assessment.trial_ids) for record in history)
         + sum(len(record.child_assessment.trial_ids) for record in history if record.child_assessment is not None),
         total_evolver_cost=_project_total_evolver_cost(history),
@@ -414,11 +394,7 @@ def run_evolution_from_config(
     run_id: str | None = None,
 ) -> EvolutionResult:
     """Assemble and run evolution from repository configuration."""
-    from aec_bench.evolution.backends.local import (
-        make_local_candidate_batch_planner,
-        make_local_candidate_evaluator,
-        make_stub_candidate_evaluator,
-    )
+    from aec_bench.evolution.backends.local import build_local_checks
     from aec_bench.evolution.config_loader import resolve_task_dirs
     from aec_bench.providers.behavioral_llm import build_behavioral_llm_client
 
@@ -468,32 +444,30 @@ def run_evolution_from_config(
         configuration_identity=f"evolution-config:{configuration_digest}",
     )
     if config.backend == "local" and task_dirs:
-        batch_planner = make_local_candidate_batch_planner(
+        selection_checks = build_local_checks(
             task_dirs=task_dirs,
             model=model,
             experiment_id=experiment_id,
+            workspace_root=workspace.root,
             adapter=adapter,
             timeout=config.timeout,
         )
-        evaluate = make_local_candidate_evaluator(workspace_root=workspace.root)
-        development_batch_planner = make_local_candidate_batch_planner(
+        revision_checks = build_local_checks(
             task_dirs=task_dirs,
             model=model,
             experiment_id=development_experiment_id,
+            workspace_root=workspace.root,
+            candidate_identity=False,
             adapter=adapter,
             timeout=config.timeout,
         )
-        development_evaluate = make_local_candidate_evaluator(
-            workspace_root=workspace.root,
-            candidate_identity=False,
-        )
     elif config.backend in ("modal", "morph") and config.solver is not None and task_dirs:
-        batch_planner, evaluate = _build_harbor_candidate_runtime(
+        selection_checks = _build_harbor_candidate_runtime(
             config=config,
             task_dirs=task_dirs,
             experiment_id=experiment_id,
         )
-        development_batch_planner, development_evaluate = _build_harbor_candidate_runtime(
+        revision_checks = _build_harbor_candidate_runtime(
             config=config,
             task_dirs=task_dirs,
             experiment_id=development_experiment_id,
@@ -501,20 +475,16 @@ def run_evolution_from_config(
     else:
         if config.backend in ("modal", "morph"):
             logger.warning("backend=%r requires solver and tasks; using provider-free stubs", config.backend)
-        batch_planner = _empty_batch_planner
-        evaluate = make_stub_candidate_evaluator(())
-        development_batch_planner = _empty_batch_planner
-        development_evaluate = make_stub_candidate_evaluator(())
+        selection_checks = CandidateChecks(plan=_empty_batch_planner, run=_empty_evaluator)
+        revision_checks = CandidateChecks(plan=_empty_batch_planner, run=_empty_evaluator)
 
     evolver_model = build_pydantic_model(config.models.evolver)
-    variation = build_agentic_variation_operator(
-        agent_model=evolver_model,
-        supervisor_model=evolver_model,
-        supervisor_model_identity=avo_configuration_identity.supervisor_model_identity,
-        development_batch_planner=development_batch_planner,
-        development_evaluator=development_evaluate,
-        development_batch_size=config.batch_size,
-        development_experiment_prefix=development_experiment_id,
+    avo = build_avo(
+        model=evolver_model,
+        model_identity=avo_configuration_identity.model_identity,
+        revision_checks=revision_checks,
+        batch_size=config.batch_size,
+        revision_experiment_prefix=development_experiment_id,
         compaction_llm=classifier_llm,
         checkpoint_root=workspace.root,
         configuration_identity=avo_configuration_identity,
@@ -523,25 +493,15 @@ def run_evolution_from_config(
     return run_evolution(
         workspace=workspace,
         config=config,
-        evaluate=evaluate,
-        batch_planner=batch_planner,
-        variation=variation,
-        enrich=lambda observations: enrich_observations(observations, classifier_llm=classifier_llm),
+        selection_checks=replace(
+            selection_checks,
+            enrich=lambda observations: enrich_observations(observations, classifier_llm=classifier_llm),
+        ),
+        propose=avo,
         report_writer=report_writer,
         clock=clock,
         run_id=resolved_run_id,
     )
-
-
-def _enrich_candidate(
-    candidate: EvaluatedCandidate,
-    batch: CandidateEvaluationBatch,
-    enrich: ObservationEnricher,
-) -> EvaluatedCandidate:
-    """Classify traces and bind resulting enrichments to the same evidence."""
-    observations = tuple(enrich(candidate.observations))
-    assessment = build_candidate_assessment(candidate.snapshot.candidate_id, batch, observations)
-    return bind_evaluated_candidate(candidate.snapshot, observations, assessment)
 
 
 def _build_analysis(candidate: EvaluatedCandidate, state: EvolutionState) -> EvolutionAnalysis:
@@ -727,7 +687,7 @@ def _graveyard_entry(outcome: CycleOutcome, run_id: str, timestamp: datetime) ->
     return GraveyardEntry(
         cycle=outcome.cycle,
         strategy=outcome.selection.strategy.value,
-        mutation_description=outcome.variation.reasoning,
+        mutation_description=outcome.proposal.reasoning,
         score_before=outcome.parent.assessment.batch_score,
         score_after=child.assessment.batch_score,
         candidate_id=child.snapshot.candidate_id,
@@ -736,7 +696,7 @@ def _graveyard_entry(outcome: CycleOutcome, run_id: str, timestamp: datetime) ->
         rejected_snapshot=child.snapshot,
         parent_assessment=outcome.parent.assessment,
         child_assessment=child.assessment,
-        mutation=outcome.variation.mutation,
+        mutation=outcome.proposal.mutation,
         run_id=run_id,
         timestamp=timestamp,
     )
@@ -775,12 +735,6 @@ def _project_total_evolver_cost(records: Sequence[EvolutionCycleRecord]) -> Cost
     )
 
 
-def _is_converged(state: EvolutionState, config: EvolutionConfig) -> bool:
-    from aec_bench.evolution.convergence import is_converged
-
-    return is_converged(state, config)
-
-
 def _write_report(workspace: Workspace, report_writer: ReportWriter | None) -> None:
     if report_writer is None:
         return
@@ -793,6 +747,13 @@ def _write_report(workspace: Workspace, report_writer: ReportWriter | None) -> N
 
 def _empty_batch_planner(_batch_size: int, _cycle: int) -> CandidateEvaluationBatch:
     raise ValueError("evolution evaluation requires at least one resolved task")
+
+
+def _empty_evaluator(
+    _snapshot: WorkspaceSnapshot,
+    _batch: CandidateEvaluationBatch,
+) -> tuple[TrialRecord, ...]:
+    return ()
 
 
 def _validate_public_evolution_tasks(task_dirs: Sequence[Path], tasks_root: Path) -> None:
@@ -815,11 +776,11 @@ def _build_harbor_candidate_runtime(
     config: EvolutionConfig,
     task_dirs: Sequence[Path],
     experiment_id: str,
-) -> tuple[CandidateBatchPlanner, CandidateEvaluator]:
-    """Build planned-batch Harbor evaluation without candidate-specific planning."""
-    from aec_bench.evolution.backends.local import make_local_candidate_batch_planner
+) -> CandidateChecks:
+    """Build one Harbor capability without candidate-specific planning."""
+    from aec_bench.evolution.backends.local import build_local_checks
 
-    planner = make_local_candidate_batch_planner(
+    planner = build_local_checks(
         task_dirs=task_dirs,
         model=config.solver.model if config.solver else config.models.evolver,
         experiment_id=experiment_id,
@@ -827,11 +788,16 @@ def _build_harbor_candidate_runtime(
         timeout=config.timeout,
         backend=config.backend,
         agent_config=config.solver,
+    ).plan
+    return CandidateChecks(
+        plan=planner,
+        run=_build_harbor_candidate_evaluator(config=config, experiment_id=experiment_id),
     )
-    return planner, _build_harbor_candidate_evaluator(config=config, experiment_id=experiment_id)
 
 
-def _build_harbor_candidate_evaluator(*, config: EvolutionConfig, experiment_id: str) -> CandidateEvaluator:
+def _build_harbor_candidate_evaluator(
+    *, config: EvolutionConfig, experiment_id: str
+) -> Callable[[WorkspaceSnapshot, CandidateEvaluationBatch], tuple[TrialRecord, ...]]:
     """Compose remote candidate evaluation from a preplanned batch."""
     from aec_bench.contracts.experiment_manifest import ComputeConfig, ExperimentManifest, TaskSelector
     from aec_bench.evolution.snapshot import serialise_snapshot
@@ -884,10 +850,7 @@ def _build_harbor_candidate_evaluator(*, config: EvolutionConfig, experiment_id:
 
 
 __all__ = (
-    "CandidateEvaluator",
-    "ObservationEnricher",
     "ReportWriter",
-    "VariationOperator",
     "run_evolution",
     "run_evolution_from_config",
 )
