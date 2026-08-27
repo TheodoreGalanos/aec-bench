@@ -112,60 +112,57 @@ and attempt planning, evaluation, variation, search policy, and persistence;
 it does not create a second task executor or verifier. Its cycle is:
 
 ```text
-host selection and exact parent evidence
+search selection and exact parent evidence
         ↓
 bounded AVO scratch loop
         ↓
-public development feedback
+private public-task revision checks
         ↓
 one exact child, abstention, or budget exhaustion
         ↓
-host exact parent-child evaluation
+exact parent-child selection checks
         ↓
 trusted search policy
         ↓
 explicit commit, archive, graveyard, lineage, and swarm effects
 ```
 
-The shell receives an explicit `Workspace`, `EvolutionConfig`, candidate batch
-planner, candidate evaluator, variation operator, and observation enricher.
-The planner creates one candidate-independent `CandidateEvaluationBatch` for a
-cycle. Parent and child records are produced by the evaluator for that exact
-batch, then `bind_candidate_evaluation()` creates separate
-`EvaluatedCandidate` values. A child is evaluated before any gate or workspace
-write can accept it. Parent and child evidence are never combined.
+The shell receives an explicit `Workspace`, `EvolutionConfig`,
+`CandidateChecks`, and candidate proposer. `CandidateChecks` owns batch
+planning, execution, and optional observation enrichment. Its `assess()` method
+returns one exact `EvaluatedCandidate`. A child is checked before any gate or
+workspace write can accept it. Parent and child evidence are never combined.
 
 `EvolutionState` is the sole owner of the hill-climb active candidate, best
 candidate, score, and stagnation state. Pure transition functions decide the
 next state. The shell applies a canonical workspace commit only after an
 accepted child. Rejected or invalid child material is written to the
-graveyard. A variation call operates on a scratch workspace and returns one
-complete `VariationResult`.
+graveyard. A proposal call operates on a scratch workspace and returns one
+complete `CandidateProposal`.
 
-The current variation operator is bounded agentic variation (AVO). The host
-passes one immutable `VariationRequest` after it selects the parent and
-inspirations and evaluates the host parent. The operator creates a fresh
-`DevelopmentEvaluationBoundary`, scratch workspace, and mutable loop
-controller for each call. The development boundary plans one fixed,
-candidate-independent public batch for that call. AVO evaluates the parent at
-revision `0`, then permits bounded scratch mutations and exact development
-evaluations. Each `DevelopmentAttempt` binds one revision to its own material
+The built-in proposer is bounded agentic variation (AVO). The application
+passes one immutable `CandidateProposalRequest` after it selects the parent and
+inspirations and checks the selected parent. The proposer creates a fresh
+`RevisionEvaluation`, scratch workspace, and `AVOSession` for each call. The
+revision boundary plans one fixed, candidate-independent public batch. AVO
+checks the parent at revision `0`, then permits bounded scratch mutations and
+exact revision checks. Each `RevisionAttempt` binds one revision to its material
 and evidence. AVO can submit only the current evaluated revision. It returns a
-`VariationResult` with a submitted child or one explicit terminal status;
+`CandidateProposal` with a submitted child or one explicit terminal status;
 selection, acceptance, canonical workspace state, archive, graveyard, and
 lineage remain outside this result.
 
-Conditional supervision is an optional, bounded part of the same AVO call.
-The supervisor receives only an `AVOSupervisionRequest` with the goal, selected
+Conditional advice is an optional, bounded part of the same AVO call. The
+advisor receives only an `AVOAdviceRequest` with the goal, selected
 parent ID, strategy, bounded attempt summaries, projected remaining budget,
 and trigger reason. It has no workspace, tools, evaluation, or outer-loop
 authority. Validated advice is stored in the call-local `AVOState` and may
 enter a later main-agent context in that call. It is not returned in
-`VariationResult` and cannot change selection, parent, strategy, goal, budget,
+`CandidateProposal` and cannot change selection, parent, strategy, goal, budget,
 evaluation, or any search effect.
 
 AVO memory is bounded structured evidence from attempts. The application may
-carry the returned memory into a later variation request; it does not become
+carry the returned memory into a later proposal request; it does not become
 outer search state. Checkpoint schema `2` is the sole validated resume
 authority for a durable call. Resume validates the run, variation, parent,
 selection, development case order, budget, configuration identity, and current
@@ -185,9 +182,9 @@ Graveyard rescue is allowed only when the entry contains a resolvable
 Swarm execution uses `SwarmManager` as an asynchronous shell over the same
 candidate/evidence boundary. Each `SwarmAssignment` contains exact parent and
 inspiration snapshots. An agent returns a `SwarmAgentResult` containing only a
-variation result and its agent cost; it does not submit a score, descriptor, or
-archive decision. The manager evaluates the assigned parent and submitted child
-through the host evaluator outside the shared-state lock. Archive and
+proposal and its agent cost; it does not submit a score, descriptor, or archive
+decision. The manager checks the assigned parent and submitted child through
+shared selection checks outside the shared-state lock. Archive and
 graveyard effects, budget accounting, pure reduction, and `SwarmState` updates
 are applied in one short locked section. `SwarmState` is immutable and is the
 decision authority; the event log reports those decisions and is not state.
@@ -198,29 +195,29 @@ The durable ownership boundaries are:
 
 | Concern | Owner |
 | --- | --- |
-| Task and attempt planning | Evaluation composition |
+| Selection batch planning, execution, and enrichment | `CandidateChecks` |
 | Validity and score meaning | Evaluation |
 | Candidate/evidence binding | Evolution functional core |
 | Parent and inspiration selection | Search policy |
-| Variation goal and strategy | Host selection contract |
+| Proposal goal and strategy | Search selection contract |
 | Scratch planning, editing, diagnosis, and repair | AVO main agent |
-| Development task membership | Development evaluation composition |
-| Development validity and score meaning | Evaluation |
-| Final parent-child evaluation | Host evaluation composition |
+| Revision task membership | Revision-check composition |
+| Revision validity and score meaning | Evaluation |
+| Final parent-child comparison | Selection-check composition |
 | Acceptance | Search-specific trusted policy |
 | Candidate persistence | Workspace/application shell |
 | QD insertion | Archive adapter |
 | Graveyard projection | Functional core |
 | AVO checkpoint and private memory | AVO runtime |
-| Inner stagnation trigger | Pure AVO supervision policy |
-| Supervisor advice | AVO supervisor |
+| Inner stagnation trigger | Pure AVO advice policy |
+| Advisor output | AVO advisor |
 | Outer stagnation and swarm pivot | Existing search and manager state |
 | Swarm concurrency | Async manager shell |
 | Swarm decisions | Functional reducer |
 
 `run_evolution_from_config()` is the composition root. It loads the workspace
-and model clients, selects the local or Harbor evaluator, builds the batch
-planner, variation operator, and enrichment path, and calls `run_evolution()`.
+and model clients, builds local or Harbor `CandidateChecks`, builds the AVO
+proposer, and calls `run_evolution()`.
 The `aec-bench evolve run` command is a thin caller of this function.
 
 Best-of-K attempts stay inside one scored trial. Evolution cycles stay outside

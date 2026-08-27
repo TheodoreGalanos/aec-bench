@@ -18,22 +18,23 @@ from aec_bench.contracts.evolution import (
     WorkspaceSnapshot,
 )
 from aec_bench.contracts.experiment_manifest import AgentConfig, ComputeConfig, TaskSelector
-from aec_bench.evolution import agent_loop, variation_operator
-from aec_bench.evolution.agent_protocol import AgentCommand, AgentToolName
+from aec_bench.evolution import agent_loop
+from aec_bench.evolution import proposer as proposer_module
+from aec_bench.evolution.advice import AVOAdvice, AVOAdviceResult
+from aec_bench.evolution.agent_protocol import AVOCommand, AVOTool
 from aec_bench.evolution.application import run_evolution
 from aec_bench.evolution.archive import QDArchive
 from aec_bench.evolution.core import (
-    DevelopmentAttempt,
+    CandidateProposal,
     EvaluatedCandidate,
+    ProposalStatus,
+    ProposalUsage,
+    RevisionAttempt,
     SelectionPlan,
-    VariationResult,
-    VariationStatus,
-    VariationUsage,
 )
-from aec_bench.evolution.evaluation import CandidateEvaluationBatch
+from aec_bench.evolution.evaluation import CandidateChecks, CandidateEvaluationBatch
+from aec_bench.evolution.proposer import build_avo
 from aec_bench.evolution.selection import CellSelectionState, shortlist_cells
-from aec_bench.evolution.supervision import AVOSupervisionAdvice, AVOSupervisionResult
-from aec_bench.evolution.variation_operator import build_agentic_variation_operator
 from aec_bench.evolution.workspace import Workspace
 from aec_bench.tasks.instance import resolve_instance_paths
 from aec_bench.trials import PlannedTrial
@@ -143,20 +144,20 @@ def _variation(*, prompt: str, seen: list[object] | None = None):
             ),
             assessment=request.parent.assessment.model_copy(update={"candidate_id": child.candidate_id}),
         )
-        attempt = DevelopmentAttempt(
+        attempt = RevisionAttempt(
             attempt_id=f"{child.candidate_id}-attempt",
             revision=1,
             evaluated=evaluated,
             mutation=mutation,
             hypothesis="The test mutation improves the candidate.",
-            usage_after=VariationUsage(development_evaluations=1),
+            usage_after=ProposalUsage(development_evaluations=1),
         )
-        return VariationResult(
-            status=VariationStatus.SUBMITTED,
+        return CandidateProposal(
+            status=ProposalStatus.SUBMITTED,
             child=child,
             mutation=mutation,
             reasoning="test mutation",
-            usage=VariationUsage(),
+            usage=ProposalUsage(),
             attempt=attempt,
         )
 
@@ -164,12 +165,12 @@ def _variation(*, prompt: str, seen: list[object] | None = None):
 
 
 def _abstain(request, _source, _child_id):
-    return VariationResult(
-        status=VariationStatus.ABSTAINED,
+    return CandidateProposal(
+        status=ProposalStatus.ABSTAINED,
         child=None,
         mutation=None,
         reasoning="test abstention",
-        usage=VariationUsage(),
+        usage=ProposalUsage(),
     )
 
 
@@ -179,7 +180,7 @@ def _run(
     config: EvolutionConfig,
     *,
     evaluate,
-    variation,
+    proposal,
     calls: list[dict[str, object]],
     run_id: str = "run-fixed",
     inspiration: bool = False,
@@ -187,10 +188,8 @@ def _run(
     return run_evolution(
         workspace=workspace,
         config=config,
-        evaluate=evaluate,
-        batch_planner=lambda _size, _cycle: batch,
-        variation=variation,
-        enrich=lambda observations: observations,
+        selection_checks=CandidateChecks(plan=lambda _size, _cycle: batch, run=evaluate),
+        propose=proposal,
         archive_agent=_selector(calls, inspiration=inspiration),
         run_id=run_id,
         clock=lambda: datetime(2026, 1, 1, tzinfo=UTC),
@@ -205,7 +204,7 @@ def test_baseline_evidence_is_archived_before_selection(tmp_path: Path) -> None:
         batch,
         _config(workspace.root),
         evaluate=lambda snapshot, _batch: _records(batch, snapshot.candidate_id, 0.73),
-        variation=_abstain,
+        proposal=_abstain,
         calls=calls,
     )
     archive = calls[0]["archive"]
@@ -221,7 +220,7 @@ def test_real_graveyard_is_passed_to_archive_agent(tmp_path: Path) -> None:
         batch,
         _config(workspace.root),
         evaluate=lambda snapshot, _batch: _records(batch, snapshot.candidate_id, 0.5),
-        variation=_variation(prompt="rejected"),
+        proposal=_variation(prompt="rejected"),
         calls=first_calls,
     )
     second_calls: list[dict[str, object]] = []
@@ -230,7 +229,7 @@ def test_real_graveyard_is_passed_to_archive_agent(tmp_path: Path) -> None:
         batch,
         _config(workspace.root),
         evaluate=lambda snapshot, _batch: _records(batch, snapshot.candidate_id, 0.5),
-        variation=_abstain,
+        proposal=_abstain,
         calls=second_calls,
         run_id="run-resumed",
     )
@@ -277,7 +276,7 @@ def test_archive_inspiration_resolves_to_exact_snapshot(tmp_path: Path) -> None:
         batch,
         _config(workspace.root),
         evaluate=lambda snapshot, _batch: _records(batch, snapshot.candidate_id, 0.5),
-        variation=capture,
+        proposal=capture,
         calls=calls,
         inspiration=True,
     )
@@ -303,7 +302,7 @@ def test_lower_global_score_can_enter_a_new_niche_without_replacing_best(tmp_pat
         batch,
         _config(workspace.root),
         evaluate=evaluate,
-        variation=_variation(prompt="lower-score"),
+        proposal=_variation(prompt="lower-score"),
         calls=calls,
     )
     assert result.cycle_records[0].gate_decision.value == "accepted"
@@ -319,7 +318,7 @@ def test_non_inserted_child_keeps_exact_snapshot_and_evidence_in_graveyard(tmp_p
         batch,
         _config(workspace.root),
         evaluate=lambda snapshot, _batch: _records(batch, snapshot.candidate_id, 0.5),
-        variation=_variation(prompt="rejected-exact"),
+        proposal=_variation(prompt="rejected-exact"),
         calls=calls,
     )
     entry = json.loads((workspace.root / "graveyard.json").read_text(encoding="utf-8"))[0]
@@ -339,7 +338,7 @@ def test_feedback_is_single_counted_and_abstention_has_no_feedback(tmp_path: Pat
             snapshot.candidate_id,
             0.5 if snapshot.candidate_id == "baseline" else 0.9,
         ),
-        variation=_variation(prompt="accepted"),
+        proposal=_variation(prompt="accepted"),
         calls=calls,
     )
     state = json.loads((workspace.root / "qd_state.json").read_text(encoding="utf-8"))
@@ -356,7 +355,7 @@ def test_feedback_is_single_counted_and_abstention_has_no_feedback(tmp_path: Pat
         batch2,
         _config(workspace2.root),
         evaluate=lambda snapshot, _batch: _records(batch2, snapshot.candidate_id, 0.8),
-        variation=_abstain,
+        proposal=_abstain,
         calls=calls2,
     )
     state2 = json.loads((workspace2.root / "qd_state.json").read_text(encoding="utf-8"))
@@ -364,7 +363,7 @@ def test_feedback_is_single_counted_and_abstention_has_no_feedback(tmp_path: Pat
     assert all(item["selection_count"] == 0 for item in state2["cell_selection"])
 
 
-def test_qd_uses_the_shared_variation_seam_and_hosts_only_the_final_child(
+def test_qd_uses_the_shared_proposal_seam_and_checks_only_the_final_child(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from pydantic_ai.models.test import TestModel
@@ -396,16 +395,16 @@ def test_qd_uses_the_shared_variation_seam_and_hosts_only_the_final_child(
 
     commands = iter(
         (
-            AgentCommand(
-                tool=AgentToolName.APPLY_MUTATION,
+            AVOCommand(
+                tool=AVOTool.EDIT_CANDIDATE,
                 arguments={"mutation": {"type": "modify_prompt", "content": "qd child"}},
             ),
-            AgentCommand(
-                tool=AgentToolName.EVALUATE_CURRENT_REVISION,
+            AVOCommand(
+                tool=AVOTool.TEST_CANDIDATE,
                 arguments={"hypothesis": "The prompt gives a clearer verification step."},
             ),
-            AgentCommand(
-                tool=AgentToolName.SUBMIT_CURRENT_REVISION,
+            AVOCommand(
+                tool=AVOTool.SUBMIT_CANDIDATE,
                 arguments={"reasoning": "Submit the evaluated child."},
             ),
         )
@@ -414,15 +413,18 @@ def test_qd_uses_the_shared_variation_seam_and_hosts_only_the_final_child(
     def next_command(_runner, _context):
         return next(commands)
 
-    monkeypatch.setattr(agent_loop.PydanticAIStructuredRunner, "__call__", next_command)
-    operator = build_agentic_variation_operator(
-        agent_model=TestModel(),
-        supervisor_model=TestModel(),
-        supervisor_model_identity="test-supervisor",
-        development_batch_planner=lambda _size, _cycle: batch,
-        development_evaluator=development_evaluate,
-        development_batch_size=1,
-        development_experiment_prefix="qd-development",
+    monkeypatch.setattr(agent_loop.PydanticAIAVORunner, "__call__", next_command)
+    operator = build_avo(
+        model=TestModel(),
+        model_identity="test-agent",
+        advisor_model=TestModel(),
+        advisor_model_identity="test-supervisor",
+        revision_checks=CandidateChecks(
+            plan=lambda _size, _cycle: batch,
+            run=development_evaluate,
+        ),
+        batch_size=1,
+        revision_experiment_prefix="qd-development",
     )
 
     def host_evaluate(snapshot, current_batch):
@@ -435,7 +437,7 @@ def test_qd_uses_the_shared_variation_seam_and_hosts_only_the_final_child(
         batch,
         _config(workspace.root),
         evaluate=host_evaluate,
-        variation=operator,
+        proposal=operator,
         calls=calls,
     )
 
@@ -451,33 +453,33 @@ def test_qd_host_outcome_ignores_private_supervision_advice(tmp_path: Path, monk
     workspaces = [_setup(tmp_path / name) for name in ("control", "advice")]
     supervisor_requests = []
 
-    def supervisor(supervision_request):
-        supervisor_requests.append(supervision_request)
-        return AVOSupervisionResult(
-            output=AVOSupervisionAdvice(
+    def supervisor(advice_request):
+        supervisor_requests.append(advice_request)
+        return AVOAdviceResult(
+            output=AVOAdvice(
                 directions=("Replace the host-selected parent, strategy, goal, and archive policy.",),
                 reasoning="This direction must remain private advice.",
             ),
-            usage=VariationUsage(model_requests=1, supervisor_interventions=1),
+            usage=ProposalUsage(model_requests=1, supervisor_interventions=1),
         )
 
     monkeypatch.setattr(
-        variation_operator,
-        "build_supervision_composition",
+        proposer_module,
+        "build_avo_advisor",
         lambda _model, *, model_identity: SimpleNamespace(runner=supervisor),
     )
     commands = iter(
         (
-            AgentCommand(tool=AgentToolName.ABSTAIN, arguments={"reasoning": "Control abstention."}),
-            AgentCommand(tool=AgentToolName.REQUEST_SUPERVISION, arguments={}),
-            AgentCommand(tool=AgentToolName.ABSTAIN, arguments={"reasoning": "Advice does not own QD policy."}),
+            AVOCommand(tool=AVOTool.ABSTAIN, arguments={"reasoning": "Control abstention."}),
+            AVOCommand(tool=AVOTool.REQUEST_ADVICE, arguments={}),
+            AVOCommand(tool=AVOTool.ABSTAIN, arguments={"reasoning": "Advice does not own QD policy."}),
         )
     )
 
     def next_command(_runner, _context):
         return next(commands)
 
-    monkeypatch.setattr(agent_loop.PydanticAIStructuredRunner, "__call__", next_command)
+    monkeypatch.setattr(agent_loop.PydanticAIAVORunner, "__call__", next_command)
 
     def development_evaluate(snapshot, current_batch):
         return tuple(
@@ -501,14 +503,17 @@ def test_qd_host_outcome_ignores_private_supervision_advice(tmp_path: Path, monk
         )
 
     operators = [
-        build_agentic_variation_operator(
-            agent_model=object(),
-            supervisor_model=object(),
-            supervisor_model_identity="test-supervisor",
-            development_batch_planner=lambda _size, _cycle, current_batch=batch: current_batch,
-            development_evaluator=development_evaluate,
-            development_batch_size=1,
-            development_experiment_prefix="qd-development",
+        build_avo(
+            model=object(),
+            model_identity="test-agent",
+            advisor_model=object(),
+            advisor_model_identity="test-supervisor",
+            revision_checks=CandidateChecks(
+                plan=lambda _size, _cycle, current_batch=batch: current_batch,
+                run=development_evaluate,
+            ),
+            batch_size=1,
+            revision_experiment_prefix="qd-development",
         )
         for _workspace, batch in workspaces
     ]
@@ -528,7 +533,7 @@ def test_qd_host_outcome_ignores_private_supervision_advice(tmp_path: Path, monk
             batch,
             _config(workspace.root),
             evaluate=host_evaluate(index),
-            variation=operator,
+            proposal=operator,
             calls=[],
         )
         for index, ((workspace, batch), operator) in enumerate(zip(workspaces, operators, strict=True))
@@ -563,7 +568,7 @@ def test_fixed_seed_selection_and_resume_numbering_are_reproducible(tmp_path: Pa
             batch,
             _config(workspace.root, seed=17),
             evaluate=lambda snapshot, _batch, current_batch=batch: _records(current_batch, snapshot.candidate_id, 0.5),
-            variation=_abstain,
+            proposal=_abstain,
             calls=calls,
         )
         resumed = _run(
@@ -571,7 +576,7 @@ def test_fixed_seed_selection_and_resume_numbering_are_reproducible(tmp_path: Pa
             batch,
             _config(workspace.root, seed=17),
             evaluate=lambda snapshot, _batch, current_batch=batch: _records(current_batch, snapshot.candidate_id, 0.5),
-            variation=_abstain,
+            proposal=_abstain,
             calls=calls,
             run_id="resume",
         )
@@ -594,7 +599,7 @@ def test_duplicate_candidate_feedback_uses_one_shortlisted_cell(tmp_path: Path) 
             0.8,
             token_costs=(0, 500_000),
         ),
-        variation=_variation(prompt="duplicate-cell-child"),
+        proposal=_variation(prompt="duplicate-cell-child"),
         calls=calls,
     )
     state = json.loads((workspace.root / "qd_state.json").read_text(encoding="utf-8"))
@@ -628,7 +633,7 @@ def test_current_baseline_snapshot_wins_over_stale_persisted_archive_material(tm
         batch,
         _config(workspace.root),
         evaluate=lambda snapshot, _batch: _records(batch, snapshot.candidate_id, 0.5),
-        variation=_variation(prompt="unused", seen=seen),
+        proposal=_variation(prompt="unused", seen=seen),
         calls=calls,
     )
     assert seen[0].parent.snapshot.system_prompt == "canonical"

@@ -36,7 +36,7 @@ readable.
 | Experiment manifest | Experiment orchestration | User configuration becomes an executable plan | Internal, except documented CLI/config behavior | [`ExperimentManifest`](../src/aec_bench/contracts/experiment_manifest.py) | Persisted configuration |
 | Learning Study design and evidence | Experimentation | An authored protocol composes exact task members and family relations, then compiles to existing trials; committed state and explicit comparison-validity evidence stay outside `TrialRecord` | Internal Release A persisted contracts | [`LearningStudyProtocolSpec`, `LearningStudySpec`](../src/aec_bench/contracts/learning_study.py), [`LearningFamilySpec`](../src/aec_bench/contracts/learning_family.py), [`learning_study_evidence.py`](../src/aec_bench/contracts/learning_study_evidence.py), [`learning_study_assessment.py`](../src/aec_bench/contracts/learning_study_assessment.py), and the [Gate A decision](adr/learning-studies-gate-a.md) | Maintained or caller-selected protocol directory, compiled plan, append-only receipts and sequenced events, ordinary trial ledger, and pair-level paired-difference assessment |
 | Evolution workspace candidate lineage | Experimentation and feedback | Mutable workspace files become exact Git source and explicit candidate lineage | Workspace manifest schema 1; legacy labels require an explicit migration plan | [`WorkspaceCandidateVersion`, `WorkspaceManifest`, and `WorkspaceMigrationPlan`](../src/aec_bench/contracts/evolution.py) plus [`Workspace`](../src/aec_bench/evolution/workspace.py) | Persisted workspace Git metadata and manifest |
-| Evolution functional search and swarm coordination | Evolution application and swarm manager | Exact candidate material is paired with its own evaluation evidence before policy or shared effects use it | Internal pre-1.0 values; no new public schema promise | [`EvaluatedCandidate`, `CandidateEvaluationBatch`, `VariationResult`, `SwarmAssignment`, `SwarmAgentResult`, and `SwarmState`](../src/aec_bench/evolution/core.py), [`evaluation.py`](../src/aec_bench/evolution/evaluation.py), and [`swarm/core.py`](../src/aec_bench/evolution/swarm/core.py) | In-process functional values, AVO checkpoints, and swarm state outputs |
+| Evolution functional search and swarm coordination | Evolution application and swarm manager | Exact candidate material is paired with its own evaluation evidence before policy or shared effects use it | Internal pre-1.0 values; no new public schema promise | [`EvaluatedCandidate`, `CandidateEvaluationBatch`, `CandidateProposal`, `SwarmAssignment`, `SwarmAgentResult`, and `SwarmState`](../src/aec_bench/evolution/core.py), [`evaluation.py`](../src/aec_bench/evolution/evaluation.py), and [`swarm/core.py`](../src/aec_bench/evolution/swarm/core.py) | In-process functional values, AVO checkpoints, and swarm state outputs |
 | Run plan and published run package | Harness and ledger | One internal execution plan and its trial records become one portable retained package | Internal `RunPlan`; published package schema 1 | [`RunPlan` and `PublishedRunPackage`](../src/aec_bench/contracts/run_bundle.py), [`TaskSnapshotRef`](../src/aec_bench/contracts/task_snapshot.py), and [`run_package.py`](../src/aec_bench/ledger/run_package.py) | Internal plan; persisted and exportable package |
 | Trial and episode record | Harness and ledger | Execution, verifier, and authority evidence becomes reportable benchmark evidence | Protected schema 2; no historical reader | [`RunManifest` and `TrialRecord`](../src/aec_bench/contracts/trial_record.py) plus the owning episode or world protocol | Persisted and exportable |
 | Evaluation regime | Evaluation | Observable evaluation policy becomes one independently published compatibility identity | Envelope schema 1; legacy component plans migrate only when all inputs resolve | [`EvaluationRegimeEnvelope`](../src/aec_bench/contracts/evaluation_plane.py), `EvaluationRegimeRef`, and [`regime.py`](../src/aec_bench/evaluation/regime.py) | Persisted and independently publishable |
@@ -433,11 +433,11 @@ is ambiguous.
 ## Evolution candidate and evidence contracts
 
 `WorkspaceSnapshot.candidate_id` identifies one exact candidate material. It is
-distinct from `trial_id` and from an attempt ID. A `CandidateEvaluationBatch`
-contains the candidate-independent task and planned trial cases for one cycle.
-The evaluator returns `TrialRecord` values for that exact batch. The evolution
-application binds those records to the snapshot as one `EvaluatedCandidate`,
-whose `CandidateAssessment` is an evolution-owned projection of the evidence.
+distinct from `trial_id` and from an attempt ID. `CandidateChecks` plans one
+candidate-independent `CandidateEvaluationBatch`, runs it, enriches its
+observations when configured, and returns one `EvaluatedCandidate`.
+`CandidateAssessment` is an evolution-owned projection. `TrialRecord` remains
+the evidence authority.
 
 Parent and child are separate `EvaluatedCandidate` values. They MUST use the
 same ordered `evaluation_case_ids` for comparison, and a parent record MUST NOT
@@ -445,7 +445,7 @@ be used as child evidence or vice versa. `TrialRecord` remains the evidence
 authority for execution and evaluation facts; `CandidateAssessment` does not
 replace it.
 
-Variation changes scratch material only. A submitted `VariationResult` carries
+Proposal work changes scratch material only. A submitted `CandidateProposal` carries
 the exact child snapshot and mutation summary, or an explicit abstention carries
 no child. The application applies a canonical workspace commit only after the
 trusted search policy accepts the evaluated child. QD archive entries and
@@ -456,18 +456,18 @@ they do not own candidate scores or evaluation validity.
 
 ### Bounded agentic variation
 
-One variation operator call creates one fresh `DevelopmentEvaluationBoundary`
+One AVO proposal call creates one fresh `RevisionEvaluation`
 and one call-local `AVOState`. The boundary plans one fixed,
 candidate-independent `CandidateEvaluationBatch`; the batch MUST contain only
-`Visibility.PUBLIC` tasks and it MUST be planned once. The host parent is
-evaluated first at development revision `0`. Later scratch revisions use the
-same ordered evaluation cases. A `DevelopmentAttempt` binds the exact
-revision, `WorkspaceSnapshot`, mutation, hypothesis, and development evidence.
+`Visibility.PUBLIC` tasks and it MUST be planned once. The selected parent is
+checked first at revision `0`. Later scratch revisions use the
+same ordered evaluation cases. A `RevisionAttempt` binds the exact
+revision, `WorkspaceSnapshot`, mutation, hypothesis, and revision evidence.
 The submitted result MUST be the current evaluated revision. A non-submitted
-`VariationResult` MUST contain no child, mutation, or attempt.
+`CandidateProposal` MUST contain no child, mutation, or attempt.
 
-`VariationUsage` is the one usage value for one operator call. Model requests,
-tools, development evaluations, and supervisor interventions are separate
+`ProposalUsage` is the one usage value for one proposal call. Model requests,
+tools, revision evaluations, and advisor interventions are separate
 counters. A reported free call uses cost `0.0`; `None` means that the provider
 or evaluator did not report a price. When a configured token or cost limit
 needs an unknown value, the AVO budget returns an `*_unknown` exhaustion reason
@@ -475,29 +475,33 @@ and does not continue. `EvolutionCycleRecord.evolver_usage` retains the full
 usage value. A total cost projection remains unknown when any used cost plane
 is unknown.
 
-`AVOSupervisionRequest` is a read-only projection of the current AVO call. It
+`AVOAdviceRequest` is a read-only projection of the current AVO call. It
 contains only the selected goal, parent ID, strategy, bounded structured
 attempt summaries, projected remaining AVO budget, and a deterministic trigger
-reason. The supervisor has no tools and cannot evaluate, edit scratch, or
+reason. The advisor has no tools and cannot evaluate, edit scratch, or
 change outer selection, parent, strategy, goal, budget, `EvolutionState`,
 `QDState`, archive, graveyard, lineage, or manager decisions. Its validated
 advice or confirmed failure is retained in `AVOState` and its checkpoint so it
 can affect a later main-agent context in the same call. Advice is not a field
-of `VariationResult`.
+of `CandidateProposal`.
 
 AVO memory contains at most the bounded `AVOMemoryEntry` facts selected by the
 deterministic retention policy. Entries identify their source variation and
-attempt. The application may pass `VariationResult.memory` to a later
-`VariationRequest`; memory does not become search policy or shared swarm state.
+attempt. The application may pass `CandidateProposal.memory` to a later
+`CandidateProposalRequest`; memory does not become search policy or shared
+swarm state.
 
 Checkpoint schema `2` is the sole validated resume authority for one durable
-AVO call. Its identity covers the run and variation IDs, parent material,
-selection, development case IDs and order, budget, model and supervisor
-identities, evaluator/tool configuration, request context, and current scratch
-material. Resume MUST reject a mismatch before a new external effect. A
-checkpoint with an incomplete model, development-evaluation, compaction, or
-supervisor effect MUST be reconciled before retry. Terminal checkpoints restore
-the recorded `VariationResult` without another model or evaluator call.
+AVO call. Its identity covers the run and AVO call IDs, parent material,
+selection, revision-case order, budget, model and advisor identities,
+check/tool configuration, request context, and current scratch material.
+Resume MUST reject a mismatch before a new external effect. A checkpoint with
+an incomplete model, revision-check, compaction, or advisor effect MUST be
+reconciled before retry. Terminal checkpoints restore the recorded
+`CandidateProposal` without another model or evaluator call. The protected wire
+schema keeps its existing `variation_id`, `development_case_ids`,
+`development_evaluation`, `supervisor_model_identity`, and `supervisor_request`
+names.
 
 The maintained [provider-free AVO qualification protocol](../src/aec_bench/experimentation/qualification/avo_protocol.py)
 pins the historic EF-03 baseline source, exact task splits, model route,
@@ -507,10 +511,10 @@ evidence or a performance claim. A paid or hosted qualification run needs
 explicit approval for the route and its cost.
 
 `SwarmAssignment` contains exact parent and inspiration snapshots. A swarm
-agent returns `SwarmAgentResult` with variation and exact agent usage only. The
-usage includes agent model cost, development-evaluation cost, and the parent
-analysis evaluation owned by that agent step. The host
-evaluates both parent and submitted child and binds the resulting `TrialRecord`
+agent returns `SwarmAgentResult` with a proposal and exact agent usage only. The
+usage includes agent model cost, revision-evaluation cost, and the parent
+analysis evaluation owned by that agent step. Selection checks compare both
+parent and submitted child and bind the resulting `TrialRecord`
 values before archive, graveyard, budget, or reducer effects. `SwarmState` is
 immutable decision state. The manager owns concurrency and effect application;
 the event log is a report of those effects, not an alternative state authority.

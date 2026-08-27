@@ -18,17 +18,23 @@ from aec_bench.contracts.evolution import (
     EvolutionObservation,
     MutationSummary,
     ObservationEnrichment,
+    ProposalUsage,
     SwarmAgentState,
     SwarmEventType,
-    VariationUsage,
     WorkspaceSnapshot,
 )
 from aec_bench.contracts.experiment_manifest import AgentConfig, ComputeConfig
 from aec_bench.contracts.trial_record import CostRecord
 from aec_bench.evolution.cancellation import AVOCancellationError, AVOCancellationReason, AVOCancellationSignal
 from aec_bench.evolution.checkpoint import AVOIncompleteExternalEffectError
-from aec_bench.evolution.core import DevelopmentAttempt, SelectionPlan, VariationResult, VariationStatus
-from aec_bench.evolution.evaluation import CandidateEvaluationBatch, bind_evaluated_candidate
+from aec_bench.evolution.core import (
+    CandidateProposal,
+    EvaluatedCandidate,
+    ProposalStatus,
+    RevisionAttempt,
+    SelectionPlan,
+)
+from aec_bench.evolution.evaluation import CandidateChecks, CandidateEvaluationBatch
 from aec_bench.evolution.swarm.config import (
     SwarmAgentConfig,
     SwarmBudgetConfig,
@@ -86,7 +92,7 @@ class FakeEvolverFactory:
                 self._i += 1
                 candidate_id = f"{agent_id}-child-{self._i}"
                 self._factory._scores_by_candidate[candidate_id] = s
-                usage = VariationUsage(
+                usage = ProposalUsage(
                     model_requests=1,
                     development_evaluations=1,
                     model_cost_usd=0.5,
@@ -108,12 +114,12 @@ class FakeEvolverFactory:
                     evaluation_case_ids=("development-case",),
                     valid=True,
                 )
-                development_candidate = bind_evaluated_candidate(
+                development_candidate = EvaluatedCandidate(
                     WorkspaceSnapshot(system_prompt=f"{candidate_id} prompt", candidate_id=candidate_id),
                     (development_observation,),
                     development_assessment,
                 )
-                attempt = DevelopmentAttempt(
+                attempt = RevisionAttempt(
                     attempt_id=f"{assignment.assignment_id}:attempt-1",
                     revision=1,
                     evaluated=development_candidate,
@@ -124,8 +130,8 @@ class FakeEvolverFactory:
                 return SwarmAgentResult(
                     agent_id=agent_id,
                     assignment_id=assignment.assignment_id,
-                    variation=VariationResult(
-                        VariationStatus.SUBMITTED,
+                    proposal=CandidateProposal(
+                        ProposalStatus.SUBMITTED,
                         development_candidate.snapshot,
                         MutationSummary(prompt_modified=True),
                         "Apply exact host-evaluated mutation",
@@ -172,6 +178,10 @@ class FakeEvolverFactory:
     def enrich(self, observations: Sequence[EvolutionObservation]) -> Sequence[EvolutionObservation]:
         return observations
 
+    @property
+    def selection_checks(self) -> CandidateChecks:
+        return CandidateChecks(plan=self.plan_batch, run=self.evaluate, enrich=self.enrich)
+
     def baseline_snapshot(self) -> WorkspaceSnapshot:
         return WorkspaceSnapshot(system_prompt="baseline prompt", candidate_id="baseline")
 
@@ -194,7 +204,7 @@ async def test_unknown_agent_cost_has_no_host_effects(tmp_path: Path) -> None:
         config=_make_config(agent_count=1),
         state_dir=tmp_path,
         evolver_factory=factory,
-        evaluator=evaluate,
+        selection_checks=CandidateChecks(plan=factory.plan_batch, run=evaluate, enrich=factory.enrich),
     )
     parent = factory.baseline_snapshot()
     manager._candidate_snapshots[parent.candidate_id] = parent
@@ -224,14 +234,14 @@ async def test_unknown_agent_cost_has_no_host_effects(tmp_path: Path) -> None:
         issued_at=datetime.now(UTC),
     )
     known_result = await factory.create("agent-0").step(assignment)
-    unknown_usage = VariationUsage(
+    unknown_usage = ProposalUsage(
         model_requests=known_result.agent_usage.model_requests,
         development_evaluations=known_result.agent_usage.development_evaluations,
     )
     result = SwarmAgentResult(
         agent_id="agent-0",
         assignment_id="assignment-1",
-        variation=known_result.variation,
+        proposal=known_result.proposal,
         agent_usage=unknown_usage,
     )
     before_snapshots = dict(manager._candidate_snapshots)

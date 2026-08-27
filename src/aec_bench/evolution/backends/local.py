@@ -11,9 +11,8 @@ from aec_bench.contracts.evolution import WorkspaceSnapshot
 from aec_bench.contracts.experiment_manifest import AgentConfig, ComputeConfig, ExperimentManifest, TaskSelector
 from aec_bench.contracts.trial_record import TrialRecord
 from aec_bench.evolution.evaluation import (
-    CandidateBatchPlanner,
+    CandidateChecks,
     CandidateEvaluationBatch,
-    CandidateEvaluator,
     validate_trial_records,
 )
 from aec_bench.evolution.snapshot import serialise_snapshot
@@ -23,30 +22,19 @@ from aec_bench.tasks.loader import load_task_definition
 from aec_bench.trials import build_trial_id, plan_trials
 
 
-def make_stub_candidate_evaluator(records: Sequence[TrialRecord]) -> CandidateEvaluator:
-    """Return fixed records for deterministic evaluation against a planned batch."""
-    fixed_records = tuple(records)
-
-    def solve(_snapshot: WorkspaceSnapshot, batch: CandidateEvaluationBatch) -> tuple[TrialRecord, ...]:
-        if len(fixed_records) != len(batch.trials):
-            raise ValueError("stub evaluation records must match the evaluation batch cardinality")
-        validate_trial_records(fixed_records, batch)
-        return fixed_records
-
-    return solve
-
-
-def make_local_candidate_batch_planner(
+def build_local_checks(
     *,
     task_dirs: Sequence[Path],
     model: str,
     experiment_id: str,
+    workspace_root: Path | None = None,
+    candidate_identity: bool = True,
     adapter: str = "rlm",
     timeout: int = 1800,
     backend: str = "local",
     agent_config: AgentConfig | None = None,
-) -> CandidateBatchPlanner:
-    """Resolve tasks once and plan one candidate-independent batch per cycle."""
+) -> CandidateChecks:
+    """Build one local capability for planning and checking candidates."""
     resolved_tasks: list[ResolvedTaskInstance] | None = None
 
     def plan(batch_size: int, cycle: int) -> CandidateEvaluationBatch:
@@ -89,23 +77,13 @@ def make_local_candidate_batch_planner(
             cycle=cycle,
         )
 
-    return plan
+    def run(snapshot: WorkspaceSnapshot, batch: CandidateEvaluationBatch) -> tuple[TrialRecord, ...]:
+        """Execute an exact planned batch through the local artifact runtime.
 
-
-def make_local_candidate_evaluator(
-    *,
-    workspace_root: Path | None = None,
-    candidate_identity: bool = True,
-) -> CandidateEvaluator:
-    """Execute an exact planned batch through the local artifact runtime.
-
-    Host evaluation namespaces both experiment and trial identities by
-    candidate. Development evaluation can keep the planned development
-    experiment identity when ``candidate_identity`` is false; its composition
-    supplies unique revision trial IDs.
-    """
-
-    def solve(snapshot: WorkspaceSnapshot, batch: CandidateEvaluationBatch) -> tuple[TrialRecord, ...]:
+        Selection checks namespace experiment and trial identities by
+        candidate. Revision checks can keep their planned experiment identity;
+        the AVO composition supplies unique revision trial IDs.
+        """
         snapshot_prompt = serialise_snapshot(snapshot)
         trials = tuple(
             replace(
@@ -139,7 +117,7 @@ def make_local_candidate_evaluator(
         validate_trial_records(records, batch)
         return tuple(records)
 
-    return solve
+    return CandidateChecks(plan=plan, run=run)
 
 
 def _resolve_task_directories(task_dirs: Sequence[Path]) -> list[ResolvedTaskInstance]:
@@ -181,8 +159,4 @@ def _agent_files(workspace_root: Path | None) -> dict[str, Path]:
     return {"tool_loop.toml": config} if config.is_file() else {}
 
 
-__all__ = (
-    "make_local_candidate_batch_planner",
-    "make_local_candidate_evaluator",
-    "make_stub_candidate_evaluator",
-)
+__all__ = ("build_local_checks",)

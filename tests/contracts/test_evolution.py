@@ -19,6 +19,7 @@ from aec_bench.contracts.evolution import (
     GateDecision,
     MutationSummary,
     ObservationEnrichment,
+    ProposalUsage,
     SelectionRecord,
     SkillEntry,
     StagnationInfo,
@@ -26,7 +27,6 @@ from aec_bench.contracts.evolution import (
     TraceQueryRequest,
     TraceSlice,
     TraceSliceTurn,
-    VariationUsage,
     WorkspaceCandidateVersion,
     WorkspaceManifest,
     WorkspaceMigrationCandidate,
@@ -590,7 +590,7 @@ class TestEvolutionCycleRecord:
             active_candidate_id_after="run:3",
             best_candidate_id_after="run:3",
             timestamp=datetime.now(UTC),
-            evolver_usage=VariationUsage(model_requests=1, model_cost_usd=0.04),
+            evolver_usage=ProposalUsage(model_requests=1, model_cost_usd=0.04),
         )
         assert record.cycle == 3
         assert record.gate_decision == GateDecision.ACCEPTED
@@ -612,7 +612,7 @@ class TestEvolutionCycleRecord:
             active_candidate_id_after="baseline",
             best_candidate_id_after="baseline",
             timestamp=datetime.now(UTC),
-            evolver_usage=VariationUsage(),
+            evolver_usage=ProposalUsage(),
         )
         assert record.gate_decision == GateDecision.SKIPPED
         assert record.active_candidate_id_after == record.best_candidate_id_after == "baseline"
@@ -631,7 +631,7 @@ class TestEvolutionCycleRecord:
                 active_candidate_id_after="baseline",
                 best_candidate_id_after="baseline",
                 timestamp=datetime.now(UTC),
-                evolver_usage=VariationUsage(),
+                evolver_usage=ProposalUsage(),
             )
 
 
@@ -661,7 +661,7 @@ class TestEvolutionResult:
             active_candidate_id_after="run:2",
             best_candidate_id_after="run:2",
             timestamp=datetime.now(UTC),
-            evolver_usage=VariationUsage(model_requests=1, model_cost_usd=0.01),
+            evolver_usage=ProposalUsage(model_requests=1, model_cost_usd=0.01),
         )
 
     def test_converged_run(self) -> None:

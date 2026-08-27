@@ -21,7 +21,7 @@ from aec_bench.contracts.evolution import (
 from aec_bench.contracts.trial_record import TrialRecord
 from aec_bench.contracts.validators import NonEmptyStr, StrictModel
 from aec_bench.evolution.core import EvaluatedCandidate
-from aec_bench.evolution.development import DevelopmentEvaluationProvenance
+from aec_bench.evolution.revision import RevisionEvaluationProvenance
 
 
 class AVOCheckpointTurn(StrictModel):
@@ -143,7 +143,7 @@ class AVOCheckpointObservation(StrictModel):
     enrichment: AVOCheckpointEnrichment
     candidate_id: NonEmptyStr
     discipline: NonEmptyStr
-    development_provenance: DevelopmentEvaluationProvenance
+    development_provenance: RevisionEvaluationProvenance
     extension_values: dict[str, Any] = Field(default_factory=dict)
     raw_output_path: str | None = None
     conversation_path: str | None = None
@@ -156,8 +156,8 @@ class AVOCheckpointObservation(StrictModel):
         if not isinstance(observation, EvolutionObservation):
             raise TypeError("observation must be an EvolutionObservation")
         provenance = observation.trial.pending_extensions.get("development_evaluation")
-        if not isinstance(provenance, DevelopmentEvaluationProvenance):
-            raise ValueError("checkpoint observation requires DevelopmentEvaluationProvenance")
+        if not isinstance(provenance, RevisionEvaluationProvenance):
+            raise ValueError("checkpoint observation requires RevisionEvaluationProvenance")
         extension_values = {
             kind: _json_extension_value(value)
             for kind, value in observation.trial.pending_extensions.items()

@@ -21,6 +21,7 @@ from aec_bench.evolution.application import (
     _build_harbor_candidate_runtime,
     run_evolution_from_config,
 )
+from aec_bench.evolution.evaluation import CandidateChecks
 from aec_bench.generation.application import generate_template_instances, resolve_template
 from aec_bench.harness.harbor_workflow import SynchronousHarborWorkflow
 from aec_bench.ledger.writer import write_trial_record
@@ -64,7 +65,7 @@ def _capture_run(monkeypatch: pytest.MonkeyPatch) -> tuple[dict[str, Any], Evolu
 
 
 class TestRunEvolutionFromConfig:
-    def test_composes_one_agentic_variation_operator_with_development_runtime(
+    def test_composes_one_avo_proposer_with_revision_checks(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         observed, expected = _capture_run(monkeypatch)
@@ -75,7 +76,7 @@ class TestRunEvolutionFromConfig:
             builder.update(kwargs)
             return lambda _request, _source, _child_id: None
 
-        monkeypatch.setattr(application, "build_agentic_variation_operator", fake_builder)
+        monkeypatch.setattr(application, "build_avo", fake_builder)
         config = EvolutionConfig(
             workspace_path=str(ws_root),
             models=EvolverModelConfig(classifier="haiku", evolver="sonnet"),
@@ -85,12 +86,11 @@ class TestRunEvolutionFromConfig:
         result = run_evolution_from_config(config=config, run_id="run/with unsafe spaces")
 
         assert result is expected
-        assert builder["agent_model"] == "sonnet"
-        assert builder["supervisor_model"] == builder["agent_model"]
-        assert builder["supervisor_model_identity"] == "sonnet"
-        assert builder["development_batch_size"] == config.batch_size
-        assert callable(builder["development_batch_planner"])
-        assert callable(builder["development_evaluator"])
+        assert builder["model"] == "sonnet"
+        assert builder["model_identity"] == "sonnet"
+        assert "advisor_model" not in builder
+        assert builder["batch_size"] == config.batch_size
+        assert isinstance(builder["revision_checks"], CandidateChecks)
         assert "budget" not in builder
         assert builder["checkpoint_root"] == ws_root
         identity = builder["configuration_identity"]
@@ -98,7 +98,7 @@ class TestRunEvolutionFromConfig:
         assert identity.development_evaluator_identity.startswith("local:")
         assert "run/with unsafe spaces" not in identity.development_evaluator_identity
         assert observed["run_id"] == "run/with unsafe spaces"
-        assert callable(observed["variation"])
+        assert callable(observed["propose"])
 
     def test_runs_from_config_with_solver(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         observed, expected = _capture_run(monkeypatch)
@@ -106,8 +106,10 @@ class TestRunEvolutionFromConfig:
         # Create a task dir so resolution finds something
         tasks_root = tmp_path / "tasks"
         task_dir = tasks_root / "electrical" / "voltage-drop" / "test-instance"
-        task_dir.mkdir(parents=True)
+        (task_dir / "tests").mkdir(parents=True)
+        (task_dir / "task.toml").write_text("[metadata]\n", encoding="utf-8")
         (task_dir / "instruction.md").write_text("Calculate voltage drop.")
+        (task_dir / "tests" / "test.sh").write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
 
         config = EvolutionConfig(
             workspace_path=str(ws_root),
@@ -128,7 +130,7 @@ class TestRunEvolutionFromConfig:
         )
         assert result is expected
         assert observed["config"].max_cycles == 3
-        assert callable(observed["evaluate"])
+        assert isinstance(observed["selection_checks"], CandidateChecks)
 
     def test_without_solver_uses_defaults(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         observed, expected = _capture_run(monkeypatch)
@@ -140,7 +142,7 @@ class TestRunEvolutionFromConfig:
         )
         result = run_evolution_from_config(config=config)
         assert result is expected
-        assert callable(observed["evaluate"])
+        assert isinstance(observed["selection_checks"], CandidateChecks)
 
     def test_builds_workspace_with_no_tasks_root(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         observed, _expected = _capture_run(monkeypatch)
@@ -196,7 +198,7 @@ class TestBuildEvolutionRunnerRemoteExecution:
             # No solver = stubs
         )
         run_evolution_from_config(config=config)
-        assert callable(observed["evaluate"])
+        assert isinstance(observed["selection_checks"], CandidateChecks)
 
     def test_morph_without_solver_warns_and_stubs(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         observed, _expected = _capture_run(monkeypatch)
@@ -208,7 +210,7 @@ class TestBuildEvolutionRunnerRemoteExecution:
             backend="morph",
         )
         run_evolution_from_config(config=config)
-        assert callable(observed["evaluate"])
+        assert isinstance(observed["selection_checks"], CandidateChecks)
 
     def test_morph_with_solver_builds_remote_evaluator_without_connecting(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -228,7 +230,7 @@ class TestBuildEvolutionRunnerRemoteExecution:
             backend="morph",
         )
         run_evolution_from_config(config=config)
-        assert callable(observed["evaluate"])
+        assert isinstance(observed["selection_checks"], CandidateChecks)
 
     def test_remote_solve_consumes_the_current_harbor_workflow(
         self,
@@ -269,14 +271,14 @@ class TestBuildEvolutionRunnerRemoteExecution:
             ),
             backend="morph",
         )
-        planner, evaluate = _build_harbor_candidate_runtime(
+        checks = _build_harbor_candidate_runtime(
             config=config,
             task_dirs=[task_dir],
             experiment_id="evo-current-harbor",
         )
 
-        batch = planner(1, 0)
-        records = evaluate(
+        batch = checks.plan_batch(1, 0)
+        records = checks.run(
             WorkspaceSnapshot(
                 system_prompt="Use the evolved instructions.",
                 candidate_id="run:1",

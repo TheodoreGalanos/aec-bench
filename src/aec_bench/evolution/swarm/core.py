@@ -8,13 +8,13 @@ from dataclasses import dataclass
 from datetime import datetime
 from statistics import fmean
 
-from aec_bench.contracts.evolution import BehaviourDescriptor, SwarmAgentState, VariationUsage, WorkspaceSnapshot
+from aec_bench.contracts.evolution import BehaviourDescriptor, ProposalUsage, SwarmAgentState, WorkspaceSnapshot
 from aec_bench.evolution.archive import ArchiveBatchOutcome
 from aec_bench.evolution.behaviour import extract_behaviour_descriptor
 from aec_bench.evolution.core import (
+    CandidateProposal,
     EvaluatedCandidate,
     SelectionPlan,
-    VariationResult,
     assessment_score,
 )
 from aec_bench.evolution.swarm.config import SwarmConfig
@@ -153,20 +153,20 @@ class SwarmAssignment:
 
 @dataclass(frozen=True)
 class SwarmAgentResult:
-    """Variation returned by an agent without host-owned evaluation evidence."""
+    """Proposal returned by an agent without selection evidence."""
 
     agent_id: str
     assignment_id: str
-    variation: VariationResult
-    agent_usage: VariationUsage
+    proposal: CandidateProposal
+    agent_usage: ProposalUsage
 
     def __post_init__(self) -> None:
         _require_text(self.agent_id, "agent_id")
         _require_text(self.assignment_id, "assignment_id")
-        if not isinstance(self.variation, VariationResult):
-            raise TypeError("variation must be a VariationResult")
-        if not isinstance(self.agent_usage, VariationUsage):
-            raise TypeError("agent_usage must be a VariationUsage")
+        if not isinstance(self.proposal, CandidateProposal):
+            raise TypeError("proposal must be a CandidateProposal")
+        if not isinstance(self.agent_usage, ProposalUsage):
+            raise TypeError("agent_usage must be a ProposalUsage")
 
 
 def _validate_descriptor(descriptor: BehaviourDescriptor) -> None:
@@ -294,19 +294,19 @@ class SwarmOutcome:
         if self.assignment.assignment_id != self.agent_result.assignment_id:
             raise ValueError("assignment and result assignment_id must match")
 
-        child = self.agent_result.variation.child
+        child = self.agent_result.proposal.child
         if child is None:
             if self.evaluated_candidate is not None or self.archive_outcome is not None:
-                raise ValueError("variation without a child cannot have evaluation or archive outcome")
+                raise ValueError("proposal without a child cannot have evaluation or archive outcome")
         elif self.evaluated_candidate is None:
-            raise ValueError("submitted variation child requires an evaluated candidate")
+            raise ValueError("submitted proposal child requires an evaluated candidate")
         if self.evaluated_candidate is not None:
             if not isinstance(self.evaluated_candidate, EvaluatedCandidate):
                 raise TypeError("evaluated_candidate must be an EvaluatedCandidate or None")
             if child is None:
-                raise ValueError("evaluated candidate requires a submitted variation child")
+                raise ValueError("evaluated candidate requires a submitted proposal child")
             if self.evaluated_candidate.snapshot.candidate_id != child.candidate_id:
-                raise ValueError("evaluated candidate must match the variation child")
+                raise ValueError("evaluated candidate must match the proposal child")
         if self.archive_outcome is not None:
             if not isinstance(self.archive_outcome, ArchiveBatchOutcome):
                 raise TypeError("archive_outcome must be an ArchiveBatchOutcome or None")
@@ -392,7 +392,7 @@ def _update_pivot_state(
     return PivotState(agent_states=tuple(states)), pivot
 
 
-def reduce_swarm_outcome(
+def next_swarm_state(
     *,
     state: SwarmState,
     outcome: SwarmOutcome,
@@ -427,13 +427,13 @@ def reduce_swarm_outcome(
     if current_agent is None:
         raise ValueError(f"swarm outcome agent {agent_id!r} is not present in state")
 
-    child = result.variation.child
+    child = result.proposal.child
     evaluated_candidate = outcome.evaluated_candidate
     evaluated = child is not None and evaluated_candidate is not None
     if child is not None and not evaluated:
-        raise ValueError("submitted variation requires a host-evaluated candidate")
+        raise ValueError("submitted proposal requires a selection-checked candidate")
     if evaluated_candidate is not None and child is None:
-        raise ValueError("evaluated candidate requires a submitted variation child")
+        raise ValueError("evaluated candidate requires a submitted proposal child")
 
     agent_cost = result.agent_usage.total_cost_usd
     if agent_cost is None:

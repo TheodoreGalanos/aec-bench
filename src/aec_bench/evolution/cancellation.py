@@ -66,20 +66,10 @@ class AVOCancellationSignal:
                 self._reason = selected
             self._event.set()
 
-    # ``set`` and ``is_set`` make the signal usable by timeout and test code
-    # that already follows the standard threading.Event vocabulary.
-    def set(self) -> None:
-        """Request cancellation with the default reason."""
-        self.cancel()
-
-    def is_set(self) -> bool:
-        """Return whether cancellation was requested."""
-        return self._event.is_set()
-
     @property
     def cancelled(self) -> bool:
         """Return whether cancellation was requested."""
-        return self.is_set()
+        return self._event.is_set()
 
     @property
     def reason(self) -> AVOCancellationReason | None:
@@ -96,9 +86,6 @@ class AVOCancellationSignal:
         if self._event.is_set():
             reason = self.reason or AVOCancellationReason()
             raise AVOCancellationError(reason)
-
-    # This spelling reads naturally at effect boundaries.
-    check = raise_if_cancelled
 
 
 __all__ = (

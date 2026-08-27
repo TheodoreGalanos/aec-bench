@@ -64,11 +64,47 @@ class CandidateEvaluationBatch:
         object.__setattr__(self, "evaluation_case_ids", case_ids)
 
 
-CandidateBatchPlanner = Callable[[int, int], CandidateEvaluationBatch]
-CandidateEvaluator = Callable[[WorkspaceSnapshot, CandidateEvaluationBatch], tuple[TrialRecord, ...]]
+def _keep_observations(
+    observations: Sequence[EvolutionObservation],
+) -> Sequence[EvolutionObservation]:
+    return observations
 
 
-def build_observations(
+@dataclass(frozen=True)
+class CandidateChecks:
+    """Plan and run the checks used to compare evolution candidates.
+
+    Callers configure this capability once. The evolution loop does not need
+    separate planner, evaluator, and enrichment arguments.
+    """
+
+    plan: Callable[[int, int], CandidateEvaluationBatch]
+    run: Callable[[WorkspaceSnapshot, CandidateEvaluationBatch], tuple[TrialRecord, ...]]
+    enrich: Callable[[Sequence[EvolutionObservation]], Sequence[EvolutionObservation]] = _keep_observations
+
+    def __post_init__(self) -> None:
+        for field_name in ("plan", "run", "enrich"):
+            if not callable(getattr(self, field_name)):
+                raise TypeError(f"{field_name} must be callable")
+
+    def plan_batch(self, batch_size: int, cycle: int) -> CandidateEvaluationBatch:
+        """Plan one candidate-independent batch."""
+        batch = self.plan(batch_size, cycle)
+        if not isinstance(batch, CandidateEvaluationBatch):
+            raise TypeError("plan must return a CandidateEvaluationBatch")
+        return batch
+
+    def assess(self, snapshot: WorkspaceSnapshot, batch: CandidateEvaluationBatch) -> EvaluatedCandidate:
+        """Run one batch and bind all evidence to the exact candidate."""
+        records = tuple(self.run(snapshot, batch))
+        observations = _build_observations(records, snapshot.candidate_id, batch=batch)
+        enriched = tuple(self.enrich(observations))
+        _require_enriched_observations(enriched, candidate_id=snapshot.candidate_id, batch=batch)
+        assessment = _build_candidate_assessment(snapshot.candidate_id, batch, enriched)
+        return EvaluatedCandidate(snapshot=snapshot, observations=enriched, assessment=assessment)
+
+
+def _build_observations(
     trial_records: Sequence[TrialRecord],
     candidate_id: str,
     *,
@@ -92,11 +128,11 @@ def build_observations(
         )
         for index, record in enumerate(records)
     )
-    validate_enriched_observations(observations, candidate_id=candidate_id, batch=batch)
+    _require_enriched_observations(observations, candidate_id=candidate_id, batch=batch)
     return observations
 
 
-def validate_enriched_observations(
+def _require_enriched_observations(
     observations: Sequence[EvolutionObservation],
     *,
     candidate_id: str,
@@ -124,7 +160,7 @@ def validate_trial_records(records: Sequence[TrialRecord], batch: CandidateEvalu
             raise ValueError("trial record attempt must match its planned evaluation case")
 
 
-def build_candidate_assessment(
+def _build_candidate_assessment(
     candidate_id: str,
     batch: CandidateEvaluationBatch,
     observations: Sequence[EvolutionObservation],
@@ -132,7 +168,7 @@ def build_candidate_assessment(
     """Project exact trial evaluation results into one candidate assessment."""
     _require_text(candidate_id, "candidate_id")
     ordered_observations = tuple(observations)
-    validate_enriched_observations(ordered_observations, candidate_id=candidate_id, batch=batch)
+    _require_enriched_observations(ordered_observations, candidate_id=candidate_id, batch=batch)
     if not ordered_observations:
         raise ValueError("candidate assessment evidence must not be empty")
     rewards: list[float] = []
@@ -172,34 +208,25 @@ def build_candidate_assessment(
     )
 
 
-def bind_candidate_evaluation(
+def assess_candidate(
     snapshot: WorkspaceSnapshot,
     batch: CandidateEvaluationBatch,
     trial_records: Sequence[TrialRecord],
     *,
     enrichments: Sequence[ObservationEnrichment] | None = None,
 ) -> EvaluatedCandidate:
-    """Build and bind one candidate to the exact batch records it produced."""
-    observations = build_observations(
+    """Bind supplied records when the caller already owns their execution."""
+    observations = _build_observations(
         trial_records,
         snapshot.candidate_id,
         enrichments=enrichments,
         batch=batch,
     )
-    assessment = build_candidate_assessment(snapshot.candidate_id, batch, observations)
-    return bind_evaluated_candidate(snapshot, observations, assessment)
+    assessment = _build_candidate_assessment(snapshot.candidate_id, batch, observations)
+    return EvaluatedCandidate(snapshot=snapshot, observations=observations, assessment=assessment)
 
 
-def bind_evaluated_candidate(
-    snapshot: WorkspaceSnapshot,
-    observations: Sequence[EvolutionObservation],
-    assessment: CandidateAssessment,
-) -> EvaluatedCandidate:
-    """Validate and bind a candidate snapshot to its evaluation evidence."""
-    return EvaluatedCandidate(snapshot=snapshot, observations=tuple(observations), assessment=assessment)
-
-
-def validate_comparable_candidates(parent: EvaluatedCandidate, child: EvaluatedCandidate) -> None:
+def require_same_evaluation_cases(parent: EvaluatedCandidate, child: EvaluatedCandidate) -> None:
     """Require parent and child to use the same ordered evaluation cases."""
     if parent.assessment.evaluation_case_ids != child.assessment.evaluation_case_ids:
         raise ValueError("parent and child must use identical evaluation_case_ids")
@@ -211,14 +238,9 @@ def _extract_discipline(task_id: str) -> str:
 
 
 __all__ = (
-    "CandidateBatchPlanner",
+    "CandidateChecks",
     "CandidateEvaluationBatch",
-    "CandidateEvaluator",
-    "bind_candidate_evaluation",
-    "bind_evaluated_candidate",
-    "build_candidate_assessment",
-    "build_observations",
-    "validate_comparable_candidates",
-    "validate_enriched_observations",
+    "assess_candidate",
+    "require_same_evaluation_cases",
     "validate_trial_records",
 )

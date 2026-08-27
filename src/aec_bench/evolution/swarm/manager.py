@@ -16,7 +16,6 @@ from typing import Protocol, runtime_checkable
 from aec_bench.contracts.evolution import (
     AgentStatus,
     ConsolidationReport,
-    EvolutionObservation,
     LineageNarrative,
     LineageRecord,
     MutationStrategy,
@@ -30,8 +29,8 @@ from aec_bench.contracts.evolution import (
 from aec_bench.contracts.trial_record import TrialRecord
 from aec_bench.evolution.archive import QDArchive
 from aec_bench.evolution.behaviour import extract_behaviour_descriptor
-from aec_bench.evolution.core import SelectionPlan, VariationStatus, assessment_score
-from aec_bench.evolution.evaluation import CandidateBatchPlanner, CandidateEvaluationBatch, CandidateEvaluator
+from aec_bench.evolution.core import ProposalStatus, SelectionPlan, assessment_score
+from aec_bench.evolution.evaluation import CandidateChecks
 from aec_bench.evolution.swarm.agent_task import AgentContext, Evolver, run_agent_loop
 from aec_bench.evolution.swarm.budget import BudgetLedger
 from aec_bench.evolution.swarm.config import SwarmConfig
@@ -43,17 +42,12 @@ from aec_bench.evolution.swarm.core import (
     SwarmAgentResult,
     SwarmAssignment,
     SwarmState,
-    reduce_swarm_outcome,
+    next_swarm_state,
 )
 from aec_bench.evolution.swarm.events import SwarmEventWriter
 from aec_bench.evolution.swarm.lineage import LineageTracker
 from aec_bench.evolution.swarm.notes import NoteStore
-from aec_bench.evolution.swarm.processing import (
-    ObservationEnricher,
-    SwarmEvaluation,
-    evaluate_swarm_result,
-    finalize_swarm_evaluation,
-)
+from aec_bench.evolution.swarm.processing import SwarmEvaluation, apply_swarm_evaluation, evaluate_assignment
 from aec_bench.evolution.swarm.shared_graveyard import SharedGraveyard
 
 logger = logging.getLogger(__name__)
@@ -71,14 +65,11 @@ class EvolverFactory(Protocol):
 
 
 @runtime_checkable
-class HostRuntime(Protocol):
-    """Host-owned services required to evaluate exact swarm candidates."""
+class SwarmRuntime(Protocol):
+    """Shared services required to evaluate exact swarm candidates."""
 
-    def plan_batch(self, batch_size: int, cycle: int) -> CandidateEvaluationBatch: ...
-
-    def evaluate(self, snapshot: WorkspaceSnapshot, batch: CandidateEvaluationBatch) -> tuple[TrialRecord, ...]: ...
-
-    def enrich(self, observations: Sequence[EvolutionObservation]) -> Sequence[EvolutionObservation]: ...
+    @property
+    def selection_checks(self) -> CandidateChecks: ...
 
     def baseline_snapshot(self) -> WorkspaceSnapshot: ...
 
@@ -146,9 +137,7 @@ class SwarmManager:
         state_dir: Path,
         evolver_factory: EvolverFactory,
         *,
-        batch_planner: CandidateBatchPlanner | None = None,
-        evaluator: CandidateEvaluator | None = None,
-        enricher: ObservationEnricher | None = None,
+        selection_checks: CandidateChecks | None = None,
         run_id: str | None = None,
         run_id_factory: RunIdFactory | None = None,
         wall_clock: WallClock | None = None,
@@ -166,18 +155,12 @@ class SwarmManager:
         self._monotonic_clock = monotonic_clock or time.monotonic
         self._assignment_id_factory = assignment_id_factory or _default_assignment_id
         self._initial_snapshot = initial_snapshot
-        host_runtime = evolver_factory if isinstance(evolver_factory, HostRuntime) else None
-        if batch_planner is None and host_runtime is not None:
-            batch_planner = host_runtime.plan_batch
-        if evaluator is None and host_runtime is not None:
-            evaluator = host_runtime.evaluate
-        if enricher is None and host_runtime is not None:
-            enricher = host_runtime.enrich
-        if batch_planner is None or evaluator is None or enricher is None:
-            raise ValueError("host batch_planner, evaluator, and enricher are required")
-        self._batch_planner = batch_planner
-        self._evaluator = evaluator
-        self._enricher = enricher
+        runtime = evolver_factory if isinstance(evolver_factory, SwarmRuntime) else None
+        if selection_checks is None and runtime is not None:
+            selection_checks = runtime.selection_checks
+        if selection_checks is None:
+            raise ValueError("selection_checks are required")
+        self._selection_checks = selection_checks
 
         # Shared infrastructure
         self._budget = BudgetLedger(
@@ -262,19 +245,18 @@ class SwarmManager:
         # unknown USD cost must not allow archive, graveyard, candidate, or
         # budget state to change before the manager fails closed.
         agent_cost = _agent_cost(result)
-        if result.variation.status is VariationStatus.SUBMITTED:
+        if result.proposal.status is ProposalStatus.SUBMITTED:
             batch = await asyncio.to_thread(
-                self._batch_planner,
+                self._selection_checks.plan_batch,
                 self._config.evolution.batch_size,
                 self._agent_cycles[assignment.agent_id] - 1,
             )
             evaluated = await asyncio.to_thread(
-                evaluate_swarm_result,
+                evaluate_assignment,
                 assignment=assignment,
                 agent_result=result,
                 batch=batch,
-                evaluate=self._evaluator,
-                enrich=self._enricher,
+                checks=self._selection_checks,
                 run_id=self._run_id,
                 cycle=self._agent_cycles[assignment.agent_id],
                 now=self._wall_clock(),
@@ -292,7 +274,7 @@ class SwarmManager:
             current_parent = self._candidate_snapshots.get(assignment.parent.candidate_id)
             if current_parent != assignment.parent:
                 raise ValueError(f"assignment parent {assignment.parent.candidate_id!r} is no longer available")
-            outcome = finalize_swarm_evaluation(
+            outcome = apply_swarm_evaluation(
                 evaluated=evaluated,
                 archive=self._archive,
                 graveyard=self._graveyard,
@@ -312,7 +294,7 @@ class SwarmManager:
                 self._budget.eval_budget_usd,
                 self._budget.eval_spend,
             )
-            self._state, decision = reduce_swarm_outcome(
+            self._state, decision = next_swarm_state(
                 state=self._state, outcome=outcome, budget=budget, config=self._config, now=self._wall_clock()
             )
             score = (
@@ -372,7 +354,7 @@ class SwarmManager:
                 self._lineage.attach_narrative(
                     LineageNarrative(
                         entry_candidate_id=child.snapshot.candidate_id,
-                        agent_reasoning=result.variation.reasoning,
+                        agent_reasoning=result.proposal.reasoning,
                         investigation_context=f"Assignment {assignment.assignment_id}.",
                     )
                 )
@@ -669,7 +651,7 @@ class SwarmManager:
 
         # Register exact source material before issuing any assignment.
         baseline = self._initial_snapshot
-        if baseline is None and isinstance(self._factory, HostRuntime):
+        if baseline is None and isinstance(self._factory, SwarmRuntime):
             baseline = self._factory.baseline_snapshot()
         if baseline is None:
             raise ValueError("an exact initial_snapshot is required for swarm assignments")

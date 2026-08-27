@@ -11,14 +11,19 @@ from aec_bench.contracts.evolution import (
     MutationStrategy,
     MutationSummary,
     ObservationEnrichment,
+    ProposalUsage,
     SwarmAgentState,
     TraceDigest,
-    VariationUsage,
     WorkspaceSnapshot,
 )
 from aec_bench.evolution.archive import ArchiveBatchOutcome, ArchiveInsertionResult, ArchiveInsertionStatus
-from aec_bench.evolution.core import DevelopmentAttempt, SelectionPlan, VariationResult, VariationStatus
-from aec_bench.evolution.evaluation import bind_evaluated_candidate
+from aec_bench.evolution.core import (
+    CandidateProposal,
+    EvaluatedCandidate,
+    ProposalStatus,
+    RevisionAttempt,
+    SelectionPlan,
+)
 from aec_bench.evolution.swarm.config import SwarmConfig
 from aec_bench.evolution.swarm.core import (
     AgentBudget,
@@ -29,7 +34,7 @@ from aec_bench.evolution.swarm.core import (
     SwarmAssignment,
     SwarmOutcome,
     SwarmState,
-    reduce_swarm_outcome,
+    next_swarm_state,
 )
 from tests.support.trial_record_factories import make_trial_record
 
@@ -97,17 +102,17 @@ def _outcome(
 ) -> SwarmOutcome:
     assignment = _assignment(agent_id, assignment_id)
     if candidate_id is None:
-        usage = VariationUsage(model_requests=1, model_cost_usd=cost)
+        usage = ProposalUsage(model_requests=1, model_cost_usd=cost)
         result = SwarmAgentResult(
             agent_id=agent_id,
             assignment_id=assignment_id,
-            variation=VariationResult(VariationStatus.ABSTAINED, None, None, "No child", usage),
+            proposal=CandidateProposal(ProposalStatus.ABSTAINED, None, None, "No child", usage),
             agent_usage=usage,
         )
         return SwarmOutcome(assignment, result, None, None)
 
     child = WorkspaceSnapshot(system_prompt="Child material", candidate_id=candidate_id)
-    usage = VariationUsage(
+    usage = ProposalUsage(
         model_requests=1,
         development_evaluations=1,
         model_cost_usd=cost,
@@ -130,12 +135,12 @@ def _outcome(
         valid=valid,
         invalid_reasons=() if valid else ("invalid candidate",),
     )
-    development_candidate = bind_evaluated_candidate(
+    development_candidate = EvaluatedCandidate(
         child,
         (development_observation,),
         development_assessment,
     )
-    attempt = DevelopmentAttempt(
+    attempt = RevisionAttempt(
         attempt_id=f"{assignment_id}:attempt-1",
         revision=1,
         evaluated=development_candidate,
@@ -146,8 +151,8 @@ def _outcome(
     result = SwarmAgentResult(
         agent_id=agent_id,
         assignment_id=assignment_id,
-        variation=VariationResult(
-            VariationStatus.SUBMITTED,
+        proposal=CandidateProposal(
+            ProposalStatus.SUBMITTED,
             child,
             MutationSummary(prompt_modified=True),
             "Submitted child",
@@ -192,7 +197,7 @@ def _outcome(
         valid=valid,
         invalid_reasons=() if valid else ("invalid candidate",),
     )
-    evaluated = bind_evaluated_candidate(child, observations, assessment)
+    evaluated = EvaluatedCandidate(child, observations, assessment)
     archive_outcome = ArchiveBatchOutcome(
         candidate_id=candidate_id,
         insertions=(ArchiveInsertionResult(archive_status, candidate_id, 0, None),),
@@ -201,7 +206,7 @@ def _outcome(
 
 
 def _reduce(state: SwarmState, outcome: SwarmOutcome, *, budget: BudgetSnapshot | None = None, **config: int):
-    return reduce_swarm_outcome(
+    return next_swarm_state(
         state=state,
         outcome=outcome,
         budget=budget or BudgetSnapshot(10.0, 0.0, 10.0, 0.0),
@@ -296,7 +301,7 @@ def test_reducer_uses_explicit_timezone_aware_time_and_does_not_mutate_inputs() 
     state = _state("agent-1")
     outcome = _outcome()
     original = (state, outcome)
-    new_state, _ = reduce_swarm_outcome(
+    new_state, _ = next_swarm_state(
         state=state,
         outcome=outcome,
         budget=BudgetSnapshot(10.0, 0.0, 10.0, 0.0),

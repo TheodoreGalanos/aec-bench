@@ -13,36 +13,36 @@ from typing import Any, Literal, Protocol
 from pydantic import ConfigDict, Field, field_validator, model_validator
 
 from aec_bench.contracts.validators import NonEmptyStr, StrictModel
+from aec_bench.evolution.advice import (
+    AVOAdvice,
+    AVOAdviceFailure,
+    AVOAdviceRecord,
+)
 from aec_bench.evolution.cancellation import AVOCancellationSignal
-from aec_bench.evolution.core import AVOState, EvaluatedCandidate, VariationRequest
+from aec_bench.evolution.core import AVOState, CandidateProposalRequest, EvaluatedCandidate
 from aec_bench.evolution.memory import AVOMemoryEntry
 from aec_bench.evolution.mutation import MutationAction
-from aec_bench.evolution.supervision import (
-    AVOSupervisionAdvice,
-    AVOSupervisionFailure,
-    AVOSupervisionRecord,
-)
 
 
-class AgentToolName(StrEnum):
-    """Names of the only tools exposed to the variation agent."""
+class AVOTool(StrEnum):
+    """Names of the only tools exposed to AVO."""
 
-    READ_PARENT_EVIDENCE = "read_parent_evidence"
-    READ_CURRENT_WORKSPACE = "read_current_workspace"
-    READ_INSPIRATION = "read_inspiration"
-    READ_HISTORY = "read_history"
-    READ_GRAVEYARD = "read_graveyard"
-    READ_KNOWLEDGE = "read_knowledge"
-    APPLY_MUTATION = "apply_mutation"
-    EVALUATE_CURRENT_REVISION = "evaluate_current_revision"
-    RESTORE_ATTEMPT = "restore_attempt"
-    SUBMIT_CURRENT_REVISION = "submit_current_revision"
+    INSPECT_PARENT_RESULTS = "inspect_parent_results"
+    INSPECT_CURRENT_CANDIDATE = "inspect_current_candidate"
+    INSPECT_INSPIRATIONS = "inspect_inspirations"
+    INSPECT_PREVIOUS_CYCLES = "inspect_previous_cycles"
+    INSPECT_REJECTED_CANDIDATES = "inspect_rejected_candidates"
+    READ_PROGRAM_GUIDANCE = "read_program_guidance"
+    EDIT_CANDIDATE = "edit_candidate"
+    TEST_CANDIDATE = "test_candidate"
+    RESTORE_CANDIDATE = "restore_candidate"
+    SUBMIT_CANDIDATE = "submit_candidate"
     ABSTAIN = "abstain"
-    REQUEST_SUPERVISION = "request_supervision"
+    REQUEST_ADVICE = "request_advice"
 
 
 class MutationInput(StrictModel):
-    """Validated prompt or skill mutation accepted by ``apply_mutation``."""
+    """Validated prompt or skill mutation accepted by ``edit_candidate``."""
 
     model_config = ConfigDict(populate_by_name=True)
 
@@ -79,23 +79,23 @@ class MutationInput(StrictModel):
         )
 
 
-class AgentCommand(StrictModel):
+class AVOCommand(StrictModel):
     """One typed tool selection returned by an injected agent runner."""
 
-    tool: AgentToolName
+    tool: AVOTool
     arguments: dict[str, Any] = Field(default_factory=dict)
 
 
-class AgentResponse(StrictModel):
+class AVOResponse(StrictModel):
     """Optional usage-bearing response from an injected model runner."""
 
-    command: AgentCommand
+    command: AVOCommand
     model_cost_usd: float | None = None
     input_tokens: int | None = None
     output_tokens: int | None = None
 
     @model_validator(mode="after")
-    def validate_cost(self) -> AgentResponse:
+    def validate_cost(self) -> AVOResponse:
         if self.model_cost_usd is not None and (not math.isfinite(self.model_cost_usd) or self.model_cost_usd < 0):
             raise ValueError("model_cost_usd must be finite and non-negative")
         return self
@@ -108,7 +108,7 @@ class AgentResponse(StrictModel):
         return value
 
 
-class AgentContext:
+class AVOContext:
     """Context passed to one injected runner request.
 
     The context contains no canonical workspace handle. The runner can inspect
@@ -118,7 +118,7 @@ class AgentContext:
     def __init__(
         self,
         *,
-        request: VariationRequest,
+        request: CandidateProposalRequest,
         parent_evidence: EvaluatedCandidate,
         state: AVOState,
         tools: Mapping[str, Callable[..., object]],
@@ -134,40 +134,40 @@ class AgentContext:
         self.previous_tool_error = previous_tool_error
         self.cancellation_signal = cancellation_signal
         self.memory: tuple[AVOMemoryEntry, ...] = state.memory
-        self.supervision_records: tuple[AVOSupervisionRecord, ...] = state.supervision_records
+        self.supervision_records: tuple[AVOAdviceRecord, ...] = state.supervision_records
 
     @property
-    def latest_supervision_advice(self) -> AVOSupervisionAdvice | None:
+    def latest_advice(self) -> AVOAdvice | None:
         """Return the latest advice, without treating it as an instruction."""
         if not self.supervision_records:
             return None
         return self.supervision_records[-1].advice
 
     @property
-    def latest_supervision_failure(self) -> AVOSupervisionFailure | None:
+    def latest_advice_failure(self) -> AVOAdviceFailure | None:
         """Return the latest confirmed supervisor failure, when present."""
         if not self.supervision_records:
             return None
         return self.supervision_records[-1].failure
 
 
-class AgentRunner(Protocol):
-    """Narrow provider boundary used by the bounded variation loop."""
+class AVORunner(Protocol):
+    """Narrow provider boundary used by the bounded proposal loop."""
 
-    def __call__(self, context: AgentContext) -> AgentCommand | AgentResponse: ...
+    def __call__(self, context: AVOContext) -> AVOCommand | AVOResponse: ...
 
 
 ApprovedKnowledgeSource = Callable[[], str] | str
 
 
 _DEFAULT_AGENT_SYSTEM_PROMPT = (
-    "You are a bounded AEC-Bench variation agent. Return exactly one typed tool command. "
+    "You are a bounded AEC-Bench candidate proposer. Return exactly one typed tool command. "
     "Use only the approved tool names and arguments. Inspect before editing, evaluate changed "
     "material before submission, and submit only an eligible current revision."
 )
 
 
-class PydanticAIStructuredRunner:
+class PydanticAIAVORunner:
     """Bounded PydanticAI adapter that returns one typed command per request.
 
     The adapter does not register arbitrary Python tools with the provider.
@@ -180,19 +180,19 @@ class PydanticAIStructuredRunner:
         self.model = model
         self.system_prompt = system_prompt or _DEFAULT_AGENT_SYSTEM_PROMPT
 
-    def __call__(self, context: AgentContext) -> AgentResponse:
+    def __call__(self, context: AVOContext) -> AVOResponse:
         pydantic_ai = import_module("pydantic_ai")
         usage_module = import_module("pydantic_ai.usage")
 
         agent = pydantic_ai.Agent(
             self.model,
             system_prompt=self.system_prompt,
-            output_type=AgentCommand,
+            output_type=AVOCommand,
             retries=0,
         )
         result = agent.run_sync(_render_agent_prompt(context), usage_limits=usage_module.UsageLimits(request_limit=1))
         usage = result.usage()
-        return AgentResponse(
+        return AVOResponse(
             command=result.output,
             model_cost_usd=None,
             input_tokens=usage.input_tokens,
@@ -200,7 +200,7 @@ class PydanticAIStructuredRunner:
         )
 
 
-def _render_agent_prompt(context: AgentContext) -> str:
+def _render_agent_prompt(context: AVOContext) -> str:
     """Render bounded loop state for a structured model request."""
     previous = "No previous tool result."
     if context.previous_tool_error is not None:
@@ -226,12 +226,12 @@ def _render_agent_prompt(context: AgentContext) -> str:
         ensure_ascii=True,
         sort_keys=True,
     )
-    supervision = "No confirmed supervisor outcome is available."
-    if context.latest_supervision_advice is not None:
-        supervision = json.dumps(
+    advice = "No confirmed advisor outcome is available."
+    if context.latest_advice is not None:
+        advice = json.dumps(
             {
-                "directions": context.latest_supervision_advice.directions,
-                "reasoning": context.latest_supervision_advice.reasoning,
+                "directions": context.latest_advice.directions,
+                "reasoning": context.latest_advice.reasoning,
                 "authority": (
                     "optional advisory guidance only; it does not itself perform or authorize workspace edits, "
                     "evaluation, or submission, or alter selection, parent, strategy, goal, or budgets; use it only "
@@ -241,49 +241,48 @@ def _render_agent_prompt(context: AgentContext) -> str:
             ensure_ascii=True,
             sort_keys=True,
         )
-    elif context.latest_supervision_failure is not None:
-        supervision = json.dumps(
+    elif context.latest_advice_failure is not None:
+        advice = json.dumps(
             {
-                "failure_code": context.latest_supervision_failure.code.value,
-                "detail": context.latest_supervision_failure.detail,
-                "authority": "confirmed fact only; do not retry supervision",
+                "failure_code": context.latest_advice_failure.code.value,
+                "detail": context.latest_advice_failure.detail,
+                "authority": "confirmed fact only; do not retry the advisor",
             },
             ensure_ascii=True,
             sort_keys=True,
         )
-    host_command = (
-        "The host command `request_supervision` takes no arguments and records that the current direction "
-        "is exhausted. "
-        if "request_supervision" in context.tools
+    advice_command = (
+        "The `request_advice` command takes no arguments and records that the current direction is exhausted. "
+        if "request_advice" in context.tools
         else ""
     )
     return (
         f"Goal: {request.selection.goal}\n"
         f"Strategy: {request.selection.strategy.value}\n"
         f"Scope: {request.scope.value}\n"
-        f"Variation {context.state.variation_id}; current revision {context.state.current_revision}; "
+        f"AVO call {context.state.variation_id}; current revision {context.state.current_revision}; "
         f"model requests {context.state.usage.model_requests}; tool calls {context.state.usage.tool_calls}; "
-        f"development evaluations {context.state.usage.development_evaluations}.\n"
+        f"revision checks {context.state.usage.development_evaluations}.\n"
         f"Structured memory (bounded facts only): {memory}\n"
         f"Approved tools: {names}. Each command uses `tool` plus an `arguments` object. "
-        f"{host_command}"
-        "For apply_mutation, arguments are {mutation: {type, name, description, discipline, body, or content}}. "
-        "For evaluate_current_revision, arguments are {hypothesis: string}. For restore_attempt, "
-        "arguments are {attempt_id: string} or {revision: integer}. For submit_current_revision and "
+        f"{advice_command}"
+        "For edit_candidate, arguments are {mutation: {type, name, description, discipline, body, or content}}. "
+        "For test_candidate, arguments are {hypothesis: string}. For restore_candidate, "
+        "arguments are {attempt_id: string} or {revision: integer}. For submit_candidate and "
         "abstain, arguments are {reasoning: string}.\n"
         f"{previous}\n"
-        f"Latest supervisor outcome (advisory guidance or confirmed fact only): {supervision}\n"
-        "Return the next AgentCommand."
+        f"Latest advisor outcome (advisory guidance or confirmed fact only): {advice}\n"
+        "Return the next AVOCommand."
     )
 
 
 __all__ = (
-    "AgentCommand",
-    "AgentContext",
-    "AgentResponse",
-    "AgentRunner",
-    "AgentToolName",
+    "AVOCommand",
+    "AVOContext",
+    "AVOResponse",
+    "AVORunner",
+    "AVOTool",
     "ApprovedKnowledgeSource",
     "MutationInput",
-    "PydanticAIStructuredRunner",
+    "PydanticAIAVORunner",
 )

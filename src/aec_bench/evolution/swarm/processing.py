@@ -3,27 +3,20 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 
-from aec_bench.contracts.evolution import EvolutionObservation, WorkspaceSnapshot
 from aec_bench.evolution.archive import ArchiveBatchOutcome, ArchiveInsertionStatus, QDArchive
 from aec_bench.evolution.behaviour import extract_behaviour_descriptor
-from aec_bench.evolution.core import EvaluatedCandidate, VariationStatus
+from aec_bench.evolution.core import EvaluatedCandidate, ProposalStatus
 from aec_bench.evolution.evaluation import (
+    CandidateChecks,
     CandidateEvaluationBatch,
-    CandidateEvaluator,
-    bind_candidate_evaluation,
-    bind_evaluated_candidate,
-    build_candidate_assessment,
-    validate_comparable_candidates,
+    require_same_evaluation_cases,
 )
 from aec_bench.evolution.graveyard import GraveyardEntry
 from aec_bench.evolution.swarm.core import SwarmAgentResult, SwarmAssignment, SwarmOutcome
 from aec_bench.evolution.swarm.shared_graveyard import SharedGraveyard
-
-ObservationEnricher = Callable[[Sequence[EvolutionObservation]], Sequence[EvolutionObservation]]
 
 
 @dataclass(frozen=True)
@@ -46,13 +39,13 @@ class SwarmEvaluation:
             raise ValueError("assignment and result assignment_id must match")
         if self.parent is None and self.child is not None:
             raise ValueError("evaluated child requires an evaluated parent")
-        submitted_child = self.agent_result.variation.child
+        submitted_child = self.agent_result.proposal.child
         if submitted_child is None and (self.parent is not None or self.child is not None):
-            raise ValueError("variation without a child cannot have evaluation")
+            raise ValueError("proposal without a child cannot have evaluation")
         if submitted_child is not None and self.parent is None:
-            raise ValueError("submitted variation requires an evaluated parent")
-        if submitted_child is not None and self.agent_result.variation.status is not VariationStatus.SUBMITTED:
-            raise ValueError("variation child requires submitted variation status")
+            raise ValueError("submitted proposal requires an evaluated parent")
+        if submitted_child is not None and self.agent_result.proposal.status is not ProposalStatus.SUBMITTED:
+            raise ValueError("proposal child requires submitted proposal status")
         if self.parent is not None and self.parent.snapshot.candidate_id != self.assignment.parent.candidate_id:
             raise ValueError("evaluated parent must match the assigned parent")
         if self.child is not None and self.child.snapshot is not submitted_child:
@@ -85,56 +78,41 @@ def _validate_inputs(
     if not isinstance(now, datetime) or now.tzinfo is None or now.utcoffset() is None:
         raise ValueError("now must be a timezone-aware datetime")
 
-    child = agent_result.variation.child
-    if child is not None and agent_result.variation.status is not VariationStatus.SUBMITTED:
-        raise ValueError("variation child requires submitted variation status")
-    if agent_result.variation.status is VariationStatus.SUBMITTED:
+    child = agent_result.proposal.child
+    if child is not None and agent_result.proposal.status is not ProposalStatus.SUBMITTED:
+        raise ValueError("proposal child requires submitted proposal status")
+    if agent_result.proposal.status is ProposalStatus.SUBMITTED:
         if child is None:
-            raise ValueError("submitted variation did not provide a child snapshot")
+            raise ValueError("submitted proposal did not provide a child snapshot")
         if child.candidate_id == assignment.parent.candidate_id:
             raise ValueError("submitted child candidate_id must differ from the parent")
 
 
-def _evaluate_candidate(
-    snapshot: WorkspaceSnapshot,
-    batch: CandidateEvaluationBatch,
-    *,
-    evaluate: CandidateEvaluator,
-    enrich: ObservationEnricher,
-) -> EvaluatedCandidate:
-    """Evaluate and enrich one exact snapshot through the EF-00 functions."""
-    evaluated = bind_candidate_evaluation(snapshot, batch, evaluate(snapshot, batch))
-    observations = tuple(enrich(evaluated.observations))
-    assessment = build_candidate_assessment(snapshot.candidate_id, batch, observations)
-    return bind_evaluated_candidate(snapshot, observations, assessment)
-
-
-def evaluate_swarm_result(
+def evaluate_assignment(
     *,
     assignment: SwarmAssignment,
     agent_result: SwarmAgentResult,
     batch: CandidateEvaluationBatch,
-    evaluate: CandidateEvaluator,
-    enrich: ObservationEnricher,
+    checks: CandidateChecks,
     run_id: str,
     cycle: int,
     now: datetime,
 ) -> SwarmEvaluation:
     """Build exact parent and child evidence without mutating shared state.
 
-    A variation without a child is an explicit agent abstention. It does not
+    A proposal without a child is an explicit agent abstention. It does not
     evaluate even the parent because no candidate was submitted for this step.
     """
     if not isinstance(batch, CandidateEvaluationBatch):
         raise TypeError("batch must be a CandidateEvaluationBatch")
     _validate_inputs(assignment, agent_result, run_id=run_id, cycle=cycle, now=now)
-    child_snapshot = agent_result.variation.child
+    child_snapshot = agent_result.proposal.child
     if child_snapshot is None:
         return SwarmEvaluation(assignment, agent_result, parent=None, child=None)
 
-    parent = _evaluate_candidate(assignment.parent, batch, evaluate=evaluate, enrich=enrich)
-    child = _evaluate_candidate(child_snapshot, batch, evaluate=evaluate, enrich=enrich)
-    validate_comparable_candidates(parent, child)
+    parent = checks.assess(assignment.parent, batch)
+    child = checks.assess(child_snapshot, batch)
+    require_same_evaluation_cases(parent, child)
     return SwarmEvaluation(assignment, agent_result, parent=parent, child=child)
 
 
@@ -151,13 +129,13 @@ def _graveyard_entry(
     child = evaluated.child
     if parent is None or child is None:
         raise ValueError("graveyard entry requires evaluated parent and child")
-    mutation = evaluated.agent_result.variation.mutation
+    mutation = evaluated.agent_result.proposal.mutation
     if mutation is None:
         raise ValueError("graveyard entry requires a mutation summary")
     return GraveyardEntry(
         cycle=cycle,
         strategy=evaluated.assignment.selection.strategy.value,
-        mutation_description=evaluated.agent_result.variation.reasoning,
+        mutation_description=evaluated.agent_result.proposal.reasoning,
         score_before=parent.assessment.batch_score,
         score_after=child.assessment.batch_score,
         candidate_id=child.snapshot.candidate_id,
@@ -172,7 +150,7 @@ def _graveyard_entry(
     )
 
 
-def finalize_swarm_evaluation(
+def apply_swarm_evaluation(
     *,
     evaluated: SwarmEvaluation,
     archive: QDArchive,
@@ -243,45 +221,8 @@ def finalize_swarm_evaluation(
     )
 
 
-def process_swarm_result(
-    *,
-    assignment: SwarmAssignment,
-    agent_result: SwarmAgentResult,
-    batch: CandidateEvaluationBatch,
-    evaluate: CandidateEvaluator,
-    enrich: ObservationEnricher,
-    archive: QDArchive,
-    graveyard: SharedGraveyard,
-    run_id: str,
-    cycle: int,
-    now: datetime,
-) -> SwarmOutcome:
-    """Evaluate and finalise one agent result through the host boundary."""
-    evaluated = evaluate_swarm_result(
-        assignment=assignment,
-        agent_result=agent_result,
-        batch=batch,
-        evaluate=evaluate,
-        enrich=enrich,
-        run_id=run_id,
-        cycle=cycle,
-        now=now,
-    )
-    return finalize_swarm_evaluation(
-        evaluated=evaluated,
-        archive=archive,
-        graveyard=graveyard,
-        run_id=run_id,
-        cycle=cycle,
-        now=now,
-    )
-
-
 __all__ = (
-    "CandidateEvaluator",
-    "ObservationEnricher",
     "SwarmEvaluation",
-    "evaluate_swarm_result",
-    "finalize_swarm_evaluation",
-    "process_swarm_result",
+    "apply_swarm_evaluation",
+    "evaluate_assignment",
 )
