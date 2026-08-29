@@ -87,15 +87,21 @@ application surface. `release_checkpoint()`, `submit_checkpoint()`,
 submitted checkpoint. It receives the accepted prefix through that checkpoint
 and continues through the same coordinator.
 
-`LifecycleTrial` binds a `PlannedTrial` to one materialized lifecycle package,
-one run location, one execution mode, and one visibility policy.
+`LifecycleTrial` binds a `PlannedTrial` to one validated `CompiledLifecycle`,
+one run location, one execution mode, and one visibility policy. Compilation
+binds the materialized package bytes, lifecycle contract, executable source,
+and operation protocol before execution.
 `run_local_lifecycle()` dispatches to separate fresh-session and
 persistent-session implementations because their memory and recovery rules are
 different. Both return `LifecycleExecution`, which contains canonical state and
 the agent and tool evidence needed for trial construction.
 
-`run_lifecycle_trial()` executes, verifies, constructs one normal
-`TrialRecord`, optionally persists it, and returns it.
+`run_lifecycle_trial()` executes, verifies, records one canonical invocation,
+selects its evidence through one retention policy, finalizes one normal
+`TrialRecord`, optionally persists that same record, and returns it. The default
+policy uses the live package and run. A study can retain an immutable snapshot
+before the core finalizer runs; it cannot construct a second current trial
+record.
 `run_lifecycle_experiment()` applies that operation to planned lifecycle trials
 and returns the records in declared order. Lifecycle studies call these
 functions and keep only their study design, immutable snapshot, recovery, and

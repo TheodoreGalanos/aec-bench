@@ -39,10 +39,15 @@ class CompiledLifecycleEnvelope(StrictModel):
         return None if value is None else ArtifactReference.validate_sha256(value)
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, init=False)
 class CompiledLifecycle:
+    """A lifecycle package whose bytes have been validated against its envelope."""
+
     package_dir: Path
     envelope: CompiledLifecycleEnvelope
+
+    def __init__(self) -> None:
+        raise TypeError("use compile_lifecycle() or load_compiled_lifecycle()")
 
 
 def compile_lifecycle(
@@ -54,12 +59,46 @@ def compile_lifecycle(
     from aec_bench.lifecycles.catalogue import materialize_lifecycle
 
     package_dir = materialize_lifecycle(template_id, Path(output_dir), variant_id=variant_id)
+    compiled = load_compiled_lifecycle(package_dir)
+    if compiled.envelope.template_id != template_id or (
+        variant_id is not None and compiled.envelope.variant_id != variant_id
+    ):
+        raise ValueError("compiled lifecycle does not match the requested template and variant")
+    return compiled
+
+
+def load_compiled_lifecycle(package_dir: Path) -> CompiledLifecycle:
+    """Validate an existing materialized package and bind its compiled identity."""
+    from aec_bench.lifecycles.catalogue import lifecycle_package_variant
+
+    package = Path(package_dir)
+    metadata = LifecycleTaskMetadata.model_validate(_read_json(package / "template.json"))
+    variant = lifecycle_package_variant(package)
+    variant_id: str | None = None
+    visibility: Literal["public", "holdout"] = "public"
+    if variant is not None:
+        raw_variant_id = variant.get("variant_id")
+        if not isinstance(raw_variant_id, str) or not raw_variant_id.strip():
+            raise ValueError("materialized lifecycle variant identity is invalid")
+        variant_id = raw_variant_id
+        raw_visibility = variant.get("visibility")
+        if raw_visibility not in {"public", "holdout"}:
+            raise ValueError("materialized lifecycle visibility is invalid")
+        visibility = cast(Literal["public", "holdout"], raw_visibility)
     envelope = build_compiled_lifecycle_envelope(
-        template_id=template_id,
-        package_dir=package_dir,
+        template_id=metadata.template_id,
+        package_dir=package,
         requested_variant_id=variant_id,
+        visibility=visibility,
     )
-    return CompiledLifecycle(package_dir=package_dir, envelope=envelope)
+    return _bind_compiled_lifecycle(package, envelope)
+
+
+def _bind_compiled_lifecycle(package_dir: Path, envelope: CompiledLifecycleEnvelope) -> CompiledLifecycle:
+    compiled = object.__new__(CompiledLifecycle)
+    object.__setattr__(compiled, "package_dir", Path(package_dir))
+    object.__setattr__(compiled, "envelope", envelope)
+    return compiled
 
 
 def build_compiled_lifecycle_envelope(

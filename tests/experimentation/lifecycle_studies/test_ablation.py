@@ -9,10 +9,13 @@ import json
 import platform
 import shutil
 import subprocess
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
-from functools import partial
+from dataclasses import replace
+from datetime import datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any
 
 import pytest
 from pydantic import ValidationError
@@ -20,23 +23,22 @@ from pydantic import ValidationError
 import aec_bench.experimentation.lifecycle_studies.ablation as ablation_runtime
 import aec_bench.experimentation.lifecycle_studies.ablation_plan as ablation_plan_runtime
 import aec_bench.experimentation.lifecycle_studies.holdout_generalization as holdout_runtime
-import aec_bench.experimentation.lifecycle_studies.trial_record as trial_record_runtime
+import aec_bench.experimentation.lifecycle_studies.retention as retention_runtime
 import aec_bench.ledger.writer as ledger_writer
-import aec_bench.lifecycles.recording as experiment_runtime
-from aec_bench.contracts.artifacts import ArtifactRef
+import aec_bench.lifecycles.application as lifecycle_application
+import aec_bench.lifecycles.catalogue as lifecycle_catalogue
+import aec_bench.lifecycles.provenance as provenance_runtime
+from aec_bench.contracts.evidence_lifecycle import EvidenceLifecycleSpec
 from aec_bench.contracts.experiment_manifest import AgentConfig
-from aec_bench.contracts.task_definition import Visibility
 from aec_bench.contracts.trial_record import (
     EvidenceStatus,
     ExecutionStatus,
-    TrialArtifactRef,
-    UnresolvedSourceRef,
+    TrialRecord,
 )
 from aec_bench.experimentation.lifecycle_studies.ablation import (
     LifecycleAblationCondition,
     LifecycleAblationLimits,
     LifecycleAblationManifest,
-    LifecycleAblationStudyDesign,
     LifecycleAblationTrial,
     LifecycleExecutionMode,
     build_lifecycle_ablation_plan,
@@ -48,41 +50,59 @@ from aec_bench.experimentation.lifecycle_studies.evaluation import (
     build_lifecycle_ablation_evaluation,
     write_lifecycle_ablation_evaluation,
 )
-from aec_bench.experimentation.lifecycle_studies.holdout_generalization import (
-    LifecycleHoldoutCondition,
-    LifecycleHoldoutEvaluationSpec,
-    LifecycleHoldoutRecordReference,
-    LifecycleHoldoutStudyDesign,
-    build_lifecycle_holdout_evaluation,
+from aec_bench.experimentation.lifecycle_studies.historical_operation import (
+    validate_captured_lifecycle_operation_interaction,
 )
-from aec_bench.experimentation.lifecycle_studies.trial_record import (
-    _persist_lifecycle_ablation_record,
-    build_lifecycle_trial_record,
-    validate_historical_lifecycle_ablation_record,
-)
+from aec_bench.experimentation.lifecycle_studies.retention import recover_lifecycle_ablation_record
 from aec_bench.harness.lifecycle_local import (
     LifecycleVisibilityPolicy,
     _run_local_lifecycle_fresh_session,
 )
 from aec_bench.ledger.reader import read_trial_record
-from aec_bench.ledger.writer import DuplicateTrialRecordError
+from aec_bench.ledger.writer import DuplicateTrialRecordError, write_trial_record
 from aec_bench.lifecycles.catalogue import (
     lifecycle_verifier,
     materialize_lifecycle,
     verify_lifecycle,
 )
-from aec_bench.lifecycles.recording import (
-    LifecycleExperimentSweepContext,
-    repository_provenance,
-)
+from aec_bench.lifecycles.evidence_files import lifecycle_artifact_kind
+from aec_bench.lifecycles.finalization import finalize_lifecycle_trial
+from aec_bench.lifecycles.provenance import repository_provenance
+from aec_bench.lifecycles.recording import record_lifecycle_experiment
 from aec_bench.lifecycles.runtime.lifecycle import (
     open_checkpoint_attempt,
     read_lifecycle,
     release_checkpoint,
     submit_checkpoint,
 )
+from tests.support.lifecycle_studies import (
+    TEMPLATE_ID,
+)
+from tests.support.lifecycle_studies import (
+    GoldFreshRegistry as _GoldFreshRegistry,
+)
+from tests.support.lifecycle_studies import (
+    add_later_conditional_evidence as _add_later_conditional_evidence,
+)
+from tests.support.lifecycle_studies import (
+    downgrade_canonical_lifecycle_invocation_to_schema_one as _downgrade_canonical_invocation_to_schema_one,
+)
+from tests.support.lifecycle_studies import (
+    lifecycle_ablation_study_design as _study_design,
+)
+from tests.support.lifecycle_studies import (
+    record_completed_lifecycle_invocation as _record_completed_lifecycle_invocation,
+)
+from tests.support.lifecycle_studies import (
+    recorded_lifecycle_ablation_trial as _recorded_trial,
+)
+from tests.support.lifecycle_studies import (
+    rewrite_canonical_lifecycle_invocation as _rewrite_canonical_invocation,
+)
+from tests.support.lifecycle_studies import (
+    single_lifecycle_ablation_manifest as _single_manifest,
+)
 
-TEMPLATE_ID = "drainage-model-evidence-lifecycle-review"
 VARIANTS = (
     "staged_full_correction",
     "semantic_no_op_release",
@@ -95,8 +115,8 @@ def test_lifecycle_episode_quarantine_artifact_kinds_distinguish_requests_from_r
     request = Path("run/episodes/initial_review/initial_review.session-001/environment_prepared_episode_request.json")
     result = Path("run/episodes/initial_review/initial_review.session-001/environment_prepared_episode_result.json")
 
-    assert trial_record_runtime._artifact_kind(request) == "environment_prepared_lifecycle_episode_request"
-    assert trial_record_runtime._artifact_kind(result) == "environment_prepared_lifecycle_episode_result"
+    assert lifecycle_artifact_kind(request) == "environment_prepared_lifecycle_episode_request"
+    assert lifecycle_artifact_kind(result) == "environment_prepared_lifecycle_episode_result"
 
 
 def test_lifecycle_ablation_condition_rejects_invalid_mode_policy_pairs() -> None:
@@ -196,6 +216,45 @@ def test_lifecycle_ablation_plan_expands_deterministically_with_unique_ids(tmp_p
     assert {trial.max_turns_per_session for trial in first.trials} == {10}
 
 
+@pytest.mark.parametrize("raw_value", [True, 1.0, "1"])
+def test_lifecycle_ablation_manifest_rejects_coercive_integer_limits(
+    tmp_path: Path,
+    raw_value: object,
+) -> None:
+    payload = _single_manifest(tmp_path).model_dump(mode="json")
+    payload["repetitions"] = raw_value
+    payload["limits"]["max_trials"] = raw_value
+
+    with pytest.raises(ValidationError):
+        LifecycleAblationManifest.model_validate(payload)
+
+
+@pytest.mark.parametrize(
+    ("field_name", "raw_value"),
+    [
+        ("trial_count", 1.0),
+        ("max_turns_per_session", True),
+        ("repetition", "1"),
+    ],
+)
+def test_lifecycle_ablation_plan_rejects_coercive_identity_numbers(
+    tmp_path: Path,
+    field_name: str,
+    raw_value: object,
+) -> None:
+    payload = build_lifecycle_ablation_plan(_single_manifest(tmp_path)).model_dump(mode="json")
+    if field_name == "trial_count":
+        payload[field_name] = raw_value
+    else:
+        payload["trials"][0][field_name] = raw_value
+    payload["plan_sha256"] = ablation_plan_runtime._canonical_sha256(
+        {key: value for key, value in payload.items() if key != "plan_sha256"}
+    )
+
+    with pytest.raises(ValidationError):
+        ablation_plan_runtime.LifecycleAblationPlan.model_validate(payload)
+
+
 def test_lifecycle_ablation_plan_identity_binds_per_session_turn_limit(tmp_path: Path) -> None:
     baseline_manifest = _single_manifest(tmp_path)
     baseline = build_lifecycle_ablation_plan(baseline_manifest)
@@ -225,6 +284,60 @@ def test_lifecycle_ablation_plan_and_trial_ids_bind_code_provenance(
     assert [trial.trial_id for trial in drifted.trials] != [trial.trial_id for trial in baseline.trials]
 
 
+@pytest.mark.parametrize(
+    "drift_relative",
+    [
+        "experimentation/lifecycle_studies/historical_trial_record.py",
+        "lifecycles/finalization.py",
+        "lifecycles/provenance.py",
+        "lifecycles/session_records.py",
+        "lifecycles/compiled.py",
+        "lifecycles/values.py",
+    ],
+)
+def test_lifecycle_ablation_plan_binds_complete_trial_importer_source_manifest(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    drift_relative: str,
+) -> None:
+    source_paths = ablation_plan_runtime._trial_importer_source_paths(Path(ablation_plan_runtime.__file__).resolve())
+    assert set(source_paths) == {
+        "experimentation/lifecycle_studies/retention.py",
+        "experimentation/lifecycle_studies/retained_snapshot.py",
+        "experimentation/lifecycle_studies/retained_record_identity.py",
+        "experimentation/lifecycle_studies/historical_evidence.py",
+        "experimentation/lifecycle_studies/historical_operation.py",
+        "experimentation/lifecycle_studies/historical_trial_record.py",
+        "lifecycles/finalization.py",
+        "lifecycles/finalization_evidence.py",
+        "lifecycles/evidence_files.py",
+        "lifecycles/session_records.py",
+        "lifecycles/compiled.py",
+        "lifecycles/values.py",
+        "lifecycles/invocation.py",
+        "lifecycles/provenance.py",
+    }
+    copied_paths: dict[str, Path] = {}
+    for relative, source in source_paths.items():
+        copied = tmp_path / "importer-source" / relative
+        copied.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source, copied)
+        copied_paths[relative] = copied
+    monkeypatch.setattr(ablation_plan_runtime, "_trial_importer_source_paths", lambda _planner: copied_paths)
+    manifest = _single_manifest(tmp_path)
+    baseline = build_lifecycle_ablation_plan(manifest)
+
+    drifted_source = copied_paths[drift_relative]
+    drifted_source.write_text(drifted_source.read_text(encoding="utf-8") + "\n# source drift\n", encoding="utf-8")
+    drifted = build_lifecycle_ablation_plan(manifest)
+
+    assert drifted.code_provenance.trial_importer_source_sha256 != (
+        baseline.code_provenance.trial_importer_source_sha256
+    )
+    assert drifted.plan_sha256 != baseline.plan_sha256
+    assert drifted.trials[0].trial_id != baseline.trials[0].trial_id
+
+
 def test_repository_provenance_uses_content_identity_outside_git(tmp_path: Path) -> None:
     source = Path(inspect.getsourcefile(repository_provenance) or "").parents[1]
     installed = tmp_path / "site-packages" / "aec_bench"
@@ -238,7 +351,7 @@ def test_repository_provenance_uses_content_identity_outside_git(tmp_path: Path)
     assert first["commit"] == f"source-sha256:{first['source_inventory_sha256']}"
     assert first["dirty"] is False
 
-    importer = installed / "experimentation" / "lifecycle_studies" / "trial_record.py"
+    importer = installed / "experimentation" / "lifecycle_studies" / "retention.py"
     importer.write_text(importer.read_text(encoding="utf-8") + "\n# source drift\n", encoding="utf-8")
     changed = repository_provenance(installed)
     assert changed["source_inventory_sha256"] != first["source_inventory_sha256"]
@@ -298,13 +411,13 @@ def test_runtime_dependency_provenance_hashes_realized_bytes_not_stale_record(tm
         encoding="utf-8",
     )
 
-    before = experiment_runtime.runtime_dependency_provenance(
+    before = provenance_runtime.runtime_dependency_provenance(
         adapter_kind="tool_loop",
         model_name="deterministic-replay",
         search_paths=(site_packages,),
     )
     dependency.write_text("BEHAVIOR = 'changed-runtime'\n", encoding="utf-8")
-    after = experiment_runtime.runtime_dependency_provenance(
+    after = provenance_runtime.runtime_dependency_provenance(
         adapter_kind="tool_loop",
         model_name="deterministic-replay",
         search_paths=(site_packages,),
@@ -328,7 +441,7 @@ def test_runtime_dependency_provenance_resolves_explicit_openai_provider(tmp_pat
         )
         (metadata_dir / "RECORD").write_text(f"{package_name}/__init__.py,,\n", encoding="utf-8")
 
-    before = experiment_runtime.runtime_dependency_provenance(
+    before = provenance_runtime.runtime_dependency_provenance(
         adapter_kind="tool_loop",
         model_name="openai:gpt-5.2",
         search_paths=(site_packages,),
@@ -337,7 +450,7 @@ def test_runtime_dependency_provenance_resolves_explicit_openai_provider(tmp_pat
         "BEHAVIOR = 'openai-changed-runtime'\n",
         encoding="utf-8",
     )
-    after = experiment_runtime.runtime_dependency_provenance(
+    after = provenance_runtime.runtime_dependency_provenance(
         adapter_kind="tool_loop",
         model_name="openai:gpt-5.2",
         search_paths=(site_packages,),
@@ -365,7 +478,7 @@ def test_runtime_dependency_provenance_records_deepseek_harness_distributions(tm
         )
         (metadata_dir / "RECORD").write_text(f"{package_name}/__init__.py,,\n", encoding="utf-8")
 
-    provenance = experiment_runtime.runtime_dependency_provenance(
+    provenance = provenance_runtime.runtime_dependency_provenance(
         adapter_kind="deepseek_harness",
         model_name="azure:gpt-4.1-mini-standard",
         search_paths=(site_packages,),
@@ -392,7 +505,7 @@ def test_runtime_dependency_provenance_uses_first_distribution_search_path(tmp_p
         )
         (metadata_dir / "RECORD").write_text("pydantic_ai/__init__.py,,\n", encoding="utf-8")
 
-    before = experiment_runtime.runtime_dependency_provenance(
+    before = provenance_runtime.runtime_dependency_provenance(
         adapter_kind="tool_loop",
         model_name="deterministic-replay",
         search_paths=roots,
@@ -401,7 +514,7 @@ def test_runtime_dependency_provenance_uses_first_distribution_search_path(tmp_p
         "BEHAVIOR = 'first-path-changed'\n",
         encoding="utf-8",
     )
-    after = experiment_runtime.runtime_dependency_provenance(
+    after = provenance_runtime.runtime_dependency_provenance(
         adapter_kind="tool_loop",
         model_name="deterministic-replay",
         search_paths=roots,
@@ -424,7 +537,7 @@ def test_lifecycle_ablation_plan_identity_binds_realized_dependency_bytes(
     metadata_dir.mkdir()
     (metadata_dir / "METADATA").write_text("Name: pydantic-ai\nVersion: 1.0.0\n", encoding="utf-8")
     (metadata_dir / "RECORD").write_text("pydantic_ai/__init__.py,,\n", encoding="utf-8")
-    monkeypatch.setattr(experiment_runtime, "_runtime_distribution_search_paths", lambda: (site_packages,))
+    monkeypatch.setattr(provenance_runtime, "_runtime_distribution_search_paths", lambda: (site_packages,))
     manifest = _single_manifest(tmp_path)
 
     baseline = build_lifecycle_ablation_plan(manifest)
@@ -550,57 +663,10 @@ def test_lifecycle_ablation_fixture_is_a_valid_sixteen_trial_plan() -> None:
     assert plan.trials[0].max_turns_per_session == 60
 
 
-def test_build_lifecycle_trial_record_maps_validated_working_provenance(tmp_path: Path) -> None:
+def test_recover_lifecycle_ablation_record_snapshots_artifacts_and_writes_once(tmp_path: Path) -> None:
     manifest, trial, package, run_dir = _recorded_trial(tmp_path)
 
-    record = build_lifecycle_trial_record(
-        manifest=manifest,
-        trial=trial,
-        package_dir=package,
-        run_dir=run_dir,
-    )
-
-    assert record.trial_id == trial.trial_id
-    assert record.experiment_id == manifest.experiment_id
-    assert record.task.task_id == TEMPLATE_ID
-    assert record.task.task_revision == json.loads((run_dir / "state.json").read_text())["package_sha256"]
-    assert record.task.visibility is Visibility.PUBLIC
-    assert record.agent.adapter == trial.agent.adapter
-    assert record.agent.model == trial.agent.model
-    assert record.agent.adapter_revision is None
-    assert isinstance(record.run_manifest.source, UnresolvedSourceRef)
-    assert record.agent.configuration["variant_id"] == trial.variant_id
-    assert record.agent.configuration["execution_mode"] == trial.execution_mode.value
-    assert record.agent.configuration["memory_visibility_policy"] == trial.memory_visibility_policy.value
-    assert record.agent.configuration["plan_sha256"] == build_lifecycle_ablation_plan(manifest).plan_sha256
-    assert record.environment.tool_versions
-    assert any(role.startswith("input:lifecycle_package:") for role in record.pending_artifacts)
-    assert record.outputs.agent_output is not None
-    assert record.outputs.agent_result is not None
-    assert record.evaluation.reward == 1.0
-    assert record.evaluation.validity.verifier_completed is True
-    assert record.evaluation.breakdown is not None
-    assert record.evaluation.breakdown["semantic_transition"]["aggregate"]["retention"] == 1.0
-    assert record.adaptation is not None
-    assert record.adaptation.variation == {"change_topology": trial.variant_id}
-    assert record.lifecycle_execution is not None
-    assert record.lifecycle_provenance is not None
-    assert record.lifecycle_provenance.runtime_provider == trial.runtime_provenance.provider
-    assert record.lifecycle_provenance.runtime_distributions == trial.runtime_provenance.distributions
-    assert record.lifecycle_provenance.runtime_dependency_sha256 == trial.runtime_provenance.dependency_inventory_sha256
-    assert record.evidence_status is EvidenceStatus.PENDING
-    task_verifier = lifecycle_verifier(TEMPLATE_ID)
-    assert record.lifecycle_provenance.verifier_qualified_name == (
-        f"{task_verifier.__module__}.{task_verifier.__qualname__}"
-    )
-    canonical = json.loads(next((run_dir / "experiments").glob("*/experiment-manifest.json")).read_text())
-    assert len(canonical["verifier"]["chain"]) == 2
-
-
-def test__persist_lifecycle_ablation_record_snapshots_artifacts_and_writes_once(tmp_path: Path) -> None:
-    manifest, trial, package, run_dir = _recorded_trial(tmp_path)
-
-    record_path = _persist_lifecycle_ablation_record(
+    record_path = recover_lifecycle_ablation_record(
         manifest=manifest,
         trial=trial,
         package_dir=package,
@@ -628,7 +694,7 @@ def test__persist_lifecycle_ablation_record_snapshots_artifacts_and_writes_once(
         assert (artifact_root / artifact.artifact.artifact_id).is_file()
 
     with pytest.raises(DuplicateTrialRecordError):
-        _persist_lifecycle_ablation_record(
+        recover_lifecycle_ablation_record(
             manifest=manifest,
             trial=trial,
             package_dir=package,
@@ -637,166 +703,9 @@ def test__persist_lifecycle_ablation_record_snapshots_artifacts_and_writes_once(
     assert record_path.read_bytes() == original_record
 
 
-def test_conditional_evidence_transactions_are_declared_and_snapshot_validated(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    manifest, trial, package, run_dir = _conditional_recorded_trial(tmp_path, monkeypatch)
-    invocation = json.loads((run_dir / "experiment-manifest.json").read_text(encoding="utf-8"))
-    artifacts = invocation["outputs"]["artifacts"]
-
-    action_path = "evidence_requests/evidence-request-000001/action.json"
-    commit_path = "evidence_requests/evidence-request-000001/committed.json"
-    requested_path = "evidence_requests/evidence-request-000001/artifacts/survey-rev-b.txt"
-    projection_path = "workspace/inbox/initial_review/requests/survey_revision/survey-rev-b.txt"
-    catalog_path = "workspace/checkpoints/initial_review/evidence-requests.json"
-    assert {action_path, commit_path, requested_path, projection_path, catalog_path}.issubset(artifacts)
-    assert trial_record_runtime._artifact_kind(Path(f"run/{action_path}")) == "evidence_request_action"
-    assert trial_record_runtime._artifact_kind(Path(f"run/{commit_path}")) == "evidence_request_commit"
-    assert trial_record_runtime._artifact_kind(Path(f"run/{requested_path}")) == "requested_evidence"
-    assert trial_record_runtime._artifact_kind(Path(f"run/{projection_path}")) == "requested_evidence_projection"
-    assert trial_record_runtime._artifact_kind(Path(f"run/{catalog_path}")) == "evidence_request_catalog"
-    trial_record_runtime._validate_declared_run_artifacts(run_dir, invocation)
-    trial_record_runtime._validate_snapshotted_lifecycle_state(package, run_dir)
-    for unexpected_relative in (
-        "evidence_requests/evidence-request-000001/untracked.txt",
-        "workspace/inbox/initial_review/requests/untracked/evidence.txt",
-        "workspace/checkpoints/initial_review/untracked/evidence-requests.json",
-    ):
-        unexpected = run_dir / unexpected_relative
-        unexpected.parent.mkdir(parents=True, exist_ok=True)
-        unexpected.write_text("not bound to an action\n", encoding="utf-8")
-        with pytest.raises(ValueError, match="evidence request artifact inventory"):
-            trial_record_runtime._validate_snapshotted_lifecycle_state(package, run_dir)
-        unexpected.unlink()
-
-    record_path = _persist_lifecycle_ablation_record(
-        manifest=manifest,
-        trial=trial,
-        package_dir=package,
-        run_dir=run_dir,
-    )
-    record = read_trial_record(record_path, ledger_root=Path(manifest.ledger_root))
-    validate_historical_lifecycle_ablation_record(
-        record,
-        manifest,
-        build_lifecycle_ablation_plan(manifest),
-        trial,
-    )
-    reference = LifecycleHoldoutRecordReference(
-        experiment_id=record.experiment_id,
-        trial_id=record.trial_id,
-        ledger_path=str(record_path),
-        sha256=_sha256(record_path),
-    )
-    loaded = holdout_runtime._load_record(reference)
-    assert loaded.record == record
-    assert loaded.reasons == ()
-    loaded_artifacts = holdout_runtime._load_artifacts(
-        record,
-        ledger_root=Path(manifest.ledger_root),
-    )
-    assert loaded_artifacts.reasons == ()
-    state_reference = next(
-        artifact for artifact in record.outputs.artifacts or () if artifact.kind == "lifecycle_state"
-    )
-    snapshot_prefix, marker, _ = state_reference.path.rpartition("/run/")
-    assert marker
-    extra_content = b"not bound to an action\n"
-    extra_path = f"{snapshot_prefix}/run/workspace/inbox/initial_review/requests/untracked/evidence.txt"
-    extra_sha256 = hashlib.sha256(extra_content).hexdigest()
-    extra_reference = TrialArtifactRef(
-        role="requested_evidence_projection",
-        artifact=ArtifactRef(
-            artifact_id=f"artifacts/sha256/{extra_sha256[:2]}/{extra_sha256}",
-            sha256=extra_sha256,
-            size_bytes=len(extra_content),
-            media_type="text/plain",
-        ),
-        logical_path=extra_path,
-    )
-    record_with_extra_projection = record.model_copy(
-        update={"output": record.outputs.model_copy(update={"artifacts": [*record.outputs.artifacts, extra_reference]})}
-    )
-    artifacts_with_extra_projection = dict(loaded_artifacts.content_by_path)
-    artifacts_with_extra_projection[extra_path] = extra_content
-    assert holdout_runtime._snapshot_record_reasons(
-        record_with_extra_projection,
-        artifacts=artifacts_with_extra_projection,
-    ) == ("snapshot_contract_invalid",)
-
-    requested_reference = next(
-        artifact for artifact in record.outputs.artifacts or () if artifact.kind == "requested_evidence"
-    )
-    requested_snapshot = Path(manifest.ledger_root) / "_artifacts" / requested_reference.artifact.artifact_id
-    requested_snapshot.write_text("tampered\n", encoding="utf-8")
-    assert holdout_runtime._load_record(reference).reasons == ("record_invalid",)
-
-
-def test_historical_lifecycle_record_without_visibility_still_validates_but_is_not_backfilled(
-    tmp_path: Path,
-) -> None:
+def test_recover_lifecycle_ablation_record_recovers_snapshot_left_before_record_write(tmp_path: Path) -> None:
     manifest, trial, package, run_dir = _recorded_trial(tmp_path)
-    record_path = _persist_lifecycle_ablation_record(
-        manifest=manifest,
-        trial=trial,
-        package_dir=package,
-        run_dir=run_dir,
-    )
-    payload = json.loads(record_path.read_text(encoding="utf-8"))
-    payload["input"].pop("visibility")
-    record_path.write_text(json.dumps(payload), encoding="utf-8")
-    historical = read_trial_record(record_path, ledger_root=Path(manifest.ledger_root))
-    plan = build_lifecycle_ablation_plan(manifest)
-
-    validate_historical_lifecycle_ablation_record(historical, manifest, plan, trial)
-
-    assert historical.task.visibility is None
-    assert "visibility" not in historical.input.model_fields_set
-    target_path = Path(manifest.ledger_root) / "holdout" / "target-001.json"
-    target_reference = LifecycleHoldoutRecordReference(
-        experiment_id="holdout",
-        trial_id="target-001",
-        ledger_path=str(target_path),
-        sha256="0" * 64,
-    )
-    assert historical.lifecycle_execution is not None
-    assert historical.lifecycle_provenance is not None
-    summary = build_lifecycle_holdout_evaluation(
-        LifecycleHoldoutEvaluationSpec(
-            study_design=LifecycleHoldoutStudyDesign(
-                interpretation="descriptive_holdout_generalization",
-                selection_basis="public_calibration",
-                causal_effects_supported=False,
-                cross_run_learning_supported=False,
-            ),
-            selected_condition=LifecycleHoldoutCondition(
-                model=historical.agent.model,
-                adapter=historical.agent.adapter,
-                runtime_dependency_sha256=historical.lifecycle_provenance.runtime_dependency_sha256,
-                execution_mode=historical.lifecycle_execution.execution_mode,
-                memory_visibility_policy=historical.lifecycle_execution.memory_visibility_policy,
-                max_turns_per_session=historical.lifecycle_execution.max_turns_per_session,
-            ),
-            public_calibration_records=(
-                LifecycleHoldoutRecordReference(
-                    experiment_id=historical.experiment_id,
-                    trial_id=historical.trial_id,
-                    ledger_path=str(record_path),
-                    sha256=_sha256(record_path),
-                ),
-            ),
-            holdout_target_records=(target_reference,),
-        )
-    )
-
-    assert "missing_task_visibility" in summary.calibration_results[0].reasons
-    assert "snapshot_record_mismatch" not in summary.calibration_results[0].reasons
-
-
-def test__persist_lifecycle_ablation_record_recovers_snapshot_left_before_record_write(tmp_path: Path) -> None:
-    manifest, trial, package, run_dir = _recorded_trial(tmp_path)
-    record_path = _persist_lifecycle_ablation_record(
+    record_path = recover_lifecycle_ablation_record(
         manifest=manifest,
         trial=trial,
         package_dir=package,
@@ -811,7 +720,7 @@ def test__persist_lifecycle_ablation_record_recovers_snapshot_left_before_record
     }
     record_path.unlink()
 
-    recovered = _persist_lifecycle_ablation_record(
+    recovered = recover_lifecycle_ablation_record(
         manifest=manifest,
         trial=trial,
         package_dir=package,
@@ -829,7 +738,7 @@ def test_run_lifecycle_ablation_snapshot_recovery_ignores_later_mutable_state_co
     tmp_path: Path,
 ) -> None:
     manifest, trial, package, run_dir = _recorded_trial(tmp_path)
-    record_path = _persist_lifecycle_ablation_record(
+    record_path = recover_lifecycle_ablation_record(
         manifest=manifest,
         trial=trial,
         package_dir=package,
@@ -871,7 +780,7 @@ def test_lifecycle_ablation_inspection_ignores_malformed_mutable_contract_for_co
     assert Path(result.record_paths[0]).is_file()
 
 
-def test__persist_lifecycle_ablation_record_recovers_after_atomic_record_publish_failure(
+def test_recover_lifecycle_ablation_record_recovers_after_atomic_record_publish_failure(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -884,7 +793,7 @@ def test__persist_lifecycle_ablation_record_recovers_after_atomic_record_publish
     with monkeypatch.context() as patch:
         patch.setattr(ledger_writer, "_write_record_temp", interrupted_temp_write)
         with pytest.raises(OSError, match="simulated power loss"):
-            _persist_lifecycle_ablation_record(
+            recover_lifecycle_ablation_record(
                 manifest=manifest,
                 trial=trial,
                 package_dir=package,
@@ -897,7 +806,7 @@ def test__persist_lifecycle_ablation_record_recovers_after_atomic_record_publish
     assert artifact_dir.is_dir()
     assert not list(record_path.parent.glob(f".{record_path.name}.*.tmp"))
 
-    recovered = _persist_lifecycle_ablation_record(
+    recovered = recover_lifecycle_ablation_record(
         manifest=manifest,
         trial=trial,
         package_dir=package,
@@ -908,23 +817,217 @@ def test__persist_lifecycle_ablation_record_recovers_after_atomic_record_publish
     read_trial_record(recovered, ledger_root=Path(manifest.ledger_root))
 
 
-def test__persist_lifecycle_ablation_record_rejects_declared_session_artifact_tamper(tmp_path: Path) -> None:
+def test_recover_lifecycle_ablation_record_rejects_declared_session_artifact_tamper(tmp_path: Path) -> None:
     manifest, trial, package, run_dir = _recorded_trial(tmp_path)
     agent_result_path = next(run_dir.glob("**/agent_result.json"))
+    original = agent_result_path.read_bytes()
     agent_result = json.loads(agent_result_path.read_text(encoding="utf-8"))
     agent_result["resolved_model"] = "forged-model"
     agent_result_path.write_text(json.dumps(agent_result), encoding="utf-8")
 
     with pytest.raises(ValueError, match="run artifact hash does not match canonical manifest"):
-        _persist_lifecycle_ablation_record(
+        recover_lifecycle_ablation_record(
             manifest=manifest,
             trial=trial,
             package_dir=package,
             run_dir=run_dir,
         )
 
+    artifact_dir = Path(manifest.ledger_root) / manifest.experiment_id / "_artifacts" / trial.trial_id
+    assert not artifact_dir.exists()
+    agent_result_path.write_bytes(original)
 
-def test__persist_lifecycle_ablation_record_uses_canonical_manifest_not_mutable_alias(tmp_path: Path) -> None:
+    recovered = recover_lifecycle_ablation_record(
+        manifest=manifest,
+        trial=trial,
+        package_dir=package,
+        run_dir=run_dir,
+    )
+
+    assert recovered == Path(trial.ledger_path)
+
+
+def test_lifecycle_ablation_snapshot_validation_rejects_replaced_symlink(tmp_path: Path) -> None:
+    manifest, trial, package, run_dir = _recorded_trial(tmp_path)
+    recover_lifecycle_ablation_record(
+        manifest=manifest,
+        trial=trial,
+        package_dir=package,
+        run_dir=run_dir,
+    )
+    artifact_dir = Path(manifest.ledger_root) / manifest.experiment_id / "_artifacts" / trial.trial_id
+    plan_path = artifact_dir / "sweep" / "plan.json"
+    external = tmp_path / "replacement-plan.json"
+    external.write_bytes(plan_path.read_bytes())
+    plan_path.unlink()
+    plan_path.symlink_to(external)
+
+    with pytest.raises(ValueError, match="must not contain symlinks"):
+        retention_runtime.validate_lifecycle_ablation_snapshot_layout(manifest, trial)
+
+
+@pytest.mark.parametrize(
+    ("drift", "message"),
+    [
+        ("runtime", "runtime dependencies do not match"),
+        ("repository", "repository does not match"),
+        ("verifier", "verifier does not match"),
+        ("variant", "variant does not match"),
+        ("adaptation", "adaptation does not match"),
+    ],
+)
+def test_recover_lifecycle_ablation_record_rejects_preregistered_provenance_drift(
+    tmp_path: Path,
+    drift: str,
+    message: str,
+) -> None:
+    manifest, trial, package, run_dir = _recorded_trial(tmp_path)
+    experiment_path = next((run_dir / "experiments").glob("*/experiment-manifest.json"))
+    experiment = json.loads(experiment_path.read_text(encoding="utf-8"))
+    if drift == "runtime":
+        experiment["environment"]["runtime_provenance"]["dependency_inventory_sha256"] = "0" * 64
+    elif drift == "repository":
+        experiment["repository"]["source_inventory_sha256"] = "0" * 64
+    elif drift == "verifier":
+        experiment["verifier"]["source_sha256"] = "0" * 64
+    elif drift == "variant":
+        experiment["lifecycle"]["variant"]["variant_id"] = "forged-variant"
+    else:
+        experiment["lifecycle"]["variant"]["adaptation"]["family_id"] = "forged-family"
+    _rewrite_canonical_invocation(run_dir, experiment)
+
+    with pytest.raises(ValueError, match=message):
+        recover_lifecycle_ablation_record(
+            manifest=manifest,
+            trial=trial,
+            package_dir=package,
+            run_dir=run_dir,
+        )
+
+    artifact_dir = Path(manifest.ledger_root) / manifest.experiment_id / "_artifacts" / trial.trial_id
+    assert not artifact_dir.exists()
+
+
+def test_recover_lifecycle_ablation_record_recovers_and_validates_schema_one_artifact_only_orphan(
+    tmp_path: Path,
+) -> None:
+    manifest, trial, package, run_dir = _recorded_trial(tmp_path)
+    _downgrade_canonical_invocation_to_schema_one(run_dir)
+
+    record_path = recover_lifecycle_ablation_record(
+        manifest=manifest,
+        trial=trial,
+        package_dir=package,
+        run_dir=run_dir,
+    )
+
+    record = read_trial_record(record_path, ledger_root=Path(manifest.ledger_root))
+    retention_runtime.validate_lifecycle_ablation_record(record, manifest, trial)
+
+
+def test_schema_one_validation_rejects_every_mutated_record_semantic(tmp_path: Path) -> None:
+    manifest, trial, package, run_dir = _recorded_trial(tmp_path)
+    _downgrade_canonical_invocation_to_schema_one(run_dir)
+    record_path = recover_lifecycle_ablation_record(
+        manifest=manifest,
+        trial=trial,
+        package_dir=package,
+        run_dir=run_dir,
+    )
+    baseline_record = read_trial_record(record_path, ledger_root=Path(manifest.ledger_root))
+    baseline = json.loads(record_path.read_text(encoding="utf-8"))
+
+    def shift_timestamps(payload: dict[str, Any]) -> None:
+        started = datetime.fromisoformat(payload["started_at"].replace("Z", "+00:00")) + timedelta(days=1)
+        payload["started_at"] = started.isoformat()
+        payload["completed_at"] = (started + timedelta(seconds=payload["timing"]["total_seconds"])).isoformat()
+
+    mutations: tuple[Callable[[dict[str, Any]], None], ...] = (
+        lambda payload: payload["evaluation"]["validity"].__setitem__("errors", ["forged"]),
+        lambda payload: payload["evaluation"]["breakdown"].__setitem__("forged", True),
+        lambda payload: payload["cost"].__setitem__("estimated_cost_usd", 1.0),
+        shift_timestamps,
+        lambda payload: payload["output"]["agent_result"].__setitem__("execution_status", "forged"),
+    )
+    for mutate in mutations:
+        payload = json.loads(json.dumps(baseline))
+        mutate(payload)
+        forged = TrialRecord.model_validate(payload).bind_run_manifest(baseline_record.run_manifest)
+        with pytest.raises(ValueError, match="historical TrialRecord does not match"):
+            retention_runtime.validate_lifecycle_ablation_record(forged, manifest, trial)
+    manifest_mutations: tuple[Callable[[dict[str, Any]], None], ...] = (
+        lambda payload: payload["source"].__setitem__("reason", "forged source"),
+        lambda payload: payload["agent"]["configuration"].__setitem__("requested_model", "forged-model"),
+    )
+    for mutate_manifest in manifest_mutations:
+        run_manifest = baseline_record.run_manifest.model_dump(mode="json")
+        mutate_manifest(run_manifest)
+        forged = TrialRecord.model_validate(baseline).bind_run_manifest(
+            type(baseline_record.run_manifest).model_validate(run_manifest)
+        )
+        with pytest.raises(ValueError, match="historical TrialRecord does not match"):
+            retention_runtime.validate_lifecycle_ablation_record(forged, manifest, trial)
+
+
+def test_historical_lifecycle_record_without_visibility_still_validates_but_is_not_backfilled(tmp_path: Path) -> None:
+    manifest, trial, package, run_dir = _recorded_trial(tmp_path)
+    _downgrade_canonical_invocation_to_schema_one(run_dir)
+    record_path = recover_lifecycle_ablation_record(
+        manifest=manifest,
+        trial=trial,
+        package_dir=package,
+        run_dir=run_dir,
+    )
+    retained = read_trial_record(record_path, ledger_root=Path(manifest.ledger_root))
+    payload = json.loads(record_path.read_text(encoding="utf-8"))
+    payload["input"].pop("visibility")
+    historical = retained.model_copy(
+        deep=True,
+        update={"input": type(retained.input).model_validate(payload["input"])},
+    ).bind_run_manifest(retained.run_manifest)
+    retention_runtime.validate_lifecycle_ablation_record(historical, manifest, trial)
+
+    assert historical.input.visibility is None
+    assert "visibility" not in historical.input.model_fields_set
+
+
+def test_captured_schema_one_operation_tool_accepts_public_json_schema_metadata() -> None:
+    tool_schema = [
+        {
+            "name": "execute_operation",
+            "description": "Execute one operation.",
+            "parameters": {
+                "title": "ExecuteOperation",
+                "type": "object",
+                "properties": {
+                    "checkpoint_id": {"title": "Checkpoint Id", "type": "string"},
+                    "operation_id": {"title": "Operation Id", "type": "string"},
+                },
+                "required": ["checkpoint_id", "operation_id"],
+                "additionalProperties": False,
+            },
+        }
+    ]
+    tool_schema_sha256 = hashlib.sha256(
+        json.dumps(tool_schema, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+    protocol = {
+        "schema_version": "1",
+        "sha256": "a" * 64,
+        "tool": {
+            "name": "execute_operation",
+            "arguments": ["checkpoint_id", "operation_id"],
+        },
+        "tool_schema_sha256": tool_schema_sha256,
+    }
+
+    assert validate_captured_lifecycle_operation_interaction(protocol, tool_schema) == (
+        "a" * 64,
+        tool_schema_sha256,
+    )
+
+
+def test_recover_lifecycle_ablation_record_uses_canonical_manifest_not_mutable_alias(tmp_path: Path) -> None:
     manifest, trial, package, run_dir = _recorded_trial(tmp_path)
     mutable_path = run_dir / "experiment-manifest.json"
     mutable = json.loads(mutable_path.read_text(encoding="utf-8"))
@@ -933,7 +1036,7 @@ def test__persist_lifecycle_ablation_record_uses_canonical_manifest_not_mutable_
     canonical_path = next((run_dir / "experiments").glob("*/experiment-manifest.json"))
     canonical = json.loads(canonical_path.read_text(encoding="utf-8"))
 
-    record_path = _persist_lifecycle_ablation_record(
+    record_path = recover_lifecycle_ablation_record(
         manifest=manifest,
         trial=trial,
         package_dir=package,
@@ -948,7 +1051,7 @@ def test__persist_lifecycle_ablation_record_uses_canonical_manifest_not_mutable_
 
 def test_finalized_trial_contains_no_mutable_working_run_references(tmp_path: Path) -> None:
     manifest, trial, package, run_dir = _recorded_trial(tmp_path)
-    record_path = _persist_lifecycle_ablation_record(
+    record_path = recover_lifecycle_ablation_record(
         manifest=manifest,
         trial=trial,
         package_dir=package,
@@ -969,147 +1072,6 @@ def test_finalized_trial_contains_no_mutable_working_run_references(tmp_path: Pa
     assert referenced_paths
     assert all(not Path(path).is_absolute() for path in referenced_paths)
     assert all((Path(manifest.ledger_root) / path).is_file() for path in referenced_paths)
-
-
-def test_build_lifecycle_trial_record_rejects_tampered_metrics(tmp_path: Path) -> None:
-    manifest, trial, package, run_dir = _recorded_trial(tmp_path)
-    metrics_path = run_dir / "metrics.json"
-    metrics = json.loads(metrics_path.read_text(encoding="utf-8"))
-    metrics["reads"] = 999
-    metrics_path.write_text(json.dumps(metrics), encoding="utf-8")
-
-    with pytest.raises(ValueError, match="lifecycle metrics hash does not match manifest"):
-        build_lifecycle_trial_record(
-            manifest=manifest,
-            trial=trial,
-            package_dir=package,
-            run_dir=run_dir,
-        )
-
-
-def test_build_lifecycle_trial_record_rejects_self_consistent_forged_token_totals(tmp_path: Path) -> None:
-    manifest, trial, package, run_dir = _recorded_trial(tmp_path)
-    canonical_manifest_path = next((run_dir / "experiments").glob("*/experiment-manifest.json"))
-    canonical_metrics_path = canonical_manifest_path.parent / "metrics.json"
-    metrics = json.loads(canonical_metrics_path.read_text(encoding="utf-8"))
-    metrics["input_tokens"] = 999
-    encoded_metrics = json.dumps(metrics, indent=2, sort_keys=True) + "\n"
-    canonical_metrics_path.write_text(encoded_metrics, encoding="utf-8")
-    (run_dir / "metrics.json").write_text(encoded_metrics, encoding="utf-8")
-    manifest_payload = json.loads(canonical_manifest_path.read_text(encoding="utf-8"))
-    metrics_sha256 = _sha256(canonical_metrics_path)
-    manifest_payload["outputs"]["metrics.json"] = metrics_sha256
-    manifest_payload["outputs"]["artifacts"]["metrics.json"] = metrics_sha256
-    canonical_manifest_path.write_text(json.dumps(manifest_payload), encoding="utf-8")
-    index_path = run_dir.parent / "experiment-index.jsonl"
-    index = json.loads(index_path.read_text(encoding="utf-8"))
-    index["manifest_sha256"] = _sha256(canonical_manifest_path)
-    index_path.write_text(json.dumps(index) + "\n", encoding="utf-8")
-    seal_path = canonical_manifest_path.parent / "index-entry.json"
-    seal = json.loads(seal_path.read_text(encoding="utf-8"))
-    seal["manifest_sha256"] = _sha256(canonical_manifest_path)
-    seal_path.write_text(json.dumps(seal), encoding="utf-8")
-
-    with pytest.raises(ValueError, match="input_tokens does not match session artifacts"):
-        build_lifecycle_trial_record(
-            manifest=manifest,
-            trial=trial,
-            package_dir=package,
-            run_dir=run_dir,
-        )
-
-
-def test_build_lifecycle_trial_record_rejects_condition_mismatch(tmp_path: Path) -> None:
-    manifest, trial, package, run_dir = _recorded_trial(tmp_path)
-    mismatched_trial = trial.model_copy(
-        update={
-            "memory_visibility_policy": LifecycleVisibilityPolicy.RAW_EVIDENCE_ONLY,
-        }
-    )
-
-    with pytest.raises(ValueError, match="lifecycle run visibility policy does not match planned trial"):
-        build_lifecycle_trial_record(
-            manifest=manifest,
-            trial=mismatched_trial,
-            package_dir=package,
-            run_dir=run_dir,
-        )
-
-
-def test_build_lifecycle_trial_record_rejects_canonical_turn_limit_outside_plan(tmp_path: Path) -> None:
-    manifest, trial, package, run_dir = _recorded_trial(tmp_path)
-    experiment_path = next((run_dir / "experiments").glob("*/experiment-manifest.json"))
-    experiment = json.loads(experiment_path.read_text(encoding="utf-8"))
-    experiment["execution"]["max_turns_per_session"] = 999
-    experiment_path.write_text(json.dumps(experiment), encoding="utf-8")
-    manifest_hash = _sha256(experiment_path)
-    index_path = run_dir.parent / "experiment-index.jsonl"
-    index = json.loads(index_path.read_text(encoding="utf-8"))
-    index["manifest_sha256"] = manifest_hash
-    index_path.write_text(json.dumps(index) + "\n", encoding="utf-8")
-    seal_path = experiment_path.parent / "index-entry.json"
-    seal = json.loads(seal_path.read_text(encoding="utf-8"))
-    seal["manifest_sha256"] = manifest_hash
-    seal_path.write_text(json.dumps(seal), encoding="utf-8")
-
-    with pytest.raises(ValueError, match="turn limit does not match planned trial"):
-        build_lifecycle_trial_record(
-            manifest=manifest,
-            trial=trial,
-            package_dir=package,
-            run_dir=run_dir,
-        )
-
-
-def test_build_lifecycle_trial_record_rejects_runtime_dependency_drift(tmp_path: Path) -> None:
-    manifest, trial, package, run_dir = _recorded_trial(tmp_path)
-    experiment_path = next((run_dir / "experiments").glob("*/experiment-manifest.json"))
-    experiment = json.loads(experiment_path.read_text(encoding="utf-8"))
-    experiment["environment"]["runtime_provenance"]["dependency_inventory_sha256"] = "0" * 64
-    experiment_path.write_text(json.dumps(experiment), encoding="utf-8")
-    manifest_hash = _sha256(experiment_path)
-    index_path = run_dir.parent / "experiment-index.jsonl"
-    index = json.loads(index_path.read_text(encoding="utf-8"))
-    index["manifest_sha256"] = manifest_hash
-    index_path.write_text(json.dumps(index) + "\n", encoding="utf-8")
-    seal_path = experiment_path.parent / "index-entry.json"
-    seal = json.loads(seal_path.read_text(encoding="utf-8"))
-    seal["manifest_sha256"] = manifest_hash
-    seal_path.write_text(json.dumps(seal), encoding="utf-8")
-
-    with pytest.raises(ValueError, match="runtime dependencies do not match planned trial"):
-        build_lifecycle_trial_record(
-            manifest=manifest,
-            trial=trial,
-            package_dir=package,
-            run_dir=run_dir,
-        )
-
-
-def test_build_lifecycle_trial_record_rejects_sweep_context_mismatch(tmp_path: Path) -> None:
-    manifest, trial, package, run_dir = _recorded_trial(tmp_path)
-    experiment_path = next((run_dir / "experiments").glob("*/experiment-manifest.json"))
-    experiment = json.loads(experiment_path.read_text(encoding="utf-8"))
-    experiment["sweep"]["condition_id"] = "fresh_context__raw_evidence_only"
-    experiment_path.write_text(json.dumps(experiment), encoding="utf-8")
-    index_path = run_dir.parent / "experiment-index.jsonl"
-    index = json.loads(index_path.read_text(encoding="utf-8"))
-    index["sweep"] = experiment["sweep"]
-    index["manifest_sha256"] = _sha256(experiment_path)
-    index_path.write_text(json.dumps(index) + "\n", encoding="utf-8")
-    seal_path = experiment_path.parent / "index-entry.json"
-    seal = json.loads(seal_path.read_text(encoding="utf-8"))
-    seal["sweep"] = experiment["sweep"]
-    seal["manifest_sha256"] = _sha256(experiment_path)
-    seal_path.write_text(json.dumps(seal), encoding="utf-8")
-
-    with pytest.raises(ValueError, match="lifecycle sweep context does not match planned trial"):
-        build_lifecycle_trial_record(
-            manifest=manifest,
-            trial=trial,
-            package_dir=package,
-            run_dir=run_dir,
-        )
 
 
 def test_run_lifecycle_ablation_executes_real_in_process_trial_and_skips_completed_resume(
@@ -1154,6 +1116,51 @@ def test_run_lifecycle_ablation_executes_real_in_process_trial_and_skips_complet
     assert second.record_paths == first.record_paths
     assert second.summary_path == first.summary_path
     assert record_path.read_bytes() == record_bytes
+
+
+def test_run_lifecycle_ablation_persists_the_exact_core_finalized_record(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    manifest = _single_manifest(tmp_path).model_copy(update={"experiment_id": "stormwater-record-identity"})
+    recorder_authorities: list[object] = []
+    finalized: list[TrialRecord] = []
+    finalization_authorities: list[object] = []
+    persisted: list[TrialRecord] = []
+    core_record = record_lifecycle_experiment
+    core_finalize = finalize_lifecycle_trial
+    ledger_write = write_trial_record
+
+    def capture_recording(**kwargs: Any) -> Any:
+        recording = core_record(**kwargs)
+        recorder_authorities.append(recording["finalization_authority"])
+        return recording
+
+    def capture_finalized(**kwargs: Any) -> TrialRecord:
+        finalization_authorities.append(kwargs["source"].recording["finalization_authority"])
+        record = core_finalize(**kwargs)
+        finalized.append(record)
+        return record
+
+    def capture_persisted(*, ledger_root: Path, record: TrialRecord) -> Path:
+        persisted.append(record)
+        return ledger_write(ledger_root=ledger_root, record=record)
+
+    monkeypatch.setattr(lifecycle_application, "record_lifecycle_experiment", capture_recording)
+    monkeypatch.setattr(lifecycle_application, "finalize_lifecycle_trial", capture_finalized)
+    monkeypatch.setattr(retention_runtime, "write_trial_record", capture_persisted)
+
+    run_lifecycle_ablation(
+        manifest,
+        registry_factory=lambda _trial, package, _run: _GoldFreshRegistry(package),
+    )
+
+    assert len(finalized) == 1
+    assert len(recorder_authorities) == 1
+    assert finalization_authorities == recorder_authorities
+    assert finalization_authorities[0] is recorder_authorities[0]
+    assert persisted == finalized
+    assert persisted[0] is finalized[0]
 
 
 def test_run_lifecycle_ablation_rejects_forged_existing_record_before_skip(tmp_path: Path) -> None:
@@ -1263,6 +1270,16 @@ def test_concurrent_finalization_repairs_shared_index_without_lost_entries(tmp_p
         }
     )
     plan = build_lifecycle_ablation_plan(manifest)
+    output_root = Path(manifest.output_root)
+    output_root.mkdir(parents=True, exist_ok=True)
+    (output_root / "manifest.json").write_text(
+        json.dumps(manifest.model_dump(mode="json"), indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    (output_root / "plan.json").write_text(
+        json.dumps(plan.model_dump(mode="json"), indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
     prepared: list[tuple[LifecycleAblationTrial, Path, Path]] = []
     for trial in plan.trials:
         package = materialize_lifecycle(
@@ -1271,25 +1288,23 @@ def test_concurrent_finalization_repairs_shared_index_without_lost_entries(tmp_p
             variant_id=trial.variant_id,
         )
         run_dir = Path(trial.run_dir)
-        _run_local_lifecycle_fresh_session(
+        execution = _run_local_lifecycle_fresh_session(
             package_dir=package,
             run_dir=run_dir,
             model=trial.agent.model,
             adapter_kind=trial.agent.adapter,
             max_turns=trial.max_turns_per_session,
             adapter_builder=_GoldFreshRegistry(package, resolved_model=trial.agent.model).build,
-            verifier=verify_lifecycle,
             visibility_policy=trial.memory_visibility_policy,
-            run_recorder=partial(
-                experiment_runtime.record_lifecycle_experiment,
-                sweep_context=LifecycleExperimentSweepContext(
-                    sweep_experiment_id=manifest.experiment_id,
-                    planned_trial_id=trial.trial_id,
-                    plan_sha256=plan.plan_sha256,
-                    condition_id=f"{trial.execution_mode.value}__{trial.memory_visibility_policy.value}",
-                    repetition=trial.repetition,
-                ),
-            ),
+        )
+        _record_completed_lifecycle_invocation(
+            manifest=manifest,
+            trial=trial,
+            package=package,
+            run_dir=run_dir,
+            execution=execution,
+            verifier=verify_lifecycle,
+            plan_sha256=plan.plan_sha256,
         )
         prepared.append((trial, package, run_dir))
     index_path = Path(manifest.output_root) / "trials" / "experiment-index.jsonl"
@@ -1297,7 +1312,7 @@ def test_concurrent_finalization_repairs_shared_index_without_lost_entries(tmp_p
 
     def finalize(item: tuple[LifecycleAblationTrial, Path, Path]) -> Path:
         trial, package, run_dir = item
-        return _persist_lifecycle_ablation_record(
+        return recover_lifecycle_ablation_record(
             manifest=manifest,
             trial=trial,
             package_dir=package,
@@ -1316,7 +1331,8 @@ def test_run_lifecycle_ablation_rejects_submitted_checkpoint_without_attempt_own
     tmp_path: Path,
 ) -> None:
     manifest = _single_manifest(tmp_path).model_copy(update={"experiment_id": "stormwater-unowned-checkpoint"})
-    trial = build_lifecycle_ablation_plan(manifest).trials[0]
+    plan = build_lifecycle_ablation_plan(manifest)
+    trial = plan.trials[0]
     package = materialize_lifecycle(
         TEMPLATE_ID,
         Path(trial.package_dir),
@@ -1498,7 +1514,8 @@ def test_run_lifecycle_ablation_rejects_attempt_mode_outside_planned_condition(
     tmp_path: Path,
 ) -> None:
     manifest = _single_manifest(tmp_path).model_copy(update={"experiment_id": "stormwater-attempt-mode-conflict"})
-    trial = build_lifecycle_ablation_plan(manifest).trials[0]
+    plan = build_lifecycle_ablation_plan(manifest)
+    trial = plan.trials[0]
     package = materialize_lifecycle(
         TEMPLATE_ID,
         Path(trial.package_dir),
@@ -1764,33 +1781,34 @@ def test_provider_failure_before_later_conditional_checkpoint_preserves_pending_
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    definition = lifecycle_catalogue._DEFINITIONS[TEMPLATE_ID]
+
     def materialize_later_conditional_lifecycle(
-        template: str,
         output_dir: Path,
         *,
         variant_id: str | None = None,
     ) -> Path:
-        package = materialize_lifecycle(
-            template,
-            output_dir,
-            variant_id=variant_id,
-        )
+        package = Path(definition.materializer(output_dir, variant_id=variant_id))
         _add_later_conditional_evidence(package)
         return package
 
-    monkeypatch.setattr(
-        ablation_plan_runtime,
-        "materialize_lifecycle",
-        materialize_later_conditional_lifecycle,
+    definition_probe = materialize_later_conditional_lifecycle(
+        tmp_path / "later-conditional-definition",
+        variant_id="response_assertion_only",
     )
-    monkeypatch.setattr(
-        ablation_runtime,
-        "materialize_lifecycle",
-        materialize_later_conditional_lifecycle,
+    modified_lifecycle = EvidenceLifecycleSpec.model_validate(
+        json.loads((definition_probe / "lifecycle.json").read_text(encoding="utf-8"))
     )
-    direct_verifier = lifecycle_verifier(TEMPLATE_ID)
-    monkeypatch.setattr(ablation_plan_runtime, "verify_lifecycle", direct_verifier)
-    monkeypatch.setattr(ablation_runtime, "verify_lifecycle", direct_verifier)
+    monkeypatch.setitem(
+        lifecycle_catalogue._DEFINITIONS,
+        TEMPLATE_ID,
+        replace(
+            definition,
+            lifecycle=modified_lifecycle,
+            materializer=materialize_later_conditional_lifecycle,
+        ),
+    )
+    lifecycle_catalogue.lifecycle_executable_artifact_sha256.cache_clear()
     manifest = _single_manifest(tmp_path).model_copy(
         update={"experiment_id": "stormwater-later-conditional-provider-failure"}
     )
@@ -1820,8 +1838,13 @@ def test_provider_failure_before_later_conditional_checkpoint_preserves_pending_
     metrics_reference = next(
         artifact for artifact in record.outputs.artifacts or () if artifact.kind == "lifecycle_metrics"
     )
-    lifecycle_reference = next(
-        artifact for artifact in record.outputs.artifacts or () if artifact.path.endswith("/package/lifecycle.json")
+    retained_lifecycle = (
+        Path(manifest.ledger_root)
+        / manifest.experiment_id
+        / "_artifacts"
+        / record.trial_id
+        / "package"
+        / "lifecycle.json"
     )
     invocation_reference = record.lifecycle_provenance.invocation_manifest
     state = holdout_runtime.EvidenceLifecycleRunState.model_validate(
@@ -1831,7 +1854,7 @@ def test_provider_failure_before_later_conditional_checkpoint_preserves_pending_
         json.loads(loaded.content_by_path[metrics_reference.path])
     )
     lifecycle = holdout_runtime.EvidenceLifecycleSpec.model_validate(
-        json.loads(loaded.content_by_path[lifecycle_reference.path])
+        json.loads(retained_lifecycle.read_text(encoding="utf-8"))
     )
     invocation = holdout_runtime.LifecycleExperimentManifest.model_validate(
         json.loads(loaded.content_by_path[invocation_reference.path])
@@ -2116,32 +2139,6 @@ def _manifest(
     )
 
 
-def _single_manifest(tmp_path: Path) -> LifecycleAblationManifest:
-    return LifecycleAblationManifest(
-        experiment_id="stormwater-live",
-        lifecycle_template_id=TEMPLATE_ID,
-        variants=("response_assertion_only",),
-        agents=(
-            AgentConfig(
-                name="gold-replay",
-                adapter="tool_loop",
-                model="deterministic-replay",
-                parameters={"max_turns_per_session": 10},
-            ),
-        ),
-        study_design=_study_design(),
-        conditions=(
-            LifecycleAblationCondition(
-                execution_mode=LifecycleExecutionMode.FRESH_CONTEXT,
-                memory_visibility_policy=LifecycleVisibilityPolicy.ARTIFACT_MEMORY,
-            ),
-        ),
-        output_root=str(tmp_path / "live-output"),
-        ledger_root=str(tmp_path / "live-ledger"),
-        limits=LifecycleAblationLimits(max_trials=1),
-    )
-
-
 def _persistent_manifest(tmp_path: Path, *, experiment_id: str) -> LifecycleAblationManifest:
     return _single_manifest(tmp_path).model_copy(
         update={
@@ -2154,205 +2151,6 @@ def _persistent_manifest(tmp_path: Path, *, experiment_id: str) -> LifecycleAbla
             ),
         }
     )
-
-
-def _recorded_trial(
-    tmp_path: Path,
-) -> tuple[LifecycleAblationManifest, LifecycleAblationTrial, Path, Path]:
-    manifest = LifecycleAblationManifest(
-        experiment_id="stormwater-import",
-        lifecycle_template_id=TEMPLATE_ID,
-        variants=("response_assertion_only",),
-        agents=(
-            AgentConfig(
-                name="agent-a",
-                adapter="tool_loop",
-                model="model-a",
-                parameters={"max_turns_per_session": 20},
-            ),
-        ),
-        study_design=_study_design(),
-        conditions=(
-            LifecycleAblationCondition(
-                execution_mode=LifecycleExecutionMode.FRESH_CONTEXT,
-                memory_visibility_policy=LifecycleVisibilityPolicy.ARTIFACT_MEMORY,
-            ),
-        ),
-        repetitions=1,
-        output_root=str(tmp_path / "outputs"),
-        ledger_root=str(tmp_path / "ledger"),
-        limits=LifecycleAblationLimits(max_trials=1),
-    )
-    trial = build_lifecycle_ablation_plan(manifest).trials[0]
-    package = materialize_lifecycle(
-        TEMPLATE_ID,
-        Path(trial.package_dir),
-        variant_id=trial.variant_id,
-    )
-    run_dir = Path(trial.run_dir)
-    _run_local_lifecycle_fresh_session(
-        package_dir=package,
-        run_dir=run_dir,
-        model=trial.agent.model,
-        adapter_kind=trial.agent.adapter,
-        max_turns=trial.max_turns_per_session,
-        adapter_builder=_GoldFreshRegistry(package, resolved_model=trial.agent.model).build,
-        verifier=verify_lifecycle,
-        visibility_policy=trial.memory_visibility_policy,
-        run_recorder=partial(
-            experiment_runtime.record_lifecycle_experiment,
-            sweep_context=LifecycleExperimentSweepContext(
-                sweep_experiment_id=manifest.experiment_id,
-                planned_trial_id=trial.trial_id,
-                plan_sha256=build_lifecycle_ablation_plan(manifest).plan_sha256,
-                condition_id=f"{trial.execution_mode.value}__{trial.memory_visibility_policy.value}",
-                repetition=trial.repetition,
-            ),
-        ),
-    )
-    return manifest, trial, package, run_dir
-
-
-def _conditional_recorded_trial(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> tuple[LifecycleAblationManifest, LifecycleAblationTrial, Path, Path]:
-    def materialize_conditional_lifecycle(
-        template: str,
-        output_dir: Path,
-        *,
-        variant_id: str | None = None,
-    ) -> Path:
-        package = materialize_lifecycle(
-            template,
-            output_dir,
-            variant_id=variant_id,
-        )
-        _add_conditional_evidence(package)
-        return package
-
-    monkeypatch.setattr(
-        ablation_plan_runtime,
-        "materialize_lifecycle",
-        materialize_conditional_lifecycle,
-    )
-    monkeypatch.setattr(
-        ablation_plan_runtime,
-        "verify_lifecycle",
-        lifecycle_verifier(TEMPLATE_ID),
-    )
-    manifest = _single_manifest(tmp_path).model_copy(update={"experiment_id": "stormwater-conditional-import"})
-    plan = build_lifecycle_ablation_plan(manifest)
-    trial = plan.trials[0]
-    package = materialize_conditional_lifecycle(
-        TEMPLATE_ID,
-        Path(trial.package_dir),
-        variant_id=trial.variant_id,
-    )
-    run_dir = Path(trial.run_dir)
-    _run_local_lifecycle_fresh_session(
-        package_dir=package,
-        run_dir=run_dir,
-        model=trial.agent.model,
-        adapter_kind=trial.agent.adapter,
-        max_turns=trial.max_turns_per_session,
-        adapter_builder=_ConditionalGoldFreshRegistry(package).build,
-        verifier=lifecycle_verifier(TEMPLATE_ID),
-        visibility_policy=trial.memory_visibility_policy,
-        run_recorder=partial(
-            experiment_runtime.record_lifecycle_experiment,
-            sweep_context=LifecycleExperimentSweepContext(
-                sweep_experiment_id=manifest.experiment_id,
-                planned_trial_id=trial.trial_id,
-                plan_sha256=plan.plan_sha256,
-                condition_id=f"{trial.execution_mode.value}__{trial.memory_visibility_policy.value}",
-                repetition=trial.repetition,
-            ),
-        ),
-    )
-    return manifest, trial, package, run_dir
-
-
-def _add_conditional_evidence(package: Path) -> None:
-    lifecycle_path = package / "lifecycle.json"
-    lifecycle = json.loads(lifecycle_path.read_text(encoding="utf-8"))
-    checkpoint_id = lifecycle["checkpoints"][0]["checkpoint_id"]
-    conditional = {
-        "request_budget": 1,
-        "requests": [
-            {
-                "request_id": "survey_revision",
-                "title": "Revised survey",
-                "description": "Obtain the revised survey source.",
-                "prerequisite_request_ids": [],
-            }
-        ],
-    }
-    lifecycle["checkpoints"][0]["conditional_evidence"] = conditional
-    lifecycle_path.write_text(json.dumps(lifecycle, indent=2, sort_keys=True), encoding="utf-8")
-    resolution = package / "hidden" / "evidence-request-resolutions.json"
-    resolution.write_text(
-        json.dumps(
-            {
-                "schema_version": "1",
-                "lifecycle_id": lifecycle["lifecycle_id"],
-                "resolutions": [
-                    {
-                        "checkpoint_id": checkpoint_id,
-                        "request_id": "survey_revision",
-                        "source_path": (f"hidden/evidence_requests/{checkpoint_id}/survey_revision"),
-                    }
-                ],
-            },
-            indent=2,
-            sort_keys=True,
-        ),
-        encoding="utf-8",
-    )
-    evidence = package / "hidden" / "evidence_requests" / checkpoint_id / "survey_revision"
-    evidence.mkdir(parents=True)
-    (evidence / "survey-rev-b.txt").write_text("revision B\n", encoding="utf-8")
-
-
-def _add_later_conditional_evidence(package: Path) -> None:
-    lifecycle_path = package / "lifecycle.json"
-    lifecycle = json.loads(lifecycle_path.read_text(encoding="utf-8"))
-    checkpoint_id = lifecycle["checkpoints"][1]["checkpoint_id"]
-    conditional = {
-        "request_budget": 1,
-        "requests": [
-            {
-                "request_id": "response_support",
-                "title": "Response support",
-                "description": "Obtain the response-stage support record.",
-                "prerequisite_request_ids": [],
-            }
-        ],
-    }
-    lifecycle["checkpoints"][1]["conditional_evidence"] = conditional
-    lifecycle_path.write_text(json.dumps(lifecycle, indent=2, sort_keys=True), encoding="utf-8")
-    resolution = package / "hidden" / "evidence-request-resolutions.json"
-    resolution.write_text(
-        json.dumps(
-            {
-                "schema_version": "1",
-                "lifecycle_id": lifecycle["lifecycle_id"],
-                "resolutions": [
-                    {
-                        "checkpoint_id": checkpoint_id,
-                        "request_id": "response_support",
-                        "source_path": (f"hidden/evidence_requests/{checkpoint_id}/response_support"),
-                    }
-                ],
-            },
-            indent=2,
-            sort_keys=True,
-        ),
-        encoding="utf-8",
-    )
-    evidence = package / "hidden" / "evidence_requests" / checkpoint_id / "response_support"
-    evidence.mkdir(parents=True)
-    (evidence / "support.txt").write_text("response support\n", encoding="utf-8")
 
 
 def _terminal_persistent_state(
@@ -2388,78 +2186,8 @@ def _terminal_persistent_state(
     return trial, package, run_dir, session_id
 
 
-def _study_design() -> LifecycleAblationStudyDesign:
-    return LifecycleAblationStudyDesign(
-        interpretation="descriptive_calibration",
-        turn_budget_scope="per_session",
-        execution_order="deterministic_sequential_plan_order",
-        randomized=False,
-        counterbalanced=False,
-        causal_effects_supported=False,
-    )
-
-
 def _sha256(path: Path) -> str:
-    import hashlib
-
     return hashlib.sha256(path.read_bytes()).hexdigest()
-
-
-class _GoldFreshRegistry:
-    def __init__(self, package: Path, *, resolved_model: str = "deterministic-replay") -> None:
-        self.gold = json.loads((package / "hidden" / "gold-submissions.json").read_text(encoding="utf-8"))
-        self.resolved_model = resolved_model
-        self.build_count = 0
-
-    def build(self, **_kwargs: object) -> object:
-        self.build_count += 1
-        gold = self.gold
-        resolved_model = self.resolved_model
-
-        class _GoldAdapter:
-            def execute(self, request: object) -> object:
-                output_path = Path(request.output_path)
-                checkpoint_id = output_path.stem
-                output_path.parent.mkdir(parents=True, exist_ok=True)
-                output_path.write_text(json.dumps(gold[checkpoint_id]), encoding="utf-8")
-                return SimpleNamespace(
-                    adapter_name="tool_loop",
-                    resolved_model=resolved_model,
-                    configuration_record={"model": resolved_model, "source": "in_process_replay"},
-                    agent_output=SimpleNamespace(status=SimpleNamespace(value="completed")),
-                    transcript=[],
-                    raw_output_text=None,
-                    provider_error=None,
-                    failure_kind=None,
-                    usage_input_tokens=10,
-                    usage_output_tokens=2,
-                    usage_cache_read_tokens=0,
-                    usage_cache_write_tokens=0,
-                )
-
-        return _GoldAdapter()
-
-
-class _ConditionalGoldFreshRegistry(_GoldFreshRegistry):
-    def build(self, *, native_tools: list[object], **kwargs: object) -> object:
-        adapter = super().build(native_tools=native_tools, **kwargs)
-        request_evidence = next(tool for tool in native_tools if getattr(tool, "__name__", "") == "request_evidence")
-
-        class _ConditionalGoldAdapter:
-            def execute(self, request: object) -> object:
-                output_path = Path(request.output_path)
-                if output_path.stem == "initial_review":
-                    response = json.loads(
-                        request_evidence(
-                            "initial_review",
-                            "survey_revision",
-                            "Resolve the source revision discrepancy.",
-                        )
-                    )
-                    assert response["status"] == "released"
-                return adapter.execute(request)
-
-        return _ConditionalGoldAdapter()
 
 
 class _InvalidSchemaRegistry(_GoldFreshRegistry):

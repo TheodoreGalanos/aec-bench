@@ -87,6 +87,7 @@ from aec_bench.lifecycles.catalogue import verify_lifecycle
 from aec_bench.lifecycles.compiled import (
     CompiledLifecycle,
     CompiledLifecycleEnvelope,
+    load_compiled_lifecycle,
 )
 
 
@@ -198,7 +199,9 @@ def _write_export(
     runtime_dir.mkdir(parents=True)
 
     shutil.copytree(compiled.package_dir, verifier_package)
-    copied = CompiledLifecycle(package_dir=verifier_package, envelope=compiled.envelope)
+    copied = load_compiled_lifecycle(verifier_package)
+    if copied.envelope != compiled.envelope:
+        raise ValueError("copied lifecycle package does not match the compiled source")
     _validate_compiled_world(copied)
     _stage_initial_context(compiled.package_dir, initial_context)
 
@@ -293,7 +296,9 @@ def verify_exported_lifecycle_run(
 ) -> dict[str, Any]:
     """Run the task verifier as the sole reward authority after agent completion."""
     envelope = CompiledLifecycleEnvelope.model_validate(_read_json(envelope_path))
-    compiled = CompiledLifecycle(package_dir=Path(package_dir), envelope=envelope)
+    compiled = load_compiled_lifecycle(Path(package_dir))
+    if compiled.envelope != envelope:
+        raise ValueError("exported lifecycle package does not match its compiled envelope")
     source = _validate_compiled_world(compiled)
     validate_harbor_lifecycle_semantics(source.lifecycle)
     _validate_operation_surface(envelope)

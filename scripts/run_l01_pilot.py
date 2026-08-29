@@ -30,8 +30,7 @@ from aec_bench.lifecycles.stormwater_design.drainage_learning import (
 
 MODEL = "azure:gpt-4.1-mini-standard"
 DEPLOYMENT_NAME = "gpt-4.1-mini-standard"
-DEFAULT_TIMEOUT_SECONDS = 600
-DEFAULT_MAX_TOKENS = 8192
+CONSOLIDATION_TIMEOUT_SECONDS = 600
 CONSOLIDATION_MAX_TOKENS = 2048
 SUMMARY_NAME = "l01-pilot-summary.json"
 PRIMARY_PROJECTIONS = (
@@ -48,7 +47,7 @@ class AzureLifecycleConsolidator:
         *,
         model: str = MODEL,
         max_tokens: int = CONSOLIDATION_MAX_TOKENS,
-        timeout_seconds: int = DEFAULT_TIMEOUT_SECONDS,
+        timeout_seconds: int = CONSOLIDATION_TIMEOUT_SECONDS,
     ) -> None:
         self.model = model
         self._client = make_rlm_client(
@@ -194,8 +193,6 @@ def _build_agent() -> AgentConfig:
         model=MODEL,
         parameters={
             "max_turns_per_session": 120,
-            "max_tokens": DEFAULT_MAX_TOKENS,
-            "timeout_sec": DEFAULT_TIMEOUT_SECONDS,
         },
     )
 
@@ -204,11 +201,8 @@ def _build_compute() -> ComputeConfig:
     return ComputeConfig(
         backend="local",
         resource_limits={
-            "max_tokens": DEFAULT_MAX_TOKENS,
-            "timeout_sec": DEFAULT_TIMEOUT_SECONDS,
             "n_concurrent_trials": 1,
         },
-        timeout_override=DEFAULT_TIMEOUT_SECONDS,
     )
 
 

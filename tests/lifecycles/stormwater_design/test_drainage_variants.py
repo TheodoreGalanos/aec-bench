@@ -12,6 +12,8 @@ import pytest
 from pydantic import ValidationError
 
 from aec_bench.lifecycles.catalogue import lifecycle_package_variant, materialize_lifecycle
+from aec_bench.lifecycles.compiled import load_compiled_lifecycle
+from aec_bench.lifecycles.invocation import LifecycleExperimentTrialContext
 from aec_bench.lifecycles.recording import record_lifecycle_experiment
 from aec_bench.lifecycles.runtime.lifecycle import EvidenceLifecycleError, run_lifecycle
 from aec_bench.lifecycles.stormwater_design.drainage_model import verify_drainage_model_lifecycle
@@ -365,6 +367,7 @@ def test_non_default_variant_is_recorded_in_manifest_and_index(tmp_path: Path) -
         verifier=verify_drainage_model_lifecycle,
         verification=verification,
         tool_schema=[],
+        trial_context=_trial_context(package, run_dir),
         repository_dir=Path(__file__).resolve().parents[2],
         index_path=index_path,
     )
@@ -385,6 +388,7 @@ def test_mismatched_variant_identity_cannot_enter_experiment_index(tmp_path: Pat
     )
     run_dir = _run_gold(package, tmp_path / "run")
     verification = verify_drainage_model_lifecycle(package, run_dir)
+    trial_context = _trial_context(package, run_dir)
     _write_json(
         package / "hidden" / "variant.json",
         get_drainage_model_variant("staged_full_correction").model_dump(mode="json"),
@@ -399,6 +403,7 @@ def test_mismatched_variant_identity_cannot_enter_experiment_index(tmp_path: Pat
             verifier=verify_drainage_model_lifecycle,
             verification=verification,
             tool_schema=[],
+            trial_context=trial_context,
             repository_dir=Path(__file__).resolve().parents[2],
             index_path=index_path,
         )
@@ -432,6 +437,7 @@ def test_valid_package_from_another_variant_cannot_be_paired_with_run(tmp_path: 
             verifier=verify_drainage_model_lifecycle,
             verification=verification,
             tool_schema=[],
+            trial_context=_trial_context(supplied_package, run_dir),
             repository_dir=Path(__file__).resolve().parents[2],
             index_path=index_path,
         )
@@ -591,6 +597,18 @@ def _load_json(path: Path) -> dict:
 def _write_json(path: Path, payload: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+
+
+def _trial_context(package: Path, run_dir: Path) -> LifecycleExperimentTrialContext:
+    compiled = load_compiled_lifecycle(package)
+    return LifecycleExperimentTrialContext(
+        trial_id=f"trial-{run_dir.name}",
+        planned_experiment_id="drainage-variant-recording-tests",
+        task_id=compiled.envelope.template_id,
+        repetition=1,
+        run_id=f"trial-{run_dir.name}",
+        compiled=compiled.envelope,
+    )
 
 
 def _experiment_agent() -> dict:

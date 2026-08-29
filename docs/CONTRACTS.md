@@ -196,12 +196,23 @@ contract.
 
 The current implementation uses the staged-evidence subtype described in
 [Staged evidence and publication](protocols/staged-evidence-and-publication.md).
-The internal application values are `LifecycleTrial` and
+The internal application values are `CompiledLifecycle`, `LifecycleTrial`, and
 `LifecycleExecution`. They are ordinary in-memory values, not persisted
-schemas. `run_lifecycle_trial()` converts one execution and its verifier result
-to the normal protected `TrialRecord`; persistence is an explicit optional
-effect. `run_lifecycle_experiment()` returns the records that it creates, so a
-caller does not read the ledger to recover its immediate results.
+schemas. `CompiledLifecycle` binds current package bytes to the lifecycle,
+executable-source, and operation-protocol identities used by the trial.
+`PlannedTrial.task_id` is the caller-owned logical identity and does not need to
+equal the compiled template ID, while `CompiledLifecycle` is the
+execution-package authority.
+`run_lifecycle_trial()` records one invocation, retains its evidence when the
+caller supplies a retention policy, and converts that retained source to one
+normal protected `TrialRecord`. Persistence is an explicit optional effect and
+uses that same record. `run_lifecycle_experiment()` returns the records that it
+creates, so a caller does not read the ledger to recover its immediate results.
+
+New lifecycle invocation manifests use schema version 2. They bind the planned
+trial identity and the complete compiled lifecycle envelope. Schema version 1
+is read and recovered only as historical retained evidence; new runs do not
+write it.
 
 `EvidenceCheckpointSpec.depends_on` is only an earlier-checkpoint acceptance
 precondition inside the declared list order. It does not provide graph

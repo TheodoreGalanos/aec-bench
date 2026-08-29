@@ -41,6 +41,7 @@ from aec_bench.experimentation.learning_studies.lifecycles import (
     LifecycleLearningTreatmentKind,
     _validate_raw_history_state,
     build_lifecycle_learning_operations,
+    lifecycle_record_uses_run,
     resolve_lifecycle_learning_target,
 )
 from aec_bench.experimentation.learning_studies.planning import (
@@ -365,15 +366,12 @@ def _arm_isolated(root: Path, arm_run: PlannedArmRun, result: ArmRunExecutionRes
             expected = arm_root / "lifecycle-experiences" / step_result.step_id
             package = expected / "package"
             run = expected / "run"
-            output = step_result.trial_record.output
             if (
                 not package.is_dir()
                 or package.is_symlink()
                 or not run.is_dir()
                 or run.is_symlink()
-                or output is None
-                or output.agent_output is None
-                or Path(output.agent_output.output_path).resolve(strict=True) != run.resolve(strict=True)
+                or not lifecycle_record_uses_run(step_result.trial_record, run)
             ):
                 return False
         return True

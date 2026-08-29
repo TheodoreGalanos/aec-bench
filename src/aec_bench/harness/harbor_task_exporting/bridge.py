@@ -15,7 +15,7 @@ from aec_bench.lifecycles.catalogue import lifecycle_definition
 from aec_bench.lifecycles.compiled import (
     CompiledLifecycle,
     CompiledLifecycleEnvelope,
-    build_compiled_lifecycle_envelope,
+    load_compiled_lifecycle,
 )
 
 from .constants import (
@@ -144,12 +144,7 @@ def validate_compiled_world(compiled: CompiledLifecycle) -> ValidatedCompiledWor
     definition = lifecycle_definition(compiled.envelope.template_id)
     if metadata != definition.metadata or lifecycle != definition.lifecycle:
         raise ValueError("compiled world contracts do not match the current lifecycle task")
-    rebuilt = build_compiled_lifecycle_envelope(
-        template_id=metadata.template_id,
-        package_dir=package,
-        requested_variant_id=compiled.envelope.variant_id,
-        visibility=compiled.envelope.visibility,
-    )
+    rebuilt = load_compiled_lifecycle(package).envelope
     if rebuilt != compiled.envelope:
         raise ValueError("compiled world envelope does not match the materialized package bytes")
     return ValidatedCompiledWorld(metadata=metadata, lifecycle=lifecycle)
@@ -292,7 +287,9 @@ def _load_bridge_source(*, task_root: Path, manifest: dict[str, Any]) -> _Bridge
     source = cast(dict[str, Any], manifest["source"])
     envelope = CompiledLifecycleEnvelope.model_validate(source["envelope"])
     package_dir = _task_relative_path(task_root, source["package"], expected_root="tests")
-    compiled = CompiledLifecycle(package_dir=package_dir, envelope=envelope)
+    compiled = load_compiled_lifecycle(package_dir)
+    if compiled.envelope != envelope:
+        raise ValueError("Harbor lifecycle package does not match its compiled envelope")
     validated = validate_compiled_world(compiled)
     validate_harbor_lifecycle_semantics(validated.lifecycle)
     validate_operation_surface(envelope)

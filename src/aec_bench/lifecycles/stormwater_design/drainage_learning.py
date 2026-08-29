@@ -243,14 +243,7 @@ def _phase_evidence_gates(evaluation: EvaluationResult) -> dict[str, dict[str, A
 
 
 def _phase_evidence_submissions(record: TrialRecord) -> dict[str, dict[str, Any]]:
-    output = record.output
-    agent_output = None if output is None else output.agent_output
-    if agent_output is None:
-        raise ValueError("phase-evidence-extraction-failed: lifecycle run is unavailable")
-    run_dir = Path(agent_output.output_path)
-    if not run_dir.is_absolute() or not run_dir.is_dir() or run_dir.is_symlink():
-        raise ValueError("phase-evidence-extraction-failed: lifecycle run is unavailable")
-    run_dir = run_dir.resolve(strict=True)
+    run_dir = _lifecycle_run_dir(record, category="phase-evidence-extraction-failed")
     submissions: dict[str, dict[str, Any]] = {}
     for checkpoint_id in CHECKPOINT_IDS:
         path = run_dir / "episodes" / checkpoint_id / "submission.json"
@@ -731,18 +724,8 @@ def _public_gate(record: TrialRecord, gate_id: str, *, category: str) -> dict[st
 
 
 def _archived_submissions(record: TrialRecord) -> dict[str, dict[str, Any]]:
-    output = record.output
-    agent_output = None if output is None else output.agent_output
-    if agent_output is None:
-        raise ValueError("feedback-submission-missing: lifecycle run location is unavailable")
-    run_candidate = Path(agent_output.output_path)
-    if not run_candidate.is_absolute() or not run_candidate.is_dir() or run_candidate.is_symlink():
-        raise ValueError("feedback-submission-missing: lifecycle run is unavailable")
-    run_dir = run_candidate.resolve(strict=True)
-    package_candidate = run_dir.parent / "package"
-    if not package_candidate.is_dir() or package_candidate.is_symlink():
-        raise ValueError("feedback-submission-missing: lifecycle package is unavailable")
-    package_dir = package_candidate.resolve(strict=True)
+    run_dir = _lifecycle_run_dir(record, category="feedback-submission-missing")
+    package_dir = _lifecycle_package_dir(record, run_dir=run_dir, category="feedback-submission-missing")
     episodes_root = run_dir / "episodes"
     for checkpoint_id in CHECKPOINT_IDS:
         expected = episodes_root / checkpoint_id / "submission.json"
@@ -766,6 +749,51 @@ def _archived_submissions(record: TrialRecord) -> dict[str, dict[str, Any]]:
             raise ValueError(f"feedback-submission-invalid: archived submission is not an object: {checkpoint_id}")
         selected[checkpoint_id] = submission
     return selected
+
+
+def _lifecycle_run_dir(record: TrialRecord, *, category: str) -> Path:
+    attached = _pending_lifecycle_root(record, anchor=("run", "state.json"), category=category)
+    if attached is not None:
+        return attached
+    output = record.output
+    agent_output = None if output is None else output.agent_output
+    if agent_output is None:
+        raise ValueError(f"{category}: lifecycle run location is unavailable")
+    candidate = Path(agent_output.output_path)
+    if not candidate.is_absolute() or not candidate.is_dir() or candidate.is_symlink():
+        raise ValueError(f"{category}: lifecycle run is unavailable")
+    return candidate.resolve(strict=True)
+
+
+def _lifecycle_package_dir(record: TrialRecord, *, run_dir: Path, category: str) -> Path:
+    attached = _pending_lifecycle_root(record, anchor=("package", "lifecycle.json"), category=category)
+    if attached is not None:
+        return attached
+    candidate = run_dir.parent / "package"
+    if not candidate.is_dir() or candidate.is_symlink():
+        raise ValueError(f"{category}: lifecycle package is unavailable")
+    return candidate.resolve(strict=True)
+
+
+def _pending_lifecycle_root(
+    record: TrialRecord,
+    *,
+    anchor: tuple[str, str],
+    category: str,
+) -> Path | None:
+    matches = [
+        path.parent
+        for path, _media_type, logical_path in record.pending_artifacts.values()
+        if logical_path is not None and Path(logical_path).parts[-2:] == anchor
+    ]
+    if len(matches) > 1:
+        raise ValueError(f"{category}: lifecycle artifact root is ambiguous")
+    if not matches:
+        return None
+    candidate = matches[0]
+    if not candidate.is_dir() or candidate.is_symlink():
+        raise ValueError(f"{category}: lifecycle artifact root is unavailable")
+    return candidate.resolve(strict=True)
 
 
 def _require_drainage_task(record: TrialRecord, *, category: str) -> None:

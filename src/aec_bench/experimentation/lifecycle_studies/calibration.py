@@ -28,10 +28,10 @@ from aec_bench.experimentation.lifecycle_studies.ablation_plan import (
     LifecycleAblationTrial,
     LifecycleCalibrationSelectionPolicy,
 )
-from aec_bench.experimentation.lifecycle_studies.trial_record import (
+from aec_bench.experimentation.lifecycle_studies.historical_operation import (
     validate_captured_lifecycle_operation_interaction,
-    validate_historical_lifecycle_ablation_record,
 )
+from aec_bench.experimentation.lifecycle_studies.retention import validate_lifecycle_ablation_record
 from aec_bench.ledger.durability import fsync_directory, mkdir_durable
 from aec_bench.ledger.reader import read_trial_record
 from aec_bench.lifecycles.runtime.episode import (
@@ -378,7 +378,7 @@ def _load_complete_campaign(
         record, reference = preloaded.get(path) or _read_record_once(path)
         if reference.experiment_id != record.experiment_id or reference.trial_id != record.trial_id:
             raise ValueError("public calibration record reference does not bind its TrialRecord")
-        validate_historical_lifecycle_ablation_record(record, manifest, plan, trial)
+        validate_lifecycle_ablation_record(record, manifest, trial)
         loaded.append(_LoadedCalibrationRecord(trial=trial, record=record, reference=reference))
     return loaded
 

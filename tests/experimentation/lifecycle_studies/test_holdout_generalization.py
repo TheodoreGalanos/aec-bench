@@ -64,7 +64,7 @@ from aec_bench.lifecycles.catalogue import (
     lifecycle_package_variant,
     materialize_lifecycle,
 )
-from aec_bench.lifecycles.recording import LifecycleExperimentMetrics
+from aec_bench.lifecycles.invocation import LifecycleExperimentMetrics
 from aec_bench.lifecycles.runtime.episode import (
     LifecycleExecutionMode,
     LifecycleVisibilityPolicy,

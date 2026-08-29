@@ -18,7 +18,12 @@ from aec_bench.lifecycles.catalogue import (
     lifecycle_variant_ids,
     verify_lifecycle,
 )
-from aec_bench.lifecycles.compiled import CompiledLifecycleEnvelope, compile_lifecycle
+from aec_bench.lifecycles.compiled import (
+    CompiledLifecycle,
+    CompiledLifecycleEnvelope,
+    compile_lifecycle,
+    load_compiled_lifecycle,
+)
 from aec_bench.lifecycles.runtime.lifecycle import run_lifecycle
 from tests.support.kernel_source_closure import internal_source_closure
 
@@ -157,6 +162,21 @@ def test_compiled_hydraulic_review_package_is_deterministic(tmp_path: Path) -> N
 
     assert first.envelope.package_sha256 == second.envelope.package_sha256
     assert _package_stats(first.package_dir) == _package_stats(second.package_dir)
+
+
+def test_compiled_lifecycle_requires_validated_package_construction(tmp_path: Path) -> None:
+    with pytest.raises(TypeError, match=r"use compile_lifecycle\(\) or load_compiled_lifecycle\(\)"):
+        CompiledLifecycle()
+
+    compiled = compile_lifecycle(TEMPLATE_ID, tmp_path / "package", variant_id="major_idf_revision")
+
+    assert load_compiled_lifecycle(compiled.package_dir) == compiled
+
+
+def test_compiled_lifecycle_accepts_catalogue_default_variant(tmp_path: Path) -> None:
+    compiled = compile_lifecycle("drainage-model-evidence-lifecycle-review", tmp_path / "package")
+
+    assert compiled.envelope.variant_id == "staged_full_correction"
 
 
 def test_compiled_hydraulic_review_fixture_executes_and_verifies(tmp_path: Path) -> None:

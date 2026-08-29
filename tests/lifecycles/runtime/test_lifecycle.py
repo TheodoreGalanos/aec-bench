@@ -6,10 +6,8 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-import subprocess
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
-from functools import partial
 from pathlib import Path
 from threading import Event, Thread
 from types import SimpleNamespace
@@ -23,6 +21,7 @@ import aec_bench.lifecycles.runtime.lifecycle as lifecycle_runtime
 import aec_bench.lifecycles.runtime.request_protocol as evidence_request_protocol_runtime
 import aec_bench.lifecycles.runtime.request_store as evidence_request_store_runtime
 from aec_bench.contracts.evidence_lifecycle import EvidenceCheckpointSpec, EvidenceLifecycleSpec
+from aec_bench.contracts.experiment_manifest import AgentConfig, ComputeConfig
 from aec_bench.harness.lifecycle_local import (
     EvidenceLifecycleControlTool,
     EvidenceLifecycleWorkspaceTool,
@@ -31,12 +30,10 @@ from aec_bench.harness.lifecycle_local import (
     _run_local_lifecycle_persistent_session,
     build_local_evidence_lifecycle_episode_environment,
     recover_completed_persistent_lifecycle_session,
+    run_local_lifecycle,
 )
 from aec_bench.harness.lifecycle_task_run import build_evidence_lifecycle_task_run_resolver
-from aec_bench.lifecycles.recording import (
-    LifecycleExperimentSweepContext,
-    record_lifecycle_experiment,
-)
+from aec_bench.lifecycles.compiled import compile_lifecycle
 from aec_bench.lifecycles.runtime.episode import (
     LifecycleEpisodeContext,
     LifecycleEpisodeEnvironment,
@@ -63,6 +60,8 @@ from aec_bench.lifecycles.runtime.state import (
     EvidenceLifecycleRunState,
     LifecycleRunStatus,
 )
+from aec_bench.lifecycles.values import LifecycleTrial
+from aec_bench.trials import PlannedTrial
 
 
 def test_lifecycle_contract_rejects_duplicate_ids_and_path_escape() -> None:
@@ -2030,19 +2029,11 @@ def test_local_episode_environment_recovers_crash_after_attempt_publication(
 
 def test_local_runners_return_the_same_normalized_evidence_schema(tmp_path: Path) -> None:
     package = _write_package(tmp_path / "package")
-    verification = {
-        "lifecycle_id": "lifecycle.demo",
-        "reward": 1.0,
-        "overall": "pass",
-        "passed": True,
-        "gates": {"continuity": {"passed": True, "score": 1.0, "failures": []}},
-    }
     fresh = _run_local_lifecycle_fresh_session(
         package_dir=package,
         run_dir=tmp_path / "fresh-run",
         model="test-model",
         adapter_builder=_WritingRegistry().build,
-        verifier=lambda _package, _run: verification,
         process_id="process.demo",
     )
     persistent = _run_local_lifecycle_persistent_session(
@@ -2050,7 +2041,6 @@ def test_local_runners_return_the_same_normalized_evidence_schema(tmp_path: Path
         run_dir=tmp_path / "persistent-run",
         model="test-model",
         adapter_builder=_LifecycleSessionRegistry(package=package, run_dir=tmp_path / "persistent-run").build,
-        verifier=lambda _package, _run: verification,
         process_id="process.demo",
     )
 
@@ -2072,6 +2062,42 @@ def test_local_runners_return_the_same_normalized_evidence_schema(tmp_path: Path
     }
 
 
+@pytest.mark.parametrize("declared_turns", [True, 0, "5"])
+def test_run_local_lifecycle_rejects_invalid_turn_limit_before_state_changes(
+    tmp_path: Path,
+    declared_turns: bool | int | str,
+) -> None:
+    compiled = compile_lifecycle(
+        "hydraulic-interaction-lifecycle-review",
+        tmp_path / "package",
+        variant_id="tailwater_revision",
+    )
+    trial = LifecycleTrial(
+        planned=PlannedTrial(
+            trial_id="invalid-turn-limit",
+            experiment_id="runtime-limit-tests",
+            task_id="hydraulic-interaction-lifecycle-review",
+            agent=AgentConfig(
+                name="test-agent",
+                adapter="tool_loop",
+                model="test-model",
+                parameters={"max_turns_per_session": declared_turns},
+            ),
+            compute=ComputeConfig(backend="local"),
+            repetition=1,
+        ),
+        compiled=compiled,
+        run_dir=tmp_path / "run",
+        execution_mode=LifecycleExecutionMode.FRESH_CONTEXT,
+        visibility_policy=LifecycleVisibilityPolicy.ARTIFACT_MEMORY,
+    )
+
+    with pytest.raises(ValueError, match="max_turns_per_session must be a positive integer"):
+        run_local_lifecycle(trial)
+
+    assert not trial.run_dir.exists()
+
+
 def test_persistent_deepseek_lifecycle_uses_only_enforceable_limits(tmp_path: Path) -> None:
     package = _write_package(tmp_path / "package")
     run_dir = tmp_path / "run"
@@ -2086,13 +2112,6 @@ def test_persistent_deepseek_lifecycle_uses_only_enforceable_limits(tmp_path: Pa
         max_tokens=4096,
         timeout_sec=120,
         adapter_builder=registry.build,
-        verifier=lambda _package, _run: {
-            "lifecycle_id": "lifecycle.demo",
-            "reward": 1.0,
-            "overall": "pass",
-            "passed": True,
-            "gates": {"continuity": {"passed": True, "score": 1.0, "failures": []}},
-        },
     )
 
     assert registry.configuration == {"max_tokens": 4096, "timeout_sec": 120}
@@ -2148,13 +2167,6 @@ def test_completed_lifecycle_remains_authoritative_when_deepseek_has_no_candidat
         adapter_kind="deepseek_harness",
         max_tokens=4096,
         adapter_builder=build_adapter,
-        verifier=lambda _package, _run: {
-            "lifecycle_id": "lifecycle.demo",
-            "reward": 1.0,
-            "overall": "pass",
-            "passed": True,
-            "gates": {"continuity": {"passed": True, "score": 1.0, "failures": []}},
-        },
     )
 
     assert result["evidence"]["lifecycle"]["status"] == "complete"
@@ -2163,55 +2175,7 @@ def test_completed_lifecycle_remains_authoritative_when_deepseek_has_no_candidat
     assert session["failure_kind"] == "missing_output"
 
 
-@pytest.mark.parametrize("execution_mode", ["persistent_context", "fresh_context"])
-def test_local_runners_forward_an_explicit_experiment_recorder(
-    tmp_path: Path,
-    execution_mode: str,
-) -> None:
-    package = _write_package(tmp_path / "package")
-    run_dir = tmp_path / "run"
-    recorder = _CapturingExperimentRecorder(tmp_path / "private-record")
-    verification = {
-        "lifecycle_id": "lifecycle.demo",
-        "reward": 1.0,
-        "overall": "pass",
-        "passed": True,
-        "gates": {"continuity": {"passed": True, "score": 1.0, "failures": []}},
-    }
-    common: dict[str, Any] = {
-        "package_dir": package,
-        "run_dir": run_dir,
-        "model": "test-model",
-        "verifier": lambda _package, _run: verification,
-        "run_recorder": recorder,
-    }
-
-    if execution_mode == "persistent_context":
-        result = _run_local_lifecycle_persistent_session(
-            **common,
-            adapter_builder=_LifecycleSessionRegistry(package=package, run_dir=run_dir).build,
-        )
-    else:
-        result = _run_local_lifecycle_fresh_session(
-            **common,
-            adapter_builder=_WritingRegistry().build,
-        )
-
-    assert len(recorder.calls) == 1
-    call = recorder.calls[0]
-    assert call["package_dir"] == package
-    assert call["run_dir"] == run_dir
-    assert call["verification"] == validate_lifecycle_verification(verification)
-    assert call["agent"]["execution_mode"] == execution_mode
-    assert result["evidence"]["experiment"] == recorder.result
-    assert result["evidence"]["artifacts"]["manifest"] == recorder.result["manifest"]
-    assert not (run_dir / "experiment-manifest.json").exists()
-    assert not (run_dir / "metrics.json").exists()
-    assert not (run_dir / "verification.json").exists()
-    assert not (tmp_path / "experiment-index.jsonl").exists()
-
-
-def test_local_runner_without_explicit_recorder_does_not_record_an_experiment(tmp_path: Path) -> None:
+def test_local_runner_returns_execution_evidence_without_recording_an_experiment(tmp_path: Path) -> None:
     package = _write_package(tmp_path / "package")
     run_dir = tmp_path / "run"
 
@@ -2220,15 +2184,9 @@ def test_local_runner_without_explicit_recorder_does_not_record_an_experiment(tm
         run_dir=run_dir,
         model="test-model",
         adapter_builder=_WritingRegistry().build,
-        verifier=lambda _package, _run: {
-            "lifecycle_id": "lifecycle.demo",
-            "reward": 1.0,
-            "overall": "pass",
-            "passed": True,
-            "gates": {"continuity": {"passed": True, "score": 1.0, "failures": []}},
-        },
     )
 
+    assert "verification" not in result["evidence"]
     assert "experiment" not in result["evidence"]
     assert "manifest" not in result["evidence"]["artifacts"]
     assert not (run_dir / "metrics.json").exists()
@@ -2236,7 +2194,7 @@ def test_local_runner_without_explicit_recorder_does_not_record_an_experiment(tm
     assert not (tmp_path / "experiment-index.jsonl").exists()
 
 
-def test_completed_persistent_recovery_forwards_explicit_experiment_recorder(tmp_path: Path) -> None:
+def test_completed_persistent_recovery_returns_failed_execution_evidence(tmp_path: Path) -> None:
     package = _write_package(tmp_path / "package")
     run_dir = tmp_path / "run"
     session_id = "session-001"
@@ -2255,133 +2213,20 @@ def test_completed_persistent_recovery_forwards_explicit_experiment_recorder(tmp
         )
         _write_json(Path(checkpoint["submission_path"]), {"checkpoint_id": checkpoint["checkpoint_id"]})
         submit_checkpoint(package, run_dir)
-    recorder = _CapturingExperimentRecorder(tmp_path / "private-record")
-
     result = recover_completed_persistent_lifecycle_session(
         package_dir=package,
         run_dir=run_dir,
         model="test-model",
-        verifier=lambda _package, _run: (_ for _ in ()).throw(
-            AssertionError("failed terminal recovery must not invoke the verifier")
-        ),
         adapter_kind="tool_loop",
         max_turns=60,
         process_id="process.recovery",
         visibility_policy=LifecycleVisibilityPolicy.PERSISTENT_CONTEXT,
-        run_recorder=partial(
-            recorder,
-            sweep_context=LifecycleExperimentSweepContext(
-                sweep_experiment_id="experiment.recovery",
-                planned_trial_id="trial.recovery",
-                plan_sha256="a" * 64,
-                condition_id="persistent_context__persistent_context",
-                repetition=1,
-            ),
-            repository_dir=Path(__file__).resolve().parent,
-        ),
     )
 
-    assert len(recorder.calls) == 1
-    call = recorder.calls[0]
-    assert call["agent"]["status"] == "failed"
-    assert call["verification"]["overall"] == "incomplete"
-    assert call["sweep_context"].planned_trial_id == "trial.recovery"
-    assert result["evidence"]["experiment"] == recorder.result
+    assert result["evidence"]["agent"]["status"] == "failed"
+    assert "verification" not in result["evidence"]
+    assert "experiment" not in result["evidence"]
     assert _load_json(session_dir / "agent_result.json")["failure_kind"] == "interrupted_after_completion"
-
-
-@pytest.mark.parametrize("execution_mode", ["persistent_context", "fresh_context"])
-def test_experiment_recorder_failure_does_not_fall_back_to_public_recording(
-    tmp_path: Path,
-    execution_mode: str,
-) -> None:
-    package = _write_package(tmp_path / "package")
-    run_dir = tmp_path / "run"
-    common: dict[str, Any] = {
-        "package_dir": package,
-        "run_dir": run_dir,
-        "model": "test-model",
-        "verifier": lambda _package, _run: {
-            "lifecycle_id": "lifecycle.demo",
-            "reward": 1.0,
-            "overall": "pass",
-            "passed": True,
-            "gates": {"continuity": {"passed": True, "score": 1.0, "failures": []}},
-        },
-        "run_recorder": _FailingExperimentRecorder(),
-    }
-
-    with pytest.raises(RuntimeError, match="private recorder failed"):
-        if execution_mode == "persistent_context":
-            _run_local_lifecycle_persistent_session(
-                **common,
-                adapter_builder=_LifecycleSessionRegistry(package=package, run_dir=run_dir).build,
-            )
-        else:
-            _run_local_lifecycle_fresh_session(
-                **common,
-                adapter_builder=_WritingRegistry().build,
-            )
-
-    assert read_lifecycle(package, run_dir)["status"] == "complete"
-    assert not (run_dir / "experiment-manifest.json").exists()
-    assert not (run_dir / "metrics.json").exists()
-    assert not (run_dir / "verification.json").exists()
-    assert not (tmp_path / "experiment-index.jsonl").exists()
-
-
-def test_local_runner_records_aec_bench_source_provenance_not_caller_repository(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    package = _write_package(tmp_path / "package")
-    caller_repository = tmp_path / "caller-repository"
-    caller_repository.mkdir()
-    subprocess.run(["git", "init", "-q"], cwd=caller_repository, check=True)
-    (caller_repository / "README.md").write_text("caller repository\n", encoding="utf-8")
-    subprocess.run(["git", "add", "README.md"], cwd=caller_repository, check=True)
-    subprocess.run(
-        [
-            "git",
-            "-c",
-            "user.name=Lifecycle Test",
-            "-c",
-            "user.email=lifecycle@example.invalid",
-            "commit",
-            "-q",
-            "-m",
-            "initial",
-        ],
-        cwd=caller_repository,
-        check=True,
-    )
-    monkeypatch.chdir(caller_repository)
-    run_dir = tmp_path / "run"
-    verification = {
-        "lifecycle_id": "lifecycle.demo",
-        "reward": 1.0,
-        "overall": "pass",
-        "passed": True,
-        "gates": {"continuity": {"passed": True, "score": 1.0, "failures": []}},
-    }
-
-    _run_local_lifecycle_fresh_session(
-        package_dir=package,
-        run_dir=run_dir,
-        model="test-model",
-        adapter_builder=_WritingRegistry().build,
-        verifier=lambda _package, _run: verification,
-        run_recorder=record_lifecycle_experiment,
-    )
-
-    invocation = _load_json(run_dir / "experiment-manifest.json")
-    expected_root = subprocess.check_output(
-        ["git", "rev-parse", "--show-toplevel"],
-        cwd=Path(lifecycle_local_runtime.__file__).resolve().parent,
-        text=True,
-    ).strip()
-    assert invocation["repository"]["root"] == expected_root
-    assert invocation["repository"]["root"] != str(caller_repository)
 
 
 @pytest.mark.parametrize("mode", ["persistent_context", "fresh_context"])
@@ -2393,7 +2238,6 @@ def test_local_runners_close_returned_provider_failures(tmp_path: Path, mode: st
         "run_dir": run_dir,
         "model": "test-model",
         "adapter_builder": _FailedRegistry().build,
-        "verifier": lambda _package, _run: {},
     }
 
     if mode == "persistent_context":
@@ -2407,88 +2251,6 @@ def test_local_runners_close_returned_provider_failures(tmp_path: Path, mode: st
     assert attempt["failure_kind"] == "provider_error"
     assert task_run["evidence"]["agent"]["status"] == "failed"
     assert task_run["evidence"]["agent"]["totals"]["failures"] == 1
-
-
-def test_local_run_records_complete_experiment_provenance_and_normalized_metrics(tmp_path: Path) -> None:
-    package = _write_package(tmp_path / "package")
-    run_dir = tmp_path / "run"
-    task_run = _run_local_lifecycle_fresh_session(
-        package_dir=package,
-        run_dir=run_dir,
-        model="claude-haiku-test-revision",
-        adapter_builder=_TracingRegistry().build,
-        verifier=lambda _package, _run: {
-            "lifecycle_id": "lifecycle.demo",
-            "reward": 1.0,
-            "overall": "pass",
-            "passed": True,
-            "gates": {"continuity": {"passed": True, "score": 1.0, "failures": []}},
-        },
-        run_recorder=record_lifecycle_experiment,
-    )
-
-    manifest = _load_json(run_dir / "experiment-manifest.json")
-    metrics = _load_json(run_dir / "metrics.json")
-    verification = _load_json(run_dir / "verification.json")
-    index_entries = [
-        json.loads(line) for line in (tmp_path / "experiment-index.jsonl").read_text(encoding="utf-8").splitlines()
-    ]
-
-    assert manifest["schema_version"] == "1"
-    assert manifest["repository"]["commit"]
-    assert manifest["repository"]["dirty_digest"]
-    assert manifest["lifecycle"]["package_files"]["lifecycle.json"]
-    assert manifest["lifecycle"]["spec_sha256"]
-    assert manifest["model"]["requested_model"] == "claude-haiku-test-revision"
-    assert manifest["model"]["resolved_models"] == ["claude-haiku-resolved-test"]
-    assert manifest["execution"]["mode"] == "fresh_context"
-    assert manifest["execution"]["memory_visibility_policy"] == "artifact_memory"
-    assert manifest["interaction"]["system_prompts"][0]["sha256"]
-    assert manifest["interaction"]["user_prompts"][0]["sha256"]
-    assert {tool["name"] for tool in manifest["interaction"]["tool_schema"]} == {
-        "list_workspace",
-        "read_workspace_file",
-        "write_checkpoint_submission",
-    }
-    assert manifest["outputs"]["verification.json"]
-    assert manifest["outputs"]["metrics.json"]
-    assert metrics["requests"] == 2
-    assert metrics["tool_calls"] == 2
-    assert metrics["reads"] == 2
-    assert metrics["checkpoint_count"] == 2
-    assert metrics["input_tokens"] == 20
-    assert metrics["estimated_cost_usd"] is not None
-    assert verification["reward"] == 1.0
-    assert len(index_entries) == 1
-    assert index_entries[0]["experiment_id"] == manifest["experiment_id"]
-    assert index_entries[0]["manifest_sha256"] == task_run["evidence"]["experiment"]["manifest_sha256"]
-
-
-def test_operational_metrics_preserve_nullable_legacy_fields_without_semantic_diagnostics(tmp_path: Path) -> None:
-    package = _write_package(tmp_path / "package")
-    run_dir = tmp_path / "run"
-
-    _run_local_lifecycle_fresh_session(
-        package_dir=package,
-        run_dir=run_dir,
-        model="unpriced-test-model",
-        adapter_builder=_WritingRegistry().build,
-        verifier=lambda _package, _run: {
-            "lifecycle_id": "lifecycle.demo",
-            "reward": 1.0,
-            "overall": "pass",
-            "passed": True,
-            "gates": {"continuity": {"passed": True, "score": 1.0, "failures": []}},
-        },
-        run_recorder=record_lifecycle_experiment,
-    )
-
-    metrics = _load_json(run_dir / "metrics.json")
-
-    assert "semantic_transition" not in metrics
-    assert "estimated_cost_usd" in metrics
-    assert metrics["estimated_cost_usd"] is None
-    assert "whole_run_seconds" in metrics
 
 
 def test_lifecycle_control_tool_submits_and_releases_next_checkpoint(tmp_path: Path) -> None:
@@ -2723,7 +2485,6 @@ def test_execution_modes_reject_incompatible_visibility_policies(tmp_path: Path)
             package_dir=package,
             run_dir=tmp_path / "persistent-run",
             model="test-model",
-            verifier=lambda _package, _run: {},
             visibility_policy=LifecycleVisibilityPolicy.ARTIFACT_MEMORY,
         )
     with pytest.raises(ValueError, match="fresh-context visibility"):
@@ -2731,7 +2492,6 @@ def test_execution_modes_reject_incompatible_visibility_policies(tmp_path: Path)
             package_dir=package,
             run_dir=tmp_path / "fresh-run",
             model="test-model",
-            verifier=lambda _package, _run: {},
             visibility_policy=LifecycleVisibilityPolicy.PERSISTENT_CONTEXT,
         )
     with pytest.raises(ValueError, match="fresh-context visibility"):
@@ -2774,13 +2534,6 @@ def test_local_session_builds_one_adapter_for_all_checkpoints(tmp_path: Path) ->
         run_dir=run_dir,
         model="test-model",
         adapter_builder=registry.build,
-        verifier=lambda _package, _run: {
-            "lifecycle_id": "lifecycle.demo",
-            "reward": 0.75,
-            "overall": "fail",
-            "passed": False,
-            "gates": {"continuity": {"passed": False, "score": 0.75, "failures": ["demo"]}},
-        },
         process_id="process.demo",
     )
 
@@ -2803,7 +2556,7 @@ def test_local_session_builds_one_adapter_for_all_checkpoints(tmp_path: Path) ->
     ]
     assert task_run["run_id"] == "process.demo.lifecycle.demo"
     assert task_run["evidence"]["lifecycle"]["status"] == "complete"
-    assert task_run["evidence"]["score"] == {"reward": 0.75, "passed": False}
+    assert "verification" not in task_run["evidence"]
     assert (run_dir / "sessions" / "session-001" / "agent_result.json").exists()
     assert (run_dir / "sessions" / "session-001" / "conversation.jsonl").exists()
 
@@ -2820,14 +2573,6 @@ def test_persistent_local_session_exposes_conditional_request_tool_only_for_capa
         run_dir=run_dir,
         model="test-model",
         adapter_builder=registry.build,
-        verifier=lambda _package, _run: {
-            "lifecycle_id": "lifecycle.demo",
-            "reward": 1.0,
-            "overall": "pass",
-            "passed": True,
-            "gates": {"continuity": {"passed": True, "score": 1.0, "failures": []}},
-        },
-        run_recorder=record_lifecycle_experiment,
     )
 
     assert registry.tool_names == [
@@ -2841,26 +2586,6 @@ def test_persistent_local_session_exposes_conditional_request_tool_only_for_capa
     assert registry.request_tool_names == registry.tool_names
     action = task_run["evidence"]["lifecycle"]["checkpoint_runs"][0]["evidence_request_actions"][0]
     assert action["session_id"] == "session-001"
-    manifest = _load_json(run_dir / "experiment-manifest.json")
-    metrics = _load_json(run_dir / "metrics.json")
-    tool_schema_names = [item["name"] for item in manifest["interaction"]["tool_schema"]]
-    assert "request_evidence" in tool_schema_names
-    request_schema = next(item for item in manifest["interaction"]["tool_schema"] if item["name"] == "request_evidence")
-    assert "self" not in request_schema["signature"]
-    assert "session_id" not in request_schema["signature"]
-    assert metrics["evidence_request_calls"] == 1
-    assert metrics["accepted_evidence_requests"] == 1
-    assert metrics["already_released_evidence_requests"] == 0
-    assert metrics["rejected_evidence_requests"] == 0
-    assert metrics["evidence_request_budget_consumed"] == 1
-    assert manifest["interaction"]["evidence_request_protocol"]["sha256"]
-    assert manifest["interaction"]["evidence_request_protocol"]["tool_schema_sha256"]
-    artifact_paths = set(manifest["outputs"]["artifacts"])
-    assert "evidence_requests/evidence-request-000001/action.json" in artifact_paths
-    assert "evidence_requests/evidence-request-000001/committed.json" in artifact_paths
-    assert "evidence_requests/evidence-request-000001/artifacts/survey-rev-b.txt" in artifact_paths
-    assert "workspace/inbox/initial_review/requests/survey_revision/survey-rev-b.txt" in artifact_paths
-    assert "workspace/checkpoints/initial_review/evidence-requests.json" in artifact_paths
 
 
 def test_persistent_session_guidance_uses_package_capability_when_only_later_checkpoint_is_conditional(
@@ -2875,13 +2600,6 @@ def test_persistent_session_guidance_uses_package_capability_when_only_later_che
         run_dir=run_dir,
         model="test-model",
         adapter_builder=registry.build,
-        verifier=lambda _package, _run: {
-            "lifecycle_id": "lifecycle.demo",
-            "reward": 1.0,
-            "overall": "pass",
-            "passed": True,
-            "gates": {"continuity": {"passed": True, "score": 1.0, "failures": []}},
-        },
     )
 
     assert task_run["evidence"]["lifecycle"]["status"] == "complete"
@@ -2910,13 +2628,6 @@ def test_local_session_continues_branch_with_editable_active_draft(tmp_path: Pat
         run_dir=branch_run,
         model="test-model",
         adapter_builder=registry.build,
-        verifier=lambda _package, _run: {
-            "lifecycle_id": "lifecycle.demo",
-            "reward": 1.0,
-            "overall": "pass",
-            "passed": True,
-            "gates": {"continuity": {"passed": True, "score": 1.0, "failures": []}},
-        },
     )
 
     lifecycle = task_run["evidence"]["lifecycle"]
@@ -2927,62 +2638,33 @@ def test_local_session_continues_branch_with_editable_active_draft(tmp_path: Pat
     assert "branch_origin/" in registry.system_prompt
 
 
-def test_local_session_preserves_agent_artifacts_before_verifier_failure(tmp_path: Path) -> None:
-    package = _write_package(tmp_path / "package")
-    run_dir = tmp_path / "run"
-    registry = _LifecycleSessionRegistry(package=package, run_dir=run_dir)
-
-    with pytest.raises(RuntimeError, match="verifier failed"):
-        _run_local_lifecycle_persistent_session(
-            package_dir=package,
-            run_dir=run_dir,
-            model="test-model",
-            adapter_builder=registry.build,
-            verifier=lambda _package, _run: (_ for _ in ()).throw(RuntimeError("verifier failed")),
-            run_recorder=record_lifecycle_experiment,
-        )
-
-    assert (run_dir / "sessions" / "session-001" / "agent_result.json").exists()
-    assert (run_dir / "sessions" / "session-001" / "conversation.jsonl").exists()
-    assert (run_dir / "sessions" / "session-001" / "raw_output.md").read_text(encoding="utf-8") == "Lifecycle complete."
-    verification = _load_json(run_dir / "verification.json")
-    manifest = _load_json(run_dir / "experiment-manifest.json")
-    assert verification["overall"] == "incomplete"
-    assert verification["gates"]["lifecycle_verifier"]["failures"] == [
-        "verifier_exception:RuntimeError:verifier failed"
-    ]
-    assert manifest["outputs"]["verification.json"]
-
-
 def test_persistent_session_resumes_active_checkpoint_without_overwriting_failed_trajectory(
     tmp_path: Path,
 ) -> None:
     package = _write_package(tmp_path / "package")
     run_dir = tmp_path / "run"
 
-    with pytest.raises(RuntimeError, match="simulated crash"):
-        _run_local_lifecycle_persistent_session(
-            package_dir=package,
-            run_dir=run_dir,
-            model="test-model",
-            adapter_builder=_CrashingRegistry().build,
-            verifier=lambda _package, _run: {},
-            run_recorder=record_lifecycle_experiment,
-        )
+    failed = _run_local_lifecycle_persistent_session(
+        package_dir=package,
+        run_dir=run_dir,
+        model="test-model",
+        adapter_builder=_CrashingRegistry().build,
+    )
+    failed_trajectory = run_dir / "sessions" / "session-001" / "trajectory.jsonl"
+    failed_trajectory_bytes = failed_trajectory.read_bytes()
+
+    assert failed["evidence"]["agent"]["status"] == "failed"
+    assert failed["evidence"]["agent"]["sessions"][0]["failure_kind"] == "adapter_exception"
+    assert failed["evidence"]["agent"]["sessions"][0]["provider_error"] == "simulated crash"
+    assert [attempt["status"] for attempt in failed["evidence"]["lifecycle"]["checkpoint_runs"][0]["attempts"]] == [
+        "failed"
+    ]
 
     resumed = _run_local_lifecycle_persistent_session(
         package_dir=package,
         run_dir=run_dir,
         model="test-model",
         adapter_builder=_LifecycleSessionRegistry(package=package, run_dir=run_dir).build,
-        verifier=lambda _package, _run: {
-            "lifecycle_id": "lifecycle.demo",
-            "reward": 1.0,
-            "overall": "pass",
-            "passed": True,
-            "gates": {"continuity": {"passed": True, "score": 1.0, "failures": []}},
-        },
-        run_recorder=record_lifecycle_experiment,
     )
     state = json.loads((run_dir / "state.json").read_text(encoding="utf-8"))
     attempts = state["checkpoint_runs"][0]["attempts"]
@@ -2991,58 +2673,42 @@ def test_persistent_session_resumes_active_checkpoint_without_overwriting_failed
     assert [attempt["status"] for attempt in attempts] == ["failed", "submitted"]
     assert attempts[0]["failure_kind"] == "adapter_exception"
     assert attempts[1]["resumed_from_attempt_id"] == attempts[0]["attempt_id"]
-    assert (run_dir / "sessions" / "session-001" / "trajectory.jsonl").exists()
+    assert failed_trajectory.read_bytes() == failed_trajectory_bytes
     assert (run_dir / "sessions" / "session-002" / "trajectory.jsonl").exists()
-    index_entries = [
-        json.loads(line) for line in (tmp_path / "experiment-index.jsonl").read_text(encoding="utf-8").splitlines()
-    ]
-    assert len(index_entries) == 2
-    assert len({entry["manifest_path"] for entry in index_entries}) == 2
-    for entry in index_entries:
-        manifest_path = Path(entry["manifest_path"])
-        assert manifest_path.is_file()
-        assert lifecycle_runtime._sha256(manifest_path) == entry["manifest_sha256"]
 
 
-def test_fresh_context_exception_records_experiment_before_propagating(tmp_path: Path) -> None:
+def test_fresh_context_exception_preserves_failed_attempt_for_resume(tmp_path: Path) -> None:
     package = _write_package(tmp_path / "package")
     run_dir = tmp_path / "run"
 
-    with pytest.raises(RuntimeError, match="simulated crash"):
-        _run_local_lifecycle_fresh_session(
-            package_dir=package,
-            run_dir=run_dir,
-            model="test-model",
-            adapter_builder=_CrashingRegistry().build,
-            verifier=lambda _package, _run: {},
-            run_recorder=record_lifecycle_experiment,
-        )
+    failed = _run_local_lifecycle_fresh_session(
+        package_dir=package,
+        run_dir=run_dir,
+        model="test-model",
+        adapter_builder=_CrashingRegistry().build,
+    )
+    failed_trajectory = run_dir / "episodes" / "initial_review" / "initial_review.session-001" / "trajectory.jsonl"
+    failed_trajectory_bytes = failed_trajectory.read_bytes()
 
-    manifest = _load_json(run_dir / "experiment-manifest.json")
-    metrics = _load_json(run_dir / "metrics.json")
-    assert manifest["execution"]["status"] == "failed"
-    assert metrics["failures"] == 1
+    assert failed["evidence"]["agent"]["status"] == "failed"
+    assert failed["evidence"]["agent"]["sessions"][0]["failure_kind"] == "adapter_exception"
+    assert failed["evidence"]["agent"]["sessions"][0]["provider_error"] == "simulated crash"
+    assert [attempt["status"] for attempt in failed["evidence"]["lifecycle"]["checkpoint_runs"][0]["attempts"]] == [
+        "failed"
+    ]
 
     resumed = _run_local_lifecycle_fresh_session(
         package_dir=package,
         run_dir=run_dir,
         model="test-model",
         adapter_builder=_WritingRegistry().build,
-        verifier=lambda _package, _run: {
-            "lifecycle_id": "lifecycle.demo",
-            "reward": 1.0,
-            "overall": "pass",
-            "passed": True,
-            "gates": {"continuity": {"passed": True, "score": 1.0, "failures": []}},
-        },
-        run_recorder=record_lifecycle_experiment,
     )
     state = _load_json(run_dir / "state.json")
     initial_attempts = state["checkpoint_runs"][0]["attempts"]
     assert resumed["evidence"]["lifecycle"]["status"] == "complete"
     assert [attempt["status"] for attempt in initial_attempts] == ["failed", "submitted"]
     assert initial_attempts[1]["resumed_from_attempt_id"] == initial_attempts[0]["attempt_id"]
-    assert len((tmp_path / "experiment-index.jsonl").read_text(encoding="utf-8").splitlines()) == 2
+    assert failed_trajectory.read_bytes() == failed_trajectory_bytes
 
 
 def _checkpoint(checkpoint_id: str) -> EvidenceCheckpointSpec:
@@ -3237,29 +2903,6 @@ def _write_jsonl(path: Path, entries: list[dict[str, Any]]) -> None:
         "".join(f"{json.dumps(entry, sort_keys=True)}\n" for entry in entries),
         encoding="utf-8",
     )
-
-
-class _CapturingExperimentRecorder:
-    def __init__(self, private_root: Path) -> None:
-        self.calls: list[dict[str, Any]] = []
-        self.result = {
-            "experiment_id": "private-experiment",
-            "manifest": str(private_root / "experiment-manifest.json"),
-            "canonical_manifest": str(private_root / "canonical" / "experiment-manifest.json"),
-            "manifest_sha256": "f" * 64,
-            "metrics": str(private_root / "metrics.json"),
-            "verification": str(private_root / "verification.json"),
-            "index": str(private_root / "experiment-index.jsonl"),
-        }
-
-    def __call__(self, **kwargs: Any) -> Any:
-        self.calls.append(kwargs)
-        return self.result
-
-
-class _FailingExperimentRecorder:
-    def __call__(self, **_kwargs: Any) -> Any:
-        raise RuntimeError("private recorder failed")
 
 
 class _FunctionEpisodeEnvironment:
@@ -3589,35 +3232,3 @@ class _FailedRegistry:
                 )
 
         return _FailedAdapter()
-
-
-class _TracingRegistry:
-    def build(self, *, trajectory_writer, **_kwargs):
-        class _TracingAdapter:
-            def execute(self, request):
-                trajectory_writer.system(request.system_prompt or "")
-                trajectory_writer.user(request.instruction)
-                trajectory_writer.new_step()
-                trajectory_writer.tool_call(
-                    "read_workspace_file",
-                    "read_workspace_file",
-                    {"path": "instruction.md"},
-                )
-                output_path = Path(request.output_path)
-                _write_json(output_path, {"checkpoint_id": output_path.stem})
-                return SimpleNamespace(
-                    adapter_name="test-tool-loop",
-                    resolved_model="claude-haiku-resolved-test",
-                    configuration_record={"model": "claude-haiku-resolved-test", "temperature": 0.0},
-                    agent_output=SimpleNamespace(status=SimpleNamespace(value="completed")),
-                    transcript=[],
-                    raw_output_text=None,
-                    provider_error=None,
-                    failure_kind=None,
-                    usage_input_tokens=10,
-                    usage_output_tokens=2,
-                    usage_cache_read_tokens=0,
-                    usage_cache_write_tokens=0,
-                )
-
-        return _TracingAdapter()

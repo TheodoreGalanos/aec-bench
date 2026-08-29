@@ -58,7 +58,7 @@ _AGENT = AgentConfig(
     model="fixed-test-model",
     parameters={"max_turns_per_session": 5},
 )
-_COMPUTE = ComputeConfig(backend="local", resource_limits={"memory_mb": 512}, timeout_override=30)
+_COMPUTE = ComputeConfig(backend="local", resource_limits={"memory_mb": 512})
 _PROJECTION_IDS = {
     "lifecycle.canonical-reward",
     "drainage.staged-disclosure",

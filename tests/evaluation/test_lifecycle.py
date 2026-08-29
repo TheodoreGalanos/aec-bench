@@ -6,11 +6,20 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
+from aec_bench.contracts.lifecycle_evaluation import LifecycleVerificationResult
 from aec_bench.evaluation.lifecycle import (
     LifecycleSemanticMetrics,
     LifecycleSemanticStateAccuracy,
     score_semantic_transitions,
 )
+
+_VALID_VERIFICATION = {
+    "lifecycle_id": "lifecycle.demo",
+    "overall": "pass",
+    "passed": True,
+    "reward": 1.0,
+    "gates": {"demo": {"passed": True, "score": 1.0, "failures": []}},
+}
 
 
 def test_semantic_transition_metrics_score_exact_updates_and_retention() -> None:
@@ -163,6 +172,47 @@ def test_semantic_transition_metrics_distinguish_boolean_and_integer_values() ->
 def test_semantic_metric_contract_rejects_rate_that_does_not_match_support() -> None:
     with pytest.raises(ValidationError, match="accuracy must match"):
         LifecycleSemanticStateAccuracy(correct_atoms=1, total_atoms=2, accuracy=1.0)
+
+
+@pytest.mark.parametrize("raw_value", [True, 1.0, "1"])
+def test_semantic_metric_contract_rejects_coercive_counts(raw_value: object) -> None:
+    with pytest.raises(ValidationError):
+        LifecycleSemanticStateAccuracy.model_validate({"correct_atoms": raw_value, "total_atoms": 1, "accuracy": 1.0})
+
+
+@pytest.mark.parametrize("raw_value", [True, "1"])
+def test_semantic_metric_contract_rejects_coercive_rates(raw_value: object) -> None:
+    with pytest.raises(ValidationError):
+        LifecycleSemanticStateAccuracy.model_validate({"correct_atoms": 1, "total_atoms": 1, "accuracy": raw_value})
+
+
+@pytest.mark.parametrize(
+    ("field", "raw_value"),
+    [
+        ("passed", 1),
+        ("passed", "true"),
+        ("reward", True),
+        ("reward", "1"),
+    ],
+)
+def test_verification_contract_rejects_coercive_outcome_values(field: str, raw_value: object) -> None:
+    with pytest.raises(ValidationError):
+        LifecycleVerificationResult.model_validate({**_VALID_VERIFICATION, field: raw_value})
+
+
+@pytest.mark.parametrize(
+    ("field", "raw_value"),
+    [
+        ("passed", 1),
+        ("passed", "true"),
+        ("score", True),
+        ("score", "1"),
+    ],
+)
+def test_verification_contract_rejects_coercive_gate_values(field: str, raw_value: object) -> None:
+    gate = {**_VALID_VERIFICATION["gates"]["demo"], field: raw_value}
+    with pytest.raises(ValidationError):
+        LifecycleVerificationResult.model_validate({**_VALID_VERIFICATION, "gates": {"demo": gate}})
 
 
 def test_semantic_metric_contract_rejects_aggregate_that_does_not_match_transitions() -> None:

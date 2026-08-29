@@ -38,7 +38,12 @@ from aec_bench.lifecycles.catalogue import (
     materialize_lifecycle,
     verify_lifecycle,
 )
-from aec_bench.lifecycles.recording import LifecycleExperimentSweepContext
+from aec_bench.lifecycles.compiled import load_compiled_lifecycle
+from aec_bench.lifecycles.finalization import LifecycleFinalizationSource
+from aec_bench.lifecycles.invocation import (
+    LifecycleExperimentRecordingResult,
+    LifecycleExperimentSweepContext,
+)
 from aec_bench.lifecycles.runtime.episode import (
     InProcessLifecycleEpisodeEnvironment,
     LifecycleEpisodeRequest,
@@ -93,9 +98,9 @@ def load_lifecycle_ablation_manifest(path: Path) -> LifecycleAblationManifest:
 
 def inspect_lifecycle_ablation_plan(manifest: LifecycleAblationManifest) -> dict[str, Any]:
     """Report deterministic trial status without creating files or invoking adapters."""
-    from aec_bench.experimentation.lifecycle_studies.trial_record import (
-        build_lifecycle_trial_record,
+    from aec_bench.experimentation.lifecycle_studies.retention import (
         validate_lifecycle_ablation_snapshot,
+        validate_lifecycle_ablation_working_trial,
     )
 
     plan = build_lifecycle_ablation_plan(manifest)
@@ -160,7 +165,7 @@ def inspect_lifecycle_ablation_plan(manifest: LifecycleAblationManifest) -> dict
                 try:
                     if (run_dir / "state.json").is_file():
                         _validate_ablation_runtime_state(package, run_dir, trial)
-                    build_lifecycle_trial_record(
+                    validate_lifecycle_ablation_working_trial(
                         manifest=manifest,
                         trial=trial,
                         package_dir=package,
@@ -228,7 +233,11 @@ def run_lifecycle_ablation(
     registry_factory: LifecycleRegistryFactory | None = None,
 ) -> LifecycleAblationRunResult:
     """Execute or resume a sequential sweep through the shared lifecycle experiment API."""
-    from aec_bench.experimentation.lifecycle_studies.trial_record import _persist_lifecycle_ablation_record
+    from aec_bench.experimentation.lifecycle_studies.retention import (
+        persist_finalized_lifecycle_ablation_record,
+        recover_lifecycle_ablation_record,
+        retain_lifecycle_ablation_snapshot,
+    )
 
     if manifest.selection_policy is not None and registry_factory is not None:
         raise ValueError("selectable calibration campaigns must use the default provider registry")
@@ -253,7 +262,7 @@ def run_lifecycle_ablation(
             continue
         artifact_dir = Path(manifest.ledger_root) / manifest.experiment_id / "_artifacts" / trial.trial_id
         if artifact_dir.is_dir():
-            finalized = _persist_lifecycle_ablation_record(
+            finalized = recover_lifecycle_ablation_record(
                 manifest=manifest,
                 trial=trial,
                 package_dir=Path(trial.package_dir),
@@ -299,7 +308,7 @@ def run_lifecycle_ablation(
             _validate_ablation_runtime_state(package, run_dir, trial)
 
         if _trial_has_finalizable_state(manifest, trial):
-            finalized = _persist_lifecycle_ablation_record(
+            finalized = recover_lifecycle_ablation_record(
                 manifest=manifest,
                 trial=trial,
                 package_dir=package,
@@ -327,16 +336,12 @@ def run_lifecycle_ablation(
                     agent=trial.agent,
                     compute=ComputeConfig(backend="local"),
                     repetition=trial.repetition,
-                    extensions={
-                        "lifecycle_sweep_context": sweep_context,
-                        "lifecycle_ablation_manifest": manifest,
-                        "lifecycle_ablation_trial": trial,
-                    },
                 ),
-                package_dir=package,
+                compiled=load_compiled_lifecycle(package),
                 run_dir=run_dir,
                 execution_mode=trial.execution_mode,
                 visibility_policy=trial.memory_visibility_policy,
+                sweep_context=sweep_context,
             )
         )
 
@@ -369,25 +374,35 @@ def run_lifecycle_ablation(
     def persist(record: TrialRecord) -> None:
         nonlocal executed, failed, imported_orphans
         trial = ablation_trials_by_id[record.trial_id]
-        finalized = _persist_lifecycle_ablation_record(
+        finalized = persist_finalized_lifecycle_ablation_record(
+            record=record,
             manifest=manifest,
             trial=trial,
-            package_dir=Path(trial.package_dir),
-            run_dir=Path(trial.run_dir),
         )
         record_paths_by_trial[trial.trial_id] = str(finalized)
-        persisted = read_trial_record(finalized, ledger_root=Path(manifest.ledger_root))
         if record.trial_id in recovered_terminal_trials:
             imported_orphans += 1
         else:
             executed += 1
-        failed += int(_record_execution_failed(persisted))
+        failed += int(_record_execution_failed(record))
+
+    def retain(
+        lifecycle_trial: LifecycleTrial,
+        recording: LifecycleExperimentRecordingResult,
+    ) -> LifecycleFinalizationSource:
+        return retain_lifecycle_ablation_snapshot(
+            lifecycle_trial=lifecycle_trial,
+            recording=recording,
+            manifest=manifest,
+            trial=ablation_trials_by_id[lifecycle_trial.planned.trial_id],
+        )
 
     if executable_trials:
         run_lifecycle_experiment(
             trials=executable_trials,
             execute=execute,
             verify=verify_lifecycle,
+            retain=retain,
             persist=persist,
         )
 
@@ -680,7 +695,7 @@ def _validate_existing_record(
     manifest: LifecycleAblationManifest,
     trial: LifecycleAblationTrial,
 ) -> None:
-    from aec_bench.experimentation.lifecycle_studies.trial_record import validate_lifecycle_ablation_record
+    from aec_bench.experimentation.lifecycle_studies.retention import validate_lifecycle_ablation_record
 
     validate_lifecycle_ablation_record(record, manifest, trial)
 

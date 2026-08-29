@@ -10,13 +10,10 @@ import math
 import re
 import tempfile
 from pathlib import Path
-from typing import Literal
+from typing import Annotated, Literal
 
 from pydantic import (
     Field,
-    NonNegativeFloat,
-    NonNegativeInt,
-    PositiveInt,
     field_validator,
     model_validator,
 )
@@ -32,7 +29,7 @@ from aec_bench.lifecycles.catalogue import (
     materialize_lifecycle,
     verify_lifecycle,
 )
-from aec_bench.lifecycles.recording import (
+from aec_bench.lifecycles.provenance import (
     repository_provenance,
     runtime_dependency_provenance,
 )
@@ -41,6 +38,10 @@ from aec_bench.lifecycles.runtime.episode import (
     LifecycleVisibilityPolicy,
 )
 from aec_bench.lifecycles.runtime.lifecycle import evidence_lifecycle_package_identity
+
+_StrictPositiveInt = Annotated[int, Field(strict=True, gt=0)]
+_StrictNonNegativeInt = Annotated[int, Field(strict=True, ge=0)]
+_StrictNonNegativeFloat = Annotated[float, Field(strict=True, ge=0.0)]
 
 
 class LifecycleAblationCondition(StrictModel):
@@ -84,9 +85,9 @@ def _default_conditions() -> tuple[LifecycleAblationCondition, ...]:
 
 
 class LifecycleAblationLimits(StrictModel):
-    max_trials: PositiveInt
+    max_trials: _StrictPositiveInt
     max_concurrency: Literal[1] = 1
-    max_estimated_cost_usd: NonNegativeFloat | None = None
+    max_estimated_cost_usd: _StrictNonNegativeFloat | None = None
 
 
 class LifecycleAblationStudyDesign(StrictModel):
@@ -105,8 +106,8 @@ class LifecycleCalibrationSelectionPolicy(StrictModel):
     incomplete_candidate: Literal["ineligible"]
     tie_break: Literal["canonical_condition_identity"]
     interaction_protocol: Literal["lifecycle_operation"]
-    public_repetitions: PositiveInt
-    holdout_repetitions: PositiveInt
+    public_repetitions: _StrictPositiveInt
+    holdout_repetitions: _StrictPositiveInt
 
     @field_validator("public_variant_ids")
     @classmethod
@@ -124,11 +125,11 @@ class LifecycleAblationManifest(StrictModel):
     agents: tuple[AgentConfig, ...]
     study_design: LifecycleAblationStudyDesign
     conditions: tuple[LifecycleAblationCondition, ...] = Field(default_factory=_default_conditions)
-    repetitions: PositiveInt = 1
+    repetitions: _StrictPositiveInt = 1
     output_root: NonEmptyStr
     ledger_root: NonEmptyStr
     limits: LifecycleAblationLimits
-    estimated_cost_per_trial_usd: NonNegativeFloat | None = None
+    estimated_cost_per_trial_usd: _StrictNonNegativeFloat | None = None
     selection_policy: LifecycleCalibrationSelectionPolicy | None = None
 
     @field_validator("experiment_id")
@@ -253,10 +254,10 @@ class LifecycleAblationTrial(StrictModel):
     package_sha256: NonEmptyStr
     agent: AgentConfig
     runtime_provenance: LifecycleRuntimeProvenance
-    max_turns_per_session: PositiveInt
+    max_turns_per_session: _StrictPositiveInt
     execution_mode: LifecycleExecutionMode
     memory_visibility_policy: LifecycleVisibilityPolicy
-    repetition: PositiveInt
+    repetition: _StrictPositiveInt
     package_dir: NonEmptyStr
     run_dir: NonEmptyStr
     ledger_path: NonEmptyStr
@@ -300,8 +301,8 @@ class LifecycleAblationPlan(StrictModel):
     plan_sha256: NonEmptyStr
     study_design: LifecycleAblationStudyDesign
     code_provenance: LifecycleAblationCodeProvenance
-    trial_count: NonNegativeInt
-    planned_estimated_cost_usd: NonNegativeFloat | None = None
+    trial_count: _StrictNonNegativeInt
+    planned_estimated_cost_usd: _StrictNonNegativeFloat | None = None
     trials: tuple[LifecycleAblationTrial, ...]
 
     @model_validator(mode="after")
@@ -320,11 +321,11 @@ class LifecycleAblationRunResult(StrictModel):
     plan_sha256: NonEmptyStr
     run_root: NonEmptyStr
     ledger_root: NonEmptyStr
-    planned_trials: NonNegativeInt
-    executed_trials: NonNegativeInt
-    imported_orphans: NonNegativeInt
-    skipped_trials: NonNegativeInt
-    failed_trials: NonNegativeInt
+    planned_trials: _StrictNonNegativeInt
+    executed_trials: _StrictNonNegativeInt
+    imported_orphans: _StrictNonNegativeInt
+    skipped_trials: _StrictNonNegativeInt
+    failed_trials: _StrictNonNegativeInt
     trial_ids: list[NonEmptyStr]
     record_paths: list[NonEmptyStr]
     summary_path: NonEmptyStr
@@ -463,7 +464,6 @@ def _ablation_code_provenance(template_id: str) -> LifecycleAblationCodeProvenan
     planner_path = Path(__file__).resolve()
     lifecycle_runtime_path = Path(inspect.getsourcefile(evidence_lifecycle_package_identity) or "")
     local_runner_path = Path(inspect.getsourcefile(run_local_lifecycle) or "")
-    importer_path = planner_path.with_name("trial_record.py")
     verifier_entrypoint_path = Path(inspect.getsourcefile(verify_lifecycle) or "")
     verifier = lifecycle_verifier(template_id)
     verifier_path = Path(inspect.getsourcefile(verifier) or "")
@@ -471,18 +471,46 @@ def _ablation_code_provenance(template_id: str) -> LifecycleAblationCodeProvenan
         "planner_source_sha256": planner_path,
         "lifecycle_runtime_source_sha256": lifecycle_runtime_path,
         "local_runner_source_sha256": local_runner_path,
-        "trial_importer_source_sha256": importer_path,
         "verifier_entrypoint_source_sha256": verifier_entrypoint_path,
         "verifier_source_sha256": verifier_path,
     }
-    missing = [str(path) for path in paths.values() if not path.is_file()]
+    importer_paths = _trial_importer_source_paths(planner_path)
+    missing = [str(path) for path in (*paths.values(), *importer_paths.values()) if not path.is_file()]
     if missing:
         raise ValueError(f"lifecycle ablation source provenance is unavailable: {', '.join(missing)}")
     repository = repository_provenance(planner_path.parent)
     return LifecycleAblationCodeProvenance(
         **{name: hashlib.sha256(path.read_bytes()).hexdigest() for name, path in paths.items()},
+        trial_importer_source_sha256=_source_manifest_sha256(importer_paths),
         repository_commit=str(repository["commit"]),
         source_inventory_sha256=str(repository["source_inventory_sha256"]),
         verifier_entrypoint_qualified_name=(f"{verify_lifecycle.__module__}.{verify_lifecycle.__qualname__}"),
         verifier_qualified_name=f"{verifier.__module__}.{verifier.__qualname__}",
+    )
+
+
+def _trial_importer_source_paths(planner_path: Path) -> dict[str, Path]:
+    package_root = planner_path.parents[2]
+    relatives = (
+        "experimentation/lifecycle_studies/retention.py",
+        "experimentation/lifecycle_studies/retained_snapshot.py",
+        "experimentation/lifecycle_studies/retained_record_identity.py",
+        "experimentation/lifecycle_studies/historical_evidence.py",
+        "experimentation/lifecycle_studies/historical_operation.py",
+        "experimentation/lifecycle_studies/historical_trial_record.py",
+        "lifecycles/finalization.py",
+        "lifecycles/finalization_evidence.py",
+        "lifecycles/evidence_files.py",
+        "lifecycles/session_records.py",
+        "lifecycles/compiled.py",
+        "lifecycles/values.py",
+        "lifecycles/invocation.py",
+        "lifecycles/provenance.py",
+    )
+    return {relative: package_root / relative for relative in relatives}
+
+
+def _source_manifest_sha256(paths: dict[str, Path]) -> str:
+    return _canonical_sha256(
+        {relative: hashlib.sha256(path.read_bytes()).hexdigest() for relative, path in sorted(paths.items())}
     )

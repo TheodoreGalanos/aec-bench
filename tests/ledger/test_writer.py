@@ -54,6 +54,20 @@ def test_write_trial_record_retains_logical_artifact_role_without_host_path(tmp_
     assert '"logical_path":"symbolic_state.json"' in persisted.replace(" ", "").replace("\n", "")
 
 
+def test_write_trial_record_rejects_artifact_changed_after_attachment(tmp_path: Path) -> None:
+    artifact = tmp_path / "workspace" / "state.json"
+    artifact.parent.mkdir()
+    artifact.write_text('{"value": 1}', encoding="utf-8")
+    record = make_trial_record()
+    record.attach_artifact("state", artifact, media_type="application/json")
+    artifact.write_text('{"value": 2}', encoding="utf-8")
+
+    with pytest.raises(ValueError, match="trial artifact changed after attachment: state"):
+        write_trial_record(ledger_root=tmp_path / "ledger", record=record)
+
+    assert not (tmp_path / "ledger" / "experiment-001" / "trial-001.json").exists()
+
+
 def test_write_trial_record_rejects_duplicate_trial_id(tmp_path: Path) -> None:
     record = make_trial_record()
     write_trial_record(ledger_root=tmp_path, record=record)

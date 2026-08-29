@@ -5,28 +5,18 @@ from __future__ import annotations
 
 import fcntl
 import hashlib
-import inspect
 import json
 import os
 import platform
-import re
 import shutil
-import subprocess
-import sys
 import uuid
-from collections import deque
 from datetime import UTC, datetime
-from importlib import metadata as importlib_metadata
 from pathlib import Path
-from typing import Any, Literal, Protocol, TypedDict, cast
-from urllib.parse import unquote, urlparse
-
-from pydantic import Field, NonNegativeFloat, NonNegativeInt, PositiveInt
+from typing import Any, cast
 
 from aec_bench.contracts.lifecycle_evaluation import LifecycleSemanticMetrics
 from aec_bench.contracts.pricing import estimate_cost_usd
 from aec_bench.contracts.trajectory import read_trajectory
-from aec_bench.contracts.validators import NonEmptyStr, StrictModel
 from aec_bench.ledger.durability import (
     fsync_directory as _fsync_directory,
 )
@@ -37,11 +27,16 @@ from aec_bench.ledger.durability import (
     mkdir_durable,
 )
 from aec_bench.ledger.process_log import read_ledger
+from aec_bench.lifecycles import invocation as lifecycle_invocation
 from aec_bench.lifecycles.catalogue import (
     lifecycle_operation_resolver,
     lifecycle_package_variant,
     lifecycle_verifier,
 )
+from aec_bench.lifecycles.compiled import load_compiled_lifecycle
+from aec_bench.lifecycles.evidence_files import is_lifecycle_regular_file
+from aec_bench.lifecycles.invocation import LifecycleExperimentMetrics, lifecycle_experiment_metrics_payload
+from aec_bench.lifecycles.provenance import callable_provenance, repository_provenance, runtime_dependency_provenance
 from aec_bench.lifecycles.runtime.lifecycle import (
     evidence_request_protocol_identity,
     read_lifecycle,
@@ -50,137 +45,6 @@ from aec_bench.lifecycles.runtime.operation_protocol import (
     lifecycle_operation_protocol_identity,
     validate_lifecycle_operation_tool_schema,
 )
-from aec_bench.model_routing import resolve_pydantic_provider
-
-
-class LifecycleExperimentMetrics(StrictModel):
-    schema_version: Literal["1", "2", "3"] = "3"
-    checkpoint_count: NonNegativeInt
-    requests: NonNegativeInt
-    tool_calls: NonNegativeInt
-    reads: NonNegativeInt
-    revisits: NonNegativeInt
-    evidence_request_calls: NonNegativeInt = 0
-    accepted_evidence_requests: NonNegativeInt = 0
-    already_released_evidence_requests: NonNegativeInt = 0
-    rejected_evidence_requests: NonNegativeInt = 0
-    evidence_request_budget_consumed: NonNegativeInt = 0
-    evidence_request_artifacts_released: NonNegativeInt = 0
-    operation_calls: NonNegativeInt = 0
-    completed_operations: NonNegativeInt = 0
-    already_current_operations: NonNegativeInt = 0
-    rejected_operations: NonNegativeInt = 0
-    operation_budget_consumed: NonNegativeInt = 0
-    operation_artifacts_produced: NonNegativeInt = 0
-    retries: NonNegativeInt
-    failures: NonNegativeInt
-    input_tokens: NonNegativeInt
-    output_tokens: NonNegativeInt
-    cache_read_tokens: NonNegativeInt
-    cache_write_tokens: NonNegativeInt
-    estimated_cost_usd: NonNegativeFloat | None = None
-    checkpoint_seconds: dict[str, NonNegativeFloat] = Field(default_factory=dict)
-    whole_run_seconds: NonNegativeFloat | None = None
-    semantic_transition: LifecycleSemanticMetrics | None = None
-
-
-_V3_OPERATION_METRIC_FIELDS = (
-    "operation_calls",
-    "completed_operations",
-    "already_current_operations",
-    "rejected_operations",
-    "operation_budget_consumed",
-    "operation_artifacts_produced",
-)
-
-
-def lifecycle_experiment_metrics_payload(metrics: LifecycleExperimentMetrics) -> dict[str, Any]:
-    """Preserve each metrics version's exact public field projection."""
-    payload = metrics.model_dump(mode="json")
-    if metrics.schema_version != "3":
-        for field_name in _V3_OPERATION_METRIC_FIELDS:
-            payload.pop(field_name)
-    return payload
-
-
-class LifecycleExperimentSweepContext(StrictModel):
-    schema_version: Literal["1"] = "1"
-    sweep_experiment_id: NonEmptyStr
-    planned_trial_id: NonEmptyStr
-    plan_sha256: NonEmptyStr
-    condition_id: NonEmptyStr
-    repetition: PositiveInt
-
-
-class LifecycleExperimentRecordingResult(TypedDict):
-    """Identify the immutable files produced by one lifecycle recorder."""
-
-    experiment_id: str
-    manifest: str
-    canonical_manifest: str
-    manifest_sha256: str
-    metrics: str
-    verification: str
-    index: str
-
-
-class LifecycleExperimentRecorder(Protocol):
-    """Record verified lifecycle evidence without choosing task or reward authority."""
-
-    def __call__(
-        self,
-        *,
-        package_dir: Path,
-        run_dir: Path,
-        agent: dict[str, Any],
-        verifier: Any,
-        verification: dict[str, Any],
-        tool_schema: list[dict[str, Any]],
-        repository_dir: Path | None = None,
-        index_path: Path | None = None,
-        sweep_context: LifecycleExperimentSweepContext | None = None,
-    ) -> LifecycleExperimentRecordingResult: ...
-
-
-class LifecycleExperimentManifest(StrictModel):
-    schema_version: NonEmptyStr = "1"
-    experiment_id: NonEmptyStr
-    created_at: NonEmptyStr
-    repository: dict[str, Any]
-    environment: dict[str, Any]
-    lifecycle: dict[str, Any]
-    verifier: dict[str, Any]
-    model: dict[str, Any]
-    execution: dict[str, Any]
-    interaction: dict[str, Any]
-    outputs: dict[str, Any]
-    sweep: LifecycleExperimentSweepContext | None = None
-
-
-_REALIZED_FILE_DIGESTS: dict[Path, tuple[tuple[int, int, int, int, int], str]] = {}
-_REQUIREMENT_PATTERN = re.compile(r"^\s*([A-Za-z0-9][A-Za-z0-9._-]*)(?:\[([^]]+)\])?")
-_EXTRA_MARKER_PATTERN = re.compile(r"\bextra\s*==\s*(['\"])([^'\"]+)\1")
-_OPENAI_COMPATIBLE_PROVIDERS = {
-    "alibaba",
-    "azure",
-    "cerebras",
-    "deepseek",
-    "fireworks",
-    "github",
-    "grok",
-    "heroku",
-    "litellm",
-    "moonshotai",
-    "nebius",
-    "ollama",
-    "openai",
-    "openai-chat",
-    "openai-responses",
-    "ovhcloud",
-    "sambanova",
-    "together",
-    "vercel",
-}
 
 
 def record_lifecycle_experiment(
@@ -191,10 +55,11 @@ def record_lifecycle_experiment(
     verifier: Any,
     verification: dict[str, Any],
     tool_schema: list[dict[str, Any]],
+    trial_context: lifecycle_invocation.LifecycleExperimentTrialContext,
     repository_dir: Path | None = None,
     index_path: Path | None = None,
-    sweep_context: LifecycleExperimentSweepContext | None = None,
-) -> LifecycleExperimentRecordingResult:
+    sweep_context: lifecycle_invocation.LifecycleExperimentSweepContext | None = None,
+) -> lifecycle_invocation.LifecycleExperimentRecordingResult:
     """Write one self-contained run record and append its immutable index entry."""
     package = Path(package_dir)
     run = Path(run_dir)
@@ -203,6 +68,20 @@ def record_lifecycle_experiment(
     manifest_path = run / "experiment-manifest.json"
     selected_index = index_path or run.parent / "experiment-index.jsonl"
     variant = _package_variant(package)
+    compiled = load_compiled_lifecycle(package)
+    if compiled.envelope != trial_context.compiled:
+        raise ValueError("lifecycle package does not match the planned compiled identity")
+    session_payloads = _validated_recording_sessions(agent.get("sessions"))
+    resolved_models = sorted({session["resolved_model"] for session in session_payloads})
+    resolved_adapters = sorted({session["adapter_name"] for session in session_payloads})
+    resolved_model = lifecycle_invocation.single_resolved_lifecycle_identity(
+        resolved_models,
+        kind="model",
+    )
+    lifecycle_invocation.single_resolved_lifecycle_identity(
+        resolved_adapters,
+        kind="adapter",
+    )
     lifecycle_state = read_lifecycle(
         package,
         run,
@@ -215,20 +94,26 @@ def record_lifecycle_experiment(
         validate_lifecycle_operation_tool_schema(tool_schema)
     _write_json(verification_path, verification)
 
-    metrics = _build_metrics(run, agent, verification)
+    metrics = _build_metrics(run, agent, verification, resolved_model=resolved_model)
     metrics_payload = lifecycle_experiment_metrics_payload(metrics)
     if metrics.semantic_transition is None:
         metrics_payload.pop("semantic_transition")
     _write_json(metrics_path, metrics_payload)
     trajectories = sorted(run.glob("**/trajectory.jsonl"))
     prompts = _interaction_prompts(trajectories)
-    repository = repository_provenance(repository_dir or Path(__file__).resolve().parent)
-    runtime_provenance = runtime_dependency_provenance(
-        adapter_kind=str(agent["adapter"]),
-        model_name=str(agent["model"]),
+    repository_capture = lifecycle_invocation.LifecycleRepositoryProvenance.model_validate(
+        repository_provenance(repository_dir or Path(__file__).resolve().parent)
+    )
+    runtime_capture = lifecycle_invocation.LifecycleRuntimeProvenance.model_validate(
+        runtime_dependency_provenance(
+            adapter_kind=str(agent["adapter"]),
+            model_name=str(agent["model"]),
+        )
     )
     state = _read_json(run / "state.json")
     experiment_id = f"lifecycle-{datetime.now(UTC).strftime('%Y%m%dT%H%M%S%fZ')}-{uuid.uuid4().hex[:12]}"
+    created_at = datetime.now(UTC).isoformat()
+    python_version = platform.python_version()
     output_hashes = _run_artifact_hashes(run)
     lifecycle_manifest = {
         "lifecycle_id": state["lifecycle_id"],
@@ -238,19 +123,14 @@ def record_lifecycle_experiment(
     }
     if variant is not None:
         lifecycle_manifest["variant"] = variant
-    verifier_entrypoint = _callable_provenance(verifier)
-    registered_verifier = verifier_entrypoint
-    template_path = package / "template.json"
-    if template_path.is_file():
-        template_id = _read_json(template_path).get("template_id")
-        if isinstance(template_id, str):
-            try:
-                registered_verifier = _callable_provenance(lifecycle_verifier(template_id))
-            except KeyError:
-                pass
-    verifier_chain = [verifier_entrypoint]
-    if registered_verifier != verifier_entrypoint:
-        verifier_chain.append(registered_verifier)
+    verifier_capture = lifecycle_invocation.LifecycleVerifierProvenanceCapture(
+        entrypoint=lifecycle_invocation.LifecycleCallableProvenance.model_validate(callable_provenance(verifier)),
+        registered=lifecycle_invocation.LifecycleCallableProvenance.model_validate(
+            callable_provenance(lifecycle_verifier(compiled.envelope.template_id))
+        ),
+    )
+    repository = repository_capture.model_dump(mode="json")
+    runtime_provenance = runtime_capture.model_dump(mode="json")
     interaction = {
         **prompts,
         "tool_schema": tool_schema,
@@ -279,7 +159,7 @@ def record_lifecycle_experiment(
     execution_manifest = {
         "mode": agent["execution_mode"],
         "memory_visibility_policy": agent["memory_visibility_policy"],
-        "session_count": len(agent.get("sessions", [])),
+        "session_count": len(session_payloads),
         "status": agent["status"],
         "checkpoint_seconds": metrics.checkpoint_seconds,
         "whole_run_seconds": metrics.whole_run_seconds,
@@ -288,32 +168,25 @@ def record_lifecycle_experiment(
         execution_manifest["max_turns_per_session"] = agent["max_turns_per_session"]
     if "limits" in agent:
         execution_manifest["limits"] = agent["limits"]
-    manifest = LifecycleExperimentManifest(
+    manifest = lifecycle_invocation.LifecycleExperimentManifest(
+        schema_version="2",
         experiment_id=experiment_id,
-        created_at=datetime.now(UTC).isoformat(),
+        created_at=created_at,
         repository=repository,
         environment={
-            "python_version": platform.python_version(),
+            "python_version": python_version,
             "platform": platform.platform(),
             "runtime_provenance": runtime_provenance,
         },
         lifecycle=lifecycle_manifest,
-        verifier={
-            **registered_verifier,
-            "entrypoint": verifier_entrypoint,
-            "chain": verifier_chain,
-        },
+        verifier=verifier_capture.manifest_payload(),
         model={
             "requested_model": agent["model"],
-            "resolved_models": sorted(
-                {str(session.get("resolved_model") or agent["model"]) for session in agent.get("sessions", [])}
-            ),
+            "resolved_models": resolved_models,
             "adapter": agent["adapter"],
             "requested_adapter": agent["adapter"],
-            "resolved_adapters": agent.get("resolved_adapters", []),
-            "session_configurations": [
-                session.get("configuration_record", {}) for session in agent.get("sessions", [])
-            ],
+            "resolved_adapters": resolved_adapters,
+            "session_configurations": [session.get("configuration_record", {}) for session in session_payloads],
             "provider_environment": _provider_environment(),
         },
         execution=execution_manifest,
@@ -324,6 +197,7 @@ def record_lifecycle_experiment(
             "artifacts": output_hashes,
         },
         sweep=sweep_context,
+        trial=trial_context,
     )
     _write_json(manifest_path, manifest.model_dump(mode="json"))
     _fsync_tree(run)
@@ -373,13 +247,44 @@ def record_lifecycle_experiment(
         "metrics": str(metrics_path),
         "verification": str(verification_path),
         "index": str(selected_index),
+        "finalization_authority": lifecycle_invocation.LifecycleInvocationRecorderCapture(
+            manifest_sha256=manifest_sha256
+        ),
     }
+
+
+def _validated_recording_sessions(value: object) -> list[dict[str, Any]]:
+    if not isinstance(value, list):
+        raise ValueError("lifecycle recording sessions are malformed")
+    sessions: list[dict[str, Any]] = []
+    for index, item in enumerate(value):
+        if not isinstance(item, dict):
+            raise ValueError(f"lifecycle recording session is malformed: {index}")
+        session = cast(dict[str, Any], item)
+        _required_recording_session_identity(session, "resolved_model", "resolved model", index)
+        _required_recording_session_identity(session, "adapter_name", "resolved adapter", index)
+        sessions.append(session)
+    return sessions
+
+
+def _required_recording_session_identity(
+    session: dict[str, Any],
+    field: str,
+    label: str,
+    index: int,
+) -> str:
+    value = session.get(field)
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"lifecycle recording session {label} is invalid: {index}")
+    return value
 
 
 def _build_metrics(
     run_dir: Path,
     agent: dict[str, Any],
     verification: dict[str, Any],
+    *,
+    resolved_model: str | None = None,
 ) -> LifecycleExperimentMetrics:
     trajectories = sorted(run_dir.glob("**/trajectory.jsonl"))
     entries = [entry for path in trajectories for entry in read_trajectory(path)]
@@ -395,10 +300,13 @@ def _build_metrics(
     ]
     timing = _lifecycle_timing(run_dir)
     totals = agent["totals"]
-    resolved_model = next(
-        (str(session["resolved_model"]) for session in agent.get("sessions", []) if session.get("resolved_model")),
-        agent["model"],
-    )
+    if resolved_model is None:
+        resolved_model = lifecycle_invocation.single_resolved_lifecycle_identity(
+            (str(session["resolved_model"]) for session in agent.get("sessions", []) if session.get("resolved_model")),
+            kind="model",
+        )
+    if resolved_model == "unresolved":
+        resolved_model = str(agent["model"])
     cost = estimate_cost_usd(
         resolved_model,
         input_tokens=int(totals["input_tokens"]),
@@ -490,365 +398,6 @@ def _interaction_prompts(trajectory_paths: list[Path]) -> dict[str, Any]:
     return {"system_prompts": system_prompts, "user_prompts": user_prompts}
 
 
-def runtime_dependency_provenance(
-    *,
-    adapter_kind: str,
-    model_name: str,
-    search_paths: tuple[Path, ...] | None = None,
-) -> dict[str, Any]:
-    """Hash the realized runtime distributions used by one lifecycle condition."""
-    if adapter_kind not in {"deepseek_harness", "in_process", "tool_loop", "pydantic_ai"}:
-        raise ValueError(f"unsupported lifecycle runtime adapter: {adapter_kind}")
-
-    provider = _resolve_runtime_provider(adapter_kind, model_name)
-    roots = tuple(Path(path).resolve() for path in (search_paths or _runtime_distribution_search_paths()))
-    if not roots:
-        raise ValueError("lifecycle runtime distribution search path is unavailable")
-    distributions: dict[str, importlib_metadata.Distribution] = {}
-    for root in roots:
-        for candidate_distribution in importlib_metadata.distributions(path=[str(root)]):
-            raw_name = candidate_distribution.metadata.get("Name")
-            if raw_name:
-                distributions.setdefault(_canonicalize_distribution_name(str(raw_name)), candidate_distribution)
-    selected = _runtime_distribution_closure(distributions, adapter_kind, provider)
-    digest = hashlib.sha256()
-    identities: list[str] = []
-    for name in sorted(selected):
-        distribution = distributions.get(name)
-        if distribution is None:
-            identity = f"{name}==missing"
-            identities.append(identity)
-            _update_inventory_digest(digest, f"distribution/{name}", identity.encode("utf-8"))
-            continue
-        identity = f"{name}=={distribution.version}"
-        identities.append(identity)
-        _update_inventory_digest(digest, f"distribution/{name}", identity.encode("utf-8"))
-        entries = _realized_distribution_entries(name, distribution)
-        if not entries:
-            raise ValueError(f"runtime distribution has no hashable realized files: {identity}")
-        for relative, file_sha256 in entries:
-            _update_inventory_digest(
-                digest,
-                f"distribution/{name}/{relative}",
-                bytes.fromhex(file_sha256),
-            )
-    return {
-        "adapter": adapter_kind,
-        "provider": provider,
-        "distributions": sorted(identities),
-        "dependency_inventory_sha256": digest.hexdigest(),
-    }
-
-
-def _runtime_distribution_search_paths() -> tuple[Path, ...]:
-    roots: list[Path] = []
-    for raw_path in sys.path:
-        candidate = Path(raw_path or os.getcwd()).resolve()
-        if not candidate.is_dir() or not any(candidate.glob("*.dist-info")):
-            continue
-        if candidate not in roots:
-            roots.append(candidate)
-    return tuple(roots)
-
-
-def _runtime_distribution_closure(
-    distributions: dict[str, importlib_metadata.Distribution],
-    adapter_kind: str,
-    provider: str,
-) -> dict[str, set[str]]:
-    if adapter_kind == "in_process":
-        seeds: dict[str, set[str]] = {"pydantic": set(), "pyyaml": set()}
-    elif adapter_kind == "deepseek_harness":
-        seeds = {
-            "deepseek-harness-runtime-bin": set(),
-            "deepseek-harness-sdk": set(),
-        }
-    else:
-        provider_extras, provider_distributions = _runtime_provider_dependencies(provider)
-        seeds = {
-            "httpx": set(),
-            "pydantic": set(),
-            "pydantic-ai": set(),
-            "pydantic-ai-slim": provider_extras,
-            "pyyaml": set(),
-        }
-        seeds.update({name: set() for name in provider_distributions})
-    queue = deque((_canonicalize_distribution_name(name), extras) for name, extras in seeds.items())
-    selected: dict[str, set[str]] = {}
-    while queue:
-        name, requested_extras = queue.popleft()
-        if name in selected and requested_extras <= selected[name]:
-            continue
-        active_extras = selected.setdefault(name, set())
-        active_extras.update(requested_extras)
-        distribution = distributions.get(name)
-        if distribution is None or name == "pydantic-ai":
-            continue
-        for raw_requirement in distribution.requires or ():
-            parsed = _parse_distribution_requirement(raw_requirement, active_extras)
-            if parsed is None:
-                continue
-            requirement_name, requirement_extras = parsed
-            queue.append((requirement_name, requirement_extras))
-    return selected
-
-
-def _resolve_runtime_provider(adapter_kind: str, model_name: str) -> str:
-    if adapter_kind == "in_process":
-        return "in_process"
-    if adapter_kind == "deepseek_harness":
-        provider = model_name.partition(":")[0].strip().lower()
-        if provider not in {"azure", "deepseek"}:
-            raise ValueError(f"unsupported DeepSeek lifecycle provider: {provider or model_name}")
-        return provider
-    provider = resolve_pydantic_provider(model_name)
-    if provider == "auto" and ":" in model_name:
-        provider = model_name.split(":", maxsplit=1)[0]
-    return "google-vertex" if provider == "vertexai" else provider
-
-
-def _runtime_provider_dependencies(provider: str) -> tuple[set[str], set[str]]:
-    selected = provider.removeprefix("gateway/")
-    selected = {
-        "chat": "openai",
-        "converse": "bedrock",
-        "gemini": "google-gla",
-        "responses": "openai",
-    }.get(selected, selected)
-    if selected == "auto":
-        return set(), set()
-    if selected in _OPENAI_COMPATIBLE_PROVIDERS:
-        return {"openai"}, {"openai"}
-    mapping: dict[str, tuple[set[str], set[str]]] = {
-        "anthropic": ({"anthropic"}, {"anthropic"}),
-        "bedrock": ({"bedrock"}, {"boto3", "botocore"}),
-        "cohere": ({"cohere"}, {"cohere"}),
-        "google-gla": ({"google"}, {"google-genai"}),
-        "google-vertex": ({"google", "vertexai"}, {"google-auth", "google-genai"}),
-        "groq": ({"groq"}, {"groq"}),
-        "huggingface": ({"huggingface"}, {"huggingface-hub"}),
-        "mistral": ({"mistral"}, {"mistralai"}),
-        "openrouter": ({"openrouter"}, {"openai"}),
-        "sentence-transformers": ({"sentence-transformers"}, {"sentence-transformers"}),
-        "voyageai": ({"voyageai"}, {"voyageai"}),
-        "xai": ({"xai"}, {"xai-sdk"}),
-    }
-    try:
-        return mapping[selected]
-    except KeyError as exc:
-        raise ValueError(f"unsupported lifecycle runtime provider dependency mapping: {provider}") from exc
-
-
-def _canonicalize_distribution_name(name: str) -> str:
-    return re.sub(r"[-_.]+", "-", name).lower()
-
-
-def _parse_distribution_requirement(raw_requirement: str, active_extras: set[str]) -> tuple[str, set[str]] | None:
-    requirement, separator, marker = raw_requirement.partition(";")
-    match = _REQUIREMENT_PATTERN.match(requirement)
-    if match is None:
-        raise ValueError(f"runtime distribution requirement is malformed: {raw_requirement}")
-    if separator and "extra" in marker:
-        marker_extras = {match.group(2) for match in _EXTRA_MARKER_PATTERN.finditer(marker)}
-        if not marker_extras:
-            raise ValueError(f"runtime distribution extra marker is unsupported: {raw_requirement}")
-        if not active_extras.intersection(marker_extras):
-            return None
-    extras = {extra.strip() for extra in (match.group(2) or "").split(",") if extra.strip()}
-    return _canonicalize_distribution_name(match.group(1)), extras
-
-
-def _realized_distribution_entries(
-    name: str,
-    distribution: importlib_metadata.Distribution,
-) -> list[tuple[str, str]]:
-    entries: dict[str, str] = {}
-    for package_path in distribution.files or ():
-        relative = package_path.as_posix()
-        if "__pycache__" in package_path.parts or package_path.suffix == ".pyc":
-            continue
-        path = Path(str(distribution.locate_file(package_path)))
-        if path.is_file():
-            entries[relative] = _realized_file_sha256(path)
-        else:
-            entries[relative] = hashlib.sha256(b"missing-realized-file").hexdigest()
-    if not entries:
-        for metadata_name in ("METADATA", "WHEEL", "entry_points.txt", "direct_url.json", "RECORD"):
-            content = distribution.read_text(metadata_name)
-            if content is not None:
-                entries[f"metadata/{metadata_name}"] = hashlib.sha256(content.encode("utf-8")).hexdigest()
-        root = Path(str(distribution.locate_file("")))
-        candidates = _distribution_top_level_names(name, distribution)
-        for candidate in candidates:
-            package = root / candidate
-            if package.is_file():
-                entries[f"package/{candidate}"] = _realized_file_sha256(package)
-            elif package.is_dir():
-                for path in _runtime_source_files(package):
-                    relative = path.relative_to(package).as_posix()
-                    entries[f"package/{candidate}/{relative}"] = _realized_file_sha256(path)
-    direct_url = distribution.read_text("direct_url.json")
-    if direct_url is not None:
-        entries.update(_editable_distribution_entries(name, direct_url))
-    return sorted(entries.items())
-
-
-def _distribution_top_level_names(
-    name: str,
-    distribution: importlib_metadata.Distribution,
-) -> tuple[str, ...]:
-    declared = distribution.read_text("top_level.txt") or ""
-    names = {line.strip() for line in declared.splitlines() if line.strip()}
-    names.add(name.replace("-", "_"))
-    return tuple(sorted(names))
-
-
-def _editable_distribution_entries(name: str, direct_url: str) -> dict[str, str]:
-    try:
-        payload = json.loads(direct_url)
-    except json.JSONDecodeError as exc:
-        raise ValueError(f"runtime distribution direct_url.json is malformed: {name}") from exc
-    if not isinstance(payload, dict) or not bool(payload.get("dir_info", {}).get("editable")):
-        return {}
-    parsed = urlparse(str(payload.get("url") or ""))
-    if parsed.scheme != "file":
-        raise ValueError(f"editable runtime distribution has unsupported source URL: {name}")
-    source = Path(unquote(parsed.path)).resolve()
-    if not source.is_dir():
-        raise ValueError(f"editable runtime distribution source is unavailable: {name}")
-    return {
-        f"editable/{path.relative_to(source).as_posix()}": _realized_file_sha256(path)
-        for path in _runtime_source_files(source)
-    }
-
-
-def _runtime_source_files(root: Path) -> list[Path]:
-    excluded = {".git", ".mypy_cache", ".pytest_cache", ".ruff_cache", ".venv", "__pycache__", "build", "dist"}
-    return [
-        path
-        for path in sorted(root.rglob("*"))
-        if path.is_file()
-        and not any(part in excluded for part in path.relative_to(root).parts)
-        and path.suffix != ".pyc"
-    ]
-
-
-def _realized_file_sha256(path: Path) -> str:
-    stat = path.stat()
-    signature = (stat.st_dev, stat.st_ino, stat.st_size, stat.st_mtime_ns, stat.st_ctime_ns)
-    cached = _REALIZED_FILE_DIGESTS.get(path)
-    if cached is not None and cached[0] == signature:
-        return cached[1]
-    digest = hashlib.sha256(path.read_bytes()).hexdigest()
-    _REALIZED_FILE_DIGESTS[path] = (signature, digest)
-    return digest
-
-
-def _update_inventory_digest(digest: Any, label: str, payload: bytes) -> None:
-    encoded_label = label.encode("utf-8")
-    digest.update(len(encoded_label).to_bytes(8, "big"))
-    digest.update(encoded_label)
-    digest.update(len(payload).to_bytes(8, "big"))
-    digest.update(payload)
-
-
-def repository_provenance(repository_dir: Path) -> dict[str, Any]:
-    source_root = _source_inventory_root(repository_dir)
-    source_package = _source_package_dir(source_root)
-    try:
-        root = _git(repository_dir, "rev-parse", "--show-toplevel").decode().strip()
-    except (FileNotFoundError, subprocess.CalledProcessError):
-        return _source_tree_provenance(source_root, source_package)
-    root_path = Path(root)
-    if not _source_package_is_tracked(root_path, source_package):
-        return _source_tree_provenance(source_root, source_package)
-    commit = _git(root_path, "rev-parse", "HEAD").decode().strip()
-    status = _git(root_path, "status", "--porcelain=v1", "--untracked-files=all")
-    diff = _git(root_path, "diff", "--binary", "HEAD")
-    untracked = _git(root_path, "ls-files", "--others", "--exclude-standard", "-z").split(b"\0")
-    digest = hashlib.sha256()
-    digest.update(status)
-    digest.update(diff)
-    for raw_path in sorted(path for path in untracked if path):
-        path = root_path / raw_path.decode()
-        digest.update(raw_path)
-        if path.is_file():
-            digest.update(path.read_bytes())
-    return {
-        "root": str(root_path),
-        "commit": commit,
-        "dirty": bool(status.strip()),
-        "dirty_digest": digest.hexdigest(),
-        "source_inventory_sha256": _source_inventory_sha256(root_path, source_package),
-        "repository_kind": "git",
-    }
-
-
-def _source_inventory_sha256(root: Path, source_package: Path | None = None) -> str:
-    selected = [root / "pyproject.toml", root / "uv.lock"]
-    source_root = source_package or _source_package_dir(root)
-    if source_root.is_dir():
-        selected.extend(
-            path
-            for path in source_root.rglob("*")
-            if path.is_file() and not path.is_symlink() and "__pycache__" not in path.parts and path.suffix != ".pyc"
-        )
-    for pattern in ("*.dist-info/METADATA", "*.dist-info/direct_url.json"):
-        selected.extend(path for path in root.glob(pattern) if path.is_file() and not path.is_symlink())
-    digest = hashlib.sha256()
-    for path in sorted(path for path in selected if path.is_file()):
-        relative = path.relative_to(root).as_posix().encode("utf-8")
-        digest.update(len(relative).to_bytes(8, "big"))
-        digest.update(relative)
-        digest.update(path.read_bytes())
-    return digest.hexdigest()
-
-
-def _source_tree_provenance(root: Path, source_package: Path) -> dict[str, Any]:
-    inventory = _source_inventory_sha256(root, source_package)
-    return {
-        "root": str(root),
-        "commit": f"source-sha256:{inventory}",
-        "dirty": False,
-        "dirty_digest": hashlib.sha256(b"").hexdigest(),
-        "source_inventory_sha256": inventory,
-        "repository_kind": "source_tree",
-    }
-
-
-def _source_package_dir(root: Path) -> Path:
-    source = root / "src" / "aec_bench"
-    return source if source.is_dir() else root / "aec_bench"
-
-
-def _source_package_is_tracked(repository_root: Path, package_dir: Path) -> bool:
-    try:
-        relative = (package_dir / "__init__.py").resolve().relative_to(repository_root.resolve())
-        _git(repository_root, "ls-files", "--error-unmatch", "--", relative.as_posix())
-    except (FileNotFoundError, subprocess.CalledProcessError, ValueError):
-        return False
-    return True
-
-
-def _source_inventory_root(repository_dir: Path) -> Path:
-    candidate = Path(repository_dir).resolve()
-    for parent in (candidate, *candidate.parents):
-        if (parent / "src" / "aec_bench").is_dir() or (parent / "aec_bench").is_dir():
-            return parent
-        if parent.name == "aec_bench" and parent.is_dir():
-            return parent.parent
-    raise ValueError(f"aec_bench source inventory is unavailable from {repository_dir}")
-
-
-def _callable_provenance(verifier: Any) -> dict[str, Any]:
-    source_path = inspect.getsourcefile(verifier)
-    return {
-        "qualified_name": f"{getattr(verifier, '__module__', '')}.{getattr(verifier, '__qualname__', repr(verifier))}",
-        "source_path": source_path,
-        "source_sha256": _sha256(Path(source_path)) if source_path and Path(source_path).is_file() else None,
-    }
-
-
 def _provider_environment() -> dict[str, str]:
     allowed = (
         "AWS_REGION",
@@ -897,7 +446,7 @@ def _run_artifact_hashes(run_dir: Path) -> dict[str, str]:
             or relative.parts == ("workspace", "operations", "current-source.json")
         )
         if (
-            path.is_file()
+            is_lifecycle_regular_file(root=run_dir, path=path)
             and (path.name in names or requested_evidence or operation_evidence)
             and "experiments" not in relative.parts
         ):
@@ -911,16 +460,6 @@ def _tree_hashes(root: Path) -> dict[str, str]:
         for path in sorted(root.rglob("*"))
         if path.is_file() and not path.is_symlink()
     }
-
-
-def _git(cwd: Path, *args: str) -> bytes:
-    completed = subprocess.run(
-        ["git", *args],
-        cwd=cwd,
-        check=True,
-        capture_output=True,
-    )
-    return completed.stdout
 
 
 def _sha256(path: Path) -> str:

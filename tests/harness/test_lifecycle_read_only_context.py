@@ -214,7 +214,6 @@ def test_persistent_lifecycle_receives_context_once_without_persisting_it(tmp_pa
         package_dir=compiled.package_dir,
         run_dir=run_dir,
         model="fixed-test-model",
-        verifier=None,
         visibility_policy=LifecycleVisibilityPolicy.PERSISTENT_CONTEXT,
         operation_resolver=resolver,
         adapter_builder=adapter.build,

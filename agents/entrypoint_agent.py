@@ -78,6 +78,7 @@ from aec_bench.harness.pump_station_harbor.session import (
     run_pump_station_reference_session,
 )
 from aec_bench.lifecycles.application import LifecycleTrial
+from aec_bench.lifecycles.compiled import load_compiled_lifecycle
 from aec_bench.lifecycles.runtime.episode import LifecycleExecutionMode, LifecycleVisibilityPolicy
 from aec_bench.trials import PlannedTrial
 from aec_bench.worlds.stewardship.wastewater_pump_station.reference_controller import (
@@ -672,7 +673,7 @@ class EntrypointAgent(BaseAgent):
                     run_local_lifecycle,
                     trial=LifecycleTrial(
                         planned=planned,
-                        package_dir=current_bridge.package_dir,
+                        compiled=load_compiled_lifecycle(current_bridge.package_dir),
                         run_dir=run_dir,
                         execution_mode=LifecycleExecutionMode.PERSISTENT_CONTEXT,
                         visibility_policy=LifecycleVisibilityPolicy.PERSISTENT_CONTEXT,
