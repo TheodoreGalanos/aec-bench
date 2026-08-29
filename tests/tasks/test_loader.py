@@ -15,7 +15,7 @@ def test_loader_reads_real_mechanical_instance() -> None:
 
     task = load_task_definition(instance_dir, TASKS_ROOT)
 
-    assert task.task_id == "mechanical/heat-load/single-room-office-L2/adelaide-library-150m2"
+    assert task.task_id == "mechanical/heat-load/single-room-office-l2/adelaide-library-150m2"
     assert task.task_type == "heat-load"
     assert task.domain == "mechanical"
     assert task.category == "reasoning"

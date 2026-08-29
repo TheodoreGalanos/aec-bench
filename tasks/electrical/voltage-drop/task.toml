@@ -1,6 +1,13 @@
 version = "1.0"
 
+[identity]
+id = "01a04c6c-4b1f-7345-bf57-112fd35c60a2"
+key = "electrical/voltage-drop"
+version = 1
+
 [metadata]
+lifecycle = "proposed"
+visibility = "public"
 difficulty = "easy"
 category = "reasoning"
 tags = ["electrical", "buildings-electrical", "deterministic", "AS-NZS-3008"]

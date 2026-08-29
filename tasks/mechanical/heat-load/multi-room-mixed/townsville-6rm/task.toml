@@ -1,6 +1,13 @@
 version = "1.0"
 
+[identity]
+id = "01a04c6c-4b2f-7ddc-8f24-4f019a838a33"
+key = "mechanical/heat-load/multi-room-mixed/townsville-6rm"
+version = 1
+
 [metadata]
+lifecycle = "proposed"
+visibility = "public"
 difficulty = "medium"
 category = "reasoning"
 tags = ["mechanical", "hvac", "heat-load", "deterministic", "multi-room", "with-tool", "AS-1668-2"]

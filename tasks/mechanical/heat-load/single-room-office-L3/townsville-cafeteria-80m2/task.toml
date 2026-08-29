@@ -1,6 +1,13 @@
 version = "1.0"
 
+[identity]
+id = "01a04c6c-4b39-7c95-be09-4108ef7832a6"
+key = "mechanical/heat-load/single-room-office-l3/townsville-cafeteria-80m2"
+version = 1
+
 [metadata]
+lifecycle = "proposed"
+visibility = "public"
 difficulty = "medium"
 category = "reasoning"
 tags = ["mechanical", "hvac", "heat-load", "deterministic", "AS-1668-2", "no-tool", "ablation-L3"]

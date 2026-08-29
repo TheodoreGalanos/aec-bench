@@ -1,6 +1,13 @@
 version = "1.0"
 
+[identity]
+id = "01a04c6c-4b1e-7d81-9793-19e78bb54375"
+key = "electrical/catenary-sag"
+version = 1
+
 [metadata]
+lifecycle = "proposed"
+visibility = "public"
 difficulty = "easy"
 category = "reasoning"
 tags = ["electrical", "transmission-lines", "deterministic", "IEC-60826"]

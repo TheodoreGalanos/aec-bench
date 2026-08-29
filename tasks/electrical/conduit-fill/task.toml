@@ -1,6 +1,13 @@
 version = "1.0"
 
+[identity]
+id = "01a04c6c-4b1e-7a69-b331-3e21fd8fd65e"
+key = "electrical/conduit-fill"
+version = 1
+
 [metadata]
+lifecycle = "proposed"
+visibility = "public"
 difficulty = "easy"
 category = "reasoning"
 tags = ["electrical", "ict-comms", "deterministic", "ANSI-TIA-569"]

@@ -2,6 +2,7 @@
 # ABOUTME: Verifies bounded legacy compatibility, missing-policy errors, and stable report output.
 
 import os
+import tomllib
 from pathlib import Path
 from unittest.mock import patch
 from uuid import UUID
@@ -10,8 +11,18 @@ import pytest
 
 from aec_bench.contracts.identity import EntityKind, new_entity_id, validate_uuidv7
 from aec_bench.tasks import metadata_migration
-from aec_bench.tasks.loader import LoadError, load_legacy_task_definition, load_task_definition, parse_task_metadata
+from aec_bench.tasks.loader import (
+    LoadError,
+    derive_task_id,
+    iter_task_instance_dirs,
+    load_legacy_task_definition,
+    load_task_catalog,
+    load_task_definition,
+    parse_task_metadata,
+)
 from aec_bench.tasks.metadata_migration import generate_task_metadata_migration_report
+
+TASKS_ROOT = Path(__file__).resolve().parents[2] / "tasks"
 
 
 def _write_task(
@@ -230,3 +241,42 @@ def test_migration_report_keeps_existing_bytes_when_replacement_fails(tmp_path: 
 
     assert report_path.read_bytes() == original_bytes
     assert list(report_path.parent.glob(f".{report_path.name}.*.tmp")) == []
+
+
+def test_repository_tasks_have_complete_explicit_metadata_and_strict_loader_success(tmp_path: Path) -> None:
+    report_path = tmp_path / "task-metadata-report.json"
+
+    first_report = generate_task_metadata_migration_report(TASKS_ROOT, report_path)
+    first_bytes = report_path.read_bytes()
+    second_report = generate_task_metadata_migration_report(TASKS_ROOT, report_path)
+    catalogue = load_task_catalog(TASKS_ROOT)
+
+    assert first_report == second_report
+    assert report_path.read_bytes() == first_bytes
+    assert len(first_report.tasks) == len(iter_task_instance_dirs(TASKS_ROOT))
+    assert len(catalogue) == len(first_report.tasks)
+    assert len({entry.generated_uuid for entry in first_report.tasks}) == len(first_report.tasks)
+    assert len({entry.proposed_key for entry in first_report.tasks}) == len(first_report.tasks)
+
+    entries_by_path = {entry.current_path: entry for entry in first_report.tasks}
+    for task_dir in iter_task_instance_dirs(TASKS_ROOT):
+        current_path = derive_task_id(task_dir, TASKS_ROOT)
+        entry = entries_by_path[current_path]
+        task = catalogue[entry.proposed_key]
+        assert task.identity is not None
+        assert str(task.identity.id) == str(entry.generated_uuid)
+        assert str(task.identity.key) == entry.proposed_key
+        assert task.task_id == entry.proposed_key
+        assert task.identity.version == 1
+        assert task.lifecycle.value == "proposed"
+        assert task.visibility.value == "public"
+
+        raw_toml = tomllib.loads((task_dir / "task.toml").read_text(encoding="utf-8"))
+        assert raw_toml.get("version") in {None, "1.0"}
+        assert raw_toml["identity"] == {
+            "id": str(entry.generated_uuid),
+            "key": entry.proposed_key,
+            "version": 1,
+        }
+        assert raw_toml["metadata"]["lifecycle"] == "proposed"
+        assert raw_toml["metadata"]["visibility"] == "public"

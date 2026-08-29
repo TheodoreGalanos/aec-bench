@@ -41,10 +41,23 @@ KNOWN_DOMAINS = {
     "plumbing",
 }
 WORKSPACE_OUTPUT_PATH_RE: Final[str] = r"/workspace/[A-Za-z0-9._/-]+"
+_TASK_KEY_COMPONENT_RE: Final[re.Pattern[str]] = re.compile(r"[^a-z0-9_-]+")
 
 
 def derive_task_id(instance_dir: Path, tasks_root: Path) -> str:
     return instance_dir.relative_to(tasks_root).as_posix()
+
+
+def canonical_task_key(relative_path: str) -> EntityKey:
+    """Map an existing task path to the lowercase identity-key form."""
+
+    components: list[str] = []
+    for component in relative_path.split("/"):
+        normalised = _TASK_KEY_COMPONENT_RE.sub("-", component.lower()).strip("-_")
+        if not normalised or not normalised[0].isalnum() or not normalised[0].isascii():
+            normalised = f"task-{normalised}" if normalised else "task"
+        components.append(normalised)
+    return EntityKey("/".join(components))
 
 
 def load_task_definition(instance_dir: Path, tasks_root: Path) -> TaskDefinition:
@@ -83,7 +96,7 @@ def _load_task_definition_with_metadata(
 
     relative_path = derive_task_id(instance_dir, tasks_root)
     try:
-        path_key = EntityKey(relative_path)
+        path_key = canonical_task_key(relative_path)
     except (TypeError, ValueError) as error:
         raise LoadError(f"task path is not a valid entity key: {relative_path}") from error
     if task_metadata.identity.key != path_key and path_key not in task_metadata.identity.aliases:

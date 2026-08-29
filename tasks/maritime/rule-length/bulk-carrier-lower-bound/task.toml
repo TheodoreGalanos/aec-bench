@@ -1,6 +1,13 @@
 version = "1.0"
 
+[identity]
+id = "01a04c6c-4b1f-71b5-aa13-ee07e8b9ea7e"
+key = "maritime/rule-length/bulk-carrier-lower-bound"
+version = 1
+
 [metadata]
+lifecycle = "proposed"
+visibility = "public"
 difficulty = "medium"
 category = "reasoning"
 tags = ["maritime", "csr-h", "iacs", "rule-length", "principal-particulars", "deterministic"]
