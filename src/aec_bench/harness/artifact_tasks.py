@@ -6,16 +6,13 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-import re
 import shutil
-import subprocess
-import sys
 import tempfile
 import time
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Annotated, Literal, Protocol
+from typing import Annotated, Any, Literal, Protocol
 
 from pydantic import BaseModel, Field, PositiveInt
 
@@ -24,7 +21,7 @@ from aec_bench.contracts.agent_output import AgentOutputStatus
 from aec_bench.contracts.canonical_refs import CanonicalRefSet, parse_canonical_refs
 from aec_bench.contracts.evaluation_result import EvaluationResult, ValidityCheck
 from aec_bench.contracts.task_definition import ToolSpec
-from aec_bench.contracts.trial_extensions import ArtifactReference
+from aec_bench.contracts.trial_extensions import ArtifactReference, VerifierExecutionReceipt
 from aec_bench.contracts.trial_record import ExecutionStatus, TrialRecord
 from aec_bench.contracts.validators import StrictModel
 from aec_bench.evaluation.normalisation import NormalisationResult, normalise_output
@@ -36,6 +33,11 @@ from aec_bench.harness.local_runtime import (
 )
 from aec_bench.harness.model_execution.llm_reviewer import ReviewerRunConfig, run_workspace_reviewer
 from aec_bench.harness.trial_record_builder import build_trial_record
+from aec_bench.harness.verifier_execution import (
+    VERIFIER_PROTOCOL_VERSION,
+    execute_verifier,
+    localise_staged_verifier_paths,
+)
 from aec_bench.ledger.writer import materialize_trial_record
 from aec_bench.tasks.instance import ResolvedTaskInstance
 from aec_bench.tasks.snapshot import build_task_snapshot_archive
@@ -54,7 +56,6 @@ _VERIFIER_RETRY_ARTIFACT_SUFFIXES = (
     "_marker.json",
 )
 _VERIFIER_RETRY_EXCLUDED_PREFIXES = ("expected_", "input_", "prior_", "source_")
-_CONTAINER_ROOT_PATTERN = re.compile(r"(?<![\w.-])/(?:workspace|tests|logs)(?=/|(?=[\"'\s]))")
 
 
 class AttemptRunner(Protocol):
@@ -679,7 +680,11 @@ def run_trial(
         shutil.copytree(selected.workspace, snapshot_dir, dirs_exist_ok=True)
         if selected_workspace_export is not None:
             _export_selected_workspace(snapshot_dir, selected_workspace_export)
-        evaluation, verification_seconds = _evaluate_selected_attempt(task=task, attempt=selected, verify=verify)
+        evaluation, verification_seconds, verifier_receipt = _evaluate_selected_attempt(
+            task=task,
+            attempt=selected,
+            verify=verify,
+        )
         if reviewer is not None and reviewer.enabled:
             review_result = run_workspace_reviewer(
                 task_dir=task.instance_dir,
@@ -702,6 +707,7 @@ def run_trial(
             actor_snapshot=snapshot_dir,
             evidence_workspace=selected.workspace,
             selection_evidence=selection.evidence,
+            verifier_receipt=verifier_receipt,
         )
     finally:
         if snapshot_dir is not None:
@@ -798,7 +804,7 @@ def run_trial_with_verifier_feedback(
     try:
         first = runtime.run_once(task, trial, attempt_id="attempt-0")
         attempts.append(first)
-        initial_evaluation, first_verification_seconds = _evaluate_selected_attempt(
+        initial_evaluation, first_verification_seconds, first_verifier_receipt = _evaluate_selected_attempt(
             task=task,
             attempt=first,
             verify=True,
@@ -843,7 +849,7 @@ def run_trial_with_verifier_feedback(
             attempts.append(selected)
             snapshot_dir = Path(tempfile.mkdtemp(prefix="aec-bench-selected-", dir=runtime.artifact_root.parent))
             shutil.copytree(selected.workspace, snapshot_dir, dirs_exist_ok=True)
-            evaluation, second_verification_seconds = _evaluate_selected_attempt(
+            evaluation, second_verification_seconds, verifier_receipt = _evaluate_selected_attempt(
                 task=task,
                 attempt=selected,
                 verify=True,
@@ -862,6 +868,7 @@ def run_trial_with_verifier_feedback(
         else:
             snapshot_dir = Path(tempfile.mkdtemp(prefix="aec-bench-selected-", dir=runtime.artifact_root.parent))
             shutil.copytree(selected.workspace, snapshot_dir, dirs_exist_ok=True)
+            verifier_receipt = first_verifier_receipt
 
         if reviewer is not None and reviewer.enabled:
             review_result = run_workspace_reviewer(
@@ -884,6 +891,7 @@ def run_trial_with_verifier_feedback(
             verification_seconds=verification_seconds,
             actor_snapshot=snapshot_dir,
             evidence_workspace=selected.workspace,
+            verifier_receipt=verifier_receipt,
         )
     finally:
         if snapshot_dir is not None:
@@ -906,6 +914,7 @@ def _build_materialized_record(
     actor_snapshot: Path,
     evidence_workspace: Path,
     selection_evidence: AttemptSelectionEvidence | None = None,
+    verifier_receipt: VerifierExecutionReceipt | None = None,
 ) -> TrialRecord:
     output_path = resolve_workspace_path(actor_snapshot, task.task.verifier.expected_output_path)
     record = build_trial_record(
@@ -929,7 +938,7 @@ def _build_materialized_record(
         conversation_path=_existing_path(actor_snapshot / "conversation.jsonl"),
         trajectory_path=_existing_path(actor_snapshot / "trajectory.jsonl"),
         attempt=trial.repetition,
-        extensions=_trial_extensions(trial, selection_evidence),
+        extensions=_trial_extensions(trial, selection_evidence, verifier_receipt),
     )
     _attach_workspace_files(record=record, workspace=actor_snapshot)
     _attach_post_execution_files(record=record, workspace=evidence_workspace)
@@ -974,12 +983,17 @@ def _build_failed_materialized_record(
 def _trial_extensions(
     trial: PlannedTrial,
     selection_evidence: AttemptSelectionEvidence | None,
+    verifier_receipt: VerifierExecutionReceipt | None = None,
 ) -> dict[str, BaseModel]:
     extensions = dict(trial.extensions)
     if selection_evidence is not None:
         if "attempt_selection" in extensions:
             raise ValueError("planned trial extension conflicts with attempt selection evidence")
         extensions["attempt_selection"] = selection_evidence
+    if verifier_receipt is not None:
+        if "verifier_execution" in extensions:
+            raise ValueError("planned trial extension conflicts with verifier execution evidence")
+        extensions["verifier_execution"] = verifier_receipt
     return extensions
 
 
@@ -1079,32 +1093,51 @@ def _write_verifier_retry_summary(workspace: Path, payload: Mapping[str, object]
 
 def _evaluate_selected_attempt(
     *, task: ResolvedTaskInstance, attempt: TaskAttempt, verify: bool
-) -> tuple[EvaluationResult, float | None]:
+) -> tuple[EvaluationResult, float | None, VerifierExecutionReceipt | None]:
     output_path = resolve_workspace_path(attempt.workspace, task.task.verifier.expected_output_path)
     verifier_seconds = None
+    verifier_receipt = None
+    reward_payload: dict[str, Any] | None = None
+    details_payload: dict[str, Any] | None = None
     if verify:
         stage_verifier_assets(task.instance_dir, attempt.workspace)
-        verifier_seconds = _run_verifier(task=task, workspace=attempt.workspace, output_path=output_path)
-    reward_path = resolve_workspace_path(attempt.workspace, task.task.verifier.reward_path)
-    details_path = (
-        None
-        if task.task.verifier.details_path is None
-        else resolve_workspace_path(attempt.workspace, task.task.verifier.details_path)
-    )
-    verifier_completed = verify and reward_path.is_file()
+        started = time.monotonic()
+        transform_version = localise_staged_verifier_paths(
+            workspace=attempt.workspace,
+            verifier_root=attempt.workspace / "tests",
+        )
+        execution = execute_verifier(
+            verifier_path=attempt.workspace / task.task.verifier.script,
+            workspace=attempt.workspace,
+            output_path=output_path,
+            reward_path=resolve_workspace_path(attempt.workspace, task.task.verifier.reward_path),
+            details_path=(
+                None
+                if task.task.verifier.details_path is None
+                else resolve_workspace_path(attempt.workspace, task.task.verifier.details_path)
+            ),
+            verifier_key=f"{task.task.task_id}/verifier",
+            verifier_version=VERIFIER_PROTOCOL_VERSION,
+            runtime_transform_version=transform_version,
+        )
+        verifier_seconds = time.monotonic() - started
+        verifier_receipt = execution.receipt
+        reward_payload = execution.reward_payload
+        details_payload = execution.details_payload
+    verifier_completed = verifier_receipt is not None and verifier_receipt.completed
     output_present = output_path.is_file()
     valid_output = attempt.status is AgentOutputStatus.COMPLETED and output_present
     reward = 0.0
-    breakdown = None
+    breakdown = details_payload
     errors: list[str] = []
-    if verifier_completed:
-        payload = json.loads(reward_path.read_text(encoding="utf-8"))
-        reward = float(payload["reward"])
-        if details_path is not None and details_path.is_file():
-            candidate = json.loads(details_path.read_text(encoding="utf-8"))
-            breakdown = candidate if isinstance(candidate, dict) else {"details": candidate}
+    if verifier_completed and reward_payload is not None:
+        reward = float(reward_payload["reward"])
+    elif not verify:
+        errors.append("verification was disabled")
+    elif verifier_receipt is not None:
+        errors.append(verifier_receipt.failure_message or "verifier did not complete successfully")
     else:
-        errors.append("verification was disabled" if not verify else "verifier did not produce its reward artifact")
+        errors.append("verifier did not run")
     if not valid_output and reward != 0.0:
         errors.append("verifier reward was ignored because the selected attempt has no valid output")
         reward = 0.0
@@ -1120,55 +1153,8 @@ def _evaluate_selected_attempt(
             breakdown=breakdown,
         ),
         verifier_seconds,
+        verifier_receipt,
     )
-
-
-def _run_verifier(*, task: ResolvedTaskInstance, workspace: Path, output_path: Path) -> float | None:
-    verifier_path = workspace / task.task.verifier.script
-    if not verifier_path.is_file():
-        return None
-    _localise_staged_verifier_paths(workspace=workspace, verifier_root=verifier_path.parent)
-    reward_path = resolve_workspace_path(workspace, task.task.verifier.reward_path)
-    reward_path.parent.mkdir(parents=True, exist_ok=True)
-    env = {**os.environ, "PYTHONPATH": str(workspace)}
-    started = time.monotonic()
-    if verifier_path.suffix == ".py":
-        command = [sys.executable, str(verifier_path), "--input", str(output_path), "--output", str(reward_path)]
-    else:
-        command = ["bash", str(verifier_path)]
-    completed = subprocess.run(
-        command,
-        cwd=workspace,
-        env=env,
-        timeout=120,
-        capture_output=True,
-        check=False,
-    )
-    if verifier_path.suffix == ".py" and completed.returncode == 0 and not reward_path.exists():
-        completed = subprocess.run(
-            [sys.executable, str(verifier_path), str(workspace)],
-            cwd=workspace,
-            env=env,
-            timeout=120,
-            capture_output=True,
-            check=False,
-        )
-    return time.monotonic() - started
-
-
-def _localise_staged_verifier_paths(*, workspace: Path, verifier_root: Path) -> None:
-    """Map container mount paths in private staged verifier files to the local workspace."""
-
-    replacements = {
-        "/workspace": str(workspace),
-        "/tests": str(workspace / "tests"),
-        "/logs": str(workspace / "logs"),
-    }
-    for path in sorted((*verifier_root.rglob("*.py"), *verifier_root.rglob("*.sh"))):
-        content = path.read_text(encoding="utf-8")
-        localised = _CONTAINER_ROOT_PATTERN.sub(lambda match: replacements[match.group(0)], content)
-        if localised != content:
-            path.write_text(localised, encoding="utf-8")
 
 
 def _with_reviewer_summary(evaluation: EvaluationResult, workspace: Path) -> EvaluationResult:

@@ -3,11 +3,14 @@
 
 import json
 import stat
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
 
 import aec_bench.ledger.durability as durability
+from aec_bench.contracts.identity import EntityKind, new_entity_id
+from aec_bench.contracts.trial_extensions import VerifierExecutionReceipt, VerifierOutputParseStatus
 from aec_bench.ledger.durability import mkdir_durable
 from aec_bench.ledger.reader import read_trial_record
 from aec_bench.ledger.writer import DuplicateTrialRecordError, run_manifest_path, write_trial_record
@@ -28,6 +31,32 @@ def test_write_trial_record_persists_json_and_supports_roundtrip(tmp_path: Path)
         experiment_id=record.experiment_id,
         run_id=record.run_id,
     ).is_file()
+
+
+def test_write_trial_record_round_trips_verifier_execution_receipt(tmp_path: Path) -> None:
+    started_at = datetime(2026, 1, 1, tzinfo=UTC)
+    receipt = VerifierExecutionReceipt(
+        receipt_id=new_entity_id(EntityKind.RECEIPT),
+        verifier_key="civil/check/verifier",
+        verifier_version=1,
+        started_at=started_at,
+        finished_at=started_at,
+        duration_seconds=0.0,
+        command_name="python3",
+        runtime_transform_version=1,
+        exit_code=0,
+        timed_out=False,
+        cancelled=False,
+        output_parse_status=VerifierOutputParseStatus.VALID,
+    )
+    record = make_trial_record()
+    record.attach_extension("verifier_execution", receipt)
+
+    path = write_trial_record(ledger_root=tmp_path, record=record)
+    loaded = read_trial_record(path, ledger_root=tmp_path)
+
+    assert loaded.verifier_execution == receipt
+    assert any(item.extension_kind == "verifier_execution" for item in loaded.extension_refs)
 
 
 def test_write_trial_record_retains_logical_artifact_role_without_host_path(tmp_path: Path) -> None:

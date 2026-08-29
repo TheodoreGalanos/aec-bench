@@ -1,10 +1,15 @@
 # ABOUTME: Defines typed optional provenance extensions used by current trial records.
 # ABOUTME: Keeps lifecycle and study-specific evidence outside the shared TrialRecord envelope.
 
-from typing import Any, Literal
+from datetime import datetime
+from enum import StrEnum
+from math import isfinite
+from typing import Annotated, Any, Literal
+from uuid import UUID
 
 from pydantic import (
     Field,
+    NonNegativeFloat,
     NonNegativeInt,
     PositiveInt,
     field_validator,
@@ -12,7 +17,14 @@ from pydantic import (
 )
 
 from aec_bench.contracts.evaluation_refs import EvaluationRegimeRef
-from aec_bench.contracts.validators import NonEmptyStr, StrictModel, ensure_non_empty_string
+from aec_bench.contracts.identity import validate_uuidv7
+from aec_bench.contracts.validators import (
+    FrozenStrictModel,
+    NonEmptyStr,
+    StrictModel,
+    ensure_non_empty_string,
+    ensure_optional_non_empty_string,
+)
 
 
 class ArtifactReference(StrictModel):
@@ -27,6 +39,74 @@ class ArtifactReference(StrictModel):
         if len(value) != 64 or any(character not in "0123456789abcdef" for character in value):
             raise ValueError("sha256 must contain 64 lowercase hexadecimal characters")
         return value
+
+
+class VerifierOutputParseStatus(StrEnum):
+    NOT_CHECKED = "not_checked"
+    MISSING = "missing"
+    MALFORMED = "malformed"
+    VALID = "valid"
+
+
+class VerifierExecutionReceipt(FrozenStrictModel):
+    """Record the process outcome and bounded evidence of one verifier execution."""
+
+    receipt_id: UUID
+    verifier_key: NonEmptyStr
+    verifier_version: Annotated[int, Field(strict=True, gt=0)]
+    started_at: datetime
+    finished_at: datetime
+    duration_seconds: NonNegativeFloat
+    command_name: NonEmptyStr
+    arguments: tuple[str, ...] = ()
+    working_directory_role: Literal["trial_workspace"] = "trial_workspace"
+    exit_code: int | None
+    timed_out: bool
+    cancelled: bool
+    stdout_artifact: ArtifactReference | None = None
+    stderr_artifact: ArtifactReference | None = None
+    reward_artifact: ArtifactReference | None = None
+    details_artifact: ArtifactReference | None = None
+    output_parse_status: VerifierOutputParseStatus
+    failure_kind: NonEmptyStr | None = None
+    failure_message: str | None = None
+    runtime_transform_version: Annotated[int, Field(strict=True, gt=0)]
+    stdout_truncated: bool = False
+    stderr_truncated: bool = False
+
+    @field_validator("receipt_id", mode="before")
+    @classmethod
+    def validate_receipt_id(cls, value: UUID | str) -> UUID:
+        return validate_uuidv7(value)
+
+    @field_validator("failure_message")
+    @classmethod
+    def validate_failure_message(cls, value: str | None) -> str | None:
+        return ensure_optional_non_empty_string(value)
+
+    @model_validator(mode="after")
+    def validate_timing_and_flags(self) -> "VerifierExecutionReceipt":
+        if self.started_at.tzinfo is None or self.finished_at.tzinfo is None:
+            raise ValueError("verifier receipt timestamps must include a timezone")
+        if self.finished_at < self.started_at:
+            raise ValueError("verifier receipt finished_at must not precede started_at")
+        if self.timed_out and self.cancelled:
+            raise ValueError("verifier receipt cannot be timed out and cancelled")
+        if self.duration_seconds and not isfinite(self.duration_seconds):
+            raise ValueError("verifier receipt duration_seconds must be finite")
+        return self
+
+    @property
+    def completed(self) -> bool:
+        """Return true only when the process and reward contract both succeeded."""
+
+        return (
+            not self.timed_out
+            and not self.cancelled
+            and self.exit_code == 0
+            and self.reward_artifact is not None
+            and self.output_parse_status is VerifierOutputParseStatus.VALID
+        )
 
 
 class DerivationStepRecord(StrictModel):

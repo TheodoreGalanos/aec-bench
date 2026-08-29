@@ -247,6 +247,8 @@ Path(args.output).write_text(json.dumps({"reward": 1.0}))
     support_path = record.outputs.artifact_path("workspace")
     assert support_path is not None
     assert Path(support_path).is_file()
+    assert any(item.extension_kind == "verifier_execution" for item in record.extension_refs)
+    assert any(item.logical_path == "logs/verifier/receipt.json" for item in record.outputs.artifacts)
 
 
 def test_run_trial_tracks_custom_branching_recipe_and_verifies_only_selection(tmp_path: Path) -> None:
@@ -333,6 +335,8 @@ Path(args.output).write_text(json.dumps({"reward": 1.0}))
     assert (exported / "deliverables" / "result.md").read_bytes() == b"draft\n"
     assert not (exported / "tests").exists()
     assert not (exported / "logs" / "verifier").exists()
+    assert any(item.extension_kind == "verifier_execution" for item in record.extension_refs)
+    assert any(item.logical_path == "logs/verifier/receipt.json" for item in record.outputs.artifacts)
     assert all(not workspace.exists() for workspace in runtime.attempt_workspaces)
 
 
@@ -457,7 +461,7 @@ def test_best_of_one_has_single_attempt_parity_without_selector_call(tmp_path: P
 
     assert selector_calls == 0
     assert record.cost is not None and record.cost.model_calls == 1
-    assert not record.extension_refs
+    assert any(item.extension_kind == "verifier_execution" for item in record.extension_refs)
 
 
 def test_self_select_uses_first_eligible_candidate(tmp_path: Path) -> None:
