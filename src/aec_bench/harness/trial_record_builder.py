@@ -104,6 +104,7 @@ def build_trial_record(
     task_kind: TrialTaskKind = "artifact",
     attempt: int = 1,
     extensions: dict[str, BaseModel] | None = None,
+    evaluation_status: EvaluationStatus | None = None,
     execution_status_override: ExecutionStatus | None = None,
     include_output: bool = True,
 ) -> TrialRecord:
@@ -142,7 +143,11 @@ def build_trial_record(
         task_id=task.task_id,
         attempt=attempt,
         execution_status=execution_status,
-        evaluation_status=EvaluationStatus.COMPLETED if evaluation is not None else EvaluationStatus.FAILED,
+        evaluation_status=(
+            evaluation_status
+            if evaluation_status is not None
+            else (EvaluationStatus.COMPLETED if evaluation is not None else EvaluationStatus.FAILED)
+        ),
         evidence_status=(EvidenceStatus.PENDING if expected_authorities else EvidenceStatus.NOT_REQUIRED),
         started_at=started_at,
         completed_at=started_at + timedelta(seconds=total_seconds),

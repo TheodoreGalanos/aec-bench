@@ -10,6 +10,7 @@ from aec_bench.adapters.base import AdapterRequest, AdapterResult
 from aec_bench.contracts.agent_output import AgentOutput, AgentOutputStatus
 from aec_bench.contracts.experiment_manifest import AgentConfig, ComputeConfig
 from aec_bench.contracts.task_definition import EnvironmentSpec, VerifierSpec
+from aec_bench.contracts.trial_record import EvaluationStatus
 from aec_bench.harness.artifact_tasks import (
     AttemptSelection,
     AttemptSelectionEvidence,
@@ -240,6 +241,7 @@ Path(args.output).write_text(json.dumps({"reward": 1.0}))
 
     assert record.evaluation is not None
     assert record.evaluation.reward == 1.0
+    assert record.evaluation_status is EvaluationStatus.COMPLETED
     assert record.evaluation.breakdown == {"multi_file": True}
     assert all(not workspace.exists() for workspace in observed_workspaces)
     assert record.outputs.raw_output_path is not None
@@ -393,6 +395,7 @@ Path("/logs/verifier/reward.json").write_text(json.dumps({"reward": 1.0}))
     assert record.evaluation is not None
     assert record.evaluation.reward == 1.0
     assert record.evaluation.validity.verifier_completed
+    assert record.evaluation_status is EvaluationStatus.COMPLETED
 
 
 def test_run_experiment_resolves_planned_trials_to_supplied_tasks(tmp_path: Path) -> None:

@@ -22,9 +22,14 @@ from aec_bench.contracts.canonical_refs import CanonicalRefSet, parse_canonical_
 from aec_bench.contracts.evaluation_result import EvaluationResult, ValidityCheck
 from aec_bench.contracts.task_definition import ToolSpec
 from aec_bench.contracts.trial_extensions import ArtifactReference, VerifierExecutionReceipt
-from aec_bench.contracts.trial_record import ExecutionStatus, TrialRecord
+from aec_bench.contracts.trial_record import (
+    EvaluationStatus,
+    ExecutionStatus,
+    TrialRecord,
+)
 from aec_bench.contracts.validators import StrictModel
 from aec_bench.evaluation.normalisation import NormalisationResult, normalise_output
+from aec_bench.evaluation.verifier_outcome import map_verifier_execution
 from aec_bench.harness.local_runtime import (
     patch_workspace_paths,
     read_instruction,
@@ -680,7 +685,7 @@ def run_trial(
         shutil.copytree(selected.workspace, snapshot_dir, dirs_exist_ok=True)
         if selected_workspace_export is not None:
             _export_selected_workspace(snapshot_dir, selected_workspace_export)
-        evaluation, verification_seconds, verifier_receipt = _evaluate_selected_attempt(
+        evaluation, verification_seconds, verifier_receipt, evaluation_status = _evaluate_selected_attempt(
             task=task,
             attempt=selected,
             verify=verify,
@@ -708,6 +713,7 @@ def run_trial(
             evidence_workspace=selected.workspace,
             selection_evidence=selection.evidence,
             verifier_receipt=verifier_receipt,
+            evaluation_status=evaluation_status,
         )
     finally:
         if snapshot_dir is not None:
@@ -804,7 +810,12 @@ def run_trial_with_verifier_feedback(
     try:
         first = runtime.run_once(task, trial, attempt_id="attempt-0")
         attempts.append(first)
-        initial_evaluation, first_verification_seconds, first_verifier_receipt = _evaluate_selected_attempt(
+        (
+            initial_evaluation,
+            first_verification_seconds,
+            first_verifier_receipt,
+            first_evaluation_status,
+        ) = _evaluate_selected_attempt(
             task=task,
             attempt=first,
             verify=True,
@@ -849,7 +860,7 @@ def run_trial_with_verifier_feedback(
             attempts.append(selected)
             snapshot_dir = Path(tempfile.mkdtemp(prefix="aec-bench-selected-", dir=runtime.artifact_root.parent))
             shutil.copytree(selected.workspace, snapshot_dir, dirs_exist_ok=True)
-            evaluation, second_verification_seconds, verifier_receipt = _evaluate_selected_attempt(
+            evaluation, second_verification_seconds, verifier_receipt, evaluation_status = _evaluate_selected_attempt(
                 task=task,
                 attempt=selected,
                 verify=True,
@@ -869,6 +880,7 @@ def run_trial_with_verifier_feedback(
             snapshot_dir = Path(tempfile.mkdtemp(prefix="aec-bench-selected-", dir=runtime.artifact_root.parent))
             shutil.copytree(selected.workspace, snapshot_dir, dirs_exist_ok=True)
             verifier_receipt = first_verifier_receipt
+            evaluation_status = first_evaluation_status
 
         if reviewer is not None and reviewer.enabled:
             review_result = run_workspace_reviewer(
@@ -892,6 +904,7 @@ def run_trial_with_verifier_feedback(
             actor_snapshot=snapshot_dir,
             evidence_workspace=selected.workspace,
             verifier_receipt=verifier_receipt,
+            evaluation_status=evaluation_status,
         )
     finally:
         if snapshot_dir is not None:
@@ -915,6 +928,7 @@ def _build_materialized_record(
     evidence_workspace: Path,
     selection_evidence: AttemptSelectionEvidence | None = None,
     verifier_receipt: VerifierExecutionReceipt | None = None,
+    evaluation_status: EvaluationStatus | None = None,
 ) -> TrialRecord:
     output_path = resolve_workspace_path(actor_snapshot, task.task.verifier.expected_output_path)
     record = build_trial_record(
@@ -939,6 +953,7 @@ def _build_materialized_record(
         trajectory_path=_existing_path(actor_snapshot / "trajectory.jsonl"),
         attempt=trial.repetition,
         extensions=_trial_extensions(trial, selection_evidence, verifier_receipt),
+        evaluation_status=evaluation_status,
     )
     _attach_workspace_files(record=record, workspace=actor_snapshot)
     _attach_post_execution_files(record=record, workspace=evidence_workspace)
@@ -1093,7 +1108,7 @@ def _write_verifier_retry_summary(workspace: Path, payload: Mapping[str, object]
 
 def _evaluate_selected_attempt(
     *, task: ResolvedTaskInstance, attempt: TaskAttempt, verify: bool
-) -> tuple[EvaluationResult, float | None, VerifierExecutionReceipt | None]:
+) -> tuple[EvaluationResult, float | None, VerifierExecutionReceipt | None, EvaluationStatus | None]:
     output_path = resolve_workspace_path(attempt.workspace, task.task.verifier.expected_output_path)
     verifier_seconds = None
     verifier_receipt = None
@@ -1141,20 +1156,25 @@ def _evaluate_selected_attempt(
     if not valid_output and reward != 0.0:
         errors.append("verifier reward was ignored because the selected attempt has no valid output")
         reward = 0.0
-    return (
-        EvaluationResult(
-            reward=reward,
-            validity=ValidityCheck(
-                output_parseable=valid_output,
-                schema_valid=valid_output,
-                verifier_completed=verifier_completed,
-                errors=errors,
-            ),
-            breakdown=breakdown,
+    evaluation = EvaluationResult(
+        reward=reward,
+        validity=ValidityCheck(
+            output_parseable=valid_output,
+            schema_valid=valid_output,
+            verifier_completed=verifier_completed,
+            errors=errors,
         ),
-        verifier_seconds,
-        verifier_receipt,
+        breakdown=breakdown,
     )
+    if verifier_receipt is not None:
+        mapped = map_verifier_execution(
+            receipt=verifier_receipt,
+            evaluation=evaluation,
+            expected_verifier_key=f"{task.task.task_id}/verifier",
+            expected_verifier_version=VERIFIER_PROTOCOL_VERSION,
+        )
+        return mapped.evaluation, verifier_seconds, verifier_receipt, mapped.status
+    return evaluation, verifier_seconds, verifier_receipt, None
 
 
 def _with_reviewer_summary(evaluation: EvaluationResult, workspace: Path) -> EvaluationResult:
