@@ -69,9 +69,15 @@ def test_entity_identity_validates_key_and_positive_version() -> None:
     assert isinstance(identity.key, EntityKey)
     assert format_display_ref(identity.key, identity.id) == "civil/drainage/pipe-sizing · " + identity.id.hex[-8:]
 
-    for invalid_version in (0, -1):
+    for invalid_version in (0, -1, True, 1.0, "1"):
         with pytest.raises(ValidationError):
-            EntityIdentity(id=identity.id, key=EntityKey("civil/drainage/pipe-sizing"), version=invalid_version)
+            EntityIdentity.model_validate(
+                {
+                    "id": identity.id,
+                    "key": "civil/drainage/pipe-sizing",
+                    "version": invalid_version,
+                }
+            )
 
 
 @pytest.mark.parametrize(

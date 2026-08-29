@@ -125,7 +125,13 @@ _CONTRACT_KEY_PRIORITY = (
     "semantics_version",
 )
 _IGNORED_PATH_PARTS = {"__pycache__", ".mypy_cache", ".pytest_cache", ".ruff_cache", "node_modules"}
-_COMPATIBILITY_KINDS = {"external_schema", "package_distribution", "protocol", "qualification_matrix"}
+_COMPATIBILITY_KINDS = {
+    "entity_revision",
+    "external_schema",
+    "package_distribution",
+    "protocol",
+    "qualification_matrix",
+}
 _FIELD_STATUSES = {"current", "temporary_exception"}
 _ACTOR_REQUEST_FINGERPRINT_KEYS = {
     "action_name",
