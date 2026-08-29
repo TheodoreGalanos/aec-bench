@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import tempfile
 import tomllib
 from dataclasses import asdict, dataclass
@@ -75,6 +76,153 @@ def generate_task_metadata_migration_report(
     output_path.parent.mkdir(parents=True, exist_ok=True)
     _write_report_atomically(output_path, report.to_json())
     return report
+
+
+def apply_task_metadata_migration(tasks_root: Path, report: TaskMetadataMigrationReport) -> tuple[str, ...]:
+    """Write reviewed identity and policy values to the listed task packages."""
+
+    changes = _task_metadata_changes(tasks_root, report, require_policy=True)
+    for entry, after in changes:
+        task_toml = tasks_root / entry.current_path / "task.toml"
+        task_toml.write_text(after, encoding="utf-8")
+    return tuple(entry.current_path for entry, _after in changes)
+
+
+def planned_task_metadata_changes(tasks_root: Path, report: TaskMetadataMigrationReport) -> tuple[str, ...]:
+    """Return task paths that would change when the reviewed report is applied."""
+
+    return tuple(
+        entry.current_path for entry, _after in _task_metadata_changes(tasks_root, report, require_policy=False)
+    )
+
+
+def _task_metadata_changes(
+    tasks_root: Path,
+    report: TaskMetadataMigrationReport,
+    *,
+    require_policy: bool,
+) -> list[tuple[TaskMetadataMigrationEntry, str]]:
+    changes: list[tuple[TaskMetadataMigrationEntry, str]] = []
+    for entry in report.tasks:
+        task_path = tasks_root / entry.current_path
+        task_toml = task_path / "task.toml"
+        if not task_toml.is_file():
+            raise MigrationReportError(f"cannot write {entry.current_path}: task.toml is missing")
+        before = task_toml.read_text(encoding="utf-8")
+        try:
+            raw_toml = tomllib.loads(before)
+        except tomllib.TOMLDecodeError as error:
+            raise MigrationReportError(
+                f"cannot write {entry.current_path}: task.toml is not valid TOML: {error}"
+            ) from error
+        metadata = raw_toml.get("metadata")
+        if not isinstance(metadata, dict):
+            if not require_policy:
+                continue
+            raise MigrationReportError(
+                f"cannot write {entry.current_path}: reviewer must author [metadata].lifecycle and visibility"
+            )
+        authored_lifecycle = metadata.get("lifecycle")
+        authored_visibility = metadata.get("visibility")
+        if not require_policy and (
+            not isinstance(authored_lifecycle, str)
+            or authored_lifecycle not in {item.value for item in Lifecycle}
+            or not isinstance(authored_visibility, str)
+            or authored_visibility not in {item.value for item in Visibility}
+        ):
+            continue
+        if entry.current_inferred_visibility not in {item.value for item in Visibility}:
+            raise MigrationReportError(
+                f"cannot write {entry.current_path}: visibility is not classified as public, private, or holdout"
+            )
+        if entry.current_inferred_lifecycle not in {item.value for item in Lifecycle}:
+            raise MigrationReportError(f"cannot write {entry.current_path}: lifecycle is not supported")
+        if not isinstance(authored_lifecycle, str) or authored_lifecycle not in {item.value for item in Lifecycle}:
+            raise MigrationReportError(
+                f"cannot write {entry.current_path}: reviewer must author a supported [metadata].lifecycle"
+            )
+        if not isinstance(authored_visibility, str) or authored_visibility not in {item.value for item in Visibility}:
+            raise MigrationReportError(
+                f"cannot write {entry.current_path}: reviewer must author public, private, or holdout visibility"
+            )
+        if (
+            authored_lifecycle != entry.current_inferred_lifecycle
+            or authored_visibility != entry.current_inferred_visibility
+        ):
+            raise MigrationReportError(
+                f"cannot write {entry.current_path}: reviewed report policy does not match authored metadata"
+            )
+        after = _with_explicit_metadata(
+            before,
+            identity={
+                "id": str(entry.generated_uuid),
+                "key": entry.proposed_key,
+                "version": entry.proposed_version,
+            },
+            lifecycle=authored_lifecycle,
+            visibility=authored_visibility,
+        )
+        if after != before:
+            changes.append((entry, after))
+    return changes
+
+
+def _with_explicit_metadata(
+    text: str,
+    *,
+    identity: dict[str, str | int],
+    lifecycle: str,
+    visibility: str,
+) -> str:
+    """Add or replace the small explicit metadata sections without reformatting other TOML."""
+
+    lines = text.splitlines()
+    first_section = next((index for index, line in enumerate(lines) if line.lstrip().startswith("[")), len(lines))
+    identity_block = [
+        "[identity]",
+        f'id = "{identity["id"]}"',
+        f'key = "{identity["key"]}"',
+        f"version = {identity['version']}",
+        "",
+    ]
+    if first_section == len(lines):
+        lines.extend(identity_block)
+    else:
+        identity_start = next((index for index, line in enumerate(lines) if line.strip() == "[identity]"), None)
+        if identity_start is None:
+            lines[first_section:first_section] = identity_block
+        else:
+            identity_end = next(
+                (index for index in range(identity_start + 1, len(lines)) if lines[index].lstrip().startswith("[")),
+                len(lines),
+            )
+            lines[identity_start:identity_end] = identity_block
+
+    metadata_start = next((index for index, line in enumerate(lines) if line.strip() == "[metadata]"), None)
+    if metadata_start is None:
+        if lines and lines[-1] != "":
+            lines.append("")
+        lines.extend(["[metadata]", f'lifecycle = "{lifecycle}"', f'visibility = "{visibility}"'])
+    else:
+        metadata_end = next(
+            (index for index in range(metadata_start + 1, len(lines)) if lines[index].lstrip().startswith("[")),
+            len(lines),
+        )
+        section = lines[metadata_start + 1 : metadata_end]
+        section = _replace_toml_string(section, "lifecycle", lifecycle)
+        section = _replace_toml_string(section, "visibility", visibility)
+        lines[metadata_start + 1 : metadata_end] = section
+    return "\n".join(lines) + "\n"
+
+
+def _replace_toml_string(lines: list[str], key: str, value: str) -> list[str]:
+    pattern = re.compile(rf"^\s*{re.escape(key)}\s*=")
+    for index, line in enumerate(lines):
+        if pattern.match(line):
+            lines[index] = f'{key} = "{value}"'
+            return lines
+    lines.insert(0, f'{key} = "{value}"')
+    return lines
 
 
 def _validate_report_entries(entries: tuple[TaskMetadataMigrationEntry, ...]) -> None:
@@ -269,5 +417,7 @@ __all__ = (
     "REPORT_SCHEMA_VERSION",
     "TaskMetadataMigrationEntry",
     "TaskMetadataMigrationReport",
+    "apply_task_metadata_migration",
     "generate_task_metadata_migration_report",
+    "planned_task_metadata_changes",
 )

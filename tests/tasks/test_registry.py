@@ -3,8 +3,10 @@
 
 from pathlib import Path
 
+import pytest
+
 from aec_bench.contracts.task_definition import Lifecycle
-from aec_bench.tasks.registry import TaskRegistry
+from aec_bench.tasks.registry import TaskDiagnosticKind, TaskRegistry
 
 TASKS_ROOT = Path(__file__).resolve().parents[2] / "tasks"
 
@@ -71,6 +73,29 @@ def test_registry_survives_malformed_task(tmp_path: Path) -> None:
     assert registry.all()[0].task_id == "mechanical/heat-load/good"
     assert len(registry.load_errors) == 1
     assert "bad" in str(registry.load_errors[0][0])
+    assert registry.summary.discovered == 2
+    assert registry.summary.valid == 1
+    assert registry.summary.invalid == 1
+    assert registry.invalid_diagnostics[0].kind is TaskDiagnosticKind.MISSING_FILE
+    with pytest.raises(ValueError, match="invalid tasks"):
+        registry.require_valid()
+
+
+def test_registry_classifies_unsupported_legacy_metadata(tmp_path: Path) -> None:
+    task_dir = tmp_path / "mechanical" / "heat-load" / "bad-value"
+    (task_dir / "tests").mkdir(parents=True)
+    (task_dir / "instruction.md").write_text("Write findings to /workspace/output.jsonl.\n", encoding="utf-8")
+    (task_dir / "tests" / "test.sh").write_text("#!/bin/bash\n", encoding="utf-8")
+    (task_dir / "task.toml").write_text(
+        '[metadata]\nvisibility = "not-a-supported-visibility"\n',
+        encoding="utf-8",
+    )
+
+    registry = TaskRegistry(tasks_root=tmp_path)
+    registry.reload()
+
+    assert registry.summary.to_dict() == {"discovered": 1, "valid": 0, "invalid": 1}
+    assert registry.invalid_diagnostics[0].kind is TaskDiagnosticKind.UNSUPPORTED_VALUE
 
 
 def test_registry_returns_empty_for_nonexistent_root(tmp_path: Path) -> None:

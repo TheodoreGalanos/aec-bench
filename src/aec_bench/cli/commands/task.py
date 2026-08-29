@@ -9,6 +9,7 @@ from pathlib import Path
 import typer
 import yaml
 
+from aec_bench.cli.commands.config import resolve_path
 from aec_bench.cli.commands.lifecycle import app as lifecycle_app
 from aec_bench.cli.commands.world import app as world_app
 from aec_bench.cli.output import console, emit
@@ -45,34 +46,231 @@ def validate_command(
     from aec_bench.tasks.validator import validate_task
 
     report = validate_task(task_dir, tasks_root=root)
+    details = _task_authoring_details(task_dir, root, report)
 
-    # Human-readable output
-    console.print(f"\n[bold]{report.task_id}[/bold]\n")
+    data = report.to_dict()
+    data["identity"] = details
 
-    if not report.findings:
-        console.print("  [green]✓ All checks passed[/green]\n")
-    else:
-        for finding in report.findings:
-            icon = _SEVERITY_ICONS.get(finding.severity.value, "?")
-            console.print(f"  {icon} [bold]{finding.check}[/bold] — {finding.file}")
-            console.print(f"    {finding.message}")
-            if finding.fix_hint:
-                console.print(f"    [dim]Fix: {finding.fix_hint}[/dim]")
-
-    # Summary line
-    if report.passed:
-        console.print(f"[green bold]Passed[/green bold] — {report.warning_count} warning(s)\n")
-    else:
+    def render(_value: dict[str, object]) -> None:
+        console.print(f"\n[bold]Task: {details['display_ref'] or report.task_id}[/bold]")
+        console.print(f"Version: {details['version'] or 'unknown'}")
+        console.print(f"Lifecycle: {details['lifecycle'] or 'unknown'}")
+        console.print(f"Visibility: {details['visibility'] or 'unknown'}")
+        runnable = details["runnable"]
+        console.print(f"Runnable: {'yes' if runnable is True else 'no' if runnable is False else 'unknown'}")
         console.print(
-            f"[red bold]{report.error_count} error(s)[/red bold], "
-            f"{report.warning_count} warning(s) — not ready for promotion\n"
+            f"Verifier: {details['verifier_entrypoint'] or 'unknown'}, "
+            f"version {details['verifier_version'] or 'unknown'}\n"
         )
 
-    # Structured JSON output for agents
-    emit("task validate", report.to_dict(), start_time=start)
+        if not report.findings:
+            console.print("  [green]✓ All checks passed[/green]\n")
+        else:
+            for finding in report.findings:
+                icon = _SEVERITY_ICONS.get(finding.severity.value, "?")
+                console.print(f"  {icon} [bold]{finding.check}[/bold] — {finding.file}")
+                console.print(f"    {finding.message}")
+                if finding.fix_hint:
+                    console.print(f"    [dim]Fix: {finding.fix_hint}[/dim]")
+
+        console.print(f"Errors: {'none' if report.error_count == 0 else report.error_count}")
+        console.print(f"Warnings: {'none' if report.warning_count == 0 else report.warning_count}")
+        if report.passed:
+            console.print(f"[green bold]Passed[/green bold] — {report.warning_count} warning(s)\n")
+        else:
+            console.print(
+                f"[red bold]{report.error_count} error(s)[/red bold], "
+                f"{report.warning_count} warning(s) — not ready for promotion\n"
+            )
+
+    emit("task validate", data, start_time=start, human_renderer=render)
 
     if not report.passed:
         raise typer.Exit(1)
+
+
+@app.command("explain")
+def explain_command(
+    task_ref: str = typer.Argument(help="Canonical task key, alias, UUID, or legacy task path"),
+    tasks_root: str | None = typer.Option(None, "--tasks-root", "-t", help="Root directory containing tasks"),
+) -> None:
+    """Explain one task identity, policy, output contract, and verifier."""
+
+    start = time.monotonic()
+    root = resolve_path("tasks_root", cli_override=tasks_root)
+    from aec_bench.tasks.registry import TaskRegistry
+
+    registry = TaskRegistry(root)
+    registry.reload()
+    task = next((candidate for candidate in registry.all() if _task_matches(candidate, task_ref)), None)
+    if task is None:
+        emit("task explain", data=None, errors=[f"task not found: {task_ref}"], start_time=start)
+        raise typer.Exit(1)
+
+    identity = task.identity
+    data = {
+        "canonical_key": task.task_id,
+        "aliases": [] if identity is None else [str(alias) for alias in identity.aliases],
+        "id": None if identity is None else str(identity.id),
+        "version": None if identity is None else identity.version,
+        "lifecycle": task.lifecycle.value,
+        "visibility": task.visibility.value,
+        "runnable": task.runnable,
+        "output_contract": {
+            "expected_output_path": task.verifier.expected_output_path,
+            "reward_path": task.verifier.reward_path,
+            "details_path": task.verifier.details_path,
+        },
+        "verifier": {"entrypoint": task.verifier.script, "version": _verifier_protocol_version()},
+    }
+
+    def render(value: dict[str, object]) -> None:
+        console.print(f"Task: {value['canonical_key']}")
+        aliases = value["aliases"]
+        alias_text = ", ".join(aliases) if isinstance(aliases, list) else "none"
+        console.print(f"Aliases: {alias_text or 'none'}")
+        console.print(f"UUID: {value['id'] or 'legacy task without UUID'}")
+        console.print(f"Version: {value['version'] or 'legacy task without version'}")
+        console.print(f"Lifecycle: {value['lifecycle']}")
+        console.print(f"Visibility: {value['visibility']}")
+        console.print(f"Runnable: {'yes' if value['runnable'] else 'no'}")
+        console.print(f"Output contract: {value['output_contract']}")
+        console.print(f"Verifier: {value['verifier']}")
+
+    emit("task explain", data=data, start_time=start, human_renderer=render)
+
+
+@app.command("migrate-metadata")
+def migrate_metadata_command(
+    check: bool = typer.Option(False, "--check", help="Report reviewed metadata changes without writing task files"),
+    write: bool = typer.Option(False, "--write", help="Apply reviewed metadata values to task files"),
+    tasks_root: str | None = typer.Option(None, "--tasks-root", "-t", help="Root directory containing tasks"),
+    report_path: Path | None = typer.Option(None, "--report-path", help="Stable migration report path"),
+) -> None:
+    """Check or apply the reviewed task metadata migration report."""
+
+    start = time.monotonic()
+    if check == write:
+        raise typer.BadParameter("choose exactly one of --check or --write")
+    root = resolve_path("tasks_root", cli_override=tasks_root)
+    output_path = (
+        report_path.resolve() if report_path is not None else root.parent / "artefacts" / "task-metadata-report.json"
+    )
+    from aec_bench.tasks.metadata_migration import (
+        MigrationReportError,
+        apply_task_metadata_migration,
+        generate_task_metadata_migration_report,
+        planned_task_metadata_changes,
+    )
+
+    try:
+        report = generate_task_metadata_migration_report(root, output_path)
+        changes = planned_task_metadata_changes(root, report)
+        if write:
+            changes = apply_task_metadata_migration(root, report)
+    except (MigrationReportError, OSError, UnicodeError, ValueError) as error:
+        emit("task migrate-metadata", data=None, errors=[str(error)], start_time=start)
+        raise typer.Exit(1) from error
+
+    action = "would update" if check else "updated"
+    data = {
+        "report_path": str(output_path),
+        "task_count": len(report.tasks),
+        "changed_paths": list(changes),
+        "mode": "check" if check else "write",
+    }
+
+    def render(_value: dict[str, object]) -> None:
+        console.print(f"Task metadata migration {action} {len(changes)} task(s).")
+        console.print(f"Report: {output_path}")
+        for path in changes:
+            console.print(f"  - {path}")
+        for entry in report.tasks:
+            decisions = "; ".join(entry.required_reviewer_decisions)
+            console.print(
+                f"  {entry.current_path}: {entry.proposed_key} · {str(entry.generated_uuid)[-8:]} "
+                f"lifecycle={entry.current_inferred_lifecycle} visibility={entry.current_inferred_visibility}; "
+                f"review: {decisions}"
+            )
+
+    emit("task migrate-metadata", data, start_time=start, human_renderer=render)
+
+
+def _verifier_protocol_version() -> int:
+    from aec_bench.harness.verifier_execution import VERIFIER_PROTOCOL_VERSION
+
+    return VERIFIER_PROTOCOL_VERSION
+
+
+def _task_matches(task: object, reference: str) -> bool:
+    from aec_bench.contracts.task_definition import TaskDefinition
+
+    if not isinstance(task, TaskDefinition):
+        return False
+    if task.task_id == reference:
+        return True
+    if task.identity is None:
+        return False
+    return reference == str(task.identity.id) or reference in {str(alias) for alias in task.identity.aliases}
+
+
+def _task_authoring_details(task_dir: Path, tasks_root: Path, report: object) -> dict[str, object]:
+    from aec_bench.tasks.loader import LoadError, load_task_definition
+    from aec_bench.tasks.validator import Severity, ValidationFinding, ValidationReport
+
+    details: dict[str, object] = {
+        "display_ref": None,
+        "id": None,
+        "key": None,
+        "version": None,
+        "lifecycle": None,
+        "visibility": None,
+        "runnable": None,
+        "verifier_entrypoint": None,
+        "verifier_version": None,
+    }
+    if not isinstance(report, ValidationReport) or not (task_dir / "task.toml").is_file():
+        return details
+    try:
+        task = load_task_definition(task_dir, tasks_root)
+    except (LoadError, KeyError, TypeError, ValueError) as error:
+        report.findings.append(
+            ValidationFinding(
+                severity=Severity.ERROR,
+                check="metadata",
+                file="task.toml",
+                message=str(error),
+                fix_hint="Run `aec-bench task migrate-metadata --check` and repair the reported metadata.",
+            )
+        )
+        return details
+    details.update(
+        lifecycle=task.lifecycle.value,
+        visibility=task.visibility.value,
+        runnable=task.runnable,
+        verifier_entrypoint=task.verifier.script,
+        verifier_version=_verifier_protocol_version(),
+    )
+    if task.identity is None:
+        report.findings.append(
+            ValidationFinding(
+                severity=Severity.WARNING,
+                check="metadata",
+                file="task.toml",
+                message="task identity metadata is missing; the task uses bounded legacy compatibility loading",
+                fix_hint="Run `aec-bench task migrate-metadata --check` before publishing this task.",
+            )
+        )
+    else:
+        from aec_bench.contracts.identity import format_display_ref
+
+        details.update(
+            display_ref=format_display_ref(task.identity.key, task.identity.id),
+            id=str(task.identity.id),
+            key=str(task.identity.key),
+            version=task.identity.version,
+        )
+    return details
 
 
 @app.command("genome")

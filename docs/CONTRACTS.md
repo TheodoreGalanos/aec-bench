@@ -81,6 +81,16 @@ Maintained task packages now record the canonical key from their repository
 path. The key uses the identity rules, so legacy path components such as
 `L2` are represented as lowercase `l2`; the filesystem path remains unchanged.
 
+The task authoring commands expose this contract for review. `aec-bench task
+validate <task-path>` reports the display identity, task version, lifecycle,
+visibility, runnable state, verifier entrypoint and verifier protocol version,
+plus classified errors and warnings. `aec-bench task explain <task-key-or-id>`
+resolves the canonical key, aliases, UUID, version, policy, output contract,
+and verifier. `aec-bench task migrate-metadata --check` writes and displays a
+stable migration report, including unresolved reviewer decisions, without
+changing task files. `--write` changes identity only when lifecycle and
+visibility are already explicit and supported; it refuses to invent policy.
+
 Executable interactive worlds use their registered world definition and
 profile instead of pretending to be a static `TaskDefinition`. Both families
 can still enter the same experiment, trial, evaluation, and reporting layers.

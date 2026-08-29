@@ -3,12 +3,14 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import yaml
 from typer.testing import CliRunner
 
 from aec_bench.cli.main import app
+from aec_bench.contracts.identity import EntityKind, new_entity_id
 
 runner = CliRunner()
 
@@ -61,6 +63,18 @@ def _make_valid_named_task(root: Path, *segments: str) -> Path:
     return task_dir
 
 
+def _add_explicit_identity(task_dir: Path, *, lifecycle: str = "active", visibility: str = "public") -> str:
+    task_id = new_entity_id(EntityKind.TASK)
+    task_toml = (task_dir / "task.toml").read_text(encoding="utf-8")
+    task_toml = task_toml.replace(
+        "[metadata]\n",
+        f'[identity]\nid = "{task_id}"\nkey = "electrical/test-task"\nversion = 2\n\n'
+        f'[metadata]\nlifecycle = "{lifecycle}"\nvisibility = "{visibility}"\n',
+    )
+    (task_dir / "task.toml").write_text(task_toml, encoding="utf-8")
+    return str(task_id)
+
+
 class TestTaskValidate:
     def test_valid_task_exits_zero(self, tmp_path: Path) -> None:
         task_dir = _make_valid_task(tmp_path)
@@ -79,10 +93,18 @@ class TestTaskValidate:
         assert "test-task" in result.output
 
     def test_json_output_has_findings(self, tmp_path: Path) -> None:
-        task_dir = tmp_path / "electrical" / "bad-task"
-        task_dir.mkdir(parents=True)
+        task_dir = _make_valid_task(tmp_path)
+        task_id = _add_explicit_identity(task_dir)
         result = runner.invoke(app, ["--json", "task", "validate", str(task_dir)])
-        assert "findings" in result.output
+
+        assert result.exit_code == 0
+        payload = json.loads(result.output)
+        assert payload["status"] == "success"
+        assert payload["data"]["findings"] == []
+        assert payload["data"]["identity"]["id"] == task_id
+        assert payload["data"]["identity"]["version"] == 2
+        assert payload["data"]["identity"]["lifecycle"] == "active"
+        assert payload["data"]["identity"]["visibility"] == "public"
 
     def test_tasks_root_option(self, tmp_path: Path) -> None:
         task_dir = _make_valid_task(tmp_path)
@@ -92,6 +114,151 @@ class TestTaskValidate:
         )
         assert result.exit_code == 0
         assert "electrical/test-task" in result.output
+
+    def test_output_includes_explicit_identity_and_policy(self, tmp_path: Path) -> None:
+        task_dir = _make_valid_task(tmp_path)
+        _add_explicit_identity(task_dir)
+
+        result = runner.invoke(app, ["--text", "task", "validate", str(task_dir)])
+
+        assert result.exit_code == 0
+        assert "Task: electrical/test-task ·" in result.output
+        assert "Version: 2" in result.output
+        assert "Lifecycle: active" in result.output
+        assert "Visibility: public" in result.output
+        assert "Runnable: yes" in result.output
+        assert "Verifier: tests/test.sh, version 1" in result.output
+        assert "Errors: none" in result.output
+        assert "Warnings: none" in result.output
+
+
+class TestTaskExplain:
+    def test_explain_resolves_key_and_uuid(self, tmp_path: Path) -> None:
+        task_dir = _make_valid_task(tmp_path)
+        task_id = _add_explicit_identity(task_dir)
+
+        result = runner.invoke(app, ["--text", "task", "explain", task_id, "--tasks-root", str(tmp_path)])
+
+        assert result.exit_code == 0
+        assert "Canonical_key" not in result.output
+        assert "Task: electrical/test-task" in result.output
+        assert task_id in result.output
+        assert "Version: 2" in result.output
+        assert "Output contract" in result.output
+        assert "tests/test.sh" in result.output
+
+    def test_explain_unknown_task_fails(self, tmp_path: Path) -> None:
+        result = runner.invoke(app, ["--text", "task", "explain", "electrical/missing", "--tasks-root", str(tmp_path)])
+
+        assert result.exit_code == 1
+        assert "task not found" in result.output
+
+
+class TestTaskMetadataMigration:
+    def test_check_write_and_second_check_are_idempotent(self, tmp_path: Path) -> None:
+        task_dir = _make_valid_task(tmp_path)
+        report_path = tmp_path / "migration-report.json"
+        task_toml = (
+            (task_dir / "task.toml")
+            .read_text(encoding="utf-8")
+            .replace("[metadata]\n", '[metadata]\nlifecycle = "active"\nvisibility = "public"\n')
+        )
+        (task_dir / "task.toml").write_text(task_toml, encoding="utf-8")
+
+        check = runner.invoke(
+            app,
+            [
+                "--text",
+                "task",
+                "migrate-metadata",
+                "--check",
+                "--tasks-root",
+                str(tmp_path),
+                "--report-path",
+                str(report_path),
+            ],
+        )
+        write = runner.invoke(
+            app,
+            [
+                "--text",
+                "task",
+                "migrate-metadata",
+                "--write",
+                "--tasks-root",
+                str(tmp_path),
+                "--report-path",
+                str(report_path),
+            ],
+        )
+        second_check = runner.invoke(
+            app,
+            [
+                "--text",
+                "task",
+                "migrate-metadata",
+                "--check",
+                "--tasks-root",
+                str(tmp_path),
+                "--report-path",
+                str(report_path),
+            ],
+        )
+
+        assert check.exit_code == 0
+        assert "would update 1" in check.output
+        assert write.exit_code == 0
+        assert "updated 1" in write.output
+        assert second_check.exit_code == 0
+        assert "would update 0" in second_check.output
+
+    def test_write_refuses_missing_policy_instead_of_inventing_it(self, tmp_path: Path) -> None:
+        task_dir = _make_valid_task(tmp_path)
+        task_toml = (
+            (task_dir / "task.toml")
+            .read_text(encoding="utf-8")
+            .replace("[metadata]\n", '[metadata]\nvisibility = "public"\n')
+        )
+        (task_dir / "task.toml").write_text(task_toml, encoding="utf-8")
+
+        check = runner.invoke(
+            app,
+            ["--text", "task", "migrate-metadata", "--check", "--tasks-root", str(tmp_path)],
+        )
+        result = runner.invoke(
+            app,
+            ["--text", "task", "migrate-metadata", "--write", "--tasks-root", str(tmp_path)],
+        )
+
+        assert check.exit_code == 0
+        assert "review:" in check.output
+        assert result.exit_code == 1
+        assert "reviewer must author" in result.output
+
+    def test_json_output_is_single_envelope(self, tmp_path: Path) -> None:
+        task_dir = _make_valid_task(tmp_path)
+        _add_explicit_identity(task_dir)
+        report_path = tmp_path / "migration-report.json"
+
+        result = runner.invoke(
+            app,
+            [
+                "--json",
+                "task",
+                "migrate-metadata",
+                "--check",
+                "--tasks-root",
+                str(tmp_path),
+                "--report-path",
+                str(report_path),
+            ],
+        )
+
+        assert result.exit_code == 0
+        payload = json.loads(result.output)
+        assert payload["status"] == "success"
+        assert payload["data"]["mode"] == "check"
+        assert payload["data"]["task_count"] == 1
 
 
 class TestTaskGenome:
