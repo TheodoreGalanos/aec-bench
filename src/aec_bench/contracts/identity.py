@@ -8,9 +8,10 @@ import secrets
 import time
 from enum import StrEnum
 from pathlib import Path, PureWindowsPath
+from typing import Annotated
 from uuid import RFC_4122, UUID
 
-from pydantic import PositiveInt, field_validator, model_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_core import core_schema
 
 from aec_bench.contracts.validators import FrozenStrictModel
@@ -120,7 +121,7 @@ class EntityIdentity(FrozenStrictModel):
 
     id: UUID
     key: EntityKey
-    version: PositiveInt
+    version: Annotated[int, Field(strict=True, gt=0)]
     aliases: tuple[EntityKey, ...] = ()
 
     @field_validator("id", mode="before")

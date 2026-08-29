@@ -111,6 +111,7 @@ def _compatibility_registration(
     wire_name: str,
     surface: str = "pydantic_model",
     aliases: list[str] | None = None,
+    compatibility_kind: str = "external_schema",
 ) -> str:
     aliases_line = ""
     if aliases:
@@ -137,7 +138,7 @@ def _compatibility_registration(
     rationale = "The fixture exercises compatibility metadata."
     duplication = "unique"
     compatibility_behavior = "reject unsupported schema"
-    compatibility_kind = "external_schema"
+    compatibility_kind = "{compatibility_kind}"
     '''
 
 
@@ -608,6 +609,22 @@ def test_version_token_registry_field_requires_compatibility_or_qualification_sc
 
     with pytest.raises(provenance.ProvenanceInputError, match="version-shaped"):
         provenance.load_registry(registry)
+
+
+def test_version_token_registry_field_accepts_entity_revision_compatibility_scope(tmp_path: Path) -> None:
+    symbol = "aec_bench.contracts.identity.EntityIdentity.version"
+    registry = _write_registry(
+        tmp_path,
+        _compatibility_registration(
+            symbol,
+            wire_name="version",
+            compatibility_kind="entity_revision",
+        ),
+    )
+
+    loaded = provenance.load_registry(registry)
+
+    assert loaded.by_locator[symbol].metadata["compatibility_kind"] == "entity_revision"
 
 
 def test_registry_wire_name_drift_follows_serialization_alias(tmp_path: Path) -> None:
