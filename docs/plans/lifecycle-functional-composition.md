@@ -222,16 +222,12 @@ The two modes are real treatments. The public API should make their difference
 explicit rather than pretending that a persistent session is a sequence of
 fresh episodes.
 
-### Trial finalisation is coupled to ablation
+### Trial finalisation has a reusable core boundary
 
-`experimentation.lifecycle_studies.trial_record` can produce a complete core
-`TrialRecord`, but its public builder and finaliser require
-`LifecycleAblationManifest` and `LifecycleAblationTrial`.
-
-This means an ordinary lifecycle trial cannot use the finalisation logic
-without pretending to be part of an ablation. The reusable finalisation
-boundary must accept a normal lifecycle trial. Ablation-specific fields can
-continue through `PlannedTrial.extensions` and study-owned reports.
+`lifecycles.finalization` produces the complete core `TrialRecord` from a
+normal lifecycle trial. `experimentation.lifecycle_studies.retention` adds the
+study-owned snapshot, index, recovery, and persistence policy. Ablation fields
+continue through the planned trial and study-owned reports.
 
 ### Ablation repeats the application pipeline
 

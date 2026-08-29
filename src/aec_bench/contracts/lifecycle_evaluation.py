@@ -3,17 +3,20 @@
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Annotated, Literal
 
-from pydantic import Field, model_validator
+from pydantic import Field, StrictBool, model_validator
 
 from aec_bench.contracts.validators import NonEmptyStr, StrictModel
 
+_StrictNonNegativeInt = Annotated[int, Field(strict=True, ge=0)]
+_StrictUnitFloat = Annotated[float, Field(strict=True, ge=0.0, le=1.0)]
+
 
 class LifecycleSemanticStateAccuracy(StrictModel):
-    correct_atoms: int = Field(ge=0)
-    total_atoms: int = Field(ge=0)
-    accuracy: float | None = Field(default=None, ge=0.0, le=1.0)
+    correct_atoms: _StrictNonNegativeInt
+    total_atoms: _StrictNonNegativeInt
+    accuracy: _StrictUnitFloat | None = None
 
     @model_validator(mode="after")
     def validate_support(self) -> LifecycleSemanticStateAccuracy:
@@ -24,21 +27,21 @@ class LifecycleSemanticStateAccuracy(StrictModel):
 
 
 class LifecycleSemanticTransitionSummary(StrictModel):
-    expected_update_count: int = Field(ge=0)
-    actual_update_count: int = Field(ge=0)
-    aligned_update_count: int = Field(ge=0)
-    updated_to_expected_count: int = Field(ge=0)
-    acquired_update_count: int = Field(ge=0)
-    unsupported_update_count: int = Field(ge=0)
-    stable_correct_before_count: int = Field(ge=0)
-    retained_count: int = Field(ge=0)
-    interference_count: int = Field(ge=0)
-    acquisition: float | None = Field(default=None, ge=0.0, le=1.0)
-    update_precision: float | None = Field(default=None, ge=0.0, le=1.0)
-    update_recall: float | None = Field(default=None, ge=0.0, le=1.0)
-    update_f1: float | None = Field(default=None, ge=0.0, le=1.0)
-    retention: float | None = Field(default=None, ge=0.0, le=1.0)
-    interference: float | None = Field(default=None, ge=0.0, le=1.0)
+    expected_update_count: _StrictNonNegativeInt
+    actual_update_count: _StrictNonNegativeInt
+    aligned_update_count: _StrictNonNegativeInt
+    updated_to_expected_count: _StrictNonNegativeInt
+    acquired_update_count: _StrictNonNegativeInt
+    unsupported_update_count: _StrictNonNegativeInt
+    stable_correct_before_count: _StrictNonNegativeInt
+    retained_count: _StrictNonNegativeInt
+    interference_count: _StrictNonNegativeInt
+    acquisition: _StrictUnitFloat | None = None
+    update_precision: _StrictUnitFloat | None = None
+    update_recall: _StrictUnitFloat | None = None
+    update_f1: _StrictUnitFloat | None = None
+    retention: _StrictUnitFloat | None = None
+    interference: _StrictUnitFloat | None = None
 
     @model_validator(mode="after")
     def validate_counts_and_support(self) -> LifecycleSemanticTransitionSummary:
@@ -97,8 +100,8 @@ class LifecycleSemanticMetrics(StrictModel):
 
 
 class LifecycleGateResult(StrictModel):
-    passed: bool
-    score: float = Field(ge=0.0, le=1.0)
+    passed: StrictBool
+    score: _StrictUnitFloat
     failures: list[str] = Field(default_factory=list)
 
 
@@ -106,8 +109,8 @@ class LifecycleVerificationResult(StrictModel):
     template_id: str | None = None
     lifecycle_id: NonEmptyStr
     overall: Literal["pass", "fail", "incomplete"]
-    passed: bool
-    reward: float = Field(ge=0.0, le=1.0)
+    passed: StrictBool
+    reward: _StrictUnitFloat
     gates: dict[str, LifecycleGateResult] = Field(min_length=1)
     semantic_metrics: LifecycleSemanticMetrics | None = None
 

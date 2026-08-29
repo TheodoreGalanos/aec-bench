@@ -6,6 +6,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
 from typer.testing import CliRunner
 
 from aec_bench.cli.main import app
@@ -18,6 +19,18 @@ def _payload(result_output: str) -> dict[str, object]:
     if not isinstance(payload, dict):
         raise AssertionError("expected CLI JSON object")
     return payload
+
+
+def _error_messages(result_output: str, command: str) -> list[str]:
+    envelope = _payload(result_output)
+    assert envelope["command"] == command
+    assert envelope["status"] == "error"
+    assert envelope["data"] is None
+    errors = envelope["errors"]
+    assert isinstance(errors, list)
+    assert errors
+    assert all(isinstance(error, str) for error in errors)
+    return errors
 
 
 def test_task_lifecycle_lists_only_current_task_definitions() -> None:
@@ -122,3 +135,147 @@ def test_task_lifecycle_contains_complete_command_hierarchy() -> None:
         assert command in lifecycle_help.output
     assert "ablation" in study_help.output
     assert "calibration-freeze" in study_help.output
+
+
+@pytest.mark.parametrize(
+    ("subcommand", "argument_template"),
+    [
+        ("start", ("--package", "{package}", "--run-dir", "{run_dir}")),
+        ("submit", ("--package", "{package}", "--run-dir", "{run_dir}")),
+        ("status", ("--package", "{package}", "--run-dir", "{run_dir}")),
+        (
+            "revisit",
+            (
+                "--package",
+                "{package}",
+                "--run-dir",
+                "{run_dir}",
+                "--checkpoint-id",
+                "checkpoint-1",
+                "--reason",
+                "Inspect the prior evidence.",
+            ),
+        ),
+        (
+            "branch",
+            (
+                "--package",
+                "{package}",
+                "--parent-run-dir",
+                "{run_dir}",
+                "--branch-run-dir",
+                "{branch_run_dir}",
+                "--checkpoint-id",
+                "checkpoint-1",
+                "--branch-id",
+                "branch-1",
+                "--reason",
+                "Test an alternative.",
+            ),
+        ),
+        (
+            "run",
+            ("--package", "{package}", "--run-dir", "{run_dir}", "--model", "test-model"),
+        ),
+        ("verify", ("{package}", "--run-dir", "{run_dir}")),
+    ],
+)
+def test_task_lifecycle_expected_io_errors_use_json_envelope(
+    tmp_path: Path,
+    subcommand: str,
+    argument_template: tuple[str, ...],
+) -> None:
+    package = tmp_path / "missing-package"
+    values = {
+        "package": str(package),
+        "run_dir": str(tmp_path / "run"),
+        "branch_run_dir": str(tmp_path / "branch-run"),
+    }
+    arguments = [argument.format_map(values) for argument in argument_template]
+
+    result = runner.invoke(app, ["--json", "task", "lifecycle", subcommand, *arguments])
+
+    assert result.exit_code == 1
+    errors = _error_messages(result.output, f"task lifecycle {subcommand}")
+    assert str(package / "template.json") in errors[0]
+
+
+def test_task_lifecycle_json_error_uses_json_envelope(tmp_path: Path) -> None:
+    package = tmp_path / "package"
+    package.mkdir()
+    (package / "template.json").write_text("{", encoding="utf-8")
+
+    result = runner.invoke(
+        app,
+        [
+            "--json",
+            "task",
+            "lifecycle",
+            "run",
+            "--package",
+            str(package),
+            "--run-dir",
+            str(tmp_path / "run"),
+            "--model",
+            "test-model",
+        ],
+    )
+
+    assert result.exit_code == 1
+    errors = _error_messages(result.output, "task lifecycle run")
+    assert "Expecting property name enclosed in double quotes" in errors[0]
+
+
+def test_task_lifecycle_domain_error_uses_json_envelope(tmp_path: Path) -> None:
+    package = tmp_path / "package"
+    run_dir = tmp_path / "run"
+    materialized = runner.invoke(
+        app,
+        [
+            "--json",
+            "task",
+            "lifecycle",
+            "materialize",
+            "drainage-model-evidence-lifecycle-review",
+            "--output",
+            str(package),
+        ],
+    )
+    started = runner.invoke(
+        app,
+        [
+            "--json",
+            "task",
+            "lifecycle",
+            "start",
+            "--package",
+            str(package),
+            "--run-dir",
+            str(run_dir),
+        ],
+    )
+
+    assert materialized.exit_code == 0, materialized.output
+    assert started.exit_code == 0, started.output
+
+    result = runner.invoke(
+        app,
+        [
+            "--json",
+            "task",
+            "lifecycle",
+            "revisit",
+            "--package",
+            str(package),
+            "--run-dir",
+            str(run_dir),
+            "--checkpoint-id",
+            "initial_review",
+            "--reason",
+            "Inspect the active checkpoint.",
+        ],
+    )
+
+    assert result.exit_code == 1
+    errors = _error_messages(result.output, "task lifecycle revisit")
+    assert errors == ["checkpoint is not available for revisit: initial_review"]

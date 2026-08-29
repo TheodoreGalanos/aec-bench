@@ -18,6 +18,8 @@ from aec_bench.harness.lifecycle_local import (
     _run_local_lifecycle_persistent_session,
 )
 from aec_bench.lifecycles.catalogue import materialize_lifecycle
+from aec_bench.lifecycles.compiled import load_compiled_lifecycle
+from aec_bench.lifecycles.invocation import LifecycleExperimentTrialContext
 from aec_bench.lifecycles.recording import record_lifecycle_experiment
 from aec_bench.lifecycles.runtime.episode import LifecycleVisibilityPolicy
 from aec_bench.lifecycles.runtime.lifecycle import (
@@ -280,9 +282,7 @@ def test_local_runner_assemblies_expose_and_execute_operation_tool(
         "run_dir": run_dir,
         "model": "deterministic-operation-probe",
         "adapter_builder": registry.build,
-        "verifier": _completed_runtime_verification,
         "operation_resolver": resolve_operation_runtime(package, run_dir),
-        "run_recorder": record_lifecycle_experiment,
     }
 
     if execution_mode == "persistent_context":
@@ -298,9 +298,34 @@ def test_local_runner_assemblies_expose_and_execute_operation_tool(
     actions = result["evidence"]["lifecycle"]["checkpoint_runs"][0]["operation_actions"]
     assert len(actions) == 1
     assert actions[0]["operation_id"] == "hydrology.design-10yr"
+    record_lifecycle_experiment(
+        package_dir=package,
+        run_dir=run_dir,
+        agent=result["evidence"]["agent"],
+        verifier=_completed_runtime_verification,
+        verification=_completed_runtime_verification(package, run_dir),
+        tool_schema=_lifecycle_tool_schema(
+            execution_mode,
+            supports_evidence_requests=False,
+            supports_lifecycle_operations=True,
+        ),
+        trial_context=_trial_context(package, run_dir),
+    )
     manifest = json.loads((run_dir / "experiment-manifest.json").read_text(encoding="utf-8"))
     schema_names = [item["name"] for item in manifest["interaction"]["tool_schema"]]
     assert "execute_operation" in schema_names
+
+
+def _trial_context(package: Path, run_dir: Path) -> LifecycleExperimentTrialContext:
+    compiled = load_compiled_lifecycle(package)
+    return LifecycleExperimentTrialContext(
+        trial_id=f"trial-{run_dir.name}",
+        planned_experiment_id="operation-runtime-tool-tests",
+        task_id=compiled.envelope.template_id,
+        repetition=1,
+        run_id=f"trial-{run_dir.name}",
+        compiled=compiled.envelope,
+    )
 
 
 class _OperationExercisingRegistry:

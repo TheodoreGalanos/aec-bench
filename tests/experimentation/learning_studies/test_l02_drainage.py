@@ -34,7 +34,7 @@ from tests.support.lifecycle_episode import deterministic_episode_environment
 from tests.support.trial_record_factories import make_trial_record
 
 _AGENT = AgentConfig(name="l02-deterministic-agent", adapter="tool_loop", model="fixed-test-model", parameters={})
-_COMPUTE = ComputeConfig(backend="local", resource_limits={"memory_mb": 512}, timeout_override=30)
+_COMPUTE = ComputeConfig(backend="local", resource_limits={"memory_mb": 512})
 
 
 class _Consolidator:

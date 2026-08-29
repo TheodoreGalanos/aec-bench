@@ -5,9 +5,20 @@ from __future__ import annotations
 
 from collections.abc import Callable, Sequence
 from pathlib import Path
-from typing import cast
 
 from aec_bench.contracts.trial_record import TrialRecord
+from aec_bench.lifecycles.compiled import load_compiled_lifecycle
+from aec_bench.lifecycles.finalization import (
+    LifecycleFinalizationSource,
+    finalize_lifecycle_trial,
+    live_lifecycle_finalization_source,
+)
+from aec_bench.lifecycles.invocation import (
+    LifecycleExperimentRecordingResult,
+    LifecycleExperimentTrialContext,
+    LifecycleInvocationRecorderCapture,
+)
+from aec_bench.lifecycles.recording import record_lifecycle_experiment
 from aec_bench.lifecycles.runtime.lifecycle import (
     branch_lifecycle,
     read_lifecycle,
@@ -23,6 +34,10 @@ from aec_bench.lifecycles.values import LifecycleExecution, LifecycleTrial
 type LifecycleTrialExecutor = Callable[[LifecycleTrial], LifecycleExecution]
 type LifecycleVerifier = Callable[[Path, Path], dict[str, object]]
 type LifecycleRecordPersistence = Callable[[TrialRecord], None]
+type LifecycleEvidenceRetention = Callable[
+    [LifecycleTrial, LifecycleExperimentRecordingResult],
+    LifecycleFinalizationSource,
+]
 
 
 def run_lifecycle_trial(
@@ -30,10 +45,22 @@ def run_lifecycle_trial(
     trial: LifecycleTrial,
     execute: LifecycleTrialExecutor,
     verify: LifecycleVerifier,
+    retain: LifecycleEvidenceRetention = live_lifecycle_finalization_source,
     persist: LifecycleRecordPersistence | None = None,
 ) -> TrialRecord:
-    """Execute, verify, build, optionally persist, and return one lifecycle trial."""
+    """Execute, record, retain, finalize, and optionally persist one lifecycle trial."""
+    current_compiled = load_compiled_lifecycle(trial.package_dir)
+    if current_compiled.envelope != trial.compiled.envelope:
+        raise ValueError("compiled lifecycle identity does not match package bytes")
+    if trial.planned.agent.adapter == "deepseek_harness":
+        raise ValueError(
+            "deepseek_harness cannot produce the required canonical lifecycle turn-limit evidence; refusing to execute"
+        )
+    planned_max_turns = trial.max_turns_per_session
     execution = execute(trial)
+    executed_max_turns = execution.agent.get("max_turns_per_session")
+    if type(executed_max_turns) is not int or executed_max_turns != planned_max_turns:
+        raise ValueError("lifecycle executor turn limit does not match the planned trial")
     from aec_bench.lifecycles.catalogue import lifecycle_operation_resolver
 
     state = read_lifecycle(
@@ -86,13 +113,6 @@ def run_lifecycle_trial(
             }
         )
 
-    from aec_bench.lifecycles.recording import LifecycleExperimentSweepContext, record_lifecycle_experiment
-    from aec_bench.lifecycles.trial_record import build_lifecycle_trial_record
-
-    sweep_context = cast(
-        LifecycleExperimentSweepContext | None,
-        trial.planned.extensions.get("lifecycle_sweep_context"),
-    )
     recording = record_lifecycle_experiment(
         package_dir=trial.package_dir,
         run_dir=trial.run_dir,
@@ -100,11 +120,26 @@ def run_lifecycle_trial(
         verifier=verify,
         verification=verification,
         tool_schema=list(execution.tool_schema),
-        sweep_context=sweep_context,
+        sweep_context=trial.sweep_context,
+        trial_context=LifecycleExperimentTrialContext(
+            trial_id=trial.planned.trial_id,
+            planned_experiment_id=trial.planned.experiment_id,
+            task_id=trial.planned.task_id,
+            repetition=trial.planned.repetition,
+            run_id=trial.planned.trial_id,
+            compiled=trial.compiled.envelope,
+        ),
     )
-    record = build_lifecycle_trial_record(
+    recorder_capture = recording.get("finalization_authority")
+    if not isinstance(recorder_capture, LifecycleInvocationRecorderCapture):
+        raise ValueError("lifecycle recorder did not return a recorder capture")
+    source = retain(trial, recording)
+    retained_authority = source.recording.get("finalization_authority")
+    if not isinstance(retained_authority, LifecycleInvocationRecorderCapture) or retained_authority != recorder_capture:
+        raise ValueError("lifecycle evidence retention did not preserve the recorder capture")
+    record = finalize_lifecycle_trial(
         trial=trial,
-        recording=recording,
+        source=source,
     )
     if persist is not None:
         persist(record)
@@ -116,14 +151,19 @@ def run_lifecycle_experiment(
     trials: Sequence[LifecycleTrial],
     execute: LifecycleTrialExecutor,
     verify: LifecycleVerifier,
+    retain: LifecycleEvidenceRetention = live_lifecycle_finalization_source,
     persist: LifecycleRecordPersistence | None = None,
 ) -> list[TrialRecord]:
     """Run lifecycle trials in declared order and return their records directly."""
-    return [run_lifecycle_trial(trial=trial, execute=execute, verify=verify, persist=persist) for trial in trials]
+    return [
+        run_lifecycle_trial(trial=trial, execute=execute, verify=verify, retain=retain, persist=persist)
+        for trial in trials
+    ]
 
 
 __all__ = (
     "LifecycleExecution",
+    "LifecycleEvidenceRetention",
     "LifecycleRecordPersistence",
     "LifecycleTrial",
     "LifecycleTrialExecutor",

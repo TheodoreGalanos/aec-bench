@@ -47,7 +47,7 @@ _CONDITION = LifecycleExecutionCondition(
     visibility_policy=LifecycleVisibilityPolicy.ARTIFACT_MEMORY,
 )
 _AGENT = AgentConfig(name="raw-history-test-agent", adapter="tool_loop", model="fixed-test-model", parameters={})
-_COMPUTE = ComputeConfig(backend="local", resource_limits={"memory_mb": 512}, timeout_override=30)
+_COMPUTE = ComputeConfig(backend="local", resource_limits={"memory_mb": 512})
 _ACQUISITION_TASK = DRAINAGE_ACQUISITION_TASK_ID
 _PROBE_TASK = "lifecycle/drainage-model-evidence-lifecycle-review/semantic_no_op_release"
 
@@ -108,9 +108,7 @@ class _RawHistoryAdapterBuilder:
                 if "learner_context" in root["entries"]:
                     for channel in json.loads(native_tools["list_workspace"]("learner_context"))["entries"]:
                         for name in json.loads(native_tools["list_workspace"](f"learner_context/{channel}"))["entries"]:
-                            item = json.loads(
-                                native_tools["read_workspace_file"](f"learner_context/{channel}/{name}")
-                            )
+                            item = json.loads(native_tools["read_workspace_file"](f"learner_context/{channel}/{name}"))
                             observed[f"{channel}/{name}"] = item["content"]
                 builder.contexts.append(observed)
                 output = Path(request.output_path)
@@ -257,6 +255,7 @@ def test_raw_history_resume_restores_without_reprojecting_and_rejects_cross_arm_
         resumed_binding.operations.execute_experience(
             ExecuteExperienceRequest(arm_run=first_arm, step=step, state=foreign_state)
         )
+
 
 def _feedback() -> dict:
     return {
@@ -415,9 +414,7 @@ def test_raw_history_context_projection_excludes_memory_and_is_immutable(tmp_pat
     root = tmp_path / "state"
     lifecycles._initialise_raw_history_state(root)
     (root / "history" / lifecycles._RAW_HISTORY_FILENAME).write_bytes(_history())
-    (root / "feedback" / "release.json").write_bytes(
-        lifecycles._canonical_json_bytes(_feedback(), category="test")
-    )
+    (root / "feedback" / "release.json").write_bytes(lifecycles._canonical_json_bytes(_feedback(), category="test"))
     context = tmp_path / "context"
     snapshot = lifecycles._create_raw_history_context_projection(root, context)
     assert {item.name for item in context.iterdir()} == {"history", "feedback"}

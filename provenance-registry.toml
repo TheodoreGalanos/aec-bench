@@ -25,8 +25,8 @@ from_prefix = "aec_bench.experimentation.lifecycle_studies.transfer.LifecycleTra
 to_prefix = "aec_bench.experimentation.lifecycle_studies.holdout_generalization.LifecycleHoldoutSummary."
 
 [[legacy_relocation]]
-from_prefix = "aec_bench.experimentation.lifecycle_studies.experiment."
-to_prefix = "aec_bench.lifecycles.recording."
+from_prefix = "aec_bench.experimentation.lifecycle_studies.experiment.LifecycleExperimentMetrics."
+to_prefix = "aec_bench.lifecycles.invocation.LifecycleExperimentMetrics."
 
 [[legacy_relocation]]
 from_prefix = "aec_bench.prime_lab.lifecycle_exporter.PrimeLifecycleExportManifest."
@@ -57,8 +57,24 @@ from_prefix = "mapping:aec_bench.harness.process_runtime.world_process.build_wor
 to_prefix = "mapping:aec_bench.harness.process_runtime.problem_model_process.build_problem_model_generation_request."
 
 [[legacy_relocation]]
-from_prefix = "mapping:aec_bench.experimentation.lifecycle_studies.experiment."
-to_prefix = "mapping:aec_bench.lifecycles.recording."
+from_prefix = "mapping:aec_bench.experimentation.lifecycle_studies.experiment._source_tree_provenance."
+to_prefix = "mapping:aec_bench.lifecycles.provenance._source_tree_provenance."
+
+[[legacy_relocation]]
+from_prefix = "mapping:aec_bench.experimentation.lifecycle_studies.experiment._callable_provenance."
+to_prefix = "mapping:aec_bench.lifecycles.provenance.callable_provenance."
+
+[[legacy_relocation]]
+from_prefix = "mapping:aec_bench.experimentation.lifecycle_studies.experiment.repository_provenance."
+to_prefix = "mapping:aec_bench.lifecycles.provenance.repository_provenance."
+
+[[legacy_relocation]]
+from_prefix = "mapping:aec_bench.experimentation.lifecycle_studies.experiment.runtime_dependency_provenance."
+to_prefix = "mapping:aec_bench.lifecycles.provenance.runtime_dependency_provenance."
+
+[[legacy_relocation]]
+from_prefix = "mapping:aec_bench.experimentation.lifecycle_studies.experiment.record_lifecycle_experiment."
+to_prefix = "mapping:aec_bench.lifecycles.recording.record_lifecycle_experiment."
 
 [[manifest]]
 contract = "aec-bench/actor-invocation-evidence/1"
@@ -1664,6 +1680,50 @@ exception_reason = "These subsystem contracts have not yet adopted the common Ar
 removal_milestone = "owning extension contracts adopt ArtifactRef"
 
 [[field]]
+symbol = "aec_bench.contracts.trial_extensions.LifecycleTrialProvenance.executable_artifact_sha256"
+surface = "pydantic_model"
+wire_name = "executable_artifact_sha256"
+category = "semantic_commitment"
+domain_owner = "lifecycle_compilation"
+authority = "lifecycle_definition_catalogue"
+authoritative = false
+exposure = "persisted"
+status = "current"
+payload_contract = "exact task-owned and shared runtime Python source selected for one compiled lifecycle"
+canonicalization = "sorted relative POSIX source paths mapped to exact file SHA-256 digests, then sorted-key compact JSON"
+consumer = "lifecycle finalization and retained lifecycle record validation"
+validation_behavior = "Finalization reloads the package against the current lifecycle definition and rejects a compiled envelope that differs from the planned envelope before copying this commitment into TrialRecord provenance"
+mismatch_behavior = "reject_lifecycle_finalization"
+retention = "lifecycle_trial_record_lifetime"
+rationale = "A retained lifecycle trial must bind the executable implementation that gave its package operational meaning."
+duplication = "claim_binding"
+algorithm = "sha256"
+canonicalizer = "aec_bench.lifecycles.compiled.source_tree_artifact_sha256"
+fail_closed = true
+
+[[field]]
+symbol = "aec_bench.contracts.trial_extensions.LifecycleTrialProvenance.operation_protocol_sha256"
+surface = "pydantic_model"
+wire_name = "operation_protocol_sha256"
+category = "semantic_commitment"
+domain_owner = "lifecycle_compilation"
+authority = "lifecycle_operation_protocol"
+authoritative = false
+exposure = "persisted"
+status = "current"
+payload_contract = "versioned lifecycle operation protocol and exact public execute_operation tool identity"
+canonicalization = "sorted-key compact UTF-8 JSON of the lifecycle operation protocol"
+consumer = "lifecycle finalization and retained lifecycle record validation"
+validation_behavior = "Compilation records the current protocol commitment only for operation-capable lifecycles; finalization reloads the package and rejects a compiled envelope that differs from the planned envelope"
+mismatch_behavior = "reject_lifecycle_finalization"
+retention = "lifecycle_trial_record_lifetime"
+rationale = "Operation-capable lifecycle evidence must remain bound to the protocol that defined the model-visible operation contract."
+duplication = "claim_binding"
+algorithm = "sha256"
+canonicalizer = "aec_bench.lifecycles.runtime.operation_protocol.lifecycle_operation_protocol_identity"
+fail_closed = true
+
+[[field]]
 symbol = "aec_bench.contracts.trial_record.AgentConfiguration.adapter_revision"
 surface = "pydantic_model"
 wire_name = "adapter_revision"
@@ -2554,6 +2614,267 @@ algorithm = "sha256"
 fail_closed = true
 artifact_boundary = "one immutable regular file below the descriptor-confined byte-store root"
 read_verification = "ImmutableByteStore re-reads and rehashes the confined file and raises ImmutableArtifactIntegrityError on mismatch"
+
+[[field]]
+symbol = "aec_bench.lifecycles.invocation.LifecycleCallableProvenanceIdentity.source_sha256"
+surface = "pydantic_model"
+wire_name = "source_sha256"
+category = "semantic_commitment"
+domain_owner = "lifecycle_recording"
+authority = "lifecycle_callable_source"
+authoritative = false
+exposure = "application_memory"
+status = "current"
+payload_contract = "exact Python source file bytes for one lifecycle verifier callable"
+canonicalization = "exact source file bytes"
+consumer = "current lifecycle finalizer and retained lifecycle study recovery"
+validation_behavior = "The identity model validates SHA-256 syntax; current finalization compares the registered verifier name and hash with current code, and study recovery compares registered and entrypoint identities with the preregistered plan"
+mismatch_behavior = "reject_lifecycle_finalization"
+retention = "one_lifecycle_finalization_or_retained_study_recovery"
+rationale = "Lifecycle results must identify the exact verifier implementation without relying on a checkout path."
+duplication = "claim_binding"
+algorithm = "sha256"
+canonicalizer = "aec_bench.lifecycles.provenance.callable_provenance"
+fail_closed = true
+
+[[field]]
+symbol = "aec_bench.lifecycles.invocation.LifecycleExperimentManifest.created_at"
+surface = "pydantic_model"
+wire_name = "created_at"
+category = "event_time"
+domain_owner = "lifecycle_recording"
+authority = "lifecycle_experiment_recorder"
+authoritative = true
+exposure = "persisted"
+status = "current"
+payload_contract = "one recorded lifecycle invocation"
+canonicalization = "current UTC datetime serialized with ISO 8601 notation"
+consumer = "lifecycle finalization, retention, and invocation-index readers"
+validation_behavior = "The recorder writes the UTC event time; finalization parses it as the trial start and requires the index copy to equal the manifest value"
+mismatch_behavior = "reject_lifecycle_finalization"
+retention = "lifecycle_invocation_and_trial_record_lifetime"
+rationale = "The field records when the lifecycle invocation manifest was created."
+duplication = "unique"
+event = "lifecycle invocation manifest created"
+
+[[field]]
+symbol = "aec_bench.lifecycles.invocation.LifecycleExperimentManifest.schema_version"
+surface = "pydantic_model"
+wire_name = "schema_version"
+category = "compatibility"
+domain_owner = "lifecycle_recording"
+authority = "lifecycle_invocation_manifest_reader"
+authoritative = true
+exposure = "persisted"
+status = "current"
+payload_contract = "AEC-Bench lifecycle invocation manifest schema 1 or 2"
+canonicalization = "explicit supported string literal 1 or 2"
+consumer = "current lifecycle finalizer and retained schema-1 lifecycle study reader"
+validation_behavior = "LifecycleExperimentManifest rejects unsupported versions and enforces absent trial identity for schema 1 and exact trial identity for schema 2"
+mismatch_behavior = "reject_lifecycle_invocation_manifest"
+retention = "lifecycle_invocation_manifest_lifetime"
+rationale = "Current and historical retained lifecycle invocations require explicit readers for their different identity contracts."
+duplication = "unique"
+compatibility_behavior = "select the schema-1 historical reader or schema-2 current finalizer and reject every other value"
+compatibility_kind = "external_schema"
+
+[[field]]
+symbol = "aec_bench.lifecycles.invocation.LifecycleExperimentRecordingResult.manifest_sha256"
+aliases = ["mapping:aec_bench.experimentation.lifecycle_studies.retention._recording_result.manifest_sha256"]
+surface = "typed_dict"
+wire_name = "manifest_sha256"
+category = "artifact_integrity"
+domain_owner = "lifecycle_recording"
+authority = "lifecycle_invocation_recorder_capture"
+authoritative = false
+exposure = "application_memory"
+status = "current"
+payload_contract = "exact canonical lifecycle invocation manifest bytes"
+canonicalization = "exact file bytes"
+consumer = "core lifecycle finalizer and lifecycle study retention"
+validation_behavior = "The recorder copies the frozen capture digest into the path handoff; core finalization and study retention rehash the referenced regular file and require this copy to match"
+mismatch_behavior = "reject_lifecycle_finalization_or_retention"
+retention = "one_lifecycle_finalization"
+rationale = "The path handoff must identify the same canonical manifest bytes as the separate immutable recorder capture."
+duplication = "claim_binding"
+algorithm = "sha256"
+fail_closed = true
+artifact_boundary = "one canonical lifecycle invocation manifest passed from recording to finalization"
+read_verification = "core finalization and study retention rehash the canonical manifest before accepting the recording handoff"
+
+[[field]]
+symbol = "aec_bench.lifecycles.invocation.LifecycleExperimentSweepContext.plan_sha256"
+aliases = ["mapping:aec_bench.experimentation.lifecycle_studies.historical_trial_record.build_historical_lifecycle_trial_record.plan_sha256"]
+surface = "pydantic_model"
+wire_name = "plan_sha256"
+category = "semantic_commitment"
+domain_owner = "lifecycle_study"
+authority = "lifecycle_ablation_plan"
+authoritative = false
+exposure = "persisted"
+status = "current"
+payload_contract = "canonical expanded lifecycle ablation plan excluding its plan_sha256 field"
+canonicalization = "sorted-key compact UTF-8 JSON with NaN rejected"
+consumer = "current lifecycle finalizer and retained schema-1 lifecycle study validator"
+validation_behavior = "Current finalization requires the manifest sweep context to equal the planned trial context; historical validation requires the retained sweep and reconstructed TrialRecord to contain the snapshotted plan commitment"
+mismatch_behavior = "reject_lifecycle_finalization_or_historical_record"
+retention = "lifecycle_invocation_and_trial_record_lifetime"
+rationale = "Each retained study invocation and reconstructed record must bind the exact preregistered expanded plan."
+duplication = "claim_binding"
+algorithm = "sha256"
+canonicalizer = "aec_bench.experimentation.lifecycle_studies.ablation_plan._canonical_sha256"
+fail_closed = true
+
+[[field]]
+symbol = "aec_bench.lifecycles.invocation.LifecycleExperimentSweepContext.schema_version"
+surface = "pydantic_model"
+wire_name = "schema_version"
+category = "compatibility"
+domain_owner = "lifecycle_study"
+authority = "lifecycle_sweep_context_reader"
+authoritative = true
+exposure = "persisted"
+status = "current"
+payload_contract = "AEC-Bench lifecycle experiment sweep context schema 1"
+canonicalization = "fixed string literal 1"
+consumer = "current lifecycle finalizer and retained schema-1 lifecycle study reader"
+validation_behavior = "LifecycleExperimentSweepContext accepts only schema 1 and both current and historical finalization require the exact planned sweep context"
+mismatch_behavior = "reject_lifecycle_invocation_manifest"
+retention = "lifecycle_invocation_manifest_lifetime"
+rationale = "The retained sweep context has an explicit reader contract shared by current and historical lifecycle study evidence."
+duplication = "unique"
+compatibility_behavior = "accept schema 1 and reject every other value"
+compatibility_kind = "external_schema"
+
+[[field]]
+symbol = "aec_bench.lifecycles.invocation.LifecycleExperimentTrialContext.schema_version"
+surface = "pydantic_model"
+wire_name = "schema_version"
+category = "compatibility"
+domain_owner = "lifecycle_recording"
+authority = "lifecycle_trial_context_reader"
+authoritative = true
+exposure = "persisted"
+status = "current"
+payload_contract = "AEC-Bench lifecycle experiment trial identity context schema 1"
+canonicalization = "fixed string literal 1"
+consumer = "schema-2 lifecycle invocation manifest finalizer"
+validation_behavior = "LifecycleExperimentTrialContext accepts only schema 1 and finalization requires the complete context to equal the planned and compiled trial identity"
+mismatch_behavior = "reject_lifecycle_finalization"
+retention = "lifecycle_invocation_manifest_lifetime"
+rationale = "Schema-2 invocation manifests retain one explicit contract for exact planned and compiled trial identity."
+duplication = "unique"
+compatibility_behavior = "accept schema 1 and reject every other value"
+compatibility_kind = "external_schema"
+
+[[field]]
+symbol = "aec_bench.lifecycles.invocation.LifecycleInvocationRecorderCapture.manifest_sha256"
+surface = "pydantic_model"
+wire_name = "manifest_sha256"
+category = "artifact_integrity"
+domain_owner = "lifecycle_recording"
+authority = "lifecycle_experiment_recorder"
+authoritative = true
+exposure = "application_memory"
+status = "current"
+payload_contract = "exact canonical lifecycle invocation manifest bytes and every claim transitively bound by that manifest"
+canonicalization = "exact canonical manifest file bytes"
+consumer = "core lifecycle finalizer and immediate lifecycle study retention"
+validation_behavior = "The frozen model validates SHA-256 syntax; finalization first validates the manifest and every referenced file, then requires the mutable recording handoff digest to equal this recorder-owned capture"
+mismatch_behavior = "reject_lifecycle_finalization"
+retention = "one_immediate_lifecycle_finalization"
+rationale = "A custom retention step must not be able to rehash a changed manifest and silently alter the recorder claims projected into TrialRecord."
+duplication = "unique"
+algorithm = "sha256"
+fail_closed = true
+artifact_boundary = "one canonical lifecycle invocation manifest passed from recording through retention to finalization"
+read_verification = "core finalization rehashes canonical and run manifest files, validates every transitive artifact hash, and compares the handoff digest with this frozen capture"
+
+[[field]]
+symbol = "aec_bench.lifecycles.invocation.LifecycleRepositoryProvenance.dirty_digest"
+surface = "pydantic_model"
+wire_name = "dirty_digest"
+category = "semantic_commitment"
+domain_owner = "lifecycle_recording"
+authority = "lifecycle_repository_provenance"
+authoritative = false
+exposure = "application_memory"
+status = "current"
+payload_contract = "Git status, binary diff, and untracked file bytes for one lifecycle source checkout"
+canonicalization = "SHA-256 over Git status, binary diff, sorted untracked paths, and untracked file bytes"
+consumer = "current lifecycle finalizer and retained lifecycle study recovery"
+validation_behavior = "The model validates SHA-256 syntax and requires the dirty flag to match whether the digest differs from SHA-256 of empty bytes; finalization applies the same relation to retained manifest fields"
+mismatch_behavior = "reject_lifecycle_finalization"
+retention = "one_lifecycle_finalization_or_retained_study_recovery"
+rationale = "A source checkout used for a lifecycle run must not claim clean immutable Git identity while retaining contradictory dirty-state evidence."
+duplication = "claim_binding"
+algorithm = "sha256"
+canonicalizer = "aec_bench.lifecycles.provenance.repository_provenance"
+fail_closed = true
+
+[[field]]
+symbol = "aec_bench.lifecycles.invocation.LifecycleRepositoryProvenanceIdentity.commit"
+surface = "pydantic_model"
+wire_name = "commit"
+category = "source_identity"
+domain_owner = "lifecycle_recording"
+authority = "lifecycle_repository_provenance"
+authoritative = false
+exposure = "application_memory"
+status = "current"
+payload_contract = "exact Git revision or content-addressed source-tree identity used by one lifecycle invocation"
+canonicalization = "git rev-parse HEAD for tracked source, otherwise source-sha256 followed by the exact source inventory digest"
+consumer = "current lifecycle finalizer and retained lifecycle study recovery"
+validation_behavior = "The model accepts only a lowercase 40-character Git revision or source-sha256 plus the matching source inventory hash; recovery compares the value with its preregistered plan"
+mismatch_behavior = "reject_lifecycle_finalization"
+retention = "one_lifecycle_finalization_or_retained_study_recovery"
+rationale = "Lifecycle trial provenance must bind the source revision that supplied recorder, runtime, and verifier behaviour."
+duplication = "claim_binding"
+format = "lowercase 40-character Git commit or source-sha256 followed by 64 lowercase hexadecimal characters"
+
+[[field]]
+symbol = "aec_bench.lifecycles.invocation.LifecycleRepositoryProvenanceIdentity.source_inventory_sha256"
+surface = "pydantic_model"
+wire_name = "source_inventory_sha256"
+category = "semantic_commitment"
+domain_owner = "lifecycle_recording"
+authority = "lifecycle_repository_provenance"
+authoritative = false
+exposure = "application_memory"
+status = "current"
+payload_contract = "exact AEC-Bench source package and installed project metadata used for one lifecycle invocation"
+canonicalization = "length-prefixed sorted relative paths and exact bytes for pyproject, lockfile, source package, and installed distribution metadata"
+consumer = "current lifecycle finalizer and retained lifecycle study recovery"
+validation_behavior = "The model validates SHA-256 syntax; source-tree identity must equal source-sha256 plus this digest, and recovery compares it with the preregistered plan"
+mismatch_behavior = "reject_lifecycle_finalization"
+retention = "one_lifecycle_finalization_or_retained_study_recovery"
+rationale = "A content-addressed source tree and a preregistered study need one exact source inventory commitment."
+duplication = "claim_binding"
+algorithm = "sha256"
+canonicalizer = "aec_bench.lifecycles.provenance._source_inventory_sha256"
+fail_closed = true
+
+[[field]]
+symbol = "aec_bench.lifecycles.invocation.LifecycleRuntimeProvenance.dependency_inventory_sha256"
+surface = "pydantic_model"
+wire_name = "dependency_inventory_sha256"
+category = "semantic_commitment"
+domain_owner = "lifecycle_recording"
+authority = "lifecycle_runtime_provenance"
+authoritative = false
+exposure = "application_memory"
+status = "current"
+payload_contract = "realized installed dependency closure used by one lifecycle adapter and provider route"
+canonicalization = "length-prefixed distribution identities and exact realized distribution file digests in sorted order"
+consumer = "current lifecycle finalizer and retained lifecycle study recovery"
+validation_behavior = "The model validates SHA-256 syntax and requires a sorted non-empty distribution list; current finalization checks the recorder manifest capture and study recovery compares the runtime block with the preregistered trial"
+mismatch_behavior = "reject_lifecycle_finalization"
+retention = "one_lifecycle_finalization_or_retained_study_recovery"
+rationale = "A lifecycle result must identify the exact installed runtime dependency closure that executed the trial."
+duplication = "claim_binding"
+algorithm = "sha256"
+canonicalizer = "aec_bench.lifecycles.provenance.runtime_dependency_provenance"
+fail_closed = true
 
 [[field]]
 symbol = "aec_bench.lifecycles.stormwater_design.drainage_learning.DrainageLearningEvidence.evidence_schema"

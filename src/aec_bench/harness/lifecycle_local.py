@@ -10,16 +10,18 @@ import uuid
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
-from typing import TYPE_CHECKING, Any, Protocol, cast
+from typing import TYPE_CHECKING, Any, cast
 
 from pydantic import JsonValue
 
 from aec_bench.adapters.base import AdapterRequest
 from aec_bench.adapters.deepseek_harness.config import DEFAULT_TIMEOUT_SECONDS
 from aec_bench.adapters.local_registry import build_local_adapter
+from aec_bench.adapters.runtime_limits import AdapterRuntimeLimitError, configured_positive_int
 from aec_bench.contracts.task_definition import ToolSpec
 from aec_bench.contracts.trajectory import read_trajectory
 from aec_bench.ledger.durability import fsync_directory, mkdir_durable
+from aec_bench.lifecycles.compiled import load_compiled_lifecycle
 from aec_bench.lifecycles.runtime.episode import (
     LifecycleEpisodeContext,
     LifecycleEpisodeEnvironment,
@@ -48,7 +50,6 @@ from aec_bench.lifecycles.runtime.lifecycle import (
     run_lifecycle,
     submit_checkpoint,
     validate_evidence_checkpoint_submission,
-    validate_lifecycle_verification,
 )
 from aec_bench.lifecycles.runtime.operation_protocol import (
     CURRENT_SOURCE_WORKSPACE_PATH,
@@ -63,19 +64,43 @@ if TYPE_CHECKING:
 DEFAULT_DEEPSEEK_LIFECYCLE_MAX_TOKENS = 8192
 
 
-class LifecycleRunRecorder(Protocol):
-    """Record one completed local run without making the harness study-aware."""
+def _validate_lifecycle_limit_support(
+    *,
+    adapter_kind: str,
+    max_tokens: int | None,
+    timeout_sec: int | None,
+) -> None:
+    """Reject limits that the selected lifecycle adapter cannot enforce."""
+    if adapter_kind == "deepseek_harness":
+        return
+    unsupported = [
+        name for name, value in (("max_tokens", max_tokens), ("timeout_sec", timeout_sec)) if value is not None
+    ]
+    if unsupported:
+        names = " and ".join(unsupported)
+        raise AdapterRuntimeLimitError(
+            f"{names} cannot be enforced by lifecycle adapter {adapter_kind!r}; refusing to run"
+        )
 
-    def __call__(
-        self,
-        *,
-        package_dir: Path,
-        run_dir: Path,
-        agent: dict[str, Any],
-        verifier: Any,
-        verification: dict[str, Any],
-        tool_schema: list[dict[str, Any]],
-    ) -> Mapping[str, Any]: ...
+
+def _configured_lifecycle_limits(trial: LifecycleTrial) -> tuple[int | None, int | None]:
+    """Resolve declared limits without changing lifecycle state."""
+    parameters = trial.planned.agent.parameters
+    resource_limits = trial.planned.compute.resource_limits
+    max_tokens_source = resource_limits if "max_tokens" in resource_limits else parameters
+    max_tokens = configured_positive_int(max_tokens_source, "max_tokens")
+
+    if trial.planned.compute.timeout_override is not None:
+        timeout_source: Mapping[str, Any] = {"timeout_sec": trial.planned.compute.timeout_override}
+    else:
+        timeout_source = resource_limits if "timeout_sec" in resource_limits else parameters
+    timeout_sec = configured_positive_int(timeout_source, "timeout_sec")
+    _validate_lifecycle_limit_support(
+        adapter_kind=trial.planned.agent.adapter,
+        max_tokens=max_tokens,
+        timeout_sec=timeout_sec,
+    )
+    return max_tokens, timeout_sec
 
 
 @dataclass(frozen=True)
@@ -478,68 +503,36 @@ def run_local_lifecycle(
     """Run one local lifecycle treatment and return execution evidence without verification."""
     from aec_bench.lifecycles.catalogue import lifecycle_operation_resolver
 
+    current_compiled = load_compiled_lifecycle(trial.package_dir)
+    if current_compiled.envelope != trial.compiled.envelope:
+        raise ValueError("lifecycle package no longer matches its compiled identity")
     agent = trial.planned.agent
-    parameters = agent.parameters
-    default_turns = 60 if trial.execution_mode is LifecycleExecutionMode.PERSISTENT_CONTEXT else 20
-    max_turns = int(parameters.get("max_turns_per_session", parameters.get("max_turns", default_turns)))
-    if max_turns < 1:
-        raise ValueError("lifecycle agent max_turns_per_session must be a positive integer")
-    limits = trial.planned.compute.resource_limits
-    max_tokens_value = limits.get("max_tokens", parameters.get("max_tokens"))
-    timeout_value = trial.planned.compute.timeout_override or limits.get("timeout_sec") or parameters.get("timeout_sec")
-    max_tokens = int(max_tokens_value) if max_tokens_value is not None else None
-    timeout_sec = int(timeout_value) if timeout_value is not None else None
+    max_turns = trial.max_turns_per_session
+    max_tokens, timeout_sec = _configured_lifecycle_limits(trial)
     resolver = lifecycle_operation_resolver(trial.package_dir, trial.run_dir)
     process_id = f"process.lifecycle.{trial.planned.trial_id}"
     common = {
         "package_dir": trial.package_dir,
         "run_dir": trial.run_dir,
         "model": agent.model,
-        "verifier": None,
         "adapter_kind": agent.adapter,
         "max_turns": max_turns,
         "process_id": process_id,
         "visibility_policy": trial.visibility_policy,
         "operation_resolver": resolver,
     }
-    try:
-        result = _execute_local_lifecycle_mode(
-            trial=trial,
-            common=common,
-            adapter_builder=adapter_builder,
-            max_tokens=max_tokens,
-            timeout_sec=timeout_sec,
-            resolver=resolver,
-            read_only_context_root=read_only_context_root,
-        )
-    except Exception:
-        if not (trial.run_dir / "state.json").is_file():
-            raise
-        lifecycle = read_lifecycle(trial.package_dir, trial.run_dir, operation_resolver=resolver)
-        sessions = (
-            _persistent_context_sessions(trial.run_dir)
-            if trial.execution_mode is LifecycleExecutionMode.PERSISTENT_CONTEXT
-            else _fresh_context_sessions(trial.run_dir)
-        )
-        if not sessions:
-            raise
-        state = cast(dict[str, object], lifecycle)
-        agent_evidence = cast(
-            dict[str, object],
-            _normalized_agent_evidence(
-                model=agent.model,
-                adapter_kind=agent.adapter,
-                execution_mode=trial.execution_mode.value,
-                memory_visibility_policy=trial.visibility_policy.value,
-                max_turns=max_turns,
-                sessions=sessions,
-                lifecycle=lifecycle,
-            ),
-        )
-    else:
-        evidence = cast(dict[str, Any], result["evidence"])
-        state = cast(dict[str, object], evidence["lifecycle"])
-        agent_evidence = cast(dict[str, object], evidence["agent"])
+    result = _execute_local_lifecycle_mode(
+        trial=trial,
+        common=common,
+        adapter_builder=adapter_builder,
+        max_tokens=max_tokens,
+        timeout_sec=timeout_sec,
+        resolver=resolver,
+        read_only_context_root=read_only_context_root,
+    )
+    evidence = cast(dict[str, Any], result["evidence"])
+    state = cast(dict[str, object], evidence["lifecycle"])
+    agent_evidence = cast(dict[str, object], evidence["agent"])
     return LifecycleExecution(
         state=state,
         agent=agent_evidence,
@@ -595,7 +588,6 @@ def _run_local_lifecycle_persistent_session(
     package_dir: Path,
     run_dir: Path,
     model: str,
-    verifier: Any | None,
     adapter_kind: str = "tool_loop",
     max_turns: int = 60,
     max_tokens: int | None = None,
@@ -605,11 +597,10 @@ def _run_local_lifecycle_persistent_session(
     visibility_policy: LifecycleVisibilityPolicy = LifecycleVisibilityPolicy.PERSISTENT_CONTEXT,
     operation_resolver: LifecycleOperationResolver | None = None,
     require_adapter_identity_match: bool = False,
-    run_recorder: LifecycleRunRecorder | None = None,
     run_authorization_sha256: str | None = None,
     read_only_context_root: Path | None = None,
 ) -> dict[str, Any]:
-    """Run all checkpoints in one adapter execution, optionally leaving reward to an external verifier."""
+    """Run all checkpoints in one adapter execution and return execution evidence."""
     if adapter_kind not in {"deepseek_harness", "tool_loop", "pydantic_ai"}:
         raise ValueError("persistent evidence lifecycles require a supported tool-capable adapter")
     if visibility_policy != LifecycleVisibilityPolicy.PERSISTENT_CONTEXT:
@@ -799,16 +790,13 @@ def _run_local_lifecycle_persistent_session(
             adapter_kind=adapter_kind,
             request_configuration=request_configuration,
         )
-        _build_local_task_run(
+        return _build_local_execution_result(
             package=package,
             run=run,
             process_id=process_id,
             lifecycle=lifecycle,
-            verifier=verifier,
             agent=agent_evidence,
-            run_recorder=run_recorder,
         )
-        raise
     finally:
         trajectory_writer.close()
 
@@ -882,14 +870,12 @@ def _run_local_lifecycle_persistent_session(
         adapter_kind=adapter_kind,
         request_configuration=request_configuration,
     )
-    return _build_local_task_run(
+    return _build_local_execution_result(
         package=package,
         run=run,
         process_id=process_id,
         lifecycle=lifecycle,
-        verifier=verifier,
         agent=agent_evidence,
-        run_recorder=run_recorder,
     )
 
 
@@ -993,7 +979,6 @@ def recover_completed_persistent_lifecycle_session(
     package_dir: Path,
     run_dir: Path,
     model: str,
-    verifier: Any,
     adapter_kind: str,
     max_turns: int,
     max_tokens: int | None = None,
@@ -1001,9 +986,8 @@ def recover_completed_persistent_lifecycle_session(
     process_id: str,
     visibility_policy: LifecycleVisibilityPolicy,
     operation_resolver: LifecycleOperationResolver | None = None,
-    run_recorder: LifecycleRunRecorder | None = None,
 ) -> dict[str, Any]:
-    """Seal a complete persistent crash and publish an unscored canonical invocation."""
+    """Seal a complete persistent crash and return its execution evidence."""
     request_configuration = _lifecycle_request_configuration(
         adapter_kind=adapter_kind,
         max_turns=max_turns,
@@ -1040,14 +1024,12 @@ def recover_completed_persistent_lifecycle_session(
         adapter_kind=adapter_kind,
         request_configuration=request_configuration,
     )
-    return _build_local_task_run(
+    return _build_local_execution_result(
         package=package,
         run=run,
         process_id=process_id,
         lifecycle=lifecycle,
-        verifier=verifier,
         agent=agent_evidence,
-        run_recorder=run_recorder,
     )
 
 
@@ -1056,7 +1038,6 @@ def _run_local_lifecycle_fresh_session(
     package_dir: Path,
     run_dir: Path,
     model: str,
-    verifier: Any,
     adapter_kind: str = "tool_loop",
     max_turns: int = 20,
     process_id: str = "process.lifecycle",
@@ -1064,7 +1045,6 @@ def _run_local_lifecycle_fresh_session(
     visibility_policy: LifecycleVisibilityPolicy = LifecycleVisibilityPolicy.ARTIFACT_MEMORY,
     operation_resolver: LifecycleOperationResolver | None = None,
     require_adapter_identity_match: bool = False,
-    run_recorder: LifecycleRunRecorder | None = None,
     run_authorization_sha256: str | None = None,
     read_only_context_root: Path | None = None,
 ) -> dict[str, Any]:
@@ -1092,36 +1072,14 @@ def _run_local_lifecycle_fresh_session(
             operation_resolver=operation_resolver,
             run_authorization_sha256=run_authorization_sha256,
         )
-    except LifecycleEpisodeExecutionError:
+    except (LifecycleEpisodeEnvironmentFailure, LifecycleEpisodeExecutionError):
         lifecycle = read_lifecycle(package, run, operation_resolver=operation_resolver)
-    except Exception:
-        lifecycle = read_lifecycle(package, run, operation_resolver=operation_resolver)
-        sessions = _fresh_context_sessions(run)
-        _build_local_task_run(
-            package=package,
-            run=run,
-            process_id=process_id,
-            lifecycle=lifecycle,
-            verifier=verifier,
-            agent=_normalized_agent_evidence(
-                model=model,
-                adapter_kind=adapter_kind,
-                execution_mode="fresh_context",
-                memory_visibility_policy=visibility_policy.value,
-                max_turns=max_turns,
-                sessions=sessions,
-                lifecycle=lifecycle,
-            ),
-            run_recorder=run_recorder,
-        )
-        raise
     sessions = _fresh_context_sessions(run)
-    return _build_local_task_run(
+    return _build_local_execution_result(
         package=package,
         run=run,
         process_id=process_id,
         lifecycle=lifecycle,
-        verifier=verifier,
         agent=_normalized_agent_evidence(
             model=model,
             adapter_kind=adapter_kind,
@@ -1131,7 +1089,6 @@ def _run_local_lifecycle_fresh_session(
             sessions=sessions,
             lifecycle=lifecycle,
         ),
-        run_recorder=run_recorder,
     )
 
 
@@ -1587,10 +1544,15 @@ def _lifecycle_request_configuration(
     timeout_sec: int | None,
 ) -> dict[str, int]:
     """Return only limits that the selected adapter can enforce."""
+    _validate_lifecycle_limit_support(
+        adapter_kind=adapter_kind,
+        max_tokens=max_tokens,
+        timeout_sec=timeout_sec,
+    )
     if adapter_kind != "deepseek_harness":
         return {"max_turns": max_turns}
-    resolved_max_tokens = max_tokens or DEFAULT_DEEPSEEK_LIFECYCLE_MAX_TOKENS
-    resolved_timeout = timeout_sec or DEFAULT_TIMEOUT_SECONDS
+    resolved_max_tokens = DEFAULT_DEEPSEEK_LIFECYCLE_MAX_TOKENS if max_tokens is None else max_tokens
+    resolved_timeout = DEFAULT_TIMEOUT_SECONDS if timeout_sec is None else timeout_sec
     for name, value in (("max_tokens", resolved_max_tokens), ("timeout_sec", resolved_timeout)):
         if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
             raise ValueError(f"{name} must be a positive integer")
@@ -1747,125 +1709,32 @@ def _adapter_failure_kind(result: Any) -> str | None:
     return "agent_failed" if status in {"failed", "empty"} else None
 
 
-def _build_local_task_run(
+def _build_local_execution_result(
     *,
     package: Path,
     run: Path,
     process_id: str,
     lifecycle: dict[str, Any],
-    verifier: Any | None,
     agent: dict[str, Any],
-    run_recorder: LifecycleRunRecorder | None = None,
 ) -> dict[str, Any]:
     spec = load_evidence_lifecycle_spec(package)
-    if verifier is None:
-        return {
-            "run_id": f"{process_id}.{spec.lifecycle_id}",
-            "evidence": {
-                "lifecycle": lifecycle,
-                "agent": agent,
-                "verification": {
-                    "status": "not_run",
-                    "reward_owner": "external_verifier",
-                },
-                "execution_security": {
-                    "filesystem_boundary": "workspace_confined_native_tools",
-                    "arbitrary_shell": False,
-                },
-                "artifacts": {
-                    "run_dir": str(run),
-                    "ledger": str(run / "lifecycle_ledger.jsonl"),
-                    "trajectories": sorted(str(path) for path in run.glob("**/trajectory.jsonl")),
-                    "conversations": sorted(str(path) for path in run.glob("**/conversation.jsonl")),
-                },
+    return {
+        "run_id": f"{process_id}.{spec.lifecycle_id}",
+        "evidence": {
+            "lifecycle": lifecycle,
+            "agent": agent,
+            "execution_security": {
+                "filesystem_boundary": "workspace_confined_native_tools",
+                "arbitrary_shell": False,
             },
-        }
-    verifier_exception: Exception | None = None
-    if lifecycle["status"] == "complete" and agent["status"] == "completed":
-        try:
-            verification = validate_lifecycle_verification(verifier(package, run))
-        except Exception as exc:
-            verifier_exception = exc
-            verification = validate_lifecycle_verification(
-                {
-                    "lifecycle_id": spec.lifecycle_id,
-                    "overall": "incomplete",
-                    "passed": False,
-                    "reward": 0.0,
-                    "gates": {
-                        "lifecycle_verifier": {
-                            "passed": False,
-                            "score": 0.0,
-                            "failures": [f"verifier_exception:{type(exc).__name__}:{exc}"],
-                        }
-                    },
-                }
-            )
-    else:
-        verification = validate_lifecycle_verification(
-            {
-                "lifecycle_id": spec.lifecycle_id,
-                "overall": "incomplete",
-                "passed": False,
-                "reward": 0.0,
-                "gates": {
-                    "lifecycle_runtime": {
-                        "passed": False,
-                        "score": 0.0,
-                        "failures": [f"stopped_at:{lifecycle.get('active_checkpoint_id') or lifecycle['status']}"],
-                    }
-                },
-            }
-        )
-    reward = float(verification["reward"])
-    passed = bool(verification["passed"])
-    experiment = None
-    if run_recorder is not None:
-        experiment = run_recorder(
-            package_dir=package,
-            run_dir=run,
-            agent=agent,
-            verifier=verifier,
-            verification=verification,
-            tool_schema=_lifecycle_tool_schema(
-                agent["execution_mode"],
-                supports_evidence_requests=_supports_evidence_requests(package),
-                supports_lifecycle_operations=_supports_lifecycle_operations(package),
-            ),
-        )
-    if verifier_exception is not None:
-        raise verifier_exception
-    trajectories = sorted(str(path) for path in run.glob("**/trajectory.jsonl"))
-    conversations = sorted(str(path) for path in run.glob("**/conversation.jsonl"))
-    artifacts = {
-        "run_dir": str(run),
-        "ledger": str(run / "lifecycle_ledger.jsonl"),
-        "trajectories": trajectories,
-        "conversations": conversations,
-    }
-    evidence = {
-        "score": {"reward": reward, "passed": passed},
-        "gates": verification.get("gates", {}),
-        "lifecycle": lifecycle,
-        "verification": verification,
-        "agent": agent,
-        "execution_security": {
-            "filesystem_boundary": "workspace_confined_native_tools",
-            "arbitrary_shell": False,
+            "artifacts": {
+                "run_dir": str(run),
+                "ledger": str(run / "lifecycle_ledger.jsonl"),
+                "trajectories": sorted(str(path) for path in run.glob("**/trajectory.jsonl")),
+                "conversations": sorted(str(path) for path in run.glob("**/conversation.jsonl")),
+            },
         },
-        "artifacts": artifacts,
     }
-    if experiment is not None:
-        evidence["experiment"] = experiment
-        artifacts.update(
-            {
-                "verification": experiment["verification"],
-                "metrics": experiment["metrics"],
-                "manifest": experiment["manifest"],
-                "experiment_index": experiment["index"],
-            }
-        )
-    return {"run_id": f"{process_id}.{spec.lifecycle_id}", "evidence": evidence}
 
 
 def _fresh_context_sessions(run_dir: Path) -> list[dict[str, Any]]:

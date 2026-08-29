@@ -6,9 +6,9 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Any, Literal, Protocol, runtime_checkable
+from typing import Annotated, Any, Literal, Protocol, runtime_checkable
 
-from pydantic import Field, NonNegativeInt, PositiveInt, field_validator, model_validator
+from pydantic import Field, field_validator, model_validator
 
 from aec_bench.contracts.trial_record import ArtifactReference
 from aec_bench.contracts.validators import NonEmptyStr, StrictModel
@@ -18,6 +18,9 @@ from aec_bench.lifecycles.runtime.state import (
     LifecycleRunStatus,
     ReleasedEvidenceArtifact,
 )
+
+_StrictPositiveInt = Annotated[int, Field(strict=True, gt=0)]
+_StrictNonNegativeInt = Annotated[int, Field(strict=True, ge=0)]
 
 
 class LifecycleExecutionMode(StrEnum):
@@ -72,8 +75,8 @@ class LifecycleEvidenceRequestOption(StrictModel):
 class LifecycleEvidenceRequestCatalog(StrictModel):
     schema_version: Literal["1"] = "1"
     checkpoint_id: NonEmptyStr
-    request_budget: NonNegativeInt
-    remaining_budget: NonNegativeInt
+    request_budget: _StrictNonNegativeInt
+    remaining_budget: _StrictNonNegativeInt
     requests: tuple[LifecycleEvidenceRequestOption, ...] = ()
 
     @model_validator(mode="after")
@@ -103,8 +106,8 @@ class LifecycleOperationOption(StrictModel):
 class LifecycleOperationCatalog(StrictModel):
     schema_version: Literal["1"] = "1"
     checkpoint_id: NonEmptyStr
-    operation_budget: NonNegativeInt
-    remaining_budget: NonNegativeInt
+    operation_budget: _StrictNonNegativeInt
+    remaining_budget: _StrictNonNegativeInt
     visible_source_state_sha256: NonEmptyStr
     operations: tuple[LifecycleOperationOption, ...] = ()
 
@@ -247,7 +250,7 @@ class LifecycleEpisodeRequest(StrictModel):
     memory_visibility_policy: LifecycleVisibilityPolicy
     requested_adapter: NonEmptyStr
     requested_model: NonEmptyStr
-    max_turns_per_session: PositiveInt
+    max_turns_per_session: _StrictPositiveInt
     title: NonEmptyStr
     instruction: NonEmptyStr
     workspace: NonEmptyStr
@@ -306,10 +309,10 @@ class LifecycleEpisodeRequest(StrictModel):
 
 
 class LifecycleEpisodeUsage(StrictModel):
-    input_tokens: NonNegativeInt = 0
-    output_tokens: NonNegativeInt = 0
-    cache_read_tokens: NonNegativeInt = 0
-    cache_write_tokens: NonNegativeInt = 0
+    input_tokens: _StrictNonNegativeInt = 0
+    output_tokens: _StrictNonNegativeInt = 0
+    cache_read_tokens: _StrictNonNegativeInt = 0
+    cache_write_tokens: _StrictNonNegativeInt = 0
 
 
 class LifecycleEpisodeResult(StrictModel):
@@ -325,7 +328,7 @@ class LifecycleEpisodeResult(StrictModel):
     status: Literal["completed", "failed"]
     requested_adapter: NonEmptyStr
     requested_model: NonEmptyStr
-    max_turns_per_session: PositiveInt
+    max_turns_per_session: _StrictPositiveInt
     adapter: NonEmptyStr
     resolved_model: NonEmptyStr
     configuration: dict[str, Any] = Field(default_factory=dict)

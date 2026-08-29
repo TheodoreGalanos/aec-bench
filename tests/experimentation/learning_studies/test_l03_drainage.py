@@ -20,7 +20,7 @@ from aec_bench.lifecycles.stormwater_design.drainage_learning import drainage_ph
 from aec_bench.lifecycles.stormwater_design.drainage_model import TEMPLATE_ID
 
 _AGENT = AgentConfig(name="l03-deterministic-agent", adapter="tool_loop", model="fixed-test-model", parameters={})
-_COMPUTE = ComputeConfig(backend="local", resource_limits={"memory_mb": 512}, timeout_override=30)
+_COMPUTE = ComputeConfig(backend="local", resource_limits={"memory_mb": 512})
 _SCAFFOLDING_MARKERS = (
     b"guided evidence-seeking checklist",
     b"constraint verification steps",

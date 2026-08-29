@@ -23,9 +23,7 @@ from aec_bench.experimentation.lifecycle_studies.ablation_plan import (
     LifecycleAblationTrial,
     build_lifecycle_ablation_plan,
 )
-from aec_bench.experimentation.lifecycle_studies.trial_record import (
-    validate_historical_lifecycle_ablation_record,
-)
+from aec_bench.experimentation.lifecycle_studies.retention import validate_lifecycle_ablation_record
 from aec_bench.ledger.reader import read_trial_record
 
 
@@ -207,7 +205,7 @@ def _read_validated_records(
             raise ValueError(f"ledger contains duplicate planned trial id: {record.trial_id}")
         if path.resolve() != Path(trial.ledger_path).resolve():
             raise ValueError(f"TrialRecord is not stored at its canonical ledger path: {record.trial_id}")
-        validate_historical_lifecycle_ablation_record(record, manifest, plan, trial)
+        validate_lifecycle_ablation_record(record, manifest, trial)
         seen.add(record.trial_id)
         records.append(record)
     return records

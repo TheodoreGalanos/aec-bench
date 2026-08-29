@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import hashlib
 from datetime import datetime
 from enum import StrEnum
 from pathlib import Path, PurePosixPath
@@ -345,6 +346,7 @@ class TrialRecord(StrictModel):
     _run_manifest: RunManifest | None = PrivateAttr(default=None)
     _extension_values: dict[str, Any] = PrivateAttr(default_factory=dict)
     _pending_artifacts: dict[str, tuple[Path, str, str | None]] = PrivateAttr(default_factory=dict)
+    _pending_artifact_hashes: dict[str, str] = PrivateAttr(default_factory=dict)
 
     @field_validator("started_at", "completed_at")
     @classmethod
@@ -428,10 +430,17 @@ class TrialRecord(StrictModel):
         *,
         media_type: str,
         logical_path: str | None = None,
+        expected_sha256: str | None = None,
     ) -> Self:
         if not role.strip():
             raise ValueError("artifact role must not be blank")
         selected_path = Path(path)
+        selected_sha256 = hashlib.sha256(selected_path.read_bytes()).hexdigest()
+        if expected_sha256 is not None:
+            ArtifactReference.validate_sha256(expected_sha256)
+            if selected_sha256 != expected_sha256:
+                raise ValueError(f"trial artifact does not match its expected SHA-256: {role}")
+        selected_expected_sha256 = expected_sha256 or selected_sha256
         if role in self._pending_artifacts:
             existing_path, existing_media_type, existing_logical_path = self._pending_artifacts[role]
             if (
@@ -440,10 +449,12 @@ class TrialRecord(StrictModel):
                 and existing_path.is_file()
                 and selected_path.is_file()
                 and existing_path.read_bytes() == selected_path.read_bytes()
+                and self._pending_artifact_hashes[role] == selected_expected_sha256
             ):
                 return self
             raise ValueError(f"trial artifact role already attached: {role}")
         self._pending_artifacts[role] = (selected_path, media_type, logical_path)
+        self._pending_artifact_hashes[role] = selected_expected_sha256
         if self.output is not None:
             if role == "raw_output":
                 self.output.raw_output_path = str(selected_path)
@@ -526,6 +537,10 @@ class TrialRecord(StrictModel):
     @property
     def pending_artifacts(self) -> dict[str, tuple[Path, str, str | None]]:
         return dict(self._pending_artifacts)
+
+    @property
+    def pending_artifact_hashes(self) -> dict[str, str]:
+        return dict(self._pending_artifact_hashes)
 
     @property
     def adaptation(self) -> AdaptationProvenance | None:

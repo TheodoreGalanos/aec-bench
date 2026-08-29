@@ -218,7 +218,7 @@ Authoritative implementations include:
 - [lifecycle coordination and recovery](../../src/aec_bench/lifecycles/runtime/lifecycle.py)
 - [functional lifecycle application](../../src/aec_bench/lifecycles/application.py)
 - [local fresh and persistent execution](../../src/aec_bench/harness/lifecycle_local.py)
-- [normal lifecycle trial construction](../../src/aec_bench/lifecycles/trial_record.py)
+- [normal lifecycle trial finalization](../../src/aec_bench/lifecycles/finalization.py)
 - [lifecycle invocation recording](../../src/aec_bench/lifecycles/recording.py)
 - [episode request/result boundary](../../src/aec_bench/lifecycles/runtime/episode.py)
 - [structural facade submittal lifecycle](../../src/aec_bench/lifecycles/structural_review/facade_submittal.py)
@@ -226,7 +226,8 @@ Authoritative implementations include:
 - [hydraulic-review Prime lifecycle composition](../../src/aec_bench/harness/hydraulic_review_prime/lifecycle.py)
 - [conditional-evidence publication](../../src/aec_bench/lifecycles/runtime/request_store.py)
 - [calibration freeze](../../src/aec_bench/experimentation/lifecycle_studies/calibration.py)
-- [ablation snapshot and finalization policy](../../src/aec_bench/experimentation/lifecycle_studies/trial_record.py)
+- [ablation snapshot retention and recovery](../../src/aec_bench/experimentation/lifecycle_studies/retention.py)
+- [historical ablation evidence validation](../../src/aec_bench/experimentation/lifecycle_studies/historical_evidence.py)
 
 Focused proof includes:
 

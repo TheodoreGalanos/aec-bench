@@ -26,7 +26,9 @@ from aec_bench.lifecycles.runtime.episode import (
     LifecycleEpisodeRequest,
     LifecycleEpisodeResult,
     LifecycleEpisodeUsage,
+    LifecycleEvidenceRequestCatalog,
     LifecycleExecutionMode,
+    LifecycleOperationCatalog,
     LifecycleVisibilityPolicy,
 )
 from aec_bench.lifecycles.runtime.lifecycle import (
@@ -163,6 +165,82 @@ def test_episode_contract_enforces_mode_visibility_and_failure_consistency() -> 
         LifecycleEpisodeResult.model_validate({**completed.model_dump(mode="json"), "failure_kind": "provider_error"})
     with pytest.raises(ValidationError, match="failed episode requires failure_kind"):
         LifecycleEpisodeResult.model_validate({**completed.model_dump(mode="json"), "status": "failed"})
+
+
+@pytest.mark.parametrize("raw_value", [True, 1.0, "1"])
+def test_episode_request_and_result_reject_coercive_max_turns(raw_value: object) -> None:
+    request = _request()
+    result = _completed_result(request)
+
+    with pytest.raises(ValidationError):
+        LifecycleEpisodeRequest.model_validate({**request.model_dump(mode="json"), "max_turns_per_session": raw_value})
+    with pytest.raises(ValidationError):
+        LifecycleEpisodeResult.model_validate({**result.model_dump(mode="json"), "max_turns_per_session": raw_value})
+
+
+@pytest.mark.parametrize("field", ["input_tokens", "output_tokens", "cache_read_tokens", "cache_write_tokens"])
+@pytest.mark.parametrize("raw_value", [True, 1.0, "1"])
+def test_episode_usage_rejects_coercive_token_counts(field: str, raw_value: object) -> None:
+    with pytest.raises(ValidationError):
+        LifecycleEpisodeUsage.model_validate({field: raw_value})
+
+
+@pytest.mark.parametrize("raw_value", [True, 1.0, "1"])
+def test_episode_catalogs_reject_coercive_budget_counts(raw_value: object) -> None:
+    evidence = {
+        "checkpoint_id": "initial_review",
+        "request_budget": 1,
+        "remaining_budget": 0,
+    }
+    operation = {
+        "checkpoint_id": "initial_review",
+        "operation_budget": 1,
+        "remaining_budget": 0,
+        "visible_source_state_sha256": "a" * 64,
+    }
+    for field_name in ("request_budget", "remaining_budget"):
+        with pytest.raises(ValidationError):
+            LifecycleEvidenceRequestCatalog.model_validate({**evidence, field_name: raw_value})
+    for field_name in ("operation_budget", "remaining_budget"):
+        with pytest.raises(ValidationError):
+            LifecycleOperationCatalog.model_validate({**operation, field_name: raw_value})
+
+
+def test_episode_numeric_boundaries_preserve_valid_integers() -> None:
+    request = _request()
+    result = _completed_result(request)
+    usage = LifecycleEpisodeUsage(
+        input_tokens=1,
+        output_tokens=2,
+        cache_read_tokens=3,
+        cache_write_tokens=4,
+    )
+
+    assert request.max_turns_per_session == 1
+    assert result.max_turns_per_session == 1
+    assert usage.model_dump(mode="json") == {
+        "input_tokens": 1,
+        "output_tokens": 2,
+        "cache_read_tokens": 3,
+        "cache_write_tokens": 4,
+    }
+    assert (
+        LifecycleEvidenceRequestCatalog(
+            checkpoint_id="initial_review",
+            request_budget=1,
+            remaining_budget=0,
+        ).request_budget
+        == 1
+    )
+    assert (
+        LifecycleOperationCatalog(
+            checkpoint_id="initial_review",
+            operation_budget=1,
+            remaining_budget=0,
+            visible_source_state_sha256="a" * 64,
+        ).operation_budget
+        == 1
+    )
 
 
 def test_current_episode_request_binds_and_persists_public_operation_state(tmp_path: Path) -> None:

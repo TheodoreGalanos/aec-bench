@@ -5,7 +5,9 @@ from __future__ import annotations
 
 import json
 import time
+from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 import typer
 import yaml
@@ -38,9 +40,9 @@ from aec_bench.lifecycles.catalogue import (
     lifecycle_smoke_environment,
     lifecycle_template_ids,
     lifecycle_variant_ids,
-    materialize_lifecycle,
     verify_lifecycle,
 )
+from aec_bench.lifecycles.compiled import compile_lifecycle, load_compiled_lifecycle
 from aec_bench.lifecycles.runtime.episode import LifecycleExecutionMode, LifecycleVisibilityPolicy
 from aec_bench.lifecycles.runtime.request_protocol import EvidenceLifecycleError
 from aec_bench.trials import PlannedTrial
@@ -50,22 +52,38 @@ study_app = typer.Typer(help="Run lifecycle-specific studies.")
 app.add_typer(study_app, name="study")
 
 
+def _emit_lifecycle_result(
+    command: str,
+    operation: Callable[[], object],
+    *,
+    human_renderer: Callable[[Any], None] | None = None,
+) -> None:
+    start = time.monotonic()
+    try:
+        result = operation()
+    except (EvidenceLifecycleError, KeyError, OSError, ValueError, yaml.YAMLError) as exc:
+        emit(command, None, errors=[str(exc)], start_time=start)
+        return
+    emit(command, result, start_time=start, human_renderer=human_renderer)
+
+
 @app.command("list")
 def list_command() -> None:
-    start = time.monotonic()
-    definitions = [lifecycle_definition(template_id) for template_id in sorted(lifecycle_template_ids())]
-    data = {
-        "count": len(definitions),
-        "lifecycles": [
-            {
-                **definition.metadata.model_dump(mode="json"),
-                "lifecycle_id": definition.lifecycle.lifecycle_id,
-                "checkpoint_count": len(definition.lifecycle.checkpoints),
-            }
-            for definition in definitions
-        ],
-    }
-    emit("task lifecycle list", data, start_time=start, human_renderer=_render_lifecycles)
+    def list_lifecycles() -> dict[str, object]:
+        definitions = [lifecycle_definition(template_id) for template_id in sorted(lifecycle_template_ids())]
+        return {
+            "count": len(definitions),
+            "lifecycles": [
+                {
+                    **definition.metadata.model_dump(mode="json"),
+                    "lifecycle_id": definition.lifecycle.lifecycle_id,
+                    "checkpoint_count": len(definition.lifecycle.checkpoints),
+                }
+                for definition in definitions
+            ],
+        }
+
+    _emit_lifecycle_result("task lifecycle list", list_lifecycles, human_renderer=_render_lifecycles)
 
 
 @app.command("materialize")
@@ -74,37 +92,24 @@ def materialize_command(
     output: Path = typer.Option(..., "--output", "-o", help="Directory where the lifecycle package is written"),
     variant: str | None = typer.Option(None, "--variant", help="Public semantic lifecycle variant id"),
 ) -> None:
-    start = time.monotonic()
-    try:
+    def materialize() -> dict[str, object]:
         definition = lifecycle_definition(template_id)
-        package_dir = materialize_lifecycle(template_id, output, variant_id=variant)
-    except (KeyError, ValueError) as exc:
-        emit("task lifecycle materialize", None, errors=[str(exc)], start_time=start)
-        return
-    emit(
-        "task lifecycle materialize",
-        {
+        package_dir = compile_lifecycle(template_id, output, variant_id=variant).package_dir
+        return {
             "template_id": template_id,
             "package_dir": str(package_dir),
             "checkpoint_count": len(definition.lifecycle.checkpoints),
             "variant_id": _materialized_variant_id(package_dir),
-        },
-        start_time=start,
-    )
+        }
+
+    _emit_lifecycle_result("task lifecycle materialize", materialize)
 
 
 @app.command("list-variants")
 def list_variants_command(template_id: str = typer.Argument(..., help="Lifecycle task id")) -> None:
-    start = time.monotonic()
-    try:
-        variants = lifecycle_variant_ids(template_id)
-    except KeyError as exc:
-        emit("task lifecycle list-variants", None, errors=[str(exc)], start_time=start)
-        return
-    emit(
+    _emit_lifecycle_result(
         "task lifecycle list-variants",
-        {"template_id": template_id, "variants": list(variants)},
-        start_time=start,
+        lambda: {"template_id": template_id, "variants": list(lifecycle_variant_ids(template_id))},
     )
 
 
@@ -113,13 +118,14 @@ def start_command(
     package: Path = typer.Option(..., "--package", help="Materialized evidence-lifecycle package"),
     run_dir: Path = typer.Option(..., "--run-dir", help="Lifecycle run directory"),
 ) -> None:
-    start = time.monotonic()
-    result = release_checkpoint(
-        package,
-        run_dir,
-        operation_resolver=lifecycle_operation_resolver(package, run_dir),
+    _emit_lifecycle_result(
+        "task lifecycle start",
+        lambda: release_checkpoint(
+            package,
+            run_dir,
+            operation_resolver=lifecycle_operation_resolver(package, run_dir),
+        ),
     )
-    emit("task lifecycle start", result, start_time=start)
 
 
 @app.command("submit")
@@ -127,13 +133,14 @@ def submit_command(
     package: Path = typer.Option(..., "--package", help="Materialized evidence-lifecycle package"),
     run_dir: Path = typer.Option(..., "--run-dir", help="Lifecycle run directory"),
 ) -> None:
-    start = time.monotonic()
-    result = submit_checkpoint(
-        package,
-        run_dir,
-        operation_resolver=lifecycle_operation_resolver(package, run_dir),
+    _emit_lifecycle_result(
+        "task lifecycle submit",
+        lambda: submit_checkpoint(
+            package,
+            run_dir,
+            operation_resolver=lifecycle_operation_resolver(package, run_dir),
+        ),
     )
-    emit("task lifecycle submit", result, start_time=start)
 
 
 @app.command("status")
@@ -141,13 +148,14 @@ def status_command(
     package: Path = typer.Option(..., "--package", help="Materialized evidence-lifecycle package"),
     run_dir: Path = typer.Option(..., "--run-dir", help="Lifecycle run directory"),
 ) -> None:
-    start = time.monotonic()
-    result = read_lifecycle(
-        package,
-        run_dir,
-        operation_resolver=lifecycle_operation_resolver(package, run_dir),
+    _emit_lifecycle_result(
+        "task lifecycle status",
+        lambda: read_lifecycle(
+            package,
+            run_dir,
+            operation_resolver=lifecycle_operation_resolver(package, run_dir),
+        ),
     )
-    emit("task lifecycle status", result, start_time=start)
 
 
 @app.command("revisit")
@@ -157,15 +165,16 @@ def revisit_command(
     checkpoint_id: str = typer.Option(..., "--checkpoint-id", help="Submitted checkpoint to inspect"),
     reason: str = typer.Option(..., "--reason", help="Reason for the revisit"),
 ) -> None:
-    start = time.monotonic()
-    result = revisit_checkpoint(
-        package,
-        run_dir,
-        checkpoint_id=checkpoint_id,
-        reason=reason,
-        operation_resolver=lifecycle_operation_resolver(package, run_dir),
+    _emit_lifecycle_result(
+        "task lifecycle revisit",
+        lambda: revisit_checkpoint(
+            package,
+            run_dir,
+            checkpoint_id=checkpoint_id,
+            reason=reason,
+            operation_resolver=lifecycle_operation_resolver(package, run_dir),
+        ),
     )
-    emit("task lifecycle revisit", result, start_time=start)
 
 
 @app.command("branch")
@@ -177,17 +186,18 @@ def branch_command(
     branch_id: str = typer.Option(..., "--branch-id", help="Stable identity for the derived run"),
     reason: str = typer.Option(..., "--reason", help="Reason for the branch"),
 ) -> None:
-    start = time.monotonic()
-    result = branch_lifecycle(
-        package,
-        parent_run_dir,
-        branch_run_dir,
-        checkpoint_id=checkpoint_id,
-        branch_id=branch_id,
-        reason=reason,
-        operation_resolver=lifecycle_operation_resolver(package, parent_run_dir),
+    _emit_lifecycle_result(
+        "task lifecycle branch",
+        lambda: branch_lifecycle(
+            package,
+            parent_run_dir,
+            branch_run_dir,
+            checkpoint_id=checkpoint_id,
+            branch_id=branch_id,
+            reason=reason,
+            operation_resolver=lifecycle_operation_resolver(package, parent_run_dir),
+        ),
     )
-    emit("task lifecycle branch", result, start_time=start)
 
 
 @app.command("run")
@@ -208,35 +218,37 @@ def run_command(
     ),
     max_turns: int = typer.Option(60, "--max-turns", min=1, help="Maximum requests in each model session"),
 ) -> None:
-    start = time.monotonic()
-    selected_visibility = visibility_policy or (
-        LifecycleVisibilityPolicy.PERSISTENT_CONTEXT
-        if mode is LifecycleExecutionMode.PERSISTENT_CONTEXT
-        else LifecycleVisibilityPolicy.ARTIFACT_MEMORY
-    )
-    task_id = _package_template_id(package)
-    planned = PlannedTrial(
-        trial_id=f"lifecycle-{run_dir.name}",
-        experiment_id=f"lifecycle-{run_dir.name}",
-        task_id=task_id,
-        agent=AgentConfig(
-            name="lifecycle-agent",
-            adapter=adapter,
-            model=model,
-            parameters={"max_turns_per_session": max_turns},
-        ),
-        compute=ComputeConfig(backend="local"),
-        repetition=1,
-    )
-    trial = LifecycleTrial(
-        planned=planned,
-        package_dir=package,
-        run_dir=run_dir,
-        execution_mode=mode,
-        visibility_policy=selected_visibility,
-    )
-    record = run_lifecycle_trial(trial=trial, execute=run_local_lifecycle, verify=verify_lifecycle)
-    emit("task lifecycle run", record.model_dump(mode="json"), start_time=start)
+    def run_trial() -> dict[str, object]:
+        compiled = load_compiled_lifecycle(package)
+        selected_visibility = visibility_policy or (
+            LifecycleVisibilityPolicy.PERSISTENT_CONTEXT
+            if mode is LifecycleExecutionMode.PERSISTENT_CONTEXT
+            else LifecycleVisibilityPolicy.ARTIFACT_MEMORY
+        )
+        planned = PlannedTrial(
+            trial_id=f"lifecycle-{run_dir.name}",
+            experiment_id=f"lifecycle-{run_dir.name}",
+            task_id=compiled.envelope.template_id,
+            agent=AgentConfig(
+                name="lifecycle-agent",
+                adapter=adapter,
+                model=model,
+                parameters={"max_turns_per_session": max_turns},
+            ),
+            compute=ComputeConfig(backend="local"),
+            repetition=1,
+        )
+        trial = LifecycleTrial(
+            planned=planned,
+            compiled=compiled,
+            run_dir=run_dir,
+            execution_mode=mode,
+            visibility_policy=selected_visibility,
+        )
+        record = run_lifecycle_trial(trial=trial, execute=run_local_lifecycle, verify=verify_lifecycle)
+        return record.model_dump(mode="json")
+
+    _emit_lifecycle_result("task lifecycle run", run_trial)
 
 
 @app.command("verify")
@@ -244,8 +256,10 @@ def verify_command(
     package_dir: Path = typer.Argument(..., help="Materialized lifecycle package directory"),
     run_dir: Path = typer.Option(..., "--run-dir", help="Completed lifecycle run directory"),
 ) -> None:
-    start = time.monotonic()
-    emit("task lifecycle verify", verify_lifecycle(package_dir, run_dir), start_time=start)
+    _emit_lifecycle_result(
+        "task lifecycle verify",
+        lambda: verify_lifecycle(package_dir, run_dir),
+    )
 
 
 @app.command("run-smoke")
@@ -253,9 +267,8 @@ def run_smoke_command(
     package_dir: Path = typer.Argument(..., help="Materialized public lifecycle package directory"),
     run_dir: Path = typer.Option(..., "--run-dir", help="Empty output directory for the deterministic run"),
 ) -> None:
-    start = time.monotonic()
-    try:
-        template_id = _package_template_id(package_dir)
+    def run_smoke() -> dict[str, object]:
+        template_id = load_compiled_lifecycle(package_dir).envelope.template_id
         environment = lifecycle_smoke_environment(template_id, package_dir)
         if environment is None:
             raise ValueError(f"lifecycle task {template_id!r} does not declare a smoke environment")
@@ -266,12 +279,7 @@ def run_smoke_command(
             operation_resolver=lifecycle_operation_resolver(package_dir, run_dir),
         )
         verification = verify_lifecycle(package_dir, run_dir)
-    except (EvidenceLifecycleError, json.JSONDecodeError, KeyError, OSError, ValueError) as exc:
-        emit("task lifecycle run-smoke", None, errors=[str(exc)], start_time=start)
-        return
-    emit(
-        "task lifecycle run-smoke",
-        {
+        return {
             "template_id": template_id,
             "package_dir": str(package_dir),
             "run_dir": str(run_dir),
@@ -280,9 +288,9 @@ def run_smoke_command(
             "passed": verification["passed"],
             "reward": verification["reward"],
             "gates": verification["gates"],
-        },
-        start_time=start,
-    )
+        }
+
+    _emit_lifecycle_result("task lifecycle run-smoke", run_smoke)
 
 
 @study_app.command("ablation")
@@ -290,19 +298,17 @@ def ablation_command(
     config: Path = typer.Option(..., "--config", help="Lifecycle ablation YAML manifest"),
     dry_run: bool = typer.Option(False, "--dry-run", help="Print the exact plan without model execution"),
 ) -> None:
-    start = time.monotonic()
     command = "task lifecycle study ablation"
-    try:
+
+    def run_study() -> dict[str, object]:
         manifest = load_lifecycle_ablation_manifest(config)
-        result = (
+        return (
             {"dry_run": True, **inspect_lifecycle_ablation_plan(manifest)}
             if dry_run
             else run_lifecycle_ablation(manifest).model_dump(mode="json")
         )
-    except (OSError, ValueError, yaml.YAMLError) as exc:
-        emit(command, None, errors=[str(exc)], start_time=start)
-        return
-    emit(command, result, start_time=start)
+
+    _emit_lifecycle_result(command, run_study)
 
 
 @study_app.command("calibration-freeze")
@@ -310,18 +316,16 @@ def calibration_freeze_command(
     config: Path = typer.Option(..., "--config", help="Preregistered lifecycle calibration YAML manifest"),
     output: Path | None = typer.Option(None, "--output", help="Write-once frozen condition JSON"),
 ) -> None:
-    start = time.monotonic()
     command = "task lifecycle study calibration-freeze"
-    try:
+
+    def freeze_calibration() -> dict[str, object]:
         manifest = load_lifecycle_ablation_manifest(config)
         destination = output or (Path(manifest.output_root) / "frozen-condition.json")
         path = write_lifecycle_calibration_freeze(manifest, destination)
         freeze = LifecycleCalibrationFreeze.model_validate_json(path.read_text(encoding="utf-8"))
-        result = {"freeze_path": str(path.resolve()), "freeze": freeze.model_dump(mode="json")}
-    except (OSError, ValueError, yaml.YAMLError) as exc:
-        emit(command, None, errors=[str(exc)], start_time=start)
-        return
-    emit(command, result, start_time=start)
+        return {"freeze_path": str(path.resolve()), "freeze": freeze.model_dump(mode="json")}
+
+    _emit_lifecycle_result(command, freeze_calibration)
 
 
 def _materialized_variant_id(package_dir: Path) -> str | None:
@@ -330,14 +334,6 @@ def _materialized_variant_id(package_dir: Path) -> str | None:
         return None
     payload = json.loads(path.read_text(encoding="utf-8"))
     return str(payload["variant_id"])
-
-
-def _package_template_id(package_dir: Path) -> str:
-    payload = json.loads((Path(package_dir) / "template.json").read_text(encoding="utf-8"))
-    template_id = payload.get("template_id") if isinstance(payload, dict) else None
-    if not isinstance(template_id, str) or not template_id:
-        raise ValueError("lifecycle package template identity is invalid")
-    return template_id
 
 
 def _render_lifecycles(data: dict[str, object]) -> None:

@@ -125,9 +125,9 @@ def parse_lifecycle_session_records(
         expected_ids = list(dict.fromkeys(expected_checkpoints[session_id]))
         if checkpoint_ids != expected_ids:
             raise ValueError(f"lifecycle session checkpoint coverage does not match state: {session_id}")
-        payload_model = str(payload.get("model") or "")
-        requested_session_adapter = str(payload.get("adapter") or "")
-        resolved_adapter = str(payload.get("adapter_name") or "")
+        payload_model = _required_session_string(payload, "model", "requested model", session_id)
+        requested_session_adapter = _required_session_string(payload, "adapter", "requested adapter", session_id)
+        resolved_adapter = _required_session_string(payload, "adapter_name", "resolved adapter", session_id)
         if payload_model != requested_model:
             raise ValueError(f"lifecycle session requested model does not match invocation: {session_id}")
         if payload.get("session_mode") != expected_session_mode:
@@ -153,14 +153,11 @@ def parse_lifecycle_session_records(
             raise ValueError(f"fresh lifecycle session artifact path is invalid: {session_id}")
         if requested_session_adapter != requested_adapter:
             raise ValueError(f"lifecycle session requested adapter does not match invocation: {session_id}")
-        if not resolved_adapter:
-            raise ValueError(f"lifecycle session resolved adapter is missing: {session_id}")
-        if payload.get("max_turns") != max_turns_per_session:
+        session_max_turns = _required_positive_session_int(payload, "max_turns", session_id)
+        if session_max_turns != max_turns_per_session:
             raise ValueError(f"lifecycle session max_turns does not match invocation: {session_id}")
-        resolved_model = str(payload.get("resolved_model") or payload.get("model") or "")
-        if not resolved_model:
-            raise ValueError(f"lifecycle session resolved model is missing: {session_id}")
-        session_status = _session_status(str(payload.get("status") or "failed"))
+        resolved_model = _required_session_string(payload, "resolved_model", "resolved model", session_id)
+        session_status = _session_status(payload.get("status"))
         attempts_submitted = all(status == "submitted" for status in expected_attempt_statuses[session_id])
         identity_mismatch = (
             resolved_adapter != requested_session_adapter
@@ -188,6 +185,10 @@ def parse_lifecycle_session_records(
         configuration = payload.get("configuration_record")
         if not isinstance(configuration, dict):
             raise ValueError(f"lifecycle session configuration is malformed: {session_id}")
+        input_tokens = _required_non_negative_session_int(payload, "input_tokens", session_id)
+        output_tokens = _required_non_negative_session_int(payload, "output_tokens", session_id)
+        cache_read_tokens = _required_non_negative_session_int(payload, "cache_read_tokens", session_id)
+        cache_write_tokens = _required_non_negative_session_int(payload, "cache_write_tokens", session_id)
         sessions.append(
             LifecycleSessionRecord(
                 session_id=session_id,
@@ -199,10 +200,10 @@ def parse_lifecycle_session_records(
                 memory_visibility_policy=memory_visibility_policy,
                 configuration=cast(dict[str, Any], configuration),
                 status=session_status,
-                input_tokens=int(payload.get("input_tokens", 0)),
-                output_tokens=int(payload.get("output_tokens", 0)),
-                cache_read_tokens=int(payload.get("cache_read_tokens", 0)),
-                cache_write_tokens=int(payload.get("cache_write_tokens", 0)),
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                cache_read_tokens=cache_read_tokens,
+                cache_write_tokens=cache_write_tokens,
                 failure_kind=(str(payload["failure_kind"]) if payload.get("failure_kind") is not None else None),
                 provider_error=(str(payload["provider_error"]) if payload.get("provider_error") is not None else None),
                 artifacts=session_artifacts,
@@ -221,12 +222,42 @@ def parse_lifecycle_session_records(
     return sessions
 
 
-def _session_status(status: str) -> Literal["completed", "failed", "partial"]:
-    if status in {"completed", "ok"}:
+def _required_session_string(
+    payload: Mapping[str, Any],
+    field: str,
+    label: str,
+    session_id: str,
+) -> str:
+    value = payload.get(field)
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"lifecycle session {label} is invalid: {session_id}")
+    return value
+
+
+def _required_positive_session_int(payload: Mapping[str, Any], field: str, session_id: str) -> int:
+    value = payload.get(field)
+    if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+        raise ValueError(f"lifecycle session {field} is invalid: {session_id}")
+    return value
+
+
+def _required_non_negative_session_int(payload: Mapping[str, Any], field: str, session_id: str) -> int:
+    value = payload.get(field)
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        raise ValueError(f"lifecycle session {field} is invalid: {session_id}")
+    return value
+
+
+def _session_status(status: object) -> Literal["completed", "failed", "partial"]:
+    if not isinstance(status, str):
+        raise ValueError(f"lifecycle session status is invalid: {status!r}")
+    if status == "completed":
         return "completed"
+    if status == "failed":
+        return "failed"
     if status == "partial":
         return "partial"
-    return "failed"
+    raise ValueError(f"lifecycle session status is invalid: {status!r}")
 
 
 def _read_json(path: Path) -> dict[str, Any]:

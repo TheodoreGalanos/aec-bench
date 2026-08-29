@@ -68,6 +68,23 @@ _RAW_HISTORY_STATE_CHANNELS = frozenset({"history", "memory", "feedback"})
 _RAW_HISTORY_CONTEXT_CHANNELS = frozenset({"history", "feedback"})
 
 
+def lifecycle_record_uses_run(record: TrialRecord, expected_run: Path) -> bool:
+    """Return whether a lifecycle record is attached to the expected run directory."""
+    attached = [
+        path.parent
+        for path, _media_type, logical_path in record.pending_artifacts.values()
+        if logical_path is not None and Path(logical_path).parts[-2:] == ("run", "state.json")
+    ]
+    if attached:
+        return len(attached) == 1 and attached[0].resolve(strict=True) == expected_run.resolve(strict=True)
+    output = record.output
+    agent_output = None if output is None else output.agent_output
+    if agent_output is None:
+        return False
+    run = Path(agent_output.output_path)
+    return run.is_absolute() and run.resolve(strict=True) == expected_run.resolve(strict=True)
+
+
 @dataclass(frozen=True, slots=True)
 class LifecycleLearningTarget:
     task_id: str
@@ -340,7 +357,7 @@ class _LifecycleLearningCoordinator:
 
             lifecycle_trial = LifecycleTrial(
                 planned=request.step.trial,
-                package_dir=compiled.package_dir,
+                compiled=compiled,
                 run_dir=run_dir,
                 execution_mode=self._execution_condition.execution_mode,
                 visibility_policy=self._execution_condition.visibility_policy,
@@ -764,7 +781,8 @@ def _validate_feedback_projection(data: bytes, *, source_record: TrialRecord) ->
     output = source_record.output
     if output is not None and output.agent_output is not None:
         run_root = Path(output.agent_output.output_path)
-        forbidden_roots = (str(run_root), str(run_root.parent / "package"))
+        if run_root.is_absolute():
+            forbidden_roots = (str(run_root), str(run_root.parent / "package"))
     _validate_feedback_value(decoded, forbidden_roots=forbidden_roots)
 
 
@@ -948,9 +966,7 @@ def _validate_raw_history_state(root: Path) -> None:
     history_entries = tuple((selected / "history").iterdir())
     if any(path.is_dir() for path in history_entries):
         raise ValueError("raw-history-selection-invalid: history entries must be files")
-    if len(history_entries) > 1 or (
-        history_entries and history_entries[0].name != _RAW_HISTORY_FILENAME
-    ):
+    if len(history_entries) > 1 or (history_entries and history_entries[0].name != _RAW_HISTORY_FILENAME):
         raise ValueError("raw-history-selection-invalid: history entry is ambiguous")
     if any(path.is_dir() for path in (selected / "feedback").iterdir()):
         raise ValueError("raw-history-selection-invalid: feedback entries must be files")
@@ -1038,8 +1054,14 @@ def _validate_raw_channel(root: Path, *, channel: str) -> None:
 def _validate_history_entry(data: bytes) -> None:
     payload = _decode_canonical_json(data, category="raw-history-state-invalid")
     expected = {
-        "history_schema", "source_experience_id", "source_task_id", "source_trial_id",
-        "feedback_view_id", "public_input", "public_outputs", "released_feedback",
+        "history_schema",
+        "source_experience_id",
+        "source_task_id",
+        "source_trial_id",
+        "feedback_view_id",
+        "public_input",
+        "public_outputs",
+        "released_feedback",
     }
     if set(payload) != expected or payload["history_schema"] != _RAW_HISTORY_SCHEMA:
         raise ValueError("raw-history-selection-invalid: history entry fields do not match the allowlist")
@@ -1093,8 +1115,10 @@ def _require_safe_directory(path: Path, category: str) -> None:
 
 def _validate_raw_relative_path(path: Path) -> None:
     pure = PurePosixPath(path.as_posix())
-    if pure.is_absolute() or not pure.parts or any(
-        part in {".", ".."} or part.startswith(".") or "\\" in part for part in pure.parts
+    if (
+        pure.is_absolute()
+        or not pure.parts
+        or any(part in {".", ".."} or part.startswith(".") or "\\" in part for part in pure.parts)
     ):
         raise ValueError("raw-history-path-unsafe: unsafe learner path")
 
@@ -1120,5 +1144,6 @@ __all__ = (
     "LifecycleLearningTreatmentKind",
     "build_lifecycle_learning_operations",
     "lifecycle_learning_task_id",
+    "lifecycle_record_uses_run",
     "resolve_lifecycle_learning_target",
 )

@@ -168,6 +168,9 @@ class LifecycleTrialProvenance(StrictModel):
     lifecycle_id: NonEmptyStr
     spec_sha256: NonEmptyStr
     package_sha256: NonEmptyStr
+    executable_artifact_sha256: NonEmptyStr | None = None
+    operation_protocol_sha256: NonEmptyStr | None = None
+    variant_id: NonEmptyStr | None = None
     repository_commit: NonEmptyStr
     repository_kind: Literal["git", "source_tree"] = "git"
     repository_dirty: bool
@@ -185,13 +188,15 @@ class LifecycleTrialProvenance(StrictModel):
     @field_validator(
         "spec_sha256",
         "package_sha256",
+        "executable_artifact_sha256",
+        "operation_protocol_sha256",
         "repository_dirty_digest",
         "runtime_dependency_sha256",
         "verifier_source_sha256",
     )
     @classmethod
-    def validate_hashes(cls, value: str) -> str:
-        return ArtifactReference.validate_sha256(value)
+    def validate_hashes(cls, value: str | None) -> str | None:
+        return None if value is None else ArtifactReference.validate_sha256(value)
 
     @field_validator("runtime_distributions")
     @classmethod

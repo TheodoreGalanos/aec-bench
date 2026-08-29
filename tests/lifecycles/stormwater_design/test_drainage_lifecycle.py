@@ -10,9 +10,14 @@ from types import SimpleNamespace
 
 import pytest
 
-from aec_bench.harness.lifecycle_local import _run_local_lifecycle_persistent_session
+from aec_bench.harness.lifecycle_local import (
+    _run_local_lifecycle_persistent_session,
+    build_lifecycle_tool_schema,
+)
 from aec_bench.harness.lifecycle_task_run import build_evidence_lifecycle_task_run_resolver
 from aec_bench.lifecycles.catalogue import lifecycle_definition, lifecycle_template_ids
+from aec_bench.lifecycles.compiled import load_compiled_lifecycle
+from aec_bench.lifecycles.invocation import LifecycleExperimentTrialContext
 from aec_bench.lifecycles.recording import record_lifecycle_experiment
 from aec_bench.lifecycles.runtime.lifecycle import (
     EvidenceLifecycleError,
@@ -588,19 +593,29 @@ def test_persistent_session_runner_closes_actual_three_checkpoint_contract(tmp_p
         run_dir=run_dir,
         model="test-model",
         adapter_builder=registry.build,
-        verifier=verify_drainage_model_lifecycle,
         process_id="process.drainage_model",
-        run_recorder=record_lifecycle_experiment,
     )
 
     assert registry.build_count == 1
     assert registry.execute_count == 1
     assert task_run["evidence"]["lifecycle"]["status"] == "complete"
-    assert task_run["evidence"]["score"] == {"reward": 1.0, "passed": True}
-    assert task_run["evidence"]["verification"]["overall"] == "pass"
+    assert "verification" not in task_run["evidence"]
+    verification = verify_drainage_model_lifecycle(package, run_dir)
+    recording = record_lifecycle_experiment(
+        package_dir=package,
+        run_dir=run_dir,
+        agent=task_run["evidence"]["agent"],
+        verifier=verify_drainage_model_lifecycle,
+        verification=verification,
+        tool_schema=build_lifecycle_tool_schema(
+            "persistent_context",
+            supports_evidence_requests=False,
+        ),
+        trial_context=_trial_context(package, run_dir),
+    )
     metrics = _load_json(run_dir / "metrics.json")
     assert metrics["semantic_transition"]["aggregate"]["acquisition"] == 1.0
-    experiment_id = task_run["evidence"]["experiment"]["experiment_id"]
+    experiment_id = recording["experiment_id"]
     canonical_metrics = _load_json(run_dir / "experiments" / experiment_id / "metrics.json")
     assert canonical_metrics["semantic_transition"] == metrics["semantic_transition"]
     manifest = _load_json(run_dir / "experiment-manifest.json")
@@ -684,6 +699,18 @@ def _run_payloads(package: Path, run_dir: Path, payloads: dict[str, dict]) -> No
         package,
         run_dir,
         episode_environment=deterministic_episode_environment(resolve),
+    )
+
+
+def _trial_context(package: Path, run_dir: Path) -> LifecycleExperimentTrialContext:
+    compiled = load_compiled_lifecycle(package)
+    return LifecycleExperimentTrialContext(
+        trial_id=f"trial-{run_dir.name}",
+        planned_experiment_id="drainage-lifecycle-recording-tests",
+        task_id=compiled.envelope.template_id,
+        repetition=1,
+        run_id=f"trial-{run_dir.name}",
+        compiled=compiled.envelope,
     )
 
 

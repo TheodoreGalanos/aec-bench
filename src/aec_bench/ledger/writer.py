@@ -161,6 +161,9 @@ def _materialize_artifacts(*, artifact_root: Path, record: TrialRecord) -> None:
     pending = record.pending_artifacts
     if not pending:
         return
+    expected_hashes = record.pending_artifact_hashes
+    if set(expected_hashes) != set(pending):
+        raise RuntimeError("pending trial artifact hashes do not match pending artifact roles")
     repository = ArtifactRepository(artifact_root)
     output = record.output
     output_artifacts = list(output.artifacts if output is not None else ())
@@ -171,6 +174,8 @@ def _materialize_artifacts(*, artifact_root: Path, record: TrialRecord) -> None:
         if not path.is_file():
             raise FileNotFoundError(f"trial artifact does not exist for role {role}: {path}")
         payload = path.read_bytes()
+        if hashlib.sha256(payload).hexdigest() != expected_hashes[role]:
+            raise ValueError(f"trial artifact changed after attachment: {role}")
         semantic_role = role.removeprefix("output:")
         if role.startswith("output:"):
             semantic_role = semantic_role.rpartition(":")[0] or semantic_role

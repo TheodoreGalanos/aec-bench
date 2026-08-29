@@ -19,7 +19,7 @@ from aec_bench.harness.lifecycle_local import (
     EvidenceLifecycleWorkspaceTool,
 )
 from aec_bench.lifecycles.catalogue import lifecycle_operation_resolver, lifecycle_package_variant, verify_lifecycle
-from aec_bench.lifecycles.recording import repository_provenance
+from aec_bench.lifecycles.provenance import repository_provenance
 from aec_bench.lifecycles.runtime.episode import LifecycleVisibilityPolicy
 from aec_bench.lifecycles.runtime.lifecycle import (
     evidence_lifecycle_package_identity,
