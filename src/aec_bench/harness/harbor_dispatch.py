@@ -17,6 +17,7 @@ from aec_bench.contracts.execution_environment import HarborEnvironmentBinding
 from aec_bench.contracts.experiment_manifest import AgentConfig, ExperimentManifest
 from aec_bench.contracts.task_definition import TaskDefinition
 from aec_bench.harness.execution_payload import ExecutionBundle, build_entrypoint_execution_bundle
+from aec_bench.tasks.selector import validate_execution_tasks
 from aec_bench.trials import plan_trials
 
 HARBOR_NATIVE_BACKENDS = ("modal", "e2b", "daytona", "docker")
@@ -122,6 +123,7 @@ class HarborExperimentDispatcher:
     ) -> HarborDispatchResult:
         if not tasks:
             raise HarborDispatchError("manifest did not select any tasks for Harbor dispatch")
+        validate_execution_tasks(tasks, permitted_visibility=manifest.tasks.visibility_filter)
         overrides = dict(task_path_overrides or {})
         feedback_tasks = tuple(
             task.task_id
@@ -148,6 +150,7 @@ class HarborExperimentDispatcher:
             agents=manifest.agents,
             compute=manifest.compute,
             repetitions=manifest.repetitions,
+            permitted_visibility=manifest.tasks.visibility_filter,
         )
         return dispatch_harbor_config(
             config=job_config,

@@ -3,6 +3,8 @@
 
 from pathlib import Path
 
+import pytest
+
 from aec_bench.contracts.dataset import (
     DatasetManifest,
     DatasetTaskEntry,
@@ -13,7 +15,8 @@ from aec_bench.contracts.experiment_manifest import (
     ExperimentManifest,
     TaskSelector,
 )
-from aec_bench.contracts.task_definition import Difficulty
+from aec_bench.contracts.identity import new_entity_id
+from aec_bench.contracts.task_definition import Difficulty, Lifecycle, Visibility
 from aec_bench.dataset.publication import publish_dataset
 from aec_bench.dataset.storage import save_dataset
 from aec_bench.harness.scheduler import (
@@ -40,7 +43,7 @@ def _make_dataset_manifest(
     return DatasetManifest(
         dataset_id=name,
         description="Test dataset",
-        tasks=tasks,
+        tasks=tuple(tasks),
     )
 
 
@@ -146,7 +149,14 @@ def test_select_manifest_tasks_filters_by_dataset_when_set(tmp_path: Path) -> No
     project_root = tmp_path / "project"
     task_directory = project_root / "tasks/electrical/voltage-drop/alpha"
     task_directory.mkdir(parents=True)
-    (task_directory / "task.toml").write_text("[metadata]\n", encoding="utf-8")
+    (task_directory / "task.toml").write_text(
+        "[identity]\n"
+        f'id = "{new_entity_id("task")}"\n'
+        'key = "electrical/voltage-drop/alpha"\n'
+        "version = 1\n\n"
+        '[metadata]\nlifecycle = "active"\nvisibility = "public"\n',
+        encoding="utf-8",
+    )
     (task_directory / "instruction.md").write_text("Complete the task.\n", encoding="utf-8")
     (task_directory / "tests").mkdir()
     (task_directory / "tests/test.sh").write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
@@ -185,7 +195,14 @@ def test_select_manifest_tasks_loads_dataset_task_from_declared_path(tmp_path: P
     project_root = tmp_path / "project"
     task_directory = project_root / "tasks/electrical/voltage-drop/missing"
     task_directory.mkdir(parents=True)
-    (task_directory / "task.toml").write_text("[metadata]\n", encoding="utf-8")
+    (task_directory / "task.toml").write_text(
+        "[identity]\n"
+        f'id = "{new_entity_id("task")}"\n'
+        'key = "electrical/voltage-drop/missing"\n'
+        "version = 1\n\n"
+        '[metadata]\nlifecycle = "active"\nvisibility = "public"\n',
+        encoding="utf-8",
+    )
     (task_directory / "instruction.md").write_text("Complete the task.\n", encoding="utf-8")
     (task_directory / "tests").mkdir()
     (task_directory / "tests/test.sh").write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
@@ -230,3 +247,101 @@ def test_select_manifest_tasks_without_dataset_field_is_unchanged() -> None:
     selected = select_manifest_tasks(tasks, manifest)
 
     assert [task.task_id for task in selected] == ["electrical/voltage-drop/alpha"]
+
+
+def test_manifest_selection_defaults_to_active_public_tasks() -> None:
+    tasks = [
+        make_task_definition(task_id="electrical/active", lifecycle=Lifecycle.ACTIVE),
+        make_task_definition(task_id="electrical/deprecated", lifecycle=Lifecycle.DEPRECATED),
+        make_task_definition(task_id="electrical/private", visibility=Visibility.PRIVATE),
+        make_task_definition(task_id="electrical/holdout", visibility=Visibility.HOLDOUT),
+    ]
+    manifest = ExperimentManifest(
+        experiment_id="experiment-001",
+        name="Default policy",
+        tasks=TaskSelector(),
+        agents=[AgentConfig(name="agent-a", adapter="tool_loop", model="gpt-5.4")],
+        compute=ComputeConfig(backend="modal"),
+    )
+
+    selected = select_manifest_tasks(tasks, manifest)
+
+    assert [task.task_id for task in selected] == ["electrical/active"]
+
+
+def test_manifest_selection_requires_explicit_deprecated_opt_in() -> None:
+    task = make_task_definition(task_id="electrical/deprecated", lifecycle=Lifecycle.DEPRECATED)
+    manifest = ExperimentManifest(
+        experiment_id="experiment-001",
+        name="Deprecated policy",
+        tasks=TaskSelector(lifecycle_filter=[Lifecycle.DEPRECATED]),
+        agents=[AgentConfig(name="agent-a", adapter="tool_loop", model="gpt-5.4")],
+        compute=ComputeConfig(backend="modal"),
+    )
+
+    assert select_manifest_tasks([task], manifest) == [task]
+
+
+@pytest.mark.parametrize("lifecycle", [Lifecycle.PROPOSED, Lifecycle.RETIRED])
+def test_manifest_selection_rejects_proposed_and_retired_tasks(lifecycle: Lifecycle) -> None:
+    task = make_task_definition(task_id=f"electrical/{lifecycle.value}", lifecycle=lifecycle)
+    manifest = ExperimentManifest.model_construct(
+        experiment_id="experiment-001",
+        name="Forbidden lifecycle policy",
+        tasks=TaskSelector.model_construct(
+            dataset=None,
+            include_patterns=[],
+            exclude_patterns=[],
+            domains=[],
+            difficulties=[],
+            lifecycle_filter=[lifecycle],
+            visibility_filter=[Visibility.PUBLIC],
+        ),
+        agents=[AgentConfig(name="agent-a", adapter="tool_loop", model="gpt-5.4")],
+        compute=ComputeConfig(backend="modal"),
+        repetitions=1,
+        disable_verification=False,
+        description=None,
+        reviewer=None,
+    )
+
+    with pytest.raises(ValueError, match=f"{lifecycle.value}.*cannot start"):
+        select_manifest_tasks([task], manifest)
+
+
+def test_manifest_selection_allows_non_public_tasks_only_with_explicit_context() -> None:
+    task = make_task_definition(task_id="electrical/holdout", visibility=Visibility.HOLDOUT)
+    manifest = ExperimentManifest(
+        experiment_id="experiment-001",
+        name="Holdout policy",
+        tasks=TaskSelector(visibility_filter=[Visibility.HOLDOUT]),
+        agents=[AgentConfig(name="agent-a", adapter="tool_loop", model="gpt-5.4")],
+        compute=ComputeConfig(backend="modal"),
+    )
+
+    assert select_manifest_tasks([task], manifest) == [task]
+
+
+def test_plan_trials_rejects_forbidden_lifecycle_and_visibility_without_context() -> None:
+    agent = AgentConfig(name="agent-a", adapter="direct", model="test-model")
+
+    with pytest.raises(ValueError, match="proposed.*cannot start"):
+        plan_trials("forbidden", tasks=[make_task_definition(lifecycle=Lifecycle.PROPOSED)], agents=[agent])
+    with pytest.raises(ValueError, match="retired.*cannot start"):
+        plan_trials("forbidden", tasks=[make_task_definition(lifecycle=Lifecycle.RETIRED)], agents=[agent])
+    with pytest.raises(ValueError, match="holdout.*explicit permitted"):
+        plan_trials("forbidden", tasks=[make_task_definition(visibility=Visibility.HOLDOUT)], agents=[agent])
+
+
+def test_plan_trials_accepts_explicit_holdout_context() -> None:
+    agent = AgentConfig(name="agent-a", adapter="direct", model="test-model")
+    task = make_task_definition(visibility=Visibility.HOLDOUT)
+
+    plan = plan_trials(
+        "permitted",
+        tasks=[task],
+        agents=[agent],
+        permitted_visibility=[Visibility.HOLDOUT],
+    )
+
+    assert len(plan) == 1

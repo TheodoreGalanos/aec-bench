@@ -331,6 +331,7 @@ def _execute_manifest(
         agents=manifest.agents,
         compute=manifest.compute,
         repetitions=manifest.repetitions,
+        permitted_visibility=manifest.tasks.visibility_filter,
     )
 
     from aec_bench.contracts.task_definition import TaskDefinition

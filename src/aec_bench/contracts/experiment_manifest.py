@@ -6,7 +6,7 @@ from typing import Any
 from pydantic import Field, PositiveInt, field_validator, model_validator
 
 from aec_bench.contracts.dataset import DatasetRef
-from aec_bench.contracts.task_definition import Difficulty, Lifecycle
+from aec_bench.contracts.task_definition import Difficulty, Lifecycle, Visibility
 from aec_bench.contracts.validators import (
     NonEmptyStr,
     StrictModel,
@@ -22,6 +22,7 @@ class TaskSelector(StrictModel):
     domains: list[str] = Field(default_factory=list)
     difficulties: list[Difficulty] = Field(default_factory=list)
     lifecycle_filter: list[Lifecycle] = Field(default_factory=lambda: [Lifecycle.ACTIVE])
+    visibility_filter: list[Visibility] = Field(default_factory=lambda: [Visibility.PUBLIC])
 
     @field_validator("lifecycle_filter")
     @classmethod

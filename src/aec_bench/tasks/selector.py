@@ -31,6 +31,24 @@ class SelectableTask(Protocol):
 SelectableTaskT = TypeVar("SelectableTaskT", bound=SelectableTask)
 
 
+def validate_execution_tasks(
+    tasks: Sequence[SelectableTask],
+    *,
+    permitted_visibility: Sequence[Visibility] = (Visibility.PUBLIC,),
+) -> None:
+    """Reject task values that cannot enter a new execution plan."""
+
+    allowed_visibility = frozenset(permitted_visibility)
+    for task in tasks:
+        if task.lifecycle in {Lifecycle.PROPOSED, Lifecycle.RETIRED}:
+            raise ValueError(f"task {task.task_id!r} has lifecycle {task.lifecycle.value!r} and cannot start a new run")
+        if task.visibility not in allowed_visibility:
+            raise ValueError(
+                f"task {task.task_id!r} has visibility {task.visibility.value!r}; "
+                "an explicit permitted visibility context is required"
+            )
+
+
 def select_tasks(
     tasks: list[SelectableTaskT],
     *,

@@ -1,6 +1,8 @@
 # ABOUTME: Tests for ExperimentManifest and related selection/configuration contracts.
 # ABOUTME: These tests define the validated experiment-planning boundary for the harness.
 
+from typing import Any, cast
+
 import pytest
 from pydantic import ValidationError
 
@@ -13,11 +15,11 @@ from aec_bench.contracts.experiment_manifest import (
     ExperimentManifest,
     TaskSelector,
 )
-from aec_bench.contracts.task_definition import Difficulty, Lifecycle
+from aec_bench.contracts.task_definition import Difficulty, Lifecycle, Visibility
 
 
 def _build_manifest(**overrides: object) -> ExperimentManifest:
-    payload: dict = {
+    payload: dict[str, object] = {
         "experiment_id": "experiment-001",
         "name": "Modal smoke run",
         "description": "Validate trustworthy-trial path.",
@@ -55,6 +57,7 @@ def test_experiment_manifest_accepts_valid_payload() -> None:
 
     assert manifest.repetitions == 1
     assert manifest.tasks.lifecycle_filter == [Lifecycle.ACTIVE]
+    assert manifest.tasks.visibility_filter == [Visibility.PUBLIC]
 
 
 def test_agent_config_accepts_explicit_client_config() -> None:
@@ -113,6 +116,12 @@ def test_task_selector_accepts_deprecated_in_lifecycle_filter() -> None:
     selector = TaskSelector(lifecycle_filter=[Lifecycle.DEPRECATED])
 
     assert Lifecycle.DEPRECATED in selector.lifecycle_filter
+
+
+def test_task_selector_accepts_explicit_non_public_visibility_context() -> None:
+    selector = TaskSelector(visibility_filter=[Visibility.PRIVATE, Visibility.HOLDOUT])
+
+    assert selector.visibility_filter == [Visibility.PRIVATE, Visibility.HOLDOUT]
 
 
 def test_agent_config_accepts_harness_as_adapter_synonym() -> None:
@@ -179,7 +188,7 @@ def test_task_selector_accepts_exact_dataset_reference() -> None:
 
 def test_task_selector_rejects_mutable_dataset_selector() -> None:
     with pytest.raises(ValidationError):
-        TaskSelector(dataset="my-suite")
+        TaskSelector(dataset=cast(Any, "my-suite"))
 
 
 def test_task_selector_defaults_dataset_to_none() -> None:

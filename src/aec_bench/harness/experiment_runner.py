@@ -58,6 +58,7 @@ class HarborImportExperimentRunner:
             agents=manifest.agents,
             compute=manifest.compute,
             repetitions=manifest.repetitions,
+            permitted_visibility=manifest.tasks.visibility_filter,
         )
         tracker = ImportProgressTracker(
             experiment_id=manifest.experiment_id,
