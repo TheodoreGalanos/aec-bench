@@ -32,6 +32,7 @@ from aec_bench.contracts.harness_instance import (
     HarnessTopologyRole,
 )
 from aec_bench.contracts.harness_kernel import KernelRef, canonical_json_sha256
+from aec_bench.contracts.identity import EntityIdentity, EntityKind, new_entity_id
 from aec_bench.contracts.output_completion import OutputCompletionEvaluation, OutputCompletionReason
 from aec_bench.contracts.stage_execution import DeclaredStage, DeclaredStageGraph
 from aec_bench.contracts.task_definition import Visibility
@@ -932,6 +933,7 @@ def _declared_stage_graph_evidence() -> RepairRuntimeEvidence:
     )
     snapshot = ArtifactTaskSnapshotRef(
         task_id=task_id,
+        task_identity=EntityIdentity(id=new_entity_id(EntityKind.TASK), key=task_id, version=1),
         artifact=ArtifactRef(
             artifact_id=f"artifacts/sha256/{'8' * 64}",
             sha256="8" * 64,

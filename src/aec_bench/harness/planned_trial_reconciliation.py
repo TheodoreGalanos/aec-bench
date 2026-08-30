@@ -9,7 +9,7 @@ from aec_bench.contracts.trial_record import PlannedTrialBinding, TrialRecord
 
 
 def planned_trial_binding(trial: PlannedTrial, spec: ResolvedRunSpec) -> PlannedTrialBinding:
-    """Build the backward-readable binding retained by a canonical trial record."""
+    """Build the canonical binding retained by a current trial record."""
 
     return PlannedTrialBinding(
         schema_version=2,

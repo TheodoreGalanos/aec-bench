@@ -868,7 +868,7 @@ def run_persisted_artifact_plan(
 
 def _validate_canonical_task_release(trial: CanonicalPlannedTrial, task: ResolvedTaskInstance) -> None:
     reference = trial.task_release
-    if reference.task_identity is None or task.task.identity != reference.task_identity:
+    if task.task.identity != reference.task_identity:
         raise ValueError(f"task identity does not match planned release: {reference.task_id}")
     try:
         assert_task_snapshot_matches_directory(reference=reference, task_dir=task.instance_dir)

@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from pydantic import ValidationError
 
 import aec_bench.lifecycles.application as lifecycle_application
 from aec_bench.contracts.artifacts import ArtifactRef
@@ -191,18 +192,15 @@ def _record(
     return record.bind_run_manifest(manifest)
 
 
-def test_schema_one_planned_trial_binding_remains_readable(tmp_path: Path) -> None:
+def test_schema_one_planned_trial_binding_is_rejected_after_current_format_cutover(tmp_path: Path) -> None:
     spec, plan = _spec_and_plan(tmp_path)
     payload = planned_trial_binding(plan.trials[0], spec).model_dump(mode="json")
     payload["schema_version"] = 1
     payload.pop("compute")
     payload.pop("family_release")
 
-    historical = PlannedTrialBinding.model_validate(payload)
-
-    assert historical.schema_version == 1
-    assert historical.compute is None
-    assert historical.family_release is None
+    with pytest.raises(ValidationError):
+        PlannedTrialBinding.model_validate(payload)
 
 
 @pytest.mark.asyncio

@@ -12,6 +12,7 @@ from pydantic import ValidationError
 from aec_bench.contracts.artifacts import ArtifactRef
 from aec_bench.contracts.execution_program import ExecutionProgramRef
 from aec_bench.contracts.harness_instance import ProgramOperationRef
+from aec_bench.contracts.identity import EntityIdentity, EntityKind, new_entity_id
 from aec_bench.contracts.stage_execution import (
     DeclaredHandoff,
     DeclaredStage,
@@ -279,6 +280,7 @@ def test_stage_output_and_receipt_bind_exact_context_and_physical_artifacts(tmp_
         task_id=graph.task_id,
         task_snapshot=ArtifactTaskSnapshotRef(
             task_id=graph.task_id,
+            task_identity=EntityIdentity(id=new_entity_id(EntityKind.TASK), key=graph.task_id, version=1),
             artifact=ArtifactRef(
                 artifact_id=f"artifacts/sha256/{'7' * 64}",
                 sha256="7" * 64,

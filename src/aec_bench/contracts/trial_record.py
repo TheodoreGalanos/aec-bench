@@ -205,14 +205,14 @@ InputRecord = TrialInput
 class PlannedTrialBinding(FrozenStrictModel):
     """Optional exact binding from one result to its canonical planned trial."""
 
-    schema_version: Literal[1, 2] = 1
+    schema_version: Literal[2] = 2
     run_identity: EntityIdentity
     trial_identity: EntityIdentity
     task_release: TaskSnapshotRef
     agent_condition_identity: EntityIdentity
     ordinal: PositiveInt
     repetition: PositiveInt
-    compute: ComputeConfig | None = None
+    compute: ComputeConfig
     family_release: FamilyExecutionRelease | None = None
     execution_family: TrialTaskKind
     evaluation_profile: EvaluationRegimeRef | None = None
@@ -228,12 +228,6 @@ class PlannedTrialBinding(FrozenStrictModel):
         if len(keys) != len(set(keys)):
             raise ValueError("planned trial authority identities must be unique")
         return value
-
-    @model_validator(mode="after")
-    def validate_schema_version(self) -> Self:
-        if self.schema_version == 2 and self.compute is None:
-            raise ValueError("planned trial binding schema 2 requires the compute condition")
-        return self
 
 
 class TrialArtifactRef(FrozenStrictModel):

@@ -16,6 +16,7 @@ from aec_bench.contracts.evaluation_generation.spec import (
     EvaluationGenerationBudget,
     EvaluationGenerationSpec,
 )
+from aec_bench.contracts.identity import EntityIdentity, EntityKind, new_entity_id
 from aec_bench.contracts.program_proposal.types import ProgramCandidateKind
 from aec_bench.contracts.task_definition import Visibility
 from aec_bench.contracts.task_review_snapshot import TaskReviewSnapshot
@@ -38,6 +39,7 @@ def _task_snapshot(task_id: str, label: str) -> ArtifactTaskSnapshotRef:
     digest = _sha(label)
     return ArtifactTaskSnapshotRef(
         task_id=task_id,
+        task_identity=EntityIdentity(id=new_entity_id(EntityKind.TASK), key=task_id, version=1),
         artifact=ArtifactRef(
             artifact_id=f"artifacts/sha256/{digest}",
             sha256=digest,
