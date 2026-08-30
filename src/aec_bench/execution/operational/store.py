@@ -14,6 +14,7 @@ from typing import cast
 from uuid import UUID
 
 from aec_bench.contracts.identity import PortableRelativePath, validate_entity_key, validate_uuidv7
+from aec_bench.execution.operational.schema import SCHEMA_STATEMENTS, SCHEMA_VERSION
 
 
 class OperationalStoreError(RuntimeError):
@@ -121,11 +122,13 @@ class OperationalStore:
         self.path = Path(path).expanduser().absolute()
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.application_version = _required_text(application_version or _installed_version(), "application_version")
-        self._migrate()
+        self._initialize_schema()
 
     def schema_version(self) -> int:
         with self._connection() as connection:
-            row = connection.execute("SELECT COALESCE(MAX(version), 0) FROM operational_schema_migrations").fetchone()
+            row = connection.execute("SELECT schema_version FROM operational_schema WHERE singleton = 1").fetchone()
+        if row is None:
+            raise OperationalStoreError("operational schema metadata is missing; recreate the local database")
         return int(row[0])
 
     def create_run(
@@ -648,44 +651,25 @@ class OperationalStore:
         finally:
             connection.close()
 
-    def _migrate(self) -> None:
-        migrations = sorted(
-            (path for path in (Path(__file__).parent / "migrations").glob("*.sql")),
-            key=lambda path: int(path.name.split("_", 1)[0]),
-        )
-        expected_versions = list(range(1, len(migrations) + 1))
-        actual_versions = [int(path.name.split("_", 1)[0]) for path in migrations]
-        if actual_versions != expected_versions:
-            raise OperationalStoreError("operational migrations must be numbered contiguously from 1")
+    def _initialize_schema(self) -> None:
         with self._connection(immediate=True) as connection:
             connection.execute(
-                "CREATE TABLE IF NOT EXISTS operational_schema_migrations "
-                "(version INTEGER PRIMARY KEY, name TEXT NOT NULL, application_version TEXT NOT NULL, "
-                "applied_at TEXT NOT NULL, status TEXT NOT NULL CHECK (status = 'applied'))"
+                "CREATE TABLE IF NOT EXISTS operational_schema "
+                "(singleton INTEGER PRIMARY KEY CHECK (singleton = 1), schema_version INTEGER NOT NULL, "
+                "application_version TEXT NOT NULL, initialized_at TEXT NOT NULL)"
             )
-            applied = {
-                row[0]: row[1] for row in connection.execute("SELECT version, name FROM operational_schema_migrations")
-            }
-            for migration, migration_version in zip(migrations, actual_versions, strict=True):
-                applied_name = applied.get(migration_version)
-                if applied_name is not None:
-                    if applied_name != migration.stem:
-                        raise OperationalStoreConflict(
-                            f"operational migration {migration_version} has a different recorded name"
-                        )
-                    continue
-                for statement in _migration_statements(migration.read_text(encoding="utf-8")):
-                    connection.execute(statement)
+            current = connection.execute("SELECT schema_version FROM operational_schema WHERE singleton = 1").fetchone()
+            if current is not None and int(current[0]) != SCHEMA_VERSION:
+                raise OperationalStoreError(
+                    "operational database schema is stale; delete and recreate this disposable local database"
+                )
+            for statement in SCHEMA_STATEMENTS:
+                connection.execute(statement)
+            if current is None:
                 connection.execute(
-                    "INSERT INTO operational_schema_migrations "
-                    "(version,name,application_version,applied_at,status) VALUES (?,?,?,?,?)",
-                    (
-                        migration_version,
-                        migration.stem,
-                        self.application_version,
-                        _timestamp(datetime.now(UTC)),
-                        "applied",
-                    ),
+                    "INSERT INTO operational_schema "
+                    "(singleton,schema_version,application_version,initialized_at) VALUES (1,?,?,?)",
+                    (SCHEMA_VERSION, self.application_version, _timestamp(datetime.now(UTC))),
                 )
 
     @staticmethod
@@ -805,21 +789,6 @@ def _installed_version() -> str:
         return version("aec-bench")
     except PackageNotFoundError:
         return "0.1.0"
-
-
-def _migration_statements(script: str) -> tuple[str, ...]:
-    statements: list[str] = []
-    pending = ""
-    for line in script.splitlines(keepends=True):
-        pending += line
-        if sqlite3.complete_statement(pending):
-            statement = pending.strip()
-            if statement:
-                statements.append(statement)
-            pending = ""
-    if pending.strip():
-        raise OperationalStoreError("operational migration contains an incomplete SQL statement")
-    return tuple(statements)
 
 
 def _checked_status(value: str, allowed: set[str]) -> str:

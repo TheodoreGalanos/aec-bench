@@ -76,12 +76,14 @@ The current path is:
 
 Execution coordination uses the small `OperationalStore` under
 `aec_bench.execution.operational`. It stores mutable status, work-item,
-attempt, backend-submission, and lease rows in SQLite with numbered migrations
-and short transactions. It stores only portable references for the resolved
-run and plan records. `EvidenceRunStore` remains authoritative for those
-portable records, and the ledger remains authoritative for final trial
-evidence. The operational store does not schedule work, retry attempts, cancel
-runs, or interpret task-family fields.
+attempt, backend-submission, and lease rows in SQLite with short transactions.
+The database is disposable local coordination state. The library initializes
+only its current schema and rejects a stale schema; users recreate the database
+instead of applying retained migrations. The store keeps only portable
+references for the resolved run and plan records. `EvidenceRunStore` remains
+authoritative for those portable records, and the ledger remains authoritative
+for final trial evidence. The operational store does not schedule work, retry
+attempts, cancel runs, or interpret task-family fields.
 
 `HarnessSpec` describes runtime capabilities, bindings, contracts, and
 budgets. It does not control attempt branching or selection. Interactive-world

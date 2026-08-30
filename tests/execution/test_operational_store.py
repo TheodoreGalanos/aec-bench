@@ -1,5 +1,5 @@
 # ABOUTME: Defines focused behavior tests for the mutable SQLite operational store.
-# ABOUTME: Protects migration application, state records, and lease ownership semantics.
+# ABOUTME: Protects current-schema initialization, state records, and lease ownership semantics.
 
 from __future__ import annotations
 
@@ -15,6 +15,7 @@ from aec_bench.execution.operational import (
     LeaseUnavailable,
     OperationalStore,
     OperationalStoreConflict,
+    OperationalStoreError,
     OperationalStoreNotFound,
 )
 
@@ -23,7 +24,7 @@ def _id(kind: EntityKind) -> str:
     return str(new_entity_id(kind))
 
 
-def test_store_applies_numbered_migrations_and_keeps_operational_records_mutable(tmp_path: Path) -> None:
+def test_store_initializes_current_schema_and_keeps_operational_records_mutable(tmp_path: Path) -> None:
     store = OperationalStore(tmp_path / "operational.sqlite3", application_version="test-version")
     run_id = _id(EntityKind.RUN)
     plan_id = _id(EntityKind.PLAN)
@@ -59,10 +60,11 @@ def test_store_applies_numbered_migrations_and_keeps_operational_records_mutable
 
     connection = sqlite3.connect(tmp_path / "operational.sqlite3")
     try:
-        migration = connection.execute(
-            "SELECT version, application_version, status FROM operational_schema_migrations"
-        ).fetchone()
-        assert migration == (1, "test-version", "applied")
+        schema = connection.execute("SELECT schema_version, application_version FROM operational_schema").fetchone()
+        assert schema == (1, "test-version")
+        assert connection.execute(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'operational_schema_migrations'"
+        ).fetchone() == (0,)
         assert connection.execute("PRAGMA journal_mode").fetchone() == ("wal",)
     finally:
         connection.close()
@@ -206,12 +208,12 @@ def test_store_uses_foreign_keys_and_short_connections(tmp_path: Path) -> None:
     connection = sqlite3.connect(path)
     try:
         assert connection.execute("PRAGMA foreign_keys").fetchone() == (0,)
-        assert connection.execute("SELECT COUNT(*) FROM operational_schema_migrations").fetchone() == (1,)
+        assert connection.execute("SELECT COUNT(*) FROM operational_schema").fetchone() == (1,)
     finally:
         connection.close()
 
 
-def test_concurrent_first_open_applies_each_migration_once(tmp_path: Path) -> None:
+def test_concurrent_first_open_initializes_current_schema_once(tmp_path: Path) -> None:
     path = tmp_path / "operational.sqlite3"
 
     with ThreadPoolExecutor(max_workers=2) as executor:
@@ -220,9 +222,27 @@ def test_concurrent_first_open_applies_each_migration_once(tmp_path: Path) -> No
     assert tuple(store.schema_version() for store in stores) == (1, 1)
     connection = sqlite3.connect(path)
     try:
-        assert connection.execute("SELECT COUNT(*) FROM operational_schema_migrations").fetchone() == (1,)
+        assert connection.execute("SELECT COUNT(*) FROM operational_schema").fetchone() == (1,)
     finally:
         connection.close()
+
+
+def test_store_rejects_stale_disposable_schema(tmp_path: Path) -> None:
+    path = tmp_path / "operational.sqlite3"
+    connection = sqlite3.connect(path)
+    try:
+        connection.execute(
+            "CREATE TABLE operational_schema "
+            "(singleton INTEGER PRIMARY KEY, schema_version INTEGER NOT NULL, "
+            "application_version TEXT NOT NULL, initialized_at TEXT NOT NULL)"
+        )
+        connection.execute("INSERT INTO operational_schema VALUES (1, 999, 'old', '2026-01-01T00:00:00+00:00')")
+        connection.commit()
+    finally:
+        connection.close()
+
+    with pytest.raises(OperationalStoreError, match="delete and recreate"):
+        OperationalStore(path)
 
 
 def test_store_requires_uuidv7_ids_and_portable_authority_references(tmp_path: Path) -> None:
