@@ -12,6 +12,12 @@ from pydantic import Field, NonNegativeFloat, NonNegativeInt, PositiveInt, field
 
 from aec_bench.contracts.artifacts import ArtifactRef
 from aec_bench.contracts.authority_evidence import AuthorityEvidenceRef
+from aec_bench.contracts.execution_policy import (
+    FailureClass,
+    FailureKind,
+    RetryPolicy,
+    failure_class_for_kind,
+)
 from aec_bench.contracts.identity import EntityIdentity, EntityKey, PortableRelativePath, validate_uuidv7
 from aec_bench.contracts.runtime_observation import RuntimeObservation
 from aec_bench.contracts.trial_extensions import VerifierExecutionReceipt
@@ -54,33 +60,8 @@ class BackendSubmissionState(StrEnum):
     RUNNING = "running"
     COMPLETED = "completed"
     FAILED = "failed"
+    CANCELLED = "cancelled"
     UNKNOWN = "unknown"
-
-
-class FailureClass(StrEnum):
-    INFRASTRUCTURE = "infrastructure"
-    BENCHMARK = "benchmark"
-    INVALIDATING = "invalidating"
-    UNKNOWN = "unknown"
-
-
-class FailureKind(StrEnum):
-    PROVIDER_UNAVAILABLE = "provider_unavailable"
-    TRANSPORT_UNAVAILABLE = "transport_unavailable"
-    SUBMISSION_REJECTED = "submission_rejected"
-    WORKER_LOST_BEFORE_SUBMISSION = "worker_lost_before_submission"
-    RESULT_IMPORT_FAILED = "result_import_failed"
-    STORAGE_BUSY = "storage_busy"
-    INVALID_OUTPUT = "invalid_output"
-    VERIFIER_FAILURE = "verifier_failure"
-    TASK_FAILURE = "task_failure"
-    BUDGET_EXHAUSTED = "budget_exhausted"
-    IDENTITY_MISMATCH = "identity_mismatch"
-    HIDDEN_DATA_EXPOSURE = "hidden_data_exposure"
-    LIMIT_NOT_ENFORCED = "limit_not_enforced"
-    AUTHORITY_EVIDENCE_MISSING = "authority_evidence_missing"
-    CONFLICTING_FINAL_RECORD = "conflicting_final_record"
-    UNKNOWN_EXTERNAL_STATE = "unknown_external_state"
 
 
 class ReconciliationState(StrEnum):
@@ -111,51 +92,11 @@ class CancellationStatus(StrEnum):
     UNKNOWN = "unknown"
 
 
-_FAILURE_CLASS_BY_KIND: dict[FailureKind, FailureClass] = {
-    FailureKind.PROVIDER_UNAVAILABLE: FailureClass.INFRASTRUCTURE,
-    FailureKind.TRANSPORT_UNAVAILABLE: FailureClass.INFRASTRUCTURE,
-    FailureKind.SUBMISSION_REJECTED: FailureClass.INFRASTRUCTURE,
-    FailureKind.WORKER_LOST_BEFORE_SUBMISSION: FailureClass.INFRASTRUCTURE,
-    FailureKind.RESULT_IMPORT_FAILED: FailureClass.INFRASTRUCTURE,
-    FailureKind.STORAGE_BUSY: FailureClass.INFRASTRUCTURE,
-    FailureKind.INVALID_OUTPUT: FailureClass.BENCHMARK,
-    FailureKind.VERIFIER_FAILURE: FailureClass.BENCHMARK,
-    FailureKind.TASK_FAILURE: FailureClass.BENCHMARK,
-    FailureKind.BUDGET_EXHAUSTED: FailureClass.BENCHMARK,
-    FailureKind.IDENTITY_MISMATCH: FailureClass.INVALIDATING,
-    FailureKind.HIDDEN_DATA_EXPOSURE: FailureClass.INVALIDATING,
-    FailureKind.LIMIT_NOT_ENFORCED: FailureClass.INVALIDATING,
-    FailureKind.AUTHORITY_EVIDENCE_MISSING: FailureClass.INVALIDATING,
-    FailureKind.CONFLICTING_FINAL_RECORD: FailureClass.INVALIDATING,
-    FailureKind.UNKNOWN_EXTERNAL_STATE: FailureClass.UNKNOWN,
-}
+class BackendCancellationResult(FrozenStrictModel):
+    """Provider-neutral result of one backend cancellation request."""
 
-
-class RetryPolicy(FrozenStrictModel):
-    """Explicit retry inputs carried by one schedulable work item."""
-
-    maximum_attempts: Annotated[int, Field(strict=True, gt=0)] = 1
-    retryable_failure_kinds: tuple[FailureKind, ...] = ()
-    backoff_seconds: Annotated[float, Field(strict=True, ge=0)] = 0.0
-    maximum_elapsed_seconds: Annotated[float, Field(strict=True, gt=0)] | None = None
-    unknown_state_policy: Literal["reconcile_before_retry", "never_retry"] = "reconcile_before_retry"
-
-    @field_validator("retryable_failure_kinds")
-    @classmethod
-    def validate_unique_failure_kinds(cls, value: tuple[FailureKind, ...]) -> tuple[FailureKind, ...]:
-        if len(value) != len(set(value)):
-            raise ValueError("retryable failure kinds must be unique")
-        if any(_FAILURE_CLASS_BY_KIND[kind] is not FailureClass.INFRASTRUCTURE for kind in value):
-            raise ValueError("automatic retry kinds must be infrastructure failures")
-        return value
-
-    @model_validator(mode="after")
-    def validate_attempt_limit(self) -> Self:
-        if self.maximum_attempts == 1 and self.retryable_failure_kinds:
-            raise ValueError("single-attempt policy must not declare retryable failure kinds")
-        if self.maximum_attempts > 1 and not self.retryable_failure_kinds:
-            raise ValueError("multi-attempt policy requires retryable failure kinds")
-        return self
+    status: Literal["confirmed", "rejected", "unsupported", "unknown"]
+    message: NonEmptyStr
 
 
 class FailureClassification(FrozenStrictModel):
@@ -167,7 +108,7 @@ class FailureClassification(FrozenStrictModel):
 
     @model_validator(mode="after")
     def validate_class(self) -> Self:
-        expected = _FAILURE_CLASS_BY_KIND[self.kind]
+        expected = failure_class_for_kind(self.kind)
         if self.failure_class is not expected:
             raise ValueError(f"failure kind {self.kind} requires class {expected}")
         return self
@@ -494,8 +435,15 @@ class WorkerOutcome(FrozenStrictModel):
             raise ValueError("worker outcome requires at least one attempt receipt")
         if self.terminal_state == "unknown" and self.finalization is not None:
             raise ValueError("unknown worker outcome must not have a finalization")
-        if self.terminal_state != "unknown" and self.finalization is None:
-            raise ValueError("known worker outcome requires a finalization")
+        if self.terminal_state == "succeeded" and self.finalization is None:
+            raise ValueError("succeeded worker outcome requires a finalization")
+        if self.terminal_state == "failed" and self.finalization is None:
+            if not any(
+                receipt.failure is not None and receipt.failure.failure_class is FailureClass.INFRASTRUCTURE
+                for receipt in self.receipts
+            ):
+                raise ValueError("failed worker outcome without finalization requires an infrastructure failure")
+            return self
         if self.finalization is None:
             return self
         if self.finalization.attempt_id not in {receipt.attempt_id for receipt in self.receipts}:
@@ -520,6 +468,7 @@ __all__ = (
     "AttemptState",
     "BackendSubmission",
     "BackendSubmissionState",
+    "BackendCancellationResult",
     "CancellationStatus",
     "FailureClass",
     "FailureClassification",

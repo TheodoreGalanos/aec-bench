@@ -73,6 +73,7 @@ class BackendSubmissionProgressCounts(FrozenStrictModel):
     running: NonNegativeInt = 0
     completed: NonNegativeInt = 0
     failed: NonNegativeInt = 0
+    cancelled: NonNegativeInt = 0
     unknown: NonNegativeInt = 0
 
 
@@ -288,6 +289,7 @@ def _submission_counts(records: tuple[BackendSubmissionRecord, ...]) -> BackendS
         running=counts["running"],
         completed=counts["completed"],
         failed=counts["failed"],
+        cancelled=counts["cancelled"],
         unknown=counts["unknown"],
     )
 

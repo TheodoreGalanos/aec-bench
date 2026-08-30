@@ -11,6 +11,7 @@ import pytest
 
 from aec_bench.contracts.identity import EntityIdentity, EntityKind, new_entity_id
 from aec_bench.contracts.run_plan import PlannedTrial, RunPlan
+from aec_bench.execution.models import RetryPolicy
 from aec_bench.execution.operational import OperationalStore, OperationalStoreError
 from aec_bench.execution.progress import project_run_progress
 
@@ -67,6 +68,7 @@ def _store_for_plan(tmp_path: Path, plan: RunPlan) -> OperationalStore:
             provider_route="default",
             model_route="default",
             resource_class="default",
+            retry_policy=RetryPolicy(),
             available_at=created_at,
             now=created_at,
         )
@@ -171,6 +173,7 @@ def test_progress_is_scoped_to_the_authoritative_plan(tmp_path: Path) -> None:
         provider_route="default",
         model_route="default",
         resource_class="default",
+        retry_policy=RetryPolicy(),
         available_at=created_at,
         now=created_at,
     )
@@ -316,6 +319,7 @@ def test_progress_marks_missing_and_unknown_planned_trials_as_blocking(tmp_path:
         provider_route="default",
         model_route="default",
         resource_class="default",
+        retry_policy=RetryPolicy(),
         available_at=created_at,
         now=created_at,
     )

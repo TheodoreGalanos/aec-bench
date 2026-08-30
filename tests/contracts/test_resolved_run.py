@@ -8,7 +8,7 @@ from pydantic import ValidationError
 
 from aec_bench.contracts.artifacts import ArtifactRef
 from aec_bench.contracts.dataset import BundleDatasetRef
-from aec_bench.contracts.execution_policy import ExecutionPolicy
+from aec_bench.contracts.execution_policy import ExecutionPolicy, FailureKind, RetryPolicy
 from aec_bench.contracts.experiment_manifest import (
     AgentCondition,
     AgentConfig,
@@ -23,7 +23,14 @@ from aec_bench.contracts.task_definition import Visibility
 from aec_bench.contracts.task_snapshot import ArtifactTaskSnapshotRef
 from aec_bench.contracts.trial_record import AuthorityExpectation, ProviderRoute
 
-_EXECUTION_POLICY = ExecutionPolicy(max_concurrency=1)
+_EXECUTION_POLICY = ExecutionPolicy(
+    max_concurrency=1,
+    retry_policy=RetryPolicy(
+        maximum_attempts=2,
+        retryable_failure_kinds=(FailureKind.TRANSPORT_UNAVAILABLE,),
+        backoff_seconds=5,
+    ),
+)
 
 
 def _identity(kind: EntityKind, key: str, version: int = 1) -> EntityIdentity:

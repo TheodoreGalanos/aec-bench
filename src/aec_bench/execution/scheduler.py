@@ -3,7 +3,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor, wait
 from datetime import UTC, datetime, timedelta
 from typing import Annotated, Literal, Self
@@ -14,7 +14,15 @@ from pydantic import Field, PositiveInt, field_validator, model_validator
 from aec_bench.contracts.execution_policy import ExecutionPolicy
 from aec_bench.contracts.run_plan import RunPlan
 from aec_bench.contracts.validators import FrozenStrictModel
-from aec_bench.execution.models import TrialWorkItem, WorkerOutcome
+from aec_bench.execution.backend import ExecutionBackendControl
+from aec_bench.execution.models import (
+    BackendCancellationResult,
+    FailureClass,
+    FailureClassification,
+    FailureKind,
+    TrialWorkItem,
+    WorkerOutcome,
+)
 from aec_bench.execution.operational import (
     AttemptRecord,
     LeaseRecord,
@@ -31,6 +39,9 @@ class SchedulerRunReport(FrozenStrictModel):
     leased_count: PositiveInt | Literal[0] = 0
     succeeded_count: Annotated[int, Field(strict=True, ge=0)] = 0
     failed_count: Annotated[int, Field(strict=True, ge=0)] = 0
+    retried_count: Annotated[int, Field(strict=True, ge=0)] = 0
+    cancelled_count: Annotated[int, Field(strict=True, ge=0)] = 0
+    unknown_count: Annotated[int, Field(strict=True, ge=0)] = 0
     idle: bool
     next_available_at: datetime | None = None
 
@@ -60,6 +71,176 @@ class LocalScheduler:
         self.store = store
         self.policy = policy
 
+    def request_cancellation(
+        self, run_id: UUID | str, *, trial_id: UUID | str | None = None, now: datetime | None = None
+    ) -> None:
+        """Request cancellation and immediately stop future leasing for the target."""
+
+        self.store.request_cancellation(run_id, trial_id=trial_id, now=now)
+
+    def cancel_active(
+        self,
+        run_id: UUID | str,
+        *,
+        owner: str,
+        backends: Mapping[str, ExecutionBackendControl],
+        now: datetime | None = None,
+    ) -> SchedulerRunReport:
+        """Cancel active work through its backend and close only known outcomes."""
+
+        selected_now = now or datetime.now(UTC)
+        run = self.store.request_cancellation(run_id, now=selected_now)
+        cancelled = 0
+        unknown = 0
+        for item in self.store.list_work_items(run.run_id):
+            if item.state != "cancel_requested":
+                continue
+            attempts = self.store.list_attempts_for_work(item.work_id)
+            if not attempts:
+                continue
+            attempt = attempts[-1]
+            submissions = self.store.list_backend_submissions(attempt.attempt_id)
+            submission = submissions[-1] if submissions else None
+            backend = backends.get(item.backend)
+            if submission is None:
+                result = BackendCancellationResult(status="confirmed", message="no external submission exists")
+            elif backend is None or not hasattr(backend, "cancel"):
+                result = BackendCancellationResult(
+                    status="unsupported", message="backend does not support cancellation"
+                )
+            else:
+                try:
+                    result = backend.cancel(item, attempt, submission)
+                except Exception as error:
+                    result = BackendCancellationResult(status="unknown", message=str(error))
+            if result.status == "confirmed":
+                self.store.transition_attempt(
+                    attempt.attempt_id,
+                    state="cancelled",
+                    now=selected_now,
+                    cancellation_status="confirmed",
+                )
+                if submission is not None:
+                    self.store.transition_backend_submission(
+                        submission.submission_id,
+                        state="cancelled",
+                        now=selected_now,
+                        cancellation_status="confirmed",
+                    )
+                self.store.update_work_item(item.work_id, state="cancelled", now=selected_now)
+                self.store.update_planned_trial(item.trial_id, state="cancelled", now=selected_now)
+                cancelled += 1
+            else:
+                failure_kind = FailureKind.UNKNOWN_EXTERNAL_STATE
+                failure = FailureClassification(
+                    failure_class=FailureClass.UNKNOWN,
+                    kind=failure_kind,
+                    message=f"cancellation {result.status}: {result.message}",
+                )
+                self.store.transition_attempt(
+                    attempt.attempt_id,
+                    state="unknown",
+                    now=selected_now,
+                    failure=failure,
+                    reconciliation_state="pending",
+                    cancellation_status=result.status,
+                )
+                if submission is not None:
+                    self.store.transition_backend_submission(
+                        submission.submission_id,
+                        state="unknown",
+                        now=selected_now,
+                        cancellation_status=result.status,
+                        reconciliation_state="pending",
+                    )
+                self.store.update_work_item(item.work_id, state="unknown", now=selected_now)
+                self.store.update_planned_trial(item.trial_id, state="unknown", now=selected_now)
+                unknown += 1
+            self.store.complete_plan_if_terminal(item.plan_id, run_id=item.run_id, now=selected_now)
+            try:
+                self.store.release_lease(
+                    next(
+                        lease.lease_id
+                        for lease in self.store.list_leases_for_run(run.run_id)
+                        if lease.work_id == item.work_id and lease.state == "active"
+                    ),
+                    owner=owner,
+                    now=selected_now,
+                )
+            except (OperationalStoreError, StopIteration):
+                pass
+        return SchedulerRunReport(
+            idle=True,
+            cancelled_count=cancelled,
+            unknown_count=unknown,
+        )
+
+    def reconcile_unknown(
+        self,
+        run_id: UUID | str,
+        *,
+        backends: Mapping[str, ExecutionBackendControl],
+        now: datetime | None = None,
+    ) -> SchedulerRunReport:
+        """Reconcile unknown work before allowing any retry."""
+
+        selected_now = now or datetime.now(UTC)
+        resolved = 0
+        unknown = 0
+        retried = 0
+        for item in self.store.list_work_items(run_id):
+            if item.state != "unknown":
+                continue
+            attempts = self.store.list_attempts_for_work(item.work_id)
+            submissions = () if not attempts else self.store.list_backend_submissions(attempts[-1].attempt_id)
+            backend = backends.get(item.backend)
+            if not attempts or not submissions or backend is None:
+                unknown += 1
+                continue
+            try:
+                outcome = backend.reconcile(item, attempts[-1], submissions[-1])
+            except Exception:
+                unknown += 1
+                continue
+            if outcome.terminal_state == "unknown":
+                unknown += 1
+                continue
+            selected_receipt = next(
+                (receipt for receipt in outcome.receipts if str(receipt.attempt_id) == attempts[-1].attempt_id), None
+            )
+            self.store.transition_attempt(
+                attempts[-1].attempt_id,
+                state=outcome.terminal_state,
+                failure=None if selected_receipt is None else selected_receipt.failure,
+                reconciliation_state="reconciled",
+            )
+            self.store.update_planned_trial(item.trial_id, state=outcome.terminal_state, now=selected_now)
+            self.store.update_work_item(item.work_id, state=outcome.terminal_state, now=selected_now)
+            if (
+                outcome.terminal_state == "failed"
+                and outcome.finalization is None
+                and selected_receipt is not None
+                and selected_receipt.failure is not None
+            ):
+                if self._schedule_retry(
+                    item,
+                    attempts[-1],
+                    selected_receipt.failure,
+                    selected_now,
+                    after_unknown=True,
+                ):
+                    retried += 1
+                    resolved += 1
+                    continue
+            resolved += 1
+            self.store.complete_plan_if_terminal(item.plan_id, run_id=item.run_id, now=selected_now)
+        return SchedulerRunReport(
+            leased_count=0,
+            retried_count=retried,
+            unknown_count=unknown,
+            idle=True,
+        )
+
     def enqueue_ready_plan(self, run_plan: RunPlan, work_items: Sequence[TrialWorkItem]) -> tuple[WorkItemRecord, ...]:
         """Enqueue every trial in a ready plan exactly once."""
 
@@ -83,6 +264,7 @@ class LocalScheduler:
                 or item.plan_id != run_plan.plan_id
                 or item.ordinal != trial.ordinal
                 or item.execution_family != trial.execution_family
+                or item.retry_policy != self.policy.retry_policy
                 or item.state not in {"planned", "queued"}
             ):
                 raise OperationalStoreError(f"work item does not match authoritative trial: {trial_id}")
@@ -109,6 +291,7 @@ class LocalScheduler:
                 model_route=str(item.model_route),
                 resource_class=str(item.resource_class),
                 available_at=item.available_at,
+                retry_policy=item.retry_policy,
                 now=item.created_at,
             )
             for item in sorted(work_items, key=lambda value: value.ordinal)
@@ -164,14 +347,19 @@ class LocalScheduler:
 
         succeeded = 0
         failed = 0
+        retried = 0
+        cancelled = 0
+        unknown = 0
         running: list[tuple[WorkItemRecord, AttemptRecord, LeaseRecord]] = []
         for work_item, lease in leased:
+            prior_attempts = self.store.list_attempts_for_work(work_item.work_id)
+            retry_number = max((record.retry_number for record in prior_attempts), default=-1) + 1
             attempt = self.store.create_attempt_for_lease(
                 work_item.work_id,
                 trial_id=work_item.trial_id,
                 lease_id=lease.lease_id,
                 candidate_index=1,
-                retry_number=0,
+                retry_number=retry_number,
                 now=selected_now,
             )
             work_item = self.store.update_work_item(work_item.work_id, state="running", now=selected_now)
@@ -189,30 +377,100 @@ class LocalScheduler:
                 done, pending = wait(pending, timeout=self.policy.lease_heartbeat_seconds)
                 for future in done:
                     work_item, attempt, lease = futures[future]
+                    current_state = self.store.get_work_item(work_item.work_id).state
+                    if current_state in {"cancelled", "unknown"}:
+                        if current_state == "unknown":
+                            unknown += 1
+                        try:
+                            self.store.release_lease(lease.lease_id, owner=owner)
+                        except OperationalStoreError:
+                            pass
+                        continue
                     lease_lost = lease.lease_id in lost_leases
                     if lease_lost:
-                        self.store.transition_attempt(attempt.attempt_id, state="unknown")
+                        self.store.transition_attempt(
+                            attempt.attempt_id,
+                            state="unknown",
+                            failure=_unknown_failure("lease expired before worker completion"),
+                            reconciliation_state="pending",
+                        )
                         self.store.update_planned_trial(work_item.trial_id, state="unknown")
                         self.store.update_work_item(work_item.work_id, state="unknown")
+                        unknown += 1
                     else:
                         try:
                             outcome = future.result()
                         except Exception:
-                            self.store.transition_attempt(attempt.attempt_id, state="failed")
-                            self.store.update_planned_trial(work_item.trial_id, state="failed")
-                            self.store.update_work_item(work_item.work_id, state="failed")
-                            failed += 1
+                            current_attempt = self.store.get_attempt(attempt.attempt_id)
+                            has_submission = bool(self.store.list_backend_submissions(attempt.attempt_id))
+                            failure = _failure_from_record(current_attempt) or (
+                                _unknown_failure("worker failed after backend submission")
+                                if has_submission
+                                else _infrastructure_failure(
+                                    FailureKind.WORKER_LOST_BEFORE_SUBMISSION,
+                                    "worker failed before backend submission",
+                                )
+                            )
+                            terminal_state = (
+                                "failed"
+                                if current_attempt.state == "failed"
+                                else ("unknown" if has_submission else "failed")
+                            )
+                            self.store.transition_attempt(
+                                attempt.attempt_id,
+                                state=terminal_state,
+                                failure=failure,
+                                reconciliation_state="pending" if has_submission else "not_required",
+                            )
+                            self.store.update_planned_trial(work_item.trial_id, state=terminal_state)
+                            self.store.update_work_item(work_item.work_id, state=terminal_state)
+                            if terminal_state == "unknown":
+                                unknown += 1
+                            elif self._schedule_retry(work_item, attempt, failure, selected_now):
+                                retried += 1
+                            else:
+                                failed += 1
                         else:
                             if isinstance(outcome, WorkerOutcome):
                                 terminal_state = outcome.terminal_state
+                                selected_receipt = next(
+                                    (
+                                        receipt
+                                        for receipt in outcome.receipts
+                                        if str(receipt.attempt_id) == attempt.attempt_id
+                                    ),
+                                    None,
+                                )
+                                selected_failure: FailureClassification | None = (
+                                    None if selected_receipt is None else selected_receipt.failure
+                                )
+                                finalizes_scheduler_attempt = (
+                                    outcome.finalization is None
+                                    or str(outcome.finalization.attempt_id) == attempt.attempt_id
+                                )
+                                if selected_receipt is not None and finalizes_scheduler_attempt:
+                                    self.store.transition_attempt(
+                                        attempt.attempt_id,
+                                        state=terminal_state,
+                                        failure=selected_failure,
+                                        reconciliation_state=selected_receipt.reconciliation_status.value,
+                                        cancellation_status=selected_receipt.cancellation_status.value,
+                                    )
                                 self.store.update_planned_trial(work_item.trial_id, state=terminal_state)
                                 self.store.update_work_item(work_item.work_id, state=terminal_state)
                                 if outcome.terminal_state == "succeeded":
                                     succeeded += 1
                                 elif outcome.terminal_state == "failed":
-                                    failed += 1
+                                    if (
+                                        outcome.finalization is None
+                                        and selected_failure is not None
+                                        and self._schedule_retry(work_item, attempt, selected_failure, selected_now)
+                                    ):
+                                        retried += 1
+                                    else:
+                                        failed += 1
                                 else:
-                                    pass
+                                    unknown += 1
                             else:
                                 self.store.transition_attempt(attempt.attempt_id, state="succeeded")
                                 self.store.update_planned_trial(work_item.trial_id, state="succeeded")
@@ -221,11 +479,21 @@ class LocalScheduler:
                         try:
                             self.store.release_lease(lease.lease_id, owner=owner)
                         except OperationalStoreError:
-                            if future.exception() is None:
+                            result_state = self.store.get_work_item(work_item.work_id).state
+                            if result_state == "succeeded":
                                 succeeded -= 1
-                            else:
+                            elif result_state == "failed":
                                 failed -= 1
-                            self.store.transition_attempt(attempt.attempt_id, state="unknown")
+                            elif result_state == "queued":
+                                retried -= 1
+                            if result_state != "unknown":
+                                unknown += 1
+                            self.store.transition_attempt(
+                                attempt.attempt_id,
+                                state="unknown",
+                                failure=_unknown_failure("lease release status is unknown"),
+                                reconciliation_state="pending",
+                            )
                             self.store.update_planned_trial(work_item.trial_id, state="unknown")
                             self.store.update_work_item(work_item.work_id, state="unknown")
                     self.store.complete_plan_if_terminal(work_item.plan_id, run_id=work_item.run_id)
@@ -248,8 +516,66 @@ class LocalScheduler:
             leased_count=len(leased),
             succeeded_count=succeeded,
             failed_count=failed,
+            retried_count=retried,
+            cancelled_count=cancelled,
+            unknown_count=unknown,
             idle=False,
         )
 
+    def _schedule_retry(
+        self,
+        work_item: WorkItemRecord,
+        attempt: AttemptRecord,
+        failure: FailureClassification,
+        now: datetime,
+        *,
+        after_unknown: bool = False,
+    ) -> bool:
+        policy = work_item.retry_policy
+        if after_unknown and policy.unknown_state_policy == "never_retry":
+            return False
+        if (
+            failure.failure_class is not FailureClass.INFRASTRUCTURE
+            or failure.kind not in policy.retryable_failure_kinds
+        ):
+            return False
+        attempts = self.store.list_attempts_for_work(work_item.work_id)
+        next_retry = max((record.retry_number for record in attempts), default=-1) + 1
+        if next_retry >= policy.maximum_attempts:
+            return False
+        if policy.maximum_elapsed_seconds is not None:
+            first = min(record.created_at for record in attempts)
+            next_available = now + timedelta(seconds=policy.backoff_seconds)
+            if (next_available - first).total_seconds() > policy.maximum_elapsed_seconds:
+                return False
+        self.store.schedule_retry(
+            work_item.work_id,
+            available_at=now + timedelta(seconds=policy.backoff_seconds),
+            now=now,
+        )
+        return True
+
 
 __all__ = ("LocalScheduler", "SchedulerRunReport", "Worker")
+
+
+def _infrastructure_failure(kind: FailureKind, message: str) -> FailureClassification:
+    return FailureClassification(failure_class=FailureClass.INFRASTRUCTURE, kind=kind, message=message)
+
+
+def _unknown_failure(message: str) -> FailureClassification:
+    return FailureClassification(
+        failure_class=FailureClass.UNKNOWN,
+        kind=FailureKind.UNKNOWN_EXTERNAL_STATE,
+        message=message,
+    )
+
+
+def _failure_from_record(attempt: AttemptRecord) -> FailureClassification | None:
+    if attempt.failure_kind is None or attempt.failure_class is None or attempt.failure_message is None:
+        return None
+    return FailureClassification(
+        failure_class=FailureClass(attempt.failure_class),
+        kind=FailureKind(attempt.failure_kind),
+        message=attempt.failure_message,
+    )

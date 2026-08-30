@@ -3,10 +3,12 @@
 
 from __future__ import annotations
 
+import json
 import re
+from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Literal, Protocol
+from typing import Literal, Protocol, cast
 from uuid import UUID
 
 from pydantic import PositiveInt, field_validator
@@ -27,6 +29,7 @@ from aec_bench.execution.models import (
     AttemptProcessStatus,
     AttemptReceipt,
     AttemptResourceUsage,
+    BackendCancellationResult,
     CancellationStatus,
     FailureClass,
     FailureClassification,
@@ -36,10 +39,17 @@ from aec_bench.execution.models import (
     TrialFinalization,
     WorkerOutcome,
 )
-from aec_bench.execution.operational import AttemptRecord, OperationalStore, OperationalStoreError, WorkItemRecord
+from aec_bench.execution.operational import (
+    AttemptRecord,
+    BackendSubmissionRecord,
+    OperationalStore,
+    OperationalStoreError,
+    WorkItemRecord,
+)
 from aec_bench.harness.harbor_reconciliation import HarborTrialTransport, reconcile_harbor_trial_records
 from aec_bench.harness.planned_trial_reconciliation import validate_planned_trial_record
 from aec_bench.ledger.evidence_run_store import EvidenceRunStore
+from aec_bench.ledger.reader import read_trial_record
 from aec_bench.ledger.writer import (
     DuplicateAppendOnlyFileError,
     DuplicateTrialRecordError,
@@ -168,9 +178,10 @@ class HarborBackend:
                 submission = self._client.submit(transport)
             except Exception:
                 return self._unknown_outcome(work_item, attempt, planned, submission_id, started_at)
-            self._operational_store.bind_backend_submission_external_id(
+            self._operational_store.bind_backend_submission_external_ids(
                 submission_id,
                 external_id=submission.external_id,
+                external_work_id=submission.harbor_trial_name,
                 now=datetime.now(UTC),
             )
             self._operational_store.transition_backend_submission(
@@ -215,6 +226,80 @@ class HarborBackend:
             self._operational_store.transition_attempt(attempt.attempt_id, state="failed", now=finished_at)
             self._operational_store.transition_backend_submission(submission_id, state="failed", now=finished_at)
             raise HarborBackendError(str(error)) from error
+
+    def cancel(
+        self, work_item: WorkItemRecord, attempt: AttemptRecord, submission: BackendSubmissionRecord
+    ) -> BackendCancellationResult:
+        """Request cancellation for one accepted Harbor submission."""
+
+        if submission.external_id is None:
+            return BackendCancellationResult(status="unknown", message="Harbor submission has no external ID")
+        cancel = getattr(self._client, "cancel", None)
+        if not callable(cancel):
+            return BackendCancellationResult(
+                status="unsupported", message="Harbor client does not support cancellation"
+            )
+        if submission.external_work_id is None:
+            return BackendCancellationResult(status="unknown", message="Harbor submission has no trial ID")
+        harbor_submission = HarborSubmission(
+            external_id=submission.external_id,
+            harbor_trial_name=submission.external_work_id,
+        )
+        try:
+            cancel_call = cast(Callable[[HarborSubmission], BackendCancellationResult], cancel)
+            return cancel_call(harbor_submission)
+        except Exception as error:
+            return BackendCancellationResult(
+                status="unknown", message=f"Harbor cancellation status is unknown: {error}"
+            )
+
+    def reconcile(
+        self, work_item: WorkItemRecord, attempt: AttemptRecord, submission: BackendSubmissionRecord
+    ) -> WorkerOutcome:
+        """Inspect and collect one previously uncertain Harbor attempt."""
+
+        stored = self._evidence_store.read_run(self._plan.run_identity)
+        planned = self._planned_trial(work_item)
+        self._validate_attempt(work_item, attempt, allow_reconciliation=True)
+        published = self._existing_published_outcome(attempt, planned, submission, stored.spec)
+        if published is not None:
+            return published
+        if submission.external_id is None or submission.external_work_id is None:
+            return self._existing_unknown_outcome(work_item, attempt, planned, UUID(submission.submission_id))
+        harbor_submission = HarborSubmission(
+            external_id=submission.external_id,
+            harbor_trial_name=submission.external_work_id,
+        )
+        try:
+            observed = self._client.inspect(harbor_submission)
+        except Exception:
+            return self._existing_unknown_outcome(work_item, attempt, planned, UUID(submission.submission_id))
+        if observed.state not in {"completed", "failed"}:
+            return self._existing_unknown_outcome(work_item, attempt, planned, UUID(submission.submission_id))
+        try:
+            record = self._client.collect(harbor_submission)
+        except Exception:
+            return self._existing_unknown_outcome(work_item, attempt, planned, UUID(submission.submission_id))
+        if record is None:
+            return self._existing_unknown_outcome(work_item, attempt, planned, UUID(submission.submission_id))
+        canonical = self._canonical_record(
+            record,
+            planned,
+            stored.spec,
+            harbor_trial_name=harbor_submission.harbor_trial_name,
+            external_id=submission.external_id,
+        )
+        return self._publish_result(
+            work_item=work_item,
+            attempt=attempt,
+            planned=planned,
+            submission_id=UUID(submission.submission_id),
+            record=canonical,
+            started_at=attempt.started_at or attempt.created_at,
+            process_failed=observed.state == "failed",
+            record_path=self._record_path(planned),
+            finalization_path=self._finalization_path(planned),
+        )
 
     def _publish_result(
         self,
@@ -312,9 +397,82 @@ class HarborBackend:
             reconciliation_status=ReconciliationState.PENDING,
         )
         self._persist_receipt(receipt)
-        self._operational_store.transition_attempt(attempt.attempt_id, state="unknown", now=finished_at)
-        self._operational_store.transition_backend_submission(submission_id, state="unknown", now=finished_at)
+        self._operational_store.transition_attempt(
+            attempt.attempt_id,
+            state="unknown",
+            now=finished_at,
+            failure=receipt.failure,
+            reconciliation_state=receipt.reconciliation_status.value,
+        )
+        self._operational_store.transition_backend_submission(
+            submission_id,
+            state="unknown",
+            now=finished_at,
+            reconciliation_state=receipt.reconciliation_status.value,
+        )
         return WorkerOutcome(terminal_state="unknown", receipts=(receipt,))
+
+    def _existing_published_outcome(
+        self,
+        attempt: AttemptRecord,
+        planned: PlannedTrial,
+        submission: BackendSubmissionRecord,
+        spec: ResolvedRunSpec,
+    ) -> WorkerOutcome | None:
+        """Recover a portable final result that committed before operational state."""
+
+        record_path = self._record_path(planned)
+        finalization_path = self._finalization_path(planned)
+        if not record_path.exists() and not finalization_path.exists():
+            return None
+        if not record_path.is_file() or not finalization_path.is_file():
+            raise HarborBackendError(f"trial publication is incomplete: {planned.trial_id}")
+        try:
+            record = read_trial_record(record_path)
+            finalization = TrialFinalization.model_validate_json(finalization_path.read_text(encoding="utf-8"))
+        except (OSError, RuntimeError, ValueError) as error:
+            raise HarborBackendError(f"published trial evidence is invalid: {planned.trial_id}") from error
+        task_revision = (
+            planned.task_release.artifact.sha256
+            if isinstance(planned.task_release, ArtifactTaskSnapshotRef)
+            else planned.task_release.source_revision
+            if isinstance(planned.task_release, RepositoryTaskSnapshotRef)
+            else record.input.task_revision
+        )
+        validate_planned_trial_record(record, planned, spec, task_revision=task_revision)
+        expected_ref = PortableRelativePath(record_path.relative_to(self._evidence_store.root).as_posix())
+        if (
+            finalization.trial_id != planned.trial_id
+            or str(finalization.attempt_id) != attempt.attempt_id
+            or finalization.trial_record_ref != expected_ref
+        ):
+            raise HarborBackendError(f"published trial finalization does not match the attempt: {planned.trial_id}")
+        receipts = tuple(
+            receipt
+            for receipt in self._receipts_for_attempt(attempt)
+            if receipt.process_status in {AttemptProcessStatus.SUCCEEDED, AttemptProcessStatus.FAILED}
+        )
+        if len(receipts) != 1:
+            raise HarborBackendError(f"published trial requires one terminal attempt receipt: {planned.trial_id}")
+        receipt = receipts[0]
+        terminal_state: Literal["succeeded", "failed"] = (
+            "succeeded" if receipt.process_status is AttemptProcessStatus.SUCCEEDED else "failed"
+        )
+        now = datetime.now(UTC)
+        self._operational_store.transition_attempt(
+            attempt.attempt_id,
+            state=terminal_state,
+            now=now,
+            failure=receipt.failure,
+            reconciliation_state="reconciled",
+        )
+        self._operational_store.transition_backend_submission(
+            submission.submission_id,
+            state="completed" if terminal_state == "succeeded" else "failed",
+            now=now,
+            reconciliation_state="reconciled",
+        )
+        return WorkerOutcome(terminal_state=terminal_state, receipts=(receipt,), finalization=finalization)
 
     def _canonical_record(
         self,
@@ -373,8 +531,12 @@ class HarborBackend:
         return planned
 
     @staticmethod
-    def _validate_attempt(work_item: WorkItemRecord, attempt: AttemptRecord) -> None:
-        if work_item.state != "running" or attempt.state != "running":
+    def _validate_attempt(
+        work_item: WorkItemRecord, attempt: AttemptRecord, *, allow_reconciliation: bool = False
+    ) -> None:
+        valid_work_states = {"running", "unknown"} if allow_reconciliation else {"running"}
+        valid_attempt_states = {"running", "unknown"} if allow_reconciliation else {"running"}
+        if work_item.state not in valid_work_states or attempt.state not in valid_attempt_states:
             raise HarborBackendError("Harbor execution requires a running work item and attempt")
         if attempt.work_id != work_item.work_id or attempt.trial_id != work_item.trial_id:
             raise HarborBackendError("scheduler attempt does not match the work item")
@@ -398,6 +560,32 @@ class HarborBackend:
             write_append_only_json_at(path=path, payload=receipt.model_dump_json(indent=2) + "\n")
         except DuplicateAppendOnlyFileError as error:
             raise HarborBackendError(f"attempt receipt already exists: {receipt.receipt_id}") from error
+
+    def _existing_unknown_outcome(
+        self,
+        work_item: WorkItemRecord,
+        attempt: AttemptRecord,
+        planned: PlannedTrial,
+        submission_id: UUID,
+    ) -> WorkerOutcome:
+        for receipt in self._receipts_for_attempt(attempt):
+            if str(receipt.attempt_id) == attempt.attempt_id and receipt.process_status is AttemptProcessStatus.UNKNOWN:
+                return WorkerOutcome(terminal_state="unknown", receipts=(receipt,))
+        return self._unknown_outcome(
+            work_item, attempt, planned, submission_id, attempt.started_at or attempt.created_at
+        )
+
+    def _receipts_for_attempt(self, attempt: AttemptRecord) -> tuple[AttemptReceipt, ...]:
+        receipt_dir = self._evidence_store.run_directory(self._plan.run_identity) / "receipts"
+        receipts: list[AttemptReceipt] = []
+        for path in sorted(receipt_dir.glob("*.json")):
+            try:
+                receipt = AttemptReceipt.model_validate(json.loads(path.read_text(encoding="utf-8")))
+            except (OSError, ValueError, TypeError):
+                continue
+            if str(receipt.attempt_id) == attempt.attempt_id:
+                receipts.append(receipt)
+        return tuple(receipts)
 
     def _record_path(self, planned: PlannedTrial) -> Path:
         return (

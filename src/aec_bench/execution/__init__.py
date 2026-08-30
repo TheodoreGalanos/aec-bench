@@ -4,12 +4,14 @@
 """Execution composition boundaries."""
 
 from aec_bench.contracts.execution_policy import ExecutionPolicy
+from aec_bench.execution.backend import ExecutionBackendControl
 from aec_bench.execution.models import (
     Attempt,
     AttemptProcessStatus,
     AttemptReceipt,
     AttemptResourceUsage,
     AttemptState,
+    BackendCancellationResult,
     BackendSubmission,
     BackendSubmissionState,
     CancellationStatus,
@@ -38,6 +40,7 @@ from aec_bench.execution.scheduler import LocalScheduler, SchedulerRunReport
 
 __all__ = (
     "Attempt",
+    "BackendCancellationResult",
     "AttemptProcessStatus",
     "AttemptReceipt",
     "AttemptResourceUsage",
@@ -65,5 +68,6 @@ __all__ = (
     "project_run_progress",
     "LocalScheduler",
     "ExecutionPolicy",
+    "ExecutionBackendControl",
     "SchedulerRunReport",
 )
