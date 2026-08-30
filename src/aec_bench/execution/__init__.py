@@ -23,6 +23,7 @@ from aec_bench.execution.models import (
     RetryPolicy,
     TrialFinalization,
     TrialWorkItem,
+    WorkerOutcome,
     WorkItemState,
 )
 from aec_bench.execution.progress import (
@@ -54,6 +55,7 @@ __all__ = (
     "RetryPolicy",
     "TrialFinalization",
     "TrialWorkItem",
+    "WorkerOutcome",
     "WorkItemState",
     "AttemptProgressCounts",
     "BackendSubmissionProgressCounts",

@@ -14,7 +14,7 @@ from pydantic import Field, PositiveInt, field_validator, model_validator
 from aec_bench.contracts.execution_policy import ExecutionPolicy
 from aec_bench.contracts.run_plan import RunPlan
 from aec_bench.contracts.validators import FrozenStrictModel
-from aec_bench.execution.models import TrialWorkItem
+from aec_bench.execution.models import TrialWorkItem, WorkerOutcome
 from aec_bench.execution.operational import (
     AttemptRecord,
     LeaseRecord,
@@ -50,7 +50,7 @@ class SchedulerRunReport(FrozenStrictModel):
         return self
 
 
-Worker = Callable[[WorkItemRecord, AttemptRecord], None]
+Worker = Callable[[WorkItemRecord, AttemptRecord], WorkerOutcome | None]
 
 
 class LocalScheduler:
@@ -170,9 +170,11 @@ class LocalScheduler:
                 work_item.work_id,
                 trial_id=work_item.trial_id,
                 lease_id=lease.lease_id,
+                candidate_index=1,
+                retry_number=0,
                 now=selected_now,
             )
-            self.store.update_work_item(work_item.work_id, state="running", now=selected_now)
+            work_item = self.store.update_work_item(work_item.work_id, state="running", now=selected_now)
             self.store.update_planned_trial(work_item.trial_id, state="running", now=selected_now)
             attempt = self.store.transition_attempt(attempt.attempt_id, state="running", now=selected_now)
             running.append((work_item, attempt, lease))
@@ -194,17 +196,28 @@ class LocalScheduler:
                         self.store.update_work_item(work_item.work_id, state="unknown")
                     else:
                         try:
-                            future.result()
+                            outcome = future.result()
                         except Exception:
                             self.store.transition_attempt(attempt.attempt_id, state="failed")
                             self.store.update_planned_trial(work_item.trial_id, state="failed")
                             self.store.update_work_item(work_item.work_id, state="failed")
                             failed += 1
                         else:
-                            self.store.transition_attempt(attempt.attempt_id, state="succeeded")
-                            self.store.update_planned_trial(work_item.trial_id, state="succeeded")
-                            self.store.update_work_item(work_item.work_id, state="succeeded")
-                            succeeded += 1
+                            if isinstance(outcome, WorkerOutcome):
+                                terminal_state = outcome.terminal_state
+                                self.store.update_planned_trial(work_item.trial_id, state=terminal_state)
+                                self.store.update_work_item(work_item.work_id, state=terminal_state)
+                                if outcome.terminal_state == "succeeded":
+                                    succeeded += 1
+                                elif outcome.terminal_state == "failed":
+                                    failed += 1
+                                else:
+                                    pass
+                            else:
+                                self.store.transition_attempt(attempt.attempt_id, state="succeeded")
+                                self.store.update_planned_trial(work_item.trial_id, state="succeeded")
+                                self.store.update_work_item(work_item.work_id, state="succeeded")
+                                succeeded += 1
                         try:
                             self.store.release_lease(lease.lease_id, owner=owner)
                         except OperationalStoreError:

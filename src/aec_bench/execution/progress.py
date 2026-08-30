@@ -219,7 +219,7 @@ def project_run_progress(run_plan: RunPlan, store: OperationalStore) -> RunProgr
         backend_submissions=_submission_counts(submissions),
         active_leases=sum(lease.state == "active" for lease in leases),
         expired_leases=sum(lease.state == "expired" for lease in leases),
-        retries=sum(attempt.attempt_number > 1 for attempt in attempts),
+        retries=sum(attempt.retry_number > 0 for attempt in attempts),
         started_at=started_at,
         last_activity_at=last_activity_at,
         estimated_remaining_work_count=(

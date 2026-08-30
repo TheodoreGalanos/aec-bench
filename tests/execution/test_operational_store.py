@@ -78,10 +78,12 @@ def test_store_initializes_current_schema_and_keeps_operational_records_mutable(
         trial_id=trial.trial_id,
         kind="trial",
     )
-    attempt = store.create_attempt(attempt_id, work_id=item.work_id, trial_id=trial.trial_id)
+    attempt = store.create_attempt(
+        attempt_id, work_id=item.work_id, trial_id=trial.trial_id, candidate_index=1, retry_number=0
+    )
     store.record_backend_submission(submission_id, attempt_id=attempt.attempt_id, backend="local", external_id="job-1")
 
-    assert store.schema_version() == 2
+    assert store.schema_version() == 3
     assert store.get_run(run_id).spec_ref == "runs/run-1/spec.json"
     assert store.get_plan(plan_id).run_id == run_id
     assert store.get_planned_trial(trial_id).ordinal == 1
@@ -96,7 +98,7 @@ def test_store_initializes_current_schema_and_keeps_operational_records_mutable(
     connection = sqlite3.connect(tmp_path / "operational.sqlite3")
     try:
         schema = connection.execute("SELECT schema_version, application_version FROM operational_schema").fetchone()
-        assert schema == (2, "test-version")
+        assert schema == (3, "test-version")
         assert connection.execute(
             "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'operational_schema_migrations'"
         ).fetchone() == (0,)
@@ -129,9 +131,12 @@ def test_identity_relationships_are_idempotent_but_conflicts_are_rejected(tmp_pa
     _create_work_item(
         store, work_id, work_key="0001-monitoring-dam-seepage", run_id=run_id, plan_id=plan_id, trial_id=trial_id
     )
-    created = store.create_attempt(attempt_id, work_id=work_id, trial_id=trial_id)
+    created = store.create_attempt(attempt_id, work_id=work_id, trial_id=trial_id, candidate_index=1, retry_number=0)
 
-    assert store.create_attempt(attempt_id, work_id=work_id, trial_id=trial_id) == created
+    assert (
+        store.create_attempt(attempt_id, work_id=work_id, trial_id=trial_id, candidate_index=1, retry_number=0)
+        == created
+    )
     with pytest.raises(OperationalStoreConflict):
         store.put_plan(plan_id, run_id=other_run_id, plan_ref="runs/run-1/plan.json")
     with pytest.raises(OperationalStoreConflict):
@@ -155,7 +160,9 @@ def test_identity_relationships_are_idempotent_but_conflicts_are_rejected(tmp_pa
         )
 
     with pytest.raises(OperationalStoreConflict, match="attempt number"):
-        store.create_attempt(_id(EntityKind.ATTEMPT), work_id=work_id, trial_id=trial_id)
+        store.create_attempt(
+            _id(EntityKind.ATTEMPT), work_id=work_id, trial_id=trial_id, candidate_index=1, retry_number=0
+        )
 
 
 def test_plan_completion_waits_for_all_plans_before_completing_run(tmp_path: Path) -> None:
@@ -246,6 +253,8 @@ def test_attempt_rejects_an_expired_lease_before_reclamation(tmp_path: Path) -> 
             _id(EntityKind.ATTEMPT),
             work_id=work_id,
             trial_id=trial_id,
+            candidate_index=1,
+            retry_number=0,
             lease_id=lease.lease_id,
             now=now + timedelta(minutes=5),
         )
@@ -270,6 +279,8 @@ def test_attempt_can_bind_active_lease_and_release_keeps_lease_history(tmp_path:
         _id(EntityKind.ATTEMPT),
         work_id=work_id,
         trial_id=trial_id,
+        candidate_index=1,
+        retry_number=0,
         lease_id=lease.lease_id,
         now=now + timedelta(minutes=1),
     )
@@ -308,7 +319,7 @@ def test_concurrent_first_open_initializes_current_schema_once(tmp_path: Path) -
     with ThreadPoolExecutor(max_workers=2) as executor:
         stores = tuple(executor.map(lambda _: OperationalStore(path), range(2)))
 
-    assert tuple(store.schema_version() for store in stores) == (2, 2)
+    assert tuple(store.schema_version() for store in stores) == (3, 3)
     connection = sqlite3.connect(path)
     try:
         assert connection.execute("SELECT COUNT(*) FROM operational_schema").fetchone() == (1,)

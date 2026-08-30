@@ -13,7 +13,13 @@ from aec_bench.contracts.identity import EntityKind, new_entity_id
 from aec_bench.contracts.trial_extensions import VerifierExecutionReceipt, VerifierOutputParseStatus
 from aec_bench.ledger.durability import mkdir_durable
 from aec_bench.ledger.reader import read_trial_record
-from aec_bench.ledger.writer import DuplicateTrialRecordError, run_manifest_path, write_trial_record
+from aec_bench.ledger.writer import (
+    DuplicateAppendOnlyFileError,
+    DuplicateTrialRecordError,
+    run_manifest_path,
+    write_append_only_json_at,
+    write_trial_record,
+)
 from tests.support.trial_record_factories import make_trial_record
 
 
@@ -103,6 +109,16 @@ def test_write_trial_record_rejects_duplicate_trial_id(tmp_path: Path) -> None:
 
     with pytest.raises(DuplicateTrialRecordError, match="trial record already exists"):
         write_trial_record(ledger_root=tmp_path, record=record)
+
+
+def test_write_append_only_json_rejects_duplicate_without_overwrite(tmp_path: Path) -> None:
+    path = tmp_path / "receipts" / "receipt.json"
+    write_append_only_json_at(path=path, payload='{"state":"first"}\n')
+
+    with pytest.raises(DuplicateAppendOnlyFileError, match="append-only file already exists"):
+        write_append_only_json_at(path=path, payload='{"state":"second"}\n')
+
+    assert path.read_text(encoding="utf-8") == '{"state":"first"}\n'
 
 
 def test_write_trial_record_supports_valid_long_public_file_name(tmp_path: Path) -> None:

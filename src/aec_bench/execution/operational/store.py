@@ -109,6 +109,8 @@ class AttemptRecord:
     run_id: str
     trial_id: str
     attempt_number: int
+    candidate_index: int
+    retry_number: int
     lease_id: str | None
     state: str
     created_at: datetime
@@ -581,6 +583,8 @@ class OperationalStore:
         work_id: UUID | str,
         trial_id: UUID | str,
         attempt_number: int = 1,
+        candidate_index: int,
+        retry_number: int,
         lease_id: UUID | str | None = None,
         state: str = "created",
         now: datetime | None = None,
@@ -591,6 +595,10 @@ class OperationalStore:
         selected_lease = None if lease_id is None else _required_id(lease_id, "lease_id")
         if attempt_number <= 0:
             raise ValueError("attempt_number must be greater than zero")
+        if candidate_index <= 0:
+            raise ValueError("candidate_index must be greater than zero")
+        if retry_number < 0:
+            raise ValueError("retry_number must not be negative")
         selected_state = _checked_status(
             state, {"created", "submitted", "running", "succeeded", "failed", "cancelled", "unknown"}
         )
@@ -612,8 +620,15 @@ class OperationalStore:
                 "SELECT * FROM operational_attempts WHERE attempt_id = ?", (selected_id,)
             ).fetchone()
             if existing is not None:
-                immutable = (existing[1], existing[3], existing[4], existing[5])
-                if immutable != (selected_work_item, selected_trial, attempt_number, selected_lease):
+                immutable = (existing[1], existing[3], existing[4], existing[5], existing[6], existing[7])
+                if immutable != (
+                    selected_work_item,
+                    selected_trial,
+                    attempt_number,
+                    candidate_index,
+                    retry_number,
+                    selected_lease,
+                ):
                     raise OperationalStoreConflict(f"attempt identity already has different content: {selected_id}")
                 return self._attempt_from_row(existing)
             number_owner = connection.execute(
@@ -626,14 +641,16 @@ class OperationalStore:
                 )
             connection.execute(
                 "INSERT INTO operational_attempts "
-                "(attempt_id,work_id,run_id,trial_id,attempt_number,lease_id,state,created_at,updated_at) "
-                "VALUES (?,?,?,?,?,?,?,?,?)",
+                "(attempt_id,work_id,run_id,trial_id,attempt_number,candidate_index,retry_number,lease_id,state,"
+                "created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
                 (
                     selected_id,
                     selected_work_item,
                     item[2],
                     selected_trial,
                     attempt_number,
+                    candidate_index,
+                    retry_number,
                     selected_lease,
                     selected_state,
                     stamp,
@@ -657,6 +674,8 @@ class OperationalStore:
         *,
         trial_id: UUID | str,
         lease_id: UUID | str,
+        candidate_index: int,
+        retry_number: int,
         now: datetime | None = None,
     ) -> AttemptRecord:
         """Create the next attempt for an active lease in one transaction."""
@@ -665,6 +684,10 @@ class OperationalStore:
         selected_trial = _required_id(trial_id, "trial_id")
         selected_lease = _required_id(lease_id, "lease_id")
         selected_now = _aware(now or datetime.now(UTC), "now")
+        if candidate_index <= 0:
+            raise ValueError("candidate_index must be greater than zero")
+        if retry_number < 0:
+            raise ValueError("retry_number must not be negative")
         stamp = _timestamp(selected_now)
         with self._connection(immediate=True) as connection:
             item = self._require_row(connection, "operational_work_items", "work_id", selected_work_item)
@@ -684,14 +707,16 @@ class OperationalStore:
             attempt_id = str(new_entity_id(EntityKind.ATTEMPT))
             connection.execute(
                 "INSERT INTO operational_attempts "
-                "(attempt_id,work_id,run_id,trial_id,attempt_number,lease_id,state,created_at,updated_at) "
-                "VALUES (?,?,?,?,?,?,?,?,?)",
+                "(attempt_id,work_id,run_id,trial_id,attempt_number,candidate_index,retry_number,lease_id,state,"
+                "created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
                 (
                     attempt_id,
                     selected_work_item,
                     item[2],
                     selected_trial,
                     attempt_number,
+                    candidate_index,
+                    retry_number,
                     selected_lease,
                     "created",
                     stamp,
@@ -713,8 +738,8 @@ class OperationalStore:
         stamp = _timestamp(selected_now)
         with self._connection(immediate=True) as connection:
             current = self._require_row(connection, "operational_attempts", "attempt_id", selected_id)
-            started_at = stamp if selected_state == "running" else current[8]
-            finished_at = stamp if selected_state in {"succeeded", "failed", "cancelled", "unknown"} else current[9]
+            started_at = stamp if selected_state == "running" else current[10]
+            finished_at = stamp if selected_state in {"succeeded", "failed", "cancelled", "unknown"} else current[11]
             connection.execute(
                 "UPDATE operational_attempts SET state = ?, started_at = ?, finished_at = ?, updated_at = ? "
                 "WHERE attempt_id = ?",
@@ -770,6 +795,26 @@ class OperationalStore:
                     stamp,
                     stamp,
                 ),
+            )
+            return self._submission_from_row(
+                connection.execute(
+                    "SELECT * FROM operational_backend_submissions WHERE submission_id = ?", (selected_id,)
+                ).fetchone()
+            )
+
+    def transition_backend_submission(
+        self, submission_id: UUID | str, *, state: str, now: datetime | None = None
+    ) -> BackendSubmissionRecord:
+        """Record the observed state of one backend submission."""
+
+        selected_id = _required_id(submission_id, "submission_id")
+        selected_state = _checked_status(state, {"submitted", "accepted", "running", "completed", "failed", "unknown"})
+        stamp = _timestamp(_aware(now or datetime.now(UTC), "now"))
+        with self._connection(immediate=True) as connection:
+            self._require_row(connection, "operational_backend_submissions", "submission_id", selected_id)
+            connection.execute(
+                "UPDATE operational_backend_submissions SET state = ?, updated_at = ? WHERE submission_id = ?",
+                (selected_state, stamp, selected_id),
             )
             return self._submission_from_row(
                 connection.execute(
@@ -1196,10 +1241,12 @@ class OperationalStore:
             row[4],
             row[5],
             row[6],
-            _parse_timestamp(row[7]),
-            _optional_timestamp(row[8]),
-            _optional_timestamp(row[9]),
-            _parse_timestamp(row[10]),
+            row[7],
+            row[8],
+            _parse_timestamp(row[9]),
+            _optional_timestamp(row[10]),
+            _optional_timestamp(row[11]),
+            _parse_timestamp(row[12]),
         )
 
     @staticmethod

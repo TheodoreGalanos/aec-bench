@@ -234,6 +234,8 @@ class Attempt(FrozenStrictModel):
     trial_id: UUID
     work_id: UUID
     attempt_number: PositiveInt
+    candidate_index: PositiveInt
+    retry_number: NonNegativeInt
     backend_submission_id: UUID | None = None
     lease_id: UUID | None = None
     worker_id: EntityKey | None = None
@@ -478,6 +480,26 @@ class TrialFinalization(FrozenStrictModel):
         return self
 
 
+class WorkerOutcome(FrozenStrictModel):
+    """Strict terminal result returned by an adapter to the scheduler."""
+
+    schema_version: Literal[1] = 1
+    terminal_state: Literal["succeeded", "failed", "unknown"]
+    receipts: tuple[AttemptReceipt, ...]
+    finalization: TrialFinalization
+
+    @model_validator(mode="after")
+    def validate_receipts(self) -> Self:
+        if not self.receipts:
+            raise ValueError("worker outcome requires at least one attempt receipt")
+        if self.finalization.attempt_id not in {receipt.attempt_id for receipt in self.receipts}:
+            raise ValueError("worker outcome finalization attempt must have a receipt")
+        selected = next(receipt for receipt in self.receipts if receipt.attempt_id == self.finalization.attempt_id)
+        if self.terminal_state == "succeeded" and selected.process_status is not AttemptProcessStatus.SUCCEEDED:
+            raise ValueError("succeeded worker outcome requires a succeeded finalization receipt")
+        return self
+
+
 def _aware(value: datetime, label: str) -> datetime:
     if value.tzinfo is None or value.utcoffset() is None:
         raise ValueError(f"{label} must include a timezone")
@@ -503,5 +525,6 @@ __all__ = (
     "RetryPolicy",
     "TrialFinalization",
     "TrialWorkItem",
+    "WorkerOutcome",
     "WorkItemState",
 )

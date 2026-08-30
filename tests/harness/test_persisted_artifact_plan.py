@@ -21,7 +21,7 @@ from aec_bench.contracts.experiment_manifest import (
 )
 from aec_bench.contracts.identity import EntityIdentity, EntityKind, new_entity_id
 from aec_bench.contracts.resolved_run import ResolvedRunSpec, resolve_run_spec
-from aec_bench.contracts.run_plan import RunPlan, TaskPlanningProfile, plan_run
+from aec_bench.contracts.run_plan import BestOfAttemptRecipe, RunPlan, TaskPlanningProfile, plan_run
 from aec_bench.contracts.task_definition import Lifecycle, TaskMetadata, Visibility
 from aec_bench.contracts.task_snapshot import ArtifactTaskSnapshotRef
 from aec_bench.harness.artifact_tasks import LocalTaskRuntime, run_persisted_artifact_plan
@@ -114,7 +114,9 @@ def _spec(task: ResolvedTaskInstance, *, condition_count: int = 1) -> ResolvedRu
     )
 
 
-def _ready_store(tmp_path: Path, spec: ResolvedRunSpec) -> tuple[EvidenceRunStore, RunPlan]:
+def _ready_store(
+    tmp_path: Path, spec: ResolvedRunSpec, *, attempt_recipe: BestOfAttemptRecipe | None = None
+) -> tuple[EvidenceRunStore, RunPlan]:
     plan = plan_run(
         spec,
         plan_identity=_identity(EntityKind.PLAN, "artifact-plan"),
@@ -130,6 +132,7 @@ def _ready_store(tmp_path: Path, spec: ResolvedRunSpec) -> tuple[EvidenceRunStor
             )
         },
         validate_combination=lambda task_release, condition, execution_family: None,
+        attempt_recipe=attempt_recipe,
     )
     store = EvidenceRunStore(tmp_path / "runs")
     store.create_run(spec)

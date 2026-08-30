@@ -3288,6 +3288,28 @@ rationale = "The field records the work-item contract schema."
 duplication = "unique"
 compatibility_behavior = "reject unsupported execution contract versions"
 compatibility_kind = "protocol"
+
+[[field]]
+symbol = "aec_bench.execution.models.WorkerOutcome.schema_version"
+surface = "pydantic_model"
+wire_name = "schema_version"
+category = "compatibility"
+domain_owner = "execution_control"
+authority = "execution_contracts"
+authoritative = true
+exposure = "persisted"
+status = "current"
+payload_contract = "PRD3 scheduler worker outcome contract"
+canonicalization = "fixed version value declared by the contract"
+consumer = "execution scheduler and artifact adapter"
+validation_behavior = "The model rejects unsupported or non-positive version values"
+mismatch_behavior = "reject_invalid_execution_contract"
+retention = "execution_record_lifetime"
+rationale = "The field records the strict scheduler worker outcome contract schema."
+duplication = "unique"
+compatibility_behavior = "reject unsupported execution contract versions"
+compatibility_kind = "protocol"
+
 [[field]]
 symbol = "aec_bench.execution.operational.store.AttemptRecord.created_at"
 surface = "dataclass"
