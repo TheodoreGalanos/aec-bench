@@ -74,6 +74,15 @@ The current path is:
 6. Persist records through the ledger owner. Evaluation can summarize the
    returned records directly without another ledger query.
 
+Execution coordination uses the small `OperationalStore` under
+`aec_bench.execution.operational`. It stores mutable status, work-item,
+attempt, backend-submission, and lease rows in SQLite with numbered migrations
+and short transactions. It stores only portable references for the resolved
+run and plan records. `EvidenceRunStore` remains authoritative for those
+portable records, and the ledger remains authoritative for final trial
+evidence. The operational store does not schedule work, retry attempts, cancel
+runs, or interpret task-family fields.
+
 `HarnessSpec` describes runtime capabilities, bindings, contracts, and
 budgets. It does not control attempt branching or selection. Interactive-world
 and lifecycle runtimes do not use this artifact-task attempt path.
