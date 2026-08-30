@@ -27,6 +27,7 @@ from aec_bench.contracts.trial_record import (
     GitSourceRef,
     LifecycleExecutionRecord,
     LifecycleTrialProvenance,
+    PlannedTrialBinding,
     ProviderRoute,
     RunManifest,
     TimingRecord,
@@ -103,6 +104,7 @@ def finalize_lifecycle_trial(
     *,
     trial: LifecycleTrial,
     source: LifecycleFinalizationSource,
+    planned_trial_binding: PlannedTrialBinding | None = None,
 ) -> TrialRecord:
     """Validate and finalize one lifecycle invocation exactly once."""
     recording = source.recording
@@ -184,7 +186,9 @@ def finalize_lifecycle_trial(
         raise ValueError("lifecycle invocation creation time is invalid") from exc
     _validate_recorder_manifest_authority(recording, finalization_authority)
     run_manifest = RunManifest(
-        run_id=trial_context.run_id,
+        run_id=(
+            str(planned_trial_binding.run_identity.id) if planned_trial_binding is not None else trial_context.run_id
+        ),
         experiment_id=trial_context.planned_experiment_id,
         source=(
             GitSourceRef(revision=repository_commit)
@@ -213,11 +217,16 @@ def finalize_lifecycle_trial(
         ),
         provider_route=ProviderRoute(provider=runtime_provider, route=resolved_adapter),
         expected_authorities=(
-            AuthorityExpectation(
-                authority_kind=AuthorityEvidenceKind.LIFECYCLE,
-                protocol="aec-bench/lifecycle-evidence/1",
-            ),
+            planned_trial_binding.expected_authorities
+            if planned_trial_binding is not None
+            else (
+                AuthorityExpectation(
+                    authority_kind=AuthorityEvidenceKind.LIFECYCLE,
+                    protocol="aec-bench/lifecycle-evidence/1",
+                ),
+            )
         ),
+        evaluation_regime=None if planned_trial_binding is None else planned_trial_binding.evaluation_profile,
     )
 
     total_seconds = float(metrics.get("whole_run_seconds") or 0.0)
@@ -261,9 +270,12 @@ def finalize_lifecycle_trial(
     )
     record = TrialRecord(
         trial_id=trial_context.trial_id,
-        run_id=trial_context.run_id,
+        run_id=(
+            str(planned_trial_binding.run_identity.id) if planned_trial_binding is not None else trial_context.run_id
+        ),
         task_id=trial_context.task_id,
-        attempt=trial_context.repetition,
+        planned_trial_binding=planned_trial_binding,
+        attempt=1 if planned_trial_binding is not None else trial_context.repetition,
         execution_status=ExecutionStatus.COMPLETED if completed else ExecutionStatus.FAILED,
         evaluation_status=EvaluationStatus.COMPLETED,
         evidence_status=EvidenceStatus.PENDING,

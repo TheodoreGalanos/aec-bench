@@ -8,6 +8,7 @@ import pytest
 from pydantic import ValidationError
 
 from aec_bench.contracts.artifacts import ArtifactRef
+from aec_bench.contracts.execution_release import WorldExecutionRelease
 from aec_bench.contracts.experiment_manifest import (
     AgentCondition,
     AgentConfig,
@@ -16,6 +17,7 @@ from aec_bench.contracts.experiment_manifest import (
     TaskSelector,
 )
 from aec_bench.contracts.identity import EntityIdentity, EntityKind, new_entity_id
+from aec_bench.contracts.interactive_world import InteractiveWorldProfileRef, WorldBuildRef
 from aec_bench.contracts.resolved_run import ResolvedRunSpec, resolve_run_spec
 from aec_bench.contracts.run_plan import (
     PlannedTrialExtension,
@@ -100,6 +102,28 @@ def _task_profiles(
                 visibility=Visibility.PUBLIC,
             ),
             execution_family="artifact" if index == 0 else second_family,
+            family_release=(
+                None
+                if index == 0 and second_family != "artifact"
+                else (
+                    WorldExecutionRelease(
+                        world_identity=_identity(EntityKind.WORLD, release.task_id),
+                        profile_identity=_identity(EntityKind.WORLD_PROFILE, f"{release.task_id}-profile"),
+                        world_build=WorldBuildRef(
+                            task_world_id=release.task_id,
+                            entry_point="aec_bench.tests.world:build",
+                            artifact_sha256="b" * 64,
+                        ),
+                        profile=InteractiveWorldProfileRef(
+                            task_world_id=release.task_id,
+                            profile_id=f"{release.task_id}-profile",
+                            profile_content_sha256="c" * 64,
+                        ),
+                    )
+                    if index != 0 and second_family == "world"
+                    else None
+                )
+            ),
         )
     return profiles
 
@@ -181,6 +205,47 @@ def test_plan_run_accepts_supported_typed_extensions() -> None:
 
     assert all(trial.extensions == (extension,) for trial in plan.trials)
     assert RunPlan.model_validate_json(plan.model_dump_json()) == plan
+
+
+def test_schema_one_ready_plan_remains_readable_without_family_releases() -> None:
+    spec = _resolved_run(repetitions=1)
+    plan = plan_run(
+        spec,
+        plan_identity=_identity(EntityKind.PLAN, "pump-study-plan"),
+        created_at=_PLAN_CREATED_AT,
+        task_profiles=_task_profiles(spec),
+        validate_combination=_accept_combination,
+    )
+    payload = plan.model_dump(mode="json")
+    payload["schema_version"] = 1
+    for trial in payload["trials"]:
+        trial.pop("family_release", None)
+    historical = RunPlan.model_validate(payload)
+    assert historical.schema_version == 1
+    assert all(trial.family_release is None for trial in historical.trials)
+
+
+def test_schema_two_ready_plan_requires_matching_family_releases() -> None:
+    spec = _resolved_run(repetitions=1)
+    plan = plan_run(
+        spec,
+        plan_identity=_identity(EntityKind.PLAN, "pump-study-plan"),
+        created_at=_PLAN_CREATED_AT,
+        task_profiles=_task_profiles(spec),
+        validate_combination=_accept_combination,
+    )
+    trials = list(plan.trials)
+    trials[-1] = trials[-1].model_copy(update={"family_release": None})
+    with pytest.raises(ValidationError, match="world release"):
+        RunPlan(
+            schema_version=2,
+            plan_identity=plan.plan_identity,
+            run_identity=plan.run_identity,
+            created_at=plan.created_at,
+            state=plan.state,
+            trials=tuple(trials),
+            summary=plan.summary,
+        )
 
 
 def test_plan_run_rejects_duplicate_trial_id_from_factory() -> None:

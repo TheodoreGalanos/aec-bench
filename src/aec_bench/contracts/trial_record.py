@@ -17,6 +17,8 @@ from aec_bench.contracts.authority_evidence import AuthorityEvidenceKind, Author
 from aec_bench.contracts.dataset import DatasetRef, dataset_reference_key
 from aec_bench.contracts.evaluation_refs import EvaluationRegimeRef
 from aec_bench.contracts.evaluation_result import EvaluationResult
+from aec_bench.contracts.execution_release import FamilyExecutionRelease
+from aec_bench.contracts.experiment_manifest import ComputeConfig
 from aec_bench.contracts.identity import EntityIdentity
 from aec_bench.contracts.task_definition import Visibility
 from aec_bench.contracts.task_snapshot import TaskSnapshotRef
@@ -203,13 +205,15 @@ InputRecord = TrialInput
 class PlannedTrialBinding(FrozenStrictModel):
     """Optional exact binding from one result to its canonical planned trial."""
 
-    schema_version: Literal[1] = 1
+    schema_version: Literal[1, 2] = 1
     run_identity: EntityIdentity
     trial_identity: EntityIdentity
     task_release: TaskSnapshotRef
     agent_condition_identity: EntityIdentity
     ordinal: PositiveInt
     repetition: PositiveInt
+    compute: ComputeConfig | None = None
+    family_release: FamilyExecutionRelease | None = None
     execution_family: TrialTaskKind
     evaluation_profile: EvaluationRegimeRef | None = None
     expected_authorities: tuple[AuthorityExpectation, ...] = ()
@@ -224,6 +228,12 @@ class PlannedTrialBinding(FrozenStrictModel):
         if len(keys) != len(set(keys)):
             raise ValueError("planned trial authority identities must be unique")
         return value
+
+    @model_validator(mode="after")
+    def validate_schema_version(self) -> Self:
+        if self.schema_version == 2 and self.compute is None:
+            raise ValueError("planned trial binding schema 2 requires the compute condition")
+        return self
 
 
 class TrialArtifactRef(FrozenStrictModel):

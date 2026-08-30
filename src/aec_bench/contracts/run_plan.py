@@ -12,6 +12,11 @@ from uuid import UUID
 from pydantic import BaseModel, Field, NonNegativeInt, PositiveInt, field_serializer, field_validator, model_validator
 
 from aec_bench.contracts.evaluation_refs import EvaluationRegimeRef
+from aec_bench.contracts.execution_release import (
+    FamilyExecutionRelease,
+    LifecycleExecutionRelease,
+    WorldExecutionRelease,
+)
 from aec_bench.contracts.experiment_manifest import AgentCondition, ComputeConfig
 from aec_bench.contracts.identity import EntityIdentity, EntityKey, EntityKind, new_entity_id
 from aec_bench.contracts.resolved_run import ResolvedRunSpec
@@ -95,6 +100,7 @@ class PlannedTrial(FrozenStrictModel):
     repetition: PositiveInt
     seed: Annotated[int, Field(strict=True, ge=0)] | None = None
     execution_family: TrialTaskKind
+    family_release: FamilyExecutionRelease | None = None
     attempt_recipe: AttemptRecipe
     evaluation_profile: EvaluationRegimeRef | None = None
     extensions: tuple[PlannedTrialExtension, ...] = ()
@@ -155,6 +161,7 @@ class RunPlanSummary(FrozenStrictModel):
 class RunPlan(FrozenStrictModel):
     """One UUID-backed, ordered plan for a resolved run."""
 
+    schema_version: Literal[1, 2] = 1
     plan_identity: EntityIdentity
     run_identity: EntityIdentity
     created_at: datetime
@@ -214,6 +221,20 @@ class RunPlan(FrozenStrictModel):
             raise ValueError("ready run plan trial keys must be unique")
         if any(trial.run_identity != self.run_identity for trial in self.trials):
             raise ValueError("ready run plan trials must reference the plan run identity")
+        if self.schema_version == 2:
+            for trial in self.trials:
+                if trial.execution_family == "artifact" and trial.family_release is not None:
+                    raise ValueError("ready artifact trial must not have a family release")
+                if trial.execution_family == "world" and not isinstance(
+                    trial.family_release,
+                    WorldExecutionRelease,
+                ):
+                    raise ValueError("ready world trial requires a world release")
+                if trial.execution_family == "lifecycle" and not isinstance(
+                    trial.family_release,
+                    LifecycleExecutionRelease,
+                ):
+                    raise ValueError("ready lifecycle trial requires a lifecycle release")
         task_ids = {trial.task_release.task_id for trial in self.trials}
         agent_ids = {trial.agent_condition.identity.id for trial in self.trials}
         if self.summary.selected_task_count != len(task_ids):
@@ -257,11 +278,21 @@ class TaskPlanningProfile(FrozenStrictModel):
 
     metadata: TaskMetadata
     execution_family: TrialTaskKind
+    family_release: FamilyExecutionRelease | None = None
 
     @model_validator(mode="after")
     def validate_runnable_lifecycle(self) -> Self:
         if self.metadata.lifecycle not in {Lifecycle.ACTIVE, Lifecycle.DEPRECATED}:
             raise ValueError("run planning requires an active or deprecated task release")
+        if self.execution_family == "artifact" and self.family_release is not None:
+            raise ValueError("artifact planning profile must not have a family release")
+        if self.execution_family == "world" and not isinstance(self.family_release, WorldExecutionRelease):
+            raise ValueError("world planning profile requires a world release")
+        if self.execution_family == "lifecycle" and not isinstance(
+            self.family_release,
+            LifecycleExecutionRelease,
+        ):
+            raise ValueError("lifecycle planning profile requires a lifecycle release")
         return self
 
 
@@ -319,6 +350,7 @@ def plan_run(
                         repetition=repetition,
                         seed=spec.randomization_seed,
                         execution_family=profile.execution_family,
+                        family_release=profile.family_release,
                         attempt_recipe=selected_attempt_recipe,
                         evaluation_profile=spec.evaluation_regime,
                         extensions=tuple(extensions),
@@ -341,6 +373,7 @@ def plan_run(
         ),
     )
     return RunPlan(
+        schema_version=2,
         plan_identity=plan_identity,
         run_identity=spec.run_identity,
         created_at=created_at,
@@ -358,6 +391,8 @@ __all__ = (
     "AttemptRecipe",
     "BestOfAttemptRecipe",
     "CombinationValidator",
+    "FamilyExecutionRelease",
+    "LifecycleExecutionRelease",
     "PlannedTrial",
     "PlannedTrialExtension",
     "RunPlan",
@@ -365,5 +400,6 @@ __all__ = (
     "SingleAttemptRecipe",
     "TaskPlanningProfile",
     "TrialIdentityFactory",
+    "WorldExecutionRelease",
     "plan_run",
 )

@@ -333,6 +333,16 @@ task counts without requiring callers to inspect every trial. Planning does not
 persist data or start execution. The existing compiled `RunPlan` below remains
 the specialised run-package contract until a later migration.
 
+Schema-2 ready plans carry an explicit caller-supplied family release for each
+world or lifecycle trial. A world release binds the exact `WorldBuildRef` and
+`InteractiveWorldProfileRef` to versioned world and profile identities. A
+lifecycle release binds the exact compiled envelope to versioned lifecycle and
+optional variant identities. The persisted world and lifecycle entrypoints
+validate these releases before `start_run`, pass the planned trial binding to
+the family runner, and reject any returned record whose UUID, release, agent,
+compute, repetition, evaluation, authority, or family differs from the plan.
+Schema-1 plans remain readable as historical plans without family releases.
+
 `EvidenceRunStore` persists the resolved specification before planning. It uses
 one safe run directory named from the readable run key and full run UUID,
 confined local locks, and durable atomic file replacement. Each directory
