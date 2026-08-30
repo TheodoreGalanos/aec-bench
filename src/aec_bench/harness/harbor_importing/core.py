@@ -576,6 +576,10 @@ def _output_record(
             error_message=agent.output_error,
         ),
         agent_result={
+            # These are Harbor backend identifiers only. Canonical import binds
+            # TrialRecord.trial_id to the planned UUID in the reconciliation boundary.
+            "harbor_job_id": context.harbor_result.config.job_id,
+            "harbor_trial_name": context.harbor_result.trial_name,
             "failure_kind": (
                 execution_result.failure_kind.value
                 if (execution_result is not None and execution_result.failure_kind is not None)

@@ -2890,6 +2890,48 @@ compatibility_behavior = "read v1 and v2 explicitly; reject unsupported runtime-
 compatibility_kind = "external_schema"
 
 [[field]]
+symbol = "aec_bench.harness.harbor_reconciliation.HarborImportReconciliation.schema_version"
+surface = "pydantic_model"
+wire_name = "schema_version"
+category = "compatibility"
+domain_owner = "harbor_execution"
+authority = "harbor_import_reconciliation"
+authoritative = true
+exposure = "persisted"
+status = "current"
+payload_contract = "exact Harbor import membership reconciliation report schema 1"
+canonicalization = "fixed integer literal 1"
+consumer = "canonical Harbor import boundary"
+validation_behavior = "HarborImportReconciliation accepts schema version 1 and requires unique expected and accepted planned trial UUIDs"
+mismatch_behavior = "reject unsupported Harbor import reconciliation report"
+retention = "harbor_import_lifetime"
+rationale = "Exact imports need a stable reader contract for expected, observed, missing, unexpected, duplicate, and accepted trial membership."
+duplication = "unique"
+compatibility_behavior = "the canonical Harbor importer accepts schema 1 only"
+compatibility_kind = "external_schema"
+
+[[field]]
+symbol = "aec_bench.harness.harbor_reconciliation.HarborTrialTransport.schema_version"
+surface = "pydantic_model"
+wire_name = "schema_version"
+category = "compatibility"
+domain_owner = "harbor_execution"
+authority = "harbor_trial_transport"
+authoritative = true
+exposure = "persisted"
+status = "current"
+payload_contract = "safe Harbor job-name to planned trial UUID transport mapping schema 1"
+canonicalization = "fixed integer literal 1"
+consumer = "canonical Harbor dispatch and import boundaries"
+validation_behavior = "HarborTrialTransport accepts schema version 1 and binds one non-empty Harbor job name to one planned trial UUID"
+mismatch_behavior = "reject an unsupported or unbound Harbor trial transport mapping"
+retention = "harbor_job_lifetime"
+rationale = "Harbor-generated identifiers are backend observations; the transport mapping preserves the exact AEC-Bench planned trial identity."
+duplication = "unique"
+compatibility_behavior = "the canonical Harbor importer accepts schema 1 only"
+compatibility_kind = "external_schema"
+
+[[field]]
 symbol = "aec_bench.harness.world_actor.authority.AuthorityCloseReport.closed_at"
 aliases = ["manifest:aec-bench/actor-invocation-evidence/1[close].closed_at"]
 surface = "dataclass"

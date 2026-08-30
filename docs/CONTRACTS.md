@@ -101,6 +101,44 @@ remains `1`; repetition is the planned repetition in the binding. Legacy
 `run_experiment` remains available to current callers
 until the later execution migration.
 
+Canonical Harbor dispatch validates the persisted ready plan and writes all
+one-trial job configurations and transport sidecars before the first Harbor
+effect. Each job contains one task, one agent, and one attempt.
+`HarborTrialTransport` carries a transport-safe Harbor job name with the exact
+planned trial UUID. Import does not treat a
+Harbor job ID or generated trial name as an AEC-Bench trial identity. The
+`HarborImportReconciliation` report lists expected, observed, missing,
+duplicate, and accepted planned trial IDs. It also lists observed, unexpected,
+and duplicate Harbor trial names. Import rejects any membership mismatch
+before it binds records, then validates each record against its exact
+planned task release, agent condition, compute backend, execution family, and
+attempt. Accepted records retain Harbor job and trial names only as observed
+backend metadata and return in plan ordinal order.
+
+The transport and reconciliation values have this JSON shape (UUIDs are
+illustrative):
+
+```json
+{
+  "schema_version": 1,
+  "transport": {
+    "harbor_job_name": "aec-planned-0190abcd12347abc8def0123456789ab",
+    "planned_trial_id": "0190abcd-1234-7abc-8def-0123456789ab",
+    "harbor_trial_name": null
+  },
+  "reconciliation": {
+    "expected_trial_ids": ["0190abcd-1234-7abc-8def-0123456789ab"],
+    "observed_trial_ids": ["0190abcd-1234-7abc-8def-0123456789ab"],
+    "observed_trial_names": ["task-name__backend-generated-id"],
+    "missing_trial_ids": [],
+    "unexpected_trial_names": [],
+    "duplicate_trial_ids": [],
+    "duplicate_trial_names": [],
+    "accepted_trial_ids": ["0190abcd-1234-7abc-8def-0123456789ab"]
+  }
+}
+```
+
 ## Task specification
 
 `TaskDefinition` is the validated runnable description of an artifact or

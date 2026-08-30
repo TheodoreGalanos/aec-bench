@@ -6,9 +6,16 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from aec_bench.contracts.experiment_manifest import AgentConfig, ExperimentManifest
+from aec_bench.contracts.resolved_run import ResolvedRunSpec
+from aec_bench.contracts.run_plan import RunPlan
 from aec_bench.contracts.task_definition import TaskDefinition
 from aec_bench.contracts.trial_record import TrialRecord
-from aec_bench.harness.harbor_importing.core import import_harbor_job
+from aec_bench.harness.harbor_importing.core import import_harbor_job, import_harbor_trial, iter_harbor_trial_dirs
+from aec_bench.harness.harbor_reconciliation import (
+    HarborImportReconciliation,
+    read_harbor_trial_transport,
+    reconcile_harbor_trial_records,
+)
 from aec_bench.harness.progress_tracker import ImportProgressTracker
 from aec_bench.harness.scheduler import select_manifest_tasks
 from aec_bench.ledger.writer import DuplicateTrialRecordError, write_trial_record
@@ -37,10 +44,64 @@ class ExperimentImportResult:
 
 
 @dataclass(frozen=True)
+class HarborPlanImportResult:
+    records: list[TrialRecord]
+    reconciliation: HarborImportReconciliation
+    ledger_paths: list[Path]
+
+
+@dataclass(frozen=True)
 class HarborImportExperimentRunner:
     repo_root: Path
     tasks_root: Path
     ledger_root: Path
+
+    def import_harbor_plan(
+        self,
+        *,
+        job_dir: Path,
+        run_spec: ResolvedRunSpec,
+        run_plan: RunPlan,
+        transport_path: Path,
+    ) -> HarborPlanImportResult:
+        """Import and persist one exact planned Harbor job result."""
+
+        transport = read_harbor_trial_transport(transport_path)
+        if len(transport) != 1:
+            raise ExperimentImportMismatchError("canonical Harbor job transport must contain exactly one planned trial")
+        if Path(job_dir).name != transport[0].harbor_job_name:
+            raise ExperimentImportMismatchError("Harbor job directory does not match its planned transport name")
+        imported_records = [
+            import_harbor_trial(
+                trial_dir=trial_dir,
+                repo_root=self.repo_root,
+                experiment_id=str(run_spec.experiment_identity.id),
+                dataset=run_spec.dataset,
+            )
+            for trial_dir in iter_harbor_trial_dirs(job_dir=job_dir)
+        ]
+        records, reconciliation = reconcile_harbor_trial_records(
+            records=imported_records,
+            run_spec=run_spec,
+            run_plan=run_plan,
+            transport=transport,
+        )
+        ledger_paths: list[Path] = []
+        for record in records:
+            try:
+                path = write_trial_record(ledger_root=self.ledger_root, record=record)
+            except DuplicateTrialRecordError as error:
+                path = self.ledger_root / record.experiment_id / f"{record.trial_id}.json"
+                if not path.is_file() or path.read_bytes() != record.model_dump_json(indent=2).encode("utf-8"):
+                    raise ExperimentImportMismatchError(
+                        "duplicate canonical TrialRecord identity resolves to different ledger content"
+                    ) from error
+            ledger_paths.append(path)
+        return HarborPlanImportResult(
+            records=records,
+            reconciliation=reconciliation,
+            ledger_paths=ledger_paths,
+        )
 
     def import_harbor_job(
         self,
