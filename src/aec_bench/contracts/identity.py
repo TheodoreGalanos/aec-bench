@@ -21,6 +21,7 @@ class EntityKind(StrEnum):
     """Durable entity categories that use the shared identity factory."""
 
     TASK = "task"
+    AGENT_CONDITION = "agent_condition"
     EXPERIMENT = "experiment"
     RUN = "run"
     PLAN = "plan"

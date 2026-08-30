@@ -6,10 +6,11 @@ from __future__ import annotations
 from pathlib import PurePosixPath
 from typing import Annotated, Literal
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 
 from aec_bench.contracts.artifacts import ArtifactRef
 from aec_bench.contracts.harness_kernel import canonical_json_sha256
+from aec_bench.contracts.identity import EntityIdentity
 from aec_bench.contracts.validators import FrozenStrictModel, NonEmptyStr
 
 
@@ -35,6 +36,7 @@ class RepositoryTaskSnapshotRef(FrozenStrictModel):
 
     kind: Literal["repository"] = "repository"
     task_id: NonEmptyStr
+    task_identity: EntityIdentity | None = Field(default=None, exclude_if=lambda value: value is None)
     source_revision: NonEmptyStr
     task_path: NonEmptyStr
 
@@ -48,6 +50,12 @@ class RepositoryTaskSnapshotRef(FrozenStrictModel):
     def validate_task_path(cls, value: str) -> str:
         return _validate_relative_path(value)
 
+    @model_validator(mode="after")
+    def validate_task_identity(self) -> RepositoryTaskSnapshotRef:
+        if self.task_identity is not None and str(self.task_identity.key) != self.task_id:
+            raise ValueError("task identity key must match task_id")
+        return self
+
     @property
     def commitment_sha256(self) -> str:
         """Return one named commitment for contracts that must bind this exact reference."""
@@ -60,7 +68,14 @@ class ArtifactTaskSnapshotRef(FrozenStrictModel):
 
     kind: Literal["artifact"] = "artifact"
     task_id: NonEmptyStr
+    task_identity: EntityIdentity | None = Field(default=None, exclude_if=lambda value: value is None)
     artifact: ArtifactRef
+
+    @model_validator(mode="after")
+    def validate_task_identity(self) -> ArtifactTaskSnapshotRef:
+        if self.task_identity is not None and str(self.task_identity.key) != self.task_id:
+            raise ValueError("task identity key must match task_id")
+        return self
 
     @property
     def commitment_sha256(self) -> str:
@@ -82,9 +97,9 @@ def task_snapshot_id(reference: TaskSnapshotRef) -> str:
 
 
 def task_snapshot_commitment(reference: TaskSnapshotRef) -> str:
-    """Commit to one exact task relationship without adding another stored identity field."""
+    """Commit to one exact task relationship while preserving legacy omissions."""
 
-    return canonical_json_sha256(reference.model_dump(mode="json"))
+    return canonical_json_sha256(reference.model_dump(mode="json", exclude_none=True))
 
 
 def task_snapshot_source_key(reference: TaskSnapshotRef) -> tuple[object, ...]:

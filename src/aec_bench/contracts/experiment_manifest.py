@@ -6,8 +6,10 @@ from typing import Any
 from pydantic import Field, PositiveInt, field_validator, model_validator
 
 from aec_bench.contracts.dataset import DatasetRef
+from aec_bench.contracts.identity import EntityIdentity
 from aec_bench.contracts.task_definition import Difficulty, Lifecycle, Visibility
 from aec_bench.contracts.validators import (
+    FrozenStrictModel,
     NonEmptyStr,
     StrictModel,
     ensure_non_empty_string,
@@ -78,6 +80,23 @@ class AgentConfig(StrictModel):
     @classmethod
     def validate_model_non_empty(cls, value: str) -> str:
         return ensure_non_empty_string(value)
+
+
+class AgentCondition(FrozenStrictModel):
+    """One explicit, versioned requested agent condition.
+
+    ``AgentConfig`` remains the user-facing configuration. This resolved
+    condition is a separate value until ``ResolvedRunSpec`` owns conversion.
+    """
+
+    identity: EntityIdentity
+    adapter: NonEmptyStr
+    model: NonEmptyStr
+    client: ClientConfig | None = None
+    system_prompt: str | None = None
+    tool_versions: dict[str, str] = Field(default_factory=dict)
+    parameters: dict[str, Any] = Field(default_factory=dict)
+    limits: dict[str, Any] = Field(default_factory=dict)
 
 
 class ComputeConfig(StrictModel):

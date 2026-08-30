@@ -9,12 +9,14 @@ from pydantic import ValidationError
 from aec_bench.contracts.artifacts import ArtifactRef
 from aec_bench.contracts.dataset import BundleDatasetRef
 from aec_bench.contracts.experiment_manifest import (
+    AgentCondition,
     AgentConfig,
     ClientConfig,
     ComputeConfig,
     ExperimentManifest,
     TaskSelector,
 )
+from aec_bench.contracts.identity import EntityIdentity, EntityKind, new_entity_id
 from aec_bench.contracts.task_definition import Difficulty, Lifecycle, Visibility
 
 
@@ -77,6 +79,26 @@ def test_agent_config_accepts_explicit_client_config() -> None:
     assert config.client is not None
     assert config.client.kind == "anthropic_api"
     assert config.client.settings["api_key_env"] == "ANTHROPIC_API_KEY"
+
+
+def test_agent_condition_is_explicit_and_versioned() -> None:
+    condition = AgentCondition(
+        identity=EntityIdentity(
+            id=new_entity_id(EntityKind.AGENT_CONDITION),
+            key="agent/deepseek-native-tools",
+            version=2,
+        ),
+        adapter="deepseek_harness",
+        model="deepseek-chat",
+        tool_versions={"filesystem": "1"},
+        parameters={"temperature": 0.0},
+        limits={"max_tokens": 8192},
+    )
+
+    assert condition.identity.id.version == 7
+    assert condition.identity.key == "agent/deepseek-native-tools"
+    assert condition.identity.version == 2
+    assert AgentCondition.model_validate_json(condition.model_dump_json()) == condition
 
 
 # --- Rejection tests ---
