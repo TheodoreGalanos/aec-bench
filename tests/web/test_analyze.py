@@ -8,15 +8,9 @@ from fastapi.testclient import TestClient
 
 from aec_bench.contracts.evaluation_result import EvaluationResult, ValidityCheck
 from aec_bench.contracts.trial_record import AgentReference, TaskReference
-from aec_bench.ledger.reader import _reset_cache_for_testing
 from aec_bench.ledger.writer import write_trial_record
 from aec_bench.web.app import create_app
 from tests.support.trial_record_factories import make_trial_record
-
-
-@pytest.fixture(autouse=True)
-def _reset_ledger_cache() -> None:
-    _reset_cache_for_testing()
 
 
 @pytest.fixture

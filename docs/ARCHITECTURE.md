@@ -106,6 +106,12 @@ evidence. Every dispatch creates
 one lease-bound attempt, renews active leases at the resolved heartbeat
 interval, and closes the run and plan only after all planned work is terminal.
 
+`EvidenceIndex` is a rebuildable SQLite projection of structured TrialRecord
+metadata. `EvidenceQuery` uses bounded keyset pages with cursors bound to the
+index generation and filter set. It never replaces portable records or loads
+conversation, trajectory, workspace, verifier, or provider evidence bodies;
+callers use the stored record path when they explicitly need those bytes.
+
 `HarnessSpec` describes runtime capabilities, bindings, contracts, and
 budgets. It does not control attempt branching or selection. Interactive-world
 and lifecycle runtimes do not use this artifact-task attempt path.

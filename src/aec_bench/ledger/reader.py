@@ -3,7 +3,6 @@
 
 import json
 from collections.abc import Sequence
-from dataclasses import dataclass
 from pathlib import Path
 
 from pydantic import BaseModel
@@ -20,17 +19,6 @@ from aec_bench.contracts.trial_record import (
 )
 from aec_bench.ledger.artifact_repository import ArtifactRepository
 from aec_bench.ledger.writer import run_manifest_path
-
-
-@dataclass(frozen=True)
-class _LedgerCache:
-    """In-memory snapshot of unscoped ledger reads, keyed by latest mtime."""
-
-    snapshot_mtime: float
-    records: list[TrialRecord]
-
-
-_cache: _LedgerCache | None = None
 
 
 def read_trial_record(path: Path, *, ledger_root: Path | None = None) -> TrialRecord:
@@ -144,40 +132,15 @@ def _iter_trial_record_paths(
     )
 
 
-def _latest_mtime(paths: list[Path]) -> float:
-    """Cheapest cache key: the newest mtime across trial JSON files."""
-    if not paths:
-        return 0.0
-    return max(p.stat().st_mtime for p in paths)
-
-
 def read_trial_records(
     ledger_root: Path,
     *,
     experiment_id: str | None = None,
 ) -> list[TrialRecord]:
-    # Scoped reads bypass the cache — they're rare and already cheap.
-    if experiment_id is not None:
-        return [
-            _read_trial_record(p, ledger_root=ledger_root)
-            for p in _iter_trial_record_paths(ledger_root, experiment_id=experiment_id)
-        ]
-
-    global _cache
-    paths = _iter_trial_record_paths(ledger_root)
-    latest = _latest_mtime(paths)
-    if _cache is not None and _cache.snapshot_mtime == latest:
-        return list(_cache.records)
-
-    records = [_read_trial_record(p, ledger_root=ledger_root) for p in paths]
-    _cache = _LedgerCache(snapshot_mtime=latest, records=records)
-    return list(_cache.records)
-
-
-def _reset_cache_for_testing() -> None:
-    """Clear the module-level cache. Tests should call this between cases."""
-    global _cache
-    _cache = None
+    return [
+        _read_trial_record(p, ledger_root=ledger_root)
+        for p in _iter_trial_record_paths(ledger_root, experiment_id=experiment_id)
+    ]
 
 
 def query_trial_records(
