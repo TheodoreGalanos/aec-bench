@@ -190,7 +190,7 @@ If the user requests changes:
 **Step 11: Generate a test instance.**
 
 ```bash
-uv run aec-bench generate task <meta.name> --instances 1 --seed 42 --output /tmp/template-preview/
+uv run aec-bench generate task <meta.name> --instances 1 --seed 42 --lifecycle proposed --visibility public --output /tmp/template-preview/
 ```
 
 Show the generated `instruction.md` with concrete parameter values so the user can see exactly what an agent would receive.

@@ -14,6 +14,7 @@ from typing import Any, cast
 
 import pytest
 
+from aec_bench.contracts.task_definition import Lifecycle, Visibility
 from aec_bench.experimentation.governance.applicability import profile_task_applicability
 from aec_bench.generation.contracts import SampledInstance
 from aec_bench.generation.sampler import sample_instance
@@ -190,7 +191,13 @@ def _instance_for_variant(
 def _scaffold_variant(tmp_path: Path, variant: str) -> tuple[Path, dict[str, float]]:
     loaded_template, config, template_dir, engine, instance = _instance_for_variant(variant)
     (template_dir / "engine.py").read_text(encoding="utf-8")
-    instance_dir = scaffold_task_instance(loaded_template, instance, tmp_path)
+    instance_dir = scaffold_task_instance(
+        loaded_template,
+        instance,
+        tmp_path,
+        task_lifecycle=Lifecycle.PROPOSED,
+        task_visibility=Visibility.PUBLIC,
+    )
     return instance_dir, instance.ground_truth
 
 

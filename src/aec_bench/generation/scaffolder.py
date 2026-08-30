@@ -6,9 +6,11 @@ import json
 import shutil
 from pathlib import Path
 from types import ModuleType
+from uuid import UUID
 
+from aec_bench.contracts.identity import EntityKind, new_entity_id
 from aec_bench.contracts.output_completion import OutputCompletionContract
-from aec_bench.contracts.task_definition import Visibility
+from aec_bench.contracts.task_definition import Lifecycle, Visibility
 from aec_bench.contracts.task_review import (
     AgenticReviewProfile,
     ClosureGate,
@@ -22,6 +24,7 @@ from aec_bench.generation.contracts import SampledInstance
 from aec_bench.generation.instruction_renderer import render_instruction
 from aec_bench.generation.verifier_gen import generate_verifier
 from aec_bench.images.extensions import generate_dockerfile
+from aec_bench.tasks.loader import canonical_task_key
 from aec_bench.templates.contracts import TemplateConfig, ToolMode
 from aec_bench.templates.registry import LoadedTemplate
 
@@ -62,7 +65,10 @@ def _build_task_toml(
     config: TemplateConfig,
     instance: SampledInstance,
     tool_mode: ToolMode,
+    task_lifecycle: Lifecycle,
     task_visibility: Visibility,
+    task_identity_id: UUID,
+    task_key: str,
 ) -> str:
     """Produce task.toml content as a string using f-strings (tomllib is read-only).
 
@@ -76,10 +82,16 @@ def _build_task_toml(
     generation_difficulty_line = _generation_difficulty_metadata_line(instance.difficulty)
 
     toml_str = f"""\
+[identity]
+id = "{task_identity_id}"
+key = "{task_key}"
+version = 1
+
 [metadata]
 domain = "{config.meta.discipline}"
 category = "{config.meta.category}"
 difficulty = "{metadata_difficulty}"
+lifecycle = "{task_lifecycle.value}"
 visibility = "{task_visibility.value}"
 {generation_difficulty_line}tags = [{tags_toml}]
 
@@ -307,7 +319,10 @@ def scaffold_task_instance(
     instance: SampledInstance,
     output_dir: Path,
     tool_mode_override: str | None = None,
-    task_visibility: Visibility = Visibility.PUBLIC,
+    *,
+    task_lifecycle: Lifecycle,
+    task_visibility: Visibility,
+    task_identity_id: UUID | None = None,
 ) -> Path:
     """Scaffold a complete task instance directory from a TemplateConfig and SampledInstance.
 
@@ -328,6 +343,8 @@ def scaffold_task_instance(
     if instance_dir.exists():
         raise FileExistsError(f"refusing to overwrite existing task package: {instance_dir}")
     engine_module = template.engine
+    identity_id = task_identity_id or new_entity_id(EntityKind.TASK)
+    task_key = str(canonical_task_key(instance_dir.relative_to(output_dir).as_posix()))
 
     # Create required subdirectories
     (instance_dir / "environment").mkdir(parents=True, exist_ok=True)
@@ -339,7 +356,9 @@ def scaffold_task_instance(
     (instance_dir / "environment" / "trajectory_writer.py").write_text(writer_source.read_text(encoding="utf-8"))
 
     # 1. Write task.toml
-    (instance_dir / "task.toml").write_text(_build_task_toml(config, instance, tool_mode, task_visibility))
+    (instance_dir / "task.toml").write_text(
+        _build_task_toml(config, instance, tool_mode, task_lifecycle, task_visibility, identity_id, task_key)
+    )
 
     # 2. Render and write instruction.md
     instruction_template = (template_dir / "instruction.md").read_text()

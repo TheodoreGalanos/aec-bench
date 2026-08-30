@@ -20,7 +20,7 @@ from aec_bench.contracts.evolution import (
     MutationStrategy,
     WorkspaceSnapshot,
 )
-from aec_bench.contracts.task_definition import Visibility
+from aec_bench.contracts.task_definition import Lifecycle, Visibility
 from aec_bench.contracts.trial_record import CostRecord, TrialRecord
 from aec_bench.evolution.analysis import (
     EvolutionAnalysis,
@@ -410,6 +410,8 @@ def run_evolution_from_config(
             difficulties=tuple(generation.difficulties),
             seed=generation.seed,
             suite_id="evolution-generated-tasks",
+            task_lifecycle=Lifecycle.ACTIVE,
+            task_visibility=Visibility.PUBLIC,
         )
         _validate_public_evolution_tasks(generated.task_paths, generated.output_root)
         task_dirs.extend(generated.task_paths)

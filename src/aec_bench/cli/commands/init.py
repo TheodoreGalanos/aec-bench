@@ -8,6 +8,7 @@ from pathlib import Path
 import typer
 from rich.console import Console
 
+from aec_bench.contracts.task_definition import Lifecycle, Visibility
 from aec_bench.init.scaffold import (
     ScaffoldResult,
     copy_skills,
@@ -89,6 +90,8 @@ def init_project(
                     difficulties=(difficulty_name,),
                     seed=42,
                     suite_id="aec-bench-example",
+                    task_lifecycle=Lifecycle.PROPOSED,
+                    task_visibility=Visibility.PUBLIC,
                 )
                 messages.append(f"Generated example instance: {generated.task_paths[0].name}")
             else:

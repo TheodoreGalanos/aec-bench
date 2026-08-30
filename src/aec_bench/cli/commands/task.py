@@ -91,7 +91,7 @@ def validate_command(
 
 @app.command("explain")
 def explain_command(
-    task_ref: str = typer.Argument(help="Canonical task key, alias, UUID, or legacy task path"),
+    task_ref: str = typer.Argument(help="Canonical task key, alias, or UUID"),
     tasks_root: str | None = typer.Option(None, "--tasks-root", "-t", help="Root directory containing tasks"),
 ) -> None:
     """Explain one task identity, policy, output contract, and verifier."""
@@ -108,11 +108,12 @@ def explain_command(
         raise typer.Exit(1)
 
     identity = task.identity
+    assert identity is not None
     data = {
         "canonical_key": task.task_id,
-        "aliases": [] if identity is None else [str(alias) for alias in identity.aliases],
-        "id": None if identity is None else str(identity.id),
-        "version": None if identity is None else identity.version,
+        "aliases": [str(alias) for alias in identity.aliases],
+        "id": str(identity.id),
+        "version": identity.version,
         "lifecycle": task.lifecycle.value,
         "visibility": task.visibility.value,
         "runnable": task.runnable,
@@ -129,8 +130,8 @@ def explain_command(
         aliases = value["aliases"]
         alias_text = ", ".join(aliases) if isinstance(aliases, list) else "none"
         console.print(f"Aliases: {alias_text or 'none'}")
-        console.print(f"UUID: {value['id'] or 'legacy task without UUID'}")
-        console.print(f"Version: {value['version'] or 'legacy task without version'}")
+        console.print(f"UUID: {value['id']}")
+        console.print(f"Version: {value['version']}")
         console.print(f"Lifecycle: {value['lifecycle']}")
         console.print(f"Visibility: {value['visibility']}")
         console.print(f"Runnable: {'yes' if value['runnable'] else 'no'}")
@@ -138,62 +139,6 @@ def explain_command(
         console.print(f"Verifier: {value['verifier']}")
 
     emit("task explain", data=data, start_time=start, human_renderer=render)
-
-
-@app.command("migrate-metadata")
-def migrate_metadata_command(
-    check: bool = typer.Option(False, "--check", help="Report reviewed metadata changes without writing task files"),
-    write: bool = typer.Option(False, "--write", help="Apply reviewed metadata values to task files"),
-    tasks_root: str | None = typer.Option(None, "--tasks-root", "-t", help="Root directory containing tasks"),
-    report_path: Path | None = typer.Option(None, "--report-path", help="Stable migration report path"),
-) -> None:
-    """Check or apply the reviewed task metadata migration report."""
-
-    start = time.monotonic()
-    if check == write:
-        raise typer.BadParameter("choose exactly one of --check or --write")
-    root = resolve_path("tasks_root", cli_override=tasks_root)
-    output_path = (
-        report_path.resolve() if report_path is not None else root.parent / "artefacts" / "task-metadata-report.json"
-    )
-    from aec_bench.tasks.metadata_migration import (
-        MigrationReportError,
-        apply_task_metadata_migration,
-        generate_task_metadata_migration_report,
-        planned_task_metadata_changes,
-    )
-
-    try:
-        report = generate_task_metadata_migration_report(root, output_path)
-        changes = planned_task_metadata_changes(root, report)
-        if write:
-            changes = apply_task_metadata_migration(root, report)
-    except (MigrationReportError, OSError, UnicodeError, ValueError) as error:
-        emit("task migrate-metadata", data=None, errors=[str(error)], start_time=start)
-        raise typer.Exit(1) from error
-
-    action = "would update" if check else "updated"
-    data = {
-        "report_path": str(output_path),
-        "task_count": len(report.tasks),
-        "changed_paths": list(changes),
-        "mode": "check" if check else "write",
-    }
-
-    def render(_value: dict[str, object]) -> None:
-        console.print(f"Task metadata migration {action} {len(changes)} task(s).")
-        console.print(f"Report: {output_path}")
-        for path in changes:
-            console.print(f"  - {path}")
-        for entry in report.tasks:
-            decisions = "; ".join(entry.required_reviewer_decisions)
-            console.print(
-                f"  {entry.current_path}: {entry.proposed_key} · {str(entry.generated_uuid)[-8:]} "
-                f"lifecycle={entry.current_inferred_lifecycle} visibility={entry.current_inferred_visibility}; "
-                f"review: {decisions}"
-            )
-
-    emit("task migrate-metadata", data, start_time=start, human_renderer=render)
 
 
 def _verifier_protocol_version() -> int:
@@ -240,7 +185,7 @@ def _task_authoring_details(task_dir: Path, tasks_root: Path, report: object) ->
                 check="metadata",
                 file="task.toml",
                 message=str(error),
-                fix_hint="Run `aec-bench task migrate-metadata --check` and repair the reported metadata.",
+                fix_hint="Add explicit [identity] and [metadata] lifecycle/visibility values to task.toml.",
             )
         )
         return details
@@ -251,25 +196,15 @@ def _task_authoring_details(task_dir: Path, tasks_root: Path, report: object) ->
         verifier_entrypoint=task.verifier.script,
         verifier_version=_verifier_protocol_version(),
     )
-    if task.identity is None:
-        report.findings.append(
-            ValidationFinding(
-                severity=Severity.WARNING,
-                check="metadata",
-                file="task.toml",
-                message="task identity metadata is missing; the task uses bounded legacy compatibility loading",
-                fix_hint="Run `aec-bench task migrate-metadata --check` before publishing this task.",
-            )
-        )
-    else:
-        from aec_bench.contracts.identity import format_display_ref
+    from aec_bench.contracts.identity import format_display_ref
 
-        details.update(
-            display_ref=format_display_ref(task.identity.key, task.identity.id),
-            id=str(task.identity.id),
-            key=str(task.identity.key),
-            version=task.identity.version,
-        )
+    assert task.identity is not None
+    details.update(
+        display_ref=format_display_ref(task.identity.key, task.identity.id),
+        id=str(task.identity.id),
+        key=str(task.identity.key),
+        version=task.identity.version,
+    )
     return details
 
 

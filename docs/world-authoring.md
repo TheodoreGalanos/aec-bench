@@ -35,7 +35,7 @@ workspace are sufficient.
 
    ```bash
    uv run aec-bench generate validate-template <template-dir>
-   uv run aec-bench generate task --template <template-dir> --instances 1 --seed 42 --output /tmp/aec-bench-preview
+   uv run aec-bench generate task --template <template-dir> --instances 1 --seed 42 --lifecycle proposed --visibility public --output /tmp/aec-bench-preview
    uv run aec-bench task validate <generated-task-dir>
    ```
 

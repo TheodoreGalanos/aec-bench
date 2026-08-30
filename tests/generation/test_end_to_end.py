@@ -5,6 +5,8 @@ import json
 import subprocess
 from pathlib import Path
 
+from aec_bench.contracts.task_definition import Lifecycle, Visibility
+
 TEMPLATE_DIR = (
     Path(__file__).resolve().parents[2]
     / "src"
@@ -37,7 +39,13 @@ def _scaffold_terzaghi_instance(tmp_path: Path, difficulty: str = "easy", seed: 
 
     loaded_template = load_template(TEMPLATE_DIR)
     instance = sample_instance(loaded_template, difficulty, seed=seed, instance_index=0)
-    return scaffold_task_instance(loaded_template, instance, tmp_path)
+    return scaffold_task_instance(
+        loaded_template,
+        instance,
+        tmp_path,
+        task_lifecycle=Lifecycle.PROPOSED,
+        task_visibility=Visibility.PUBLIC,
+    )
 
 
 def test_generated_verifier_scores_golden_pass_at_1_0(tmp_path: Path) -> None:
@@ -145,6 +153,8 @@ def test_dataset_generation_verifier_scores_golden_pass(tmp_path: Path) -> None:
         ),
         templates=TemplateSelection(include=["ground/*"]),
         visibility=VisibilityMix(mix={"all_given": 1.0}),
+        task_lifecycle="proposed",
+        task_visibility="public",
         tool_mode=ToolModeMix(mix={"with-tool": 1.0}),
         instances=InstanceConfig(per_task=2, total_max=2),
         output=OutputConfig(dir=output_dir),
@@ -210,6 +220,8 @@ def test_dataset_with_three_templates(tmp_path: Path) -> None:
     raw = tomllib.loads("""
         name = "three-template-test"
         seed = 42
+        task_lifecycle = "proposed"
+        task_visibility = "public"
 
         [coverage]
         difficulties = {easy = 0.5, medium = 0.5}

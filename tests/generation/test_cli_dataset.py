@@ -14,6 +14,8 @@ runner = CliRunner()
 MINIMAL_SUITE_TOML = textwrap.dedent("""\
     name = "cli-test-suite"
     seed = 42
+    task_lifecycle = "proposed"
+    task_visibility = "public"
 
     [coverage]
     difficulties = {easy = 0.5, medium = 0.5}

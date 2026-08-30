@@ -1,13 +1,23 @@
 # ABOUTME: Tests for the task loader in the aec-bench Python implementation.
 # ABOUTME: Covers real task-instance shapes from the repository plus malformed synthetic cases.
 
+import tomllib
 from pathlib import Path
+from uuid import UUID
 
 import pytest
 
+from aec_bench.contracts.identity import EntityKind, new_entity_id, validate_uuidv7
 from aec_bench.tasks.loader import LoadError, _load_tools, derive_task_id, load_task_definition
 
 TASKS_ROOT = Path(__file__).resolve().parents[2] / "tasks"
+
+
+def _identity_block(key: str, *, lifecycle: str = "active", visibility: str = "public") -> str:
+    return (
+        f'[identity]\nid = "{new_entity_id(EntityKind.TASK)}"\nkey = "{key}"\nversion = 1\n\n'
+        f'[metadata]\nlifecycle = "{lifecycle}"\nvisibility = "{visibility}"\n'
+    )
 
 
 def test_loader_reads_real_mechanical_instance() -> None:
@@ -20,6 +30,31 @@ def test_loader_reads_real_mechanical_instance() -> None:
     assert task.domain == "mechanical"
     assert task.category == "reasoning"
     assert task.timeout_seconds == 600
+
+
+def test_maintained_catalogue_uses_strict_identity_and_policy_metadata() -> None:
+    """Every maintained filesystem task must load from explicit metadata."""
+
+    task_dirs = [path.parent for path in TASKS_ROOT.rglob("task.toml") if (path.parent / "instruction.md").exists()]
+    assert task_dirs, "maintained catalogue audit must inspect at least one task"
+    loaded_keys: set[str] = set()
+    loaded_ids: set[UUID] = set()
+    for task_dir in task_dirs:
+        raw = tomllib.loads((task_dir / "task.toml").read_text(encoding="utf-8"))
+        identity = raw["identity"]
+        metadata = raw["metadata"]
+        assert set(identity) >= {"id", "key", "version"}
+        assert metadata["lifecycle"]
+        assert metadata["visibility"]
+        task = load_task_definition(task_dir, TASKS_ROOT)
+        assert task.identity is not None
+        assert task.identity.key == identity["key"]
+        assert task.identity.version == identity["version"]
+        loaded_ids.add(validate_uuidv7(task.identity.id))
+        loaded_keys.add(task.task_id)
+
+    assert len(loaded_keys) == len(task_dirs)
+    assert len(loaded_ids) == len(task_dirs)
 
 
 def test_loader_reads_real_top_level_electrical_task() -> None:
@@ -79,7 +114,7 @@ def test_loader_reads_holdout_visibility_from_metadata(tmp_path: Path) -> None:
     )
     (instance_dir / "tests" / "test.sh").write_text("#!/bin/bash\n", encoding="utf-8")
     (instance_dir / "task.toml").write_text(
-        '[agent]\ntimeout_sec = 600\n\n[metadata]\nvisibility = "holdout"\n',
+        _identity_block("mechanical/heat-load/demo", visibility="holdout") + "[agent]\ntimeout_sec = 600\n",
         encoding="utf-8",
     )
 
@@ -98,10 +133,7 @@ def test_loader_uses_metadata_domain_for_generated_task_roots(tmp_path: Path) ->
     )
     (instance_dir / "tests" / "test.sh").write_text("#!/bin/bash\n", encoding="utf-8")
     (instance_dir / "task.toml").write_text(
-        "[agent]\n"
-        "timeout_sec = 600\n\n"
-        "[metadata]\n"
-        'domain = "structural"\n'
+        _identity_block("generated/suite/structural/load-analysis/demo") + 'domain = "structural"\n'
         'category = "load-analysis"\n'
         'difficulty = "easy"\n',
         encoding="utf-8",
@@ -132,7 +164,7 @@ def test_loader_accepts_verify_py_as_verifier_script(tmp_path: Path) -> None:
     )
     (instance_dir / "tests" / "verify.py").write_text("# verifier\n", encoding="utf-8")
     (instance_dir / "task.toml").write_text(
-        "[agent]\ntimeout_sec = 600\n\n[metadata]\n",
+        _identity_block("electrical/voltage-drop/demo") + "[agent]\ntimeout_sec = 600\n",
         encoding="utf-8",
     )
 
@@ -152,7 +184,7 @@ def test_loader_prefers_test_sh_over_verify_py(tmp_path: Path) -> None:
     (instance_dir / "tests" / "test.sh").write_text("#!/bin/bash\n", encoding="utf-8")
     (instance_dir / "tests" / "verify.py").write_text("# verifier\n", encoding="utf-8")
     (instance_dir / "task.toml").write_text(
-        "[agent]\ntimeout_sec = 600\n\n[metadata]\n",
+        _identity_block("electrical/voltage-drop/demo") + "[agent]\ntimeout_sec = 600\n",
         encoding="utf-8",
     )
 
@@ -170,7 +202,7 @@ def test_loader_rejects_missing_verifier_script(tmp_path: Path) -> None:
         encoding="utf-8",
     )
     (instance_dir / "task.toml").write_text(
-        "[agent]\ntimeout_sec = 600\n\n[metadata]\n",
+        _identity_block("mechanical/heat-load/demo") + "[agent]\ntimeout_sec = 600\n",
         encoding="utf-8",
     )
 
@@ -186,7 +218,8 @@ def test_loader_reads_tools_section_from_task_toml(tmp_path: Path) -> None:
     (instance_dir / "instruction.md").write_text("Write findings to /workspace/output.md.\n", encoding="utf-8")
     (instance_dir / "tests" / "test.sh").write_text("#!/bin/bash\n", encoding="utf-8")
     (instance_dir / "task.toml").write_text(
-        '[agent]\ntimeout_sec = 600\n\n[metadata]\n\n[tools]\nscripts = ["terzaghi_calc.py"]\n',
+        _identity_block("ground/terzaghi/demo")
+        + '[agent]\ntimeout_sec = 600\n\n[tools]\nscripts = ["terzaghi_calc.py"]\n',
         encoding="utf-8",
     )
 
@@ -204,7 +237,9 @@ def test_loader_returns_empty_tools_when_no_tools_section(tmp_path: Path) -> Non
     (instance_dir / "tests").mkdir(parents=True)
     (instance_dir / "instruction.md").write_text("Write findings to /workspace/output.md.\n", encoding="utf-8")
     (instance_dir / "tests" / "test.sh").write_text("#!/bin/bash\n", encoding="utf-8")
-    (instance_dir / "task.toml").write_text("[agent]\ntimeout_sec = 600\n\n[metadata]\n", encoding="utf-8")
+    (instance_dir / "task.toml").write_text(
+        _identity_block("ground/terzaghi/demo") + "[agent]\ntimeout_sec = 600\n", encoding="utf-8"
+    )
 
     task = load_task_definition(instance_dir, tmp_path)
 

@@ -11,7 +11,7 @@ from rich.table import Table
 
 from aec_bench.cli.commands.generate_dockerfiles import generate_dockerfiles_command
 from aec_bench.cli.output import console, emit, print_success, print_warning
-from aec_bench.contracts.task_definition import Visibility
+from aec_bench.contracts.task_definition import Lifecycle, Visibility
 from aec_bench.templates.registry import LoadedTemplate, discover_templates, load_template, validate_template
 
 app = typer.Typer(help="Generate task instances from templates.", no_args_is_help=True)
@@ -53,8 +53,13 @@ def generate_task(
     ),
     output: Path = typer.Option(Path("./tasks/"), "--output", help="Output directory for instances"),
     tool_mode: str | None = typer.Option(None, "--tool-mode", help="Override template tool_mode"),
+    task_lifecycle: Lifecycle = typer.Option(
+        ...,
+        "--lifecycle",
+        help="Lifecycle written explicitly into each generated task",
+    ),
     task_visibility: Visibility = typer.Option(
-        Visibility.PUBLIC,
+        ...,
         "--visibility",
         help="Registry visibility written explicitly into each generated task",
     ),
@@ -69,8 +74,10 @@ def generate_task(
     (index, instance name, difficulty, path per entry), manifest_path.
 
     Examples:
-      aec-bench generate task voltage-drop --instances 5 --difficulty easy,medium
-      aec-bench --json generate task voltage-drop --dry-run | jq '.data.instances'
+      aec-bench generate task voltage-drop --instances 5 --difficulty easy,medium \
+        --lifecycle proposed --visibility public
+      aec-bench --json generate task voltage-drop --lifecycle proposed \
+        --visibility public --dry-run | jq '.data.instances'
     """
     import time
 
@@ -157,6 +164,7 @@ def generate_task(
             "seed": seed,
             "start_index": start_index,
             "visibility": task_visibility.value,
+            "lifecycle": task_lifecycle.value,
             "instances": plan_list,
         }
 
@@ -186,6 +194,7 @@ def generate_task(
         seed=seed,
         start_index=start_index,
         tool_mode=tool_mode,
+        task_lifecycle=task_lifecycle,
         task_visibility=task_visibility,
     )
     resolved_output = generated.output_root

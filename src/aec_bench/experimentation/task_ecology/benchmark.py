@@ -11,6 +11,8 @@ from typing import Any, Literal
 
 import yaml
 
+from aec_bench.contracts.identity import EntityKind, new_entity_id
+from aec_bench.contracts.task_definition import Lifecycle, Visibility
 from aec_bench.contracts.validators import ensure_relative_path
 from aec_bench.evolution.config_loader import load_evolution_config
 from aec_bench.evolution.report_data import list_runs
@@ -148,10 +150,14 @@ def materialise_suite(
                 seed=seed + template_index * 100,
                 instance_index=difficulty_index,
             )
+            task_identity_id = new_entity_id(EntityKind.TASK)
             instance_dir = scaffold_task_instance(
                 template=template,
                 instance=instance,
                 output_dir=suite_root,
+                task_lifecycle=Lifecycle.PROPOSED,
+                task_visibility=Visibility.PUBLIC,
+                task_identity_id=task_identity_id,
             )
             materialised.append(
                 MaterialisedInstance(
@@ -174,6 +180,9 @@ def materialise_suite(
                         if template.config.meta.tool_mode is not ToolMode.BOTH
                         else ToolMode.WITH_TOOL
                     ),
+                    task_lifecycle=Lifecycle.PROPOSED,
+                    task_visibility=Visibility.PUBLIC,
+                    task_identity_id=task_identity_id,
                 )
             )
 

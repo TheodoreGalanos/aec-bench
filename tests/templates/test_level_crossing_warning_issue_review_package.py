@@ -12,6 +12,7 @@ from pathlib import Path
 
 import pytest
 
+from aec_bench.contracts.task_definition import Lifecycle, Visibility
 from aec_bench.generation.sampler import sample_instance
 from aec_bench.generation.scaffolder import scaffold_task_instance
 from aec_bench.templates.registry import discover_templates, load_template
@@ -110,7 +111,13 @@ def _sample_review_instance(tmp_path: Path, seed: int = 20260706) -> tuple[Path,
     template_dir = loaded_template.path
     instance = sample_instance(loaded_template, difficulty_name="medium", seed=seed, instance_index=0)
     (template_dir / "engine.py").read_text(encoding="utf-8")
-    instance_dir = scaffold_task_instance(loaded_template, instance, tmp_path)
+    instance_dir = scaffold_task_instance(
+        loaded_template,
+        instance,
+        tmp_path,
+        task_lifecycle=Lifecycle.PROPOSED,
+        task_visibility=Visibility.PUBLIC,
+    )
     return instance_dir, instance.ground_truth
 
 
@@ -132,7 +139,13 @@ def _instance_for_variant(variant: str, max_seeds: int = 800):
 
 def _scaffold_variant(tmp_path: Path, variant: str) -> tuple[Path, dict]:
     loaded_template, _config, _template_dir, _engine, instance = _instance_for_variant(variant)
-    instance_dir = scaffold_task_instance(loaded_template, instance, tmp_path)
+    instance_dir = scaffold_task_instance(
+        loaded_template,
+        instance,
+        tmp_path,
+        task_lifecycle=Lifecycle.PROPOSED,
+        task_visibility=Visibility.PUBLIC,
+    )
     return instance_dir, instance.ground_truth
 
 

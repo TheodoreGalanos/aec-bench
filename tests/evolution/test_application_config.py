@@ -16,6 +16,7 @@ from aec_bench.contracts.evolution import (
     WorkspaceSnapshot,
 )
 from aec_bench.contracts.experiment_manifest import AgentConfig, ClientConfig, TaskSelector
+from aec_bench.contracts.task_definition import Lifecycle, Visibility
 from aec_bench.evolution import application
 from aec_bench.evolution.application import (
     _build_harbor_candidate_runtime,
@@ -389,6 +390,8 @@ class TestGenerateTaskInstances:
             count=gen_config.count,
             difficulties=tuple(gen_config.difficulties),
             seed=gen_config.seed,
+            task_lifecycle=Lifecycle.PROPOSED,
+            task_visibility=Visibility.PUBLIC,
         )
         dirs = generated.task_paths
         assert len(dirs) == 3
@@ -410,6 +413,8 @@ class TestGenerateTaskInstances:
             count=gen_config.count,
             difficulties=tuple(gen_config.difficulties),
             seed=gen_config.seed,
+            task_lifecycle=Lifecycle.PROPOSED,
+            task_visibility=Visibility.PUBLIC,
         ).task_paths
         assert len(dirs) == 4
 
@@ -422,6 +427,8 @@ class TestGenerateTaskInstances:
             count=gen1.count,
             difficulties=tuple(gen1.difficulties),
             seed=gen1.seed,
+            task_lifecycle=Lifecycle.PROPOSED,
+            task_visibility=Visibility.PUBLIC,
         ).task_paths
         dirs2 = generate_template_instances(
             template=resolve_template(gen2.template),
@@ -429,6 +436,8 @@ class TestGenerateTaskInstances:
             count=gen2.count,
             difficulties=tuple(gen2.difficulties),
             seed=gen2.seed,
+            task_lifecycle=Lifecycle.PROPOSED,
+            task_visibility=Visibility.PUBLIC,
         ).task_paths
         # Different seeds should produce different instance names (different parameters)
         content1 = (dirs1[0] / "instruction.md").read_text()

@@ -13,11 +13,13 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Annotated, Any, Literal, Self
+from uuid import UUID
 
 from pydantic import Field, NonNegativeInt, field_validator, model_validator
 
 from aec_bench.contracts.artifacts import ArtifactRef
-from aec_bench.contracts.task_definition import Visibility
+from aec_bench.contracts.identity import validate_uuidv7
+from aec_bench.contracts.task_definition import Lifecycle, Visibility
 from aec_bench.contracts.validators import FrozenStrictModel, NonEmptyStr
 from aec_bench.generation.sampler import sample_instance
 from aec_bench.generation.scaffolder import scaffold_task_instance
@@ -90,12 +92,19 @@ class GenerationInstance(FrozenStrictModel):
     instance_index: NonNegativeInt
     difficulty: NonEmptyStr
     tool_mode: ToolMode
-    task_visibility: Visibility = Visibility.PUBLIC
+    task_lifecycle: Lifecycle
+    task_visibility: Visibility
+    task_identity_id: UUID
 
     @field_validator("task_id", "template_id")
     @classmethod
     def validate_relative_identifiers(cls, value: str) -> str:
         return _validate_replay_relative_path(value)
+
+    @field_validator("task_identity_id")
+    @classmethod
+    def validate_task_identity_id(cls, value: UUID) -> UUID:
+        return validate_uuidv7(value)
 
 
 class GenerationManifest(FrozenStrictModel):
@@ -238,7 +247,9 @@ def replay_generation(manifest_path: Path, output_dir: Path, *, overwrite: bool 
                 instance=sampled,
                 output_dir=replay_root,
                 tool_mode_override=record.tool_mode.value,
+                task_lifecycle=record.task_lifecycle,
                 task_visibility=record.task_visibility,
+                task_identity_id=record.task_identity_id,
             )
             actual_task_id = generated_path.relative_to(replay_root).as_posix()
             if actual_task_id != record.task_id:

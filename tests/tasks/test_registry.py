@@ -58,12 +58,22 @@ def test_registry_survives_malformed_task(tmp_path: Path) -> None:
     (good_dir / "tests").mkdir(parents=True)
     (good_dir / "instruction.md").write_text("Write findings to /workspace/output.jsonl.\n", encoding="utf-8")
     (good_dir / "tests" / "test.sh").write_text("#!/bin/bash\n", encoding="utf-8")
-    (good_dir / "task.toml").write_text("[agent]\ntimeout_sec = 600\n\n[metadata]\n", encoding="utf-8")
+    (good_dir / "task.toml").write_text(
+        "[identity]\n"
+        'id = "019c2c7a-5a33-7b8d-a702-8f7f3e8c21aa"\n'
+        'key = "mechanical/heat-load/good"\nversion = 1\n\n'
+        '[agent]\ntimeout_sec = 600\n\n[metadata]\nlifecycle = "proposed"\nvisibility = "public"\n',
+        encoding="utf-8",
+    )
 
     bad_dir = tmp_path / "mechanical" / "heat-load" / "bad"
     (bad_dir / "tests").mkdir(parents=True)
     (bad_dir / "instruction.md").write_text("Broken task.\n", encoding="utf-8")
-    (bad_dir / "task.toml").write_text("[agent]\ntimeout_sec = 600\n\n[metadata]\n", encoding="utf-8")
+    (bad_dir / "task.toml").write_text(
+        '[identity]\nid = "019c2c7a-5a33-7b8d-a702-8f7f3e8c21ac"\nkey = "mechanical/heat-load/bad"\nversion = 1\n\n'
+        '[agent]\ntimeout_sec = 600\n\n[metadata]\nlifecycle = "proposed"\nvisibility = "public"\n',
+        encoding="utf-8",
+    )
     # no verifier script — will cause LoadError
 
     registry = TaskRegistry(tasks_root=tmp_path)
@@ -81,13 +91,16 @@ def test_registry_survives_malformed_task(tmp_path: Path) -> None:
         registry.require_valid()
 
 
-def test_registry_classifies_unsupported_legacy_metadata(tmp_path: Path) -> None:
+def test_registry_classifies_unsupported_visibility_metadata(tmp_path: Path) -> None:
     task_dir = tmp_path / "mechanical" / "heat-load" / "bad-value"
     (task_dir / "tests").mkdir(parents=True)
     (task_dir / "instruction.md").write_text("Write findings to /workspace/output.jsonl.\n", encoding="utf-8")
     (task_dir / "tests" / "test.sh").write_text("#!/bin/bash\n", encoding="utf-8")
     (task_dir / "task.toml").write_text(
-        '[metadata]\nvisibility = "not-a-supported-visibility"\n',
+        "[identity]\n"
+        'id = "019c2c7a-5a33-7b8d-a702-8f7f3e8c21ab"\n'
+        'key = "mechanical/heat-load/bad-value"\nversion = 1\n\n'
+        '[metadata]\nlifecycle = "proposed"\nvisibility = "not-a-supported-visibility"\n',
         encoding="utf-8",
     )
 
