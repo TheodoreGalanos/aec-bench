@@ -98,6 +98,13 @@ class AgentCondition(FrozenStrictModel):
     parameters: dict[str, Any] = Field(default_factory=dict)
     limits: dict[str, Any] = Field(default_factory=dict)
 
+    @field_validator("tool_versions")
+    @classmethod
+    def validate_tool_versions(cls, value: dict[str, str]) -> dict[str, str]:
+        if any(not name.strip() or not version.strip() for name, version in value.items()):
+            raise ValueError("agent condition tool names and versions must not be blank")
+        return value
+
 
 class ComputeConfig(StrictModel):
     backend: NonEmptyStr

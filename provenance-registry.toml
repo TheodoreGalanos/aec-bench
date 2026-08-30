@@ -1364,6 +1364,27 @@ compatibility_behavior = "the migration command accepts schema 1 only"
 compatibility_kind = "external_schema"
 
 [[field]]
+symbol = "aec_bench.contracts.experiment_manifest.AgentCondition.tool_versions"
+surface = "pydantic_model"
+wire_name = "tool_versions"
+category = "compatibility"
+domain_owner = "experiment_orchestration"
+authority = "experiment_author"
+authoritative = true
+exposure = "application_memory"
+status = "current"
+payload_contract = "one requested agent condition"
+canonicalization = "tool name to requested version string mapping without rewriting"
+consumer = "resolved run planning and exact agent-condition comparison"
+validation_behavior = "AgentCondition rejects blank tool names and blank requested versions"
+mismatch_behavior = "treat the agent condition as a different requested condition version"
+retention = "resolved_run_spec_lifetime"
+rationale = "Tool versions can change agent behavior and must be explicit in the requested condition."
+duplication = "unique"
+compatibility_behavior = "require the requested tool versions or reject the condition before execution"
+compatibility_kind = "package_distribution"
+
+[[field]]
 symbol = "aec_bench.contracts.identity.EntityIdentity.version"
 surface = "pydantic_model"
 wire_name = "version"

@@ -101,6 +101,17 @@ def test_agent_condition_is_explicit_and_versioned() -> None:
     assert AgentCondition.model_validate_json(condition.model_dump_json()) == condition
 
 
+def test_agent_condition_rejects_blank_tool_identity() -> None:
+    identity = EntityIdentity(
+        id=new_entity_id(EntityKind.AGENT_CONDITION),
+        key="agent/deepseek-native-tools",
+        version=2,
+    )
+
+    with pytest.raises(ValidationError, match="tool names and versions must not be blank"):
+        AgentCondition(identity=identity, adapter="deepseek_harness", model="deepseek-chat", tool_versions={"": "1"})
+
+
 # --- Rejection tests ---
 
 
