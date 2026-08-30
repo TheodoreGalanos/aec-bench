@@ -149,6 +149,16 @@ planned task release, agent condition, compute backend, execution family, and
 attempt. Accepted records retain Harbor job and trial names only as observed
 backend metadata and return in plan ordinal order.
 
+The scheduler-facing `HarborBackend` binds one lease-bound attempt to a strict
+`HarborAttemptTransport` containing the canonical run, plan, trial, work,
+ordinal, attempt, and submission identities. It records the submission and
+transport mapping before the Harbor effect, binds the returned external ID,
+and writes the receipt, finalization, and `TrialRecord` in the portable evidence
+run directory. A
+missing or unknown remote result produces an unknown receipt and no final
+record; it does not close the planned trial. Duplicate publication and any
+identity or membership drift fail closed.
+
 The transport and reconciliation values have this JSON shape (UUIDs are
 illustrative):
 

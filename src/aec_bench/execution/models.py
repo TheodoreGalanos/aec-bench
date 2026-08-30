@@ -486,12 +486,18 @@ class WorkerOutcome(FrozenStrictModel):
     schema_version: Literal[1] = 1
     terminal_state: Literal["succeeded", "failed", "unknown"]
     receipts: tuple[AttemptReceipt, ...]
-    finalization: TrialFinalization
+    finalization: TrialFinalization | None = None
 
     @model_validator(mode="after")
     def validate_receipts(self) -> Self:
         if not self.receipts:
             raise ValueError("worker outcome requires at least one attempt receipt")
+        if self.terminal_state == "unknown" and self.finalization is not None:
+            raise ValueError("unknown worker outcome must not have a finalization")
+        if self.terminal_state != "unknown" and self.finalization is None:
+            raise ValueError("known worker outcome requires a finalization")
+        if self.finalization is None:
+            return self
         if self.finalization.attempt_id not in {receipt.attempt_id for receipt in self.receipts}:
             raise ValueError("worker outcome finalization attempt must have a receipt")
         selected = next(receipt for receipt in self.receipts if receipt.attempt_id == self.finalization.attempt_id)

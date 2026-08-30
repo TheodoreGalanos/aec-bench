@@ -4093,6 +4093,27 @@ compatibility_behavior = "read v1 and v2 explicitly; reject unsupported runtime-
 compatibility_kind = "external_schema"
 
 [[field]]
+symbol = "aec_bench.harness.harbor_backend.HarborAttemptTransport.schema_version"
+surface = "pydantic_model"
+wire_name = "schema_version"
+category = "compatibility"
+domain_owner = "harbor_execution"
+authority = "harbor_scheduler_backend"
+authoritative = true
+exposure = "persisted"
+status = "current"
+payload_contract = "strict AEC-Bench attempt to Harbor transport mapping schema 1"
+canonicalization = "fixed integer literal 1"
+consumer = "scheduler-facing Harbor backend and reconciliation readers"
+validation_behavior = "HarborAttemptTransport accepts schema version 1 and requires UUIDv7 run, plan, trial, work, attempt, and submission identities"
+mismatch_behavior = "reject an unsupported or incomplete Harbor attempt mapping"
+retention = "harbor_attempt_lifetime"
+rationale = "The mapping binds one remote Harbor effect to the exact scheduler-owned attempt without changing canonical trial identity."
+duplication = "unique"
+compatibility_behavior = "the canonical Harbor backend accepts schema 1 only"
+compatibility_kind = "external_schema"
+
+[[field]]
 symbol = "aec_bench.harness.harbor_reconciliation.HarborImportReconciliation.schema_version"
 surface = "pydantic_model"
 wire_name = "schema_version"
