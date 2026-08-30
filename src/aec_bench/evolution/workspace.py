@@ -20,15 +20,11 @@ from aec_bench.contracts.evolution import (
     SkillEntry,
     WorkspaceCandidateVersion,
     WorkspaceManifest,
-    WorkspaceMigrationIssue,
-    WorkspaceMigrationPlan,
-    WorkspaceMigrationReport,
     WorkspaceSnapshot,
 )
 
 # Regex for YAML frontmatter at the top of a SKILL.md file.
 _FRONTMATTER_RE = re.compile(r"^---\n(.*?)\n---", re.DOTALL)
-_SCORE_RE = re.compile(r"score\s+([0-9]+(?:\.[0-9]+)?)")
 _CANDIDATE_NOTES_REF = "aec-bench-evolution"
 
 
@@ -78,13 +74,6 @@ class Workspace:
         if not manifest_path.exists():
             raise WorkspaceError(f"manifest.yaml not found in {root}")
         raw = yaml.safe_load(manifest_path.read_text(encoding="utf-8"))
-        if "version" in raw:
-            if "schema_version" in raw:
-                raise WorkspaceError("workspace manifest cannot contain both version and schema_version")
-            version = raw.pop("version")
-            if version != "0.1.0":
-                raise WorkspaceError(f"unsupported legacy workspace manifest version: {version!r}")
-            raw["schema_version"] = 1
         self._manifest = WorkspaceManifest(**raw)
         system_md = root / "prompts" / "system.md"
         if not system_md.exists():
@@ -198,9 +187,6 @@ class Workspace:
             return baseline
         if candidates:
             raise WorkspaceError("evolution workspace has candidates but no baseline candidate")
-        if self._legacy_labels():
-            raise WorkspaceError("legacy evolution labels require an explicit workspace migration plan")
-
         self._git("add", "-A")
         self._git("commit", "--allow-empty", "-m", "evo-0: initial workspace")
         candidate = WorkspaceCandidateVersion(
@@ -271,8 +257,6 @@ class Workspace:
         A run filter selects explicit candidate IDs, not label order.
         """
         candidates = list(self._registered_candidates())
-        if not candidates and self._legacy_labels():
-            raise WorkspaceError("legacy evolution labels require an explicit workspace migration plan")
         if run_id is None:
             return candidates
         return [
@@ -316,250 +300,6 @@ class Workspace:
         from_revision = self.require_candidate(from_candidate_id).source_revision
         to_revision = self.require_candidate(to_candidate_id).source_revision
         return self._git_output("diff", from_revision, to_revision)
-
-    def migrate_legacy_versions(self, plan: WorkspaceMigrationPlan) -> WorkspaceMigrationReport:
-        """Register legacy labels only when source and lineage are explicit."""
-        existing = {candidate.candidate_id: candidate for candidate in self._registered_candidates()}
-        planned_ids = {item.candidate_id for item in plan.candidates}
-        issues: list[WorkspaceMigrationIssue] = []
-        resolved: list[WorkspaceCandidateVersion] = []
-        resolved_revisions: set[str] = set()
-        planned_labels = {item.label for item in plan.candidates}
-
-        for label in self._legacy_labels():
-            if label not in planned_labels:
-                issues.append(
-                    WorkspaceMigrationIssue(
-                        label=label,
-                        code="source_ambiguous",
-                        message=f"legacy label {label!r} is not included in the migration plan",
-                    )
-                )
-
-        for item in plan.candidates:
-            revision = self._label_revision(item.label)
-            if revision is None:
-                issues.append(
-                    WorkspaceMigrationIssue(
-                        label=item.label,
-                        code="label_missing",
-                        message=f"legacy label {item.label!r} does not exist",
-                    )
-                )
-                continue
-            if item.expected_source_revision is None:
-                issues.append(
-                    WorkspaceMigrationIssue(
-                        label=item.label,
-                        code="source_ambiguous",
-                        message=f"legacy label {item.label!r} has no expected source revision",
-                    )
-                )
-                continue
-            if revision != item.expected_source_revision:
-                issues.append(
-                    WorkspaceMigrationIssue(
-                        label=item.label,
-                        code="label_moved",
-                        message=(
-                            f"legacy label {item.label!r} resolves to {revision}, not {item.expected_source_revision}"
-                        ),
-                    )
-                )
-                continue
-            if item.parent_candidate_id is not None and (
-                item.parent_candidate_id not in existing and item.parent_candidate_id not in planned_ids
-            ):
-                issues.append(
-                    WorkspaceMigrationIssue(
-                        label=item.label,
-                        code="lineage_missing",
-                        message=f"parent candidate {item.parent_candidate_id!r} is not registered or planned",
-                    )
-                )
-                continue
-
-            current = existing.get(item.candidate_id)
-            if current is not None:
-                if (
-                    current.source_revision != revision
-                    or current.label != item.label
-                    or current.parent_candidate_id != item.parent_candidate_id
-                ):
-                    issues.append(
-                        WorkspaceMigrationIssue(
-                            label=item.label,
-                            code="candidate_conflict",
-                            message=f"candidate_id {item.candidate_id!r} already identifies different metadata",
-                        )
-                    )
-                    continue
-                resolved.append(current)
-                resolved_revisions.add(revision)
-                continue
-            if revision in resolved_revisions:
-                issues.append(
-                    WorkspaceMigrationIssue(
-                        label=item.label,
-                        code="source_ambiguous",
-                        message=f"source revision {revision} is assigned to more than one candidate",
-                    )
-                )
-                continue
-
-            summary = self._git_output("show", "-s", "--format=%s", revision)
-            score_match = _SCORE_RE.search(summary)
-            resolved.append(
-                WorkspaceCandidateVersion(
-                    candidate_id=item.candidate_id,
-                    source_revision=revision,
-                    parent_candidate_id=item.parent_candidate_id,
-                    summary=summary,
-                    score=float(score_match.group(1)) if score_match else None,
-                    label=item.label,
-                )
-            )
-            resolved_revisions.add(revision)
-
-        label_to_candidate_id = {
-            candidate.label: candidate.candidate_id
-            for candidate in (*existing.values(), *resolved)
-            if candidate.label is not None
-        }
-        sidecar_updates, sidecar_issues = self._prepare_legacy_sidecar_migrations(label_to_candidate_id)
-        issues.extend(sidecar_issues)
-        if issues:
-            return WorkspaceMigrationReport(issues=tuple(issues))
-
-        for candidate in resolved:
-            self._store_candidate(candidate)
-        self._persist_current_manifest_schema()
-        for path, payload in sidecar_updates:
-            path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
-        return WorkspaceMigrationReport(migrated_candidate_ids=tuple(item.candidate_id for item in resolved))
-
-    def _prepare_legacy_sidecar_migrations(
-        self,
-        label_to_candidate_id: dict[str, str],
-    ) -> tuple[list[tuple[Path, object]], list[WorkspaceMigrationIssue]]:
-        updates: list[tuple[Path, object]] = []
-        issues: list[WorkspaceMigrationIssue] = []
-
-        archive_path = self._root / "archive.json"
-        if archive_path.exists():
-            archive = self._read_migration_json(archive_path, issues)
-            changed = False
-            if isinstance(archive, dict) and isinstance(archive.get("entries"), list):
-                for index, entry in enumerate(archive["entries"]):
-                    snapshot = entry.get("snapshot") if isinstance(entry, dict) else None
-                    if isinstance(snapshot, dict) and "workspace_version" in snapshot:
-                        changed |= self._replace_legacy_candidate_field(
-                            snapshot,
-                            label_to_candidate_id,
-                            location=f"archive.json entry {index}",
-                            issues=issues,
-                        )
-            elif archive is not None:
-                issues.append(
-                    WorkspaceMigrationIssue(
-                        label="archive.json",
-                        code="source_ambiguous",
-                        message="archive.json does not contain an entries list",
-                    )
-                )
-            if changed:
-                updates.append((archive_path, archive))
-
-        graveyard_path = self._root / "graveyard.json"
-        if graveyard_path.exists():
-            graveyard = self._read_migration_json(graveyard_path, issues)
-            changed = False
-            if isinstance(graveyard, list):
-                for index, entry in enumerate(graveyard):
-                    if isinstance(entry, dict) and "workspace_version" in entry:
-                        changed |= self._replace_legacy_candidate_field(
-                            entry,
-                            label_to_candidate_id,
-                            location=f"graveyard.json entry {index}",
-                            issues=issues,
-                        )
-            elif graveyard is not None:
-                issues.append(
-                    WorkspaceMigrationIssue(
-                        label="graveyard.json",
-                        code="source_ambiguous",
-                        message="graveyard.json is not a list",
-                    )
-                )
-            if changed:
-                updates.append((graveyard_path, graveyard))
-
-        return updates, issues
-
-    @staticmethod
-    def _read_migration_json(path: Path, issues: list[WorkspaceMigrationIssue]) -> object | None:
-        try:
-            return cast(object, json.loads(path.read_text(encoding="utf-8")))
-        except (OSError, ValueError) as exc:
-            issues.append(
-                WorkspaceMigrationIssue(
-                    label=path.name,
-                    code="source_ambiguous",
-                    message=f"cannot read {path.name}: {exc}",
-                )
-            )
-            return None
-
-    @staticmethod
-    def _replace_legacy_candidate_field(
-        record: dict[str, object],
-        label_to_candidate_id: dict[str, str],
-        *,
-        location: str,
-        issues: list[WorkspaceMigrationIssue],
-    ) -> bool:
-        legacy_label = record.get("workspace_version")
-        if not isinstance(legacy_label, str) or not legacy_label:
-            issues.append(
-                WorkspaceMigrationIssue(
-                    label=location,
-                    code="source_ambiguous",
-                    message=f"{location} has an invalid workspace_version",
-                )
-            )
-            return False
-        candidate_id = label_to_candidate_id.get(legacy_label)
-        if candidate_id is None:
-            issues.append(
-                WorkspaceMigrationIssue(
-                    label=legacy_label,
-                    code="source_ambiguous",
-                    message=f"{location} references unplanned legacy label {legacy_label!r}",
-                )
-            )
-            return False
-        current = record.get("candidate_id")
-        if current is not None and current != candidate_id:
-            issues.append(
-                WorkspaceMigrationIssue(
-                    label=legacy_label,
-                    code="candidate_conflict",
-                    message=f"{location} contains conflicting candidate identity",
-                )
-            )
-            return False
-        record.pop("workspace_version")
-        record["candidate_id"] = candidate_id
-        return True
-
-    def _persist_current_manifest_schema(self) -> None:
-        manifest_path = self._root / "manifest.yaml"
-        raw = yaml.safe_load(manifest_path.read_text(encoding="utf-8"))
-        if "version" not in raw:
-            return
-        raw.pop("version")
-        raw["schema_version"] = self._manifest.schema_version
-        manifest_path.write_text(yaml.safe_dump(raw, sort_keys=False), encoding="utf-8")
 
     def _candidate_at_revision(self, revision: str) -> WorkspaceCandidateVersion | None:
         payload = self._try_git_output("notes", f"--ref={_CANDIDATE_NOTES_REF}", "show", revision)
@@ -611,13 +351,6 @@ class Workspace:
 
     def _label_revision(self, label: str) -> str | None:
         return self._try_git_output("rev-parse", "--verify", f"{label}^{{commit}}")
-
-    def _legacy_labels(self) -> tuple[str, ...]:
-        raw = self._try_git_output("tag", "-l", "evo-*")
-        if not raw:
-            return ()
-        registered_labels = {candidate.label for candidate in self._registered_candidates() if candidate.label}
-        return tuple(label for label in raw.splitlines() if label not in registered_labels)
 
     def _registered_candidates(self) -> tuple[WorkspaceCandidateVersion, ...]:
         notes = self._try_git_output("notes", f"--ref={_CANDIDATE_NOTES_REF}", "list")

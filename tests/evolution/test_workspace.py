@@ -1,18 +1,16 @@
 # ABOUTME: Tests for the evolution Workspace class.
 # ABOUTME: Covers load validation, prompt/skill I/O, snapshots, and git versioning.
 
-import json
 import subprocess
 from pathlib import Path
 
 import pytest
 import yaml
+from pydantic import ValidationError
 
 from aec_bench.contracts.evolution import (
     SkillEntry,
     WorkspaceCandidateVersion,
-    WorkspaceMigrationCandidate,
-    WorkspaceMigrationPlan,
     WorkspaceSnapshot,
 )
 from aec_bench.evolution.workspace import Workspace, WorkspaceError
@@ -76,6 +74,7 @@ class TestWorkspaceLoad:
         root = tmp_path / "ws"
         root.mkdir()
         manifest = {
+            "schema_version": 1,
             "name": "test-workspace",
             "agent_adapter": "tool_loop",
             "evolvable_layers": ["prompts"],
@@ -85,7 +84,7 @@ class TestWorkspaceLoad:
         with pytest.raises(WorkspaceError, match="system.md"):
             Workspace(root)
 
-    def test_legacy_manifest_has_explicit_reader(self, tmp_path: Path) -> None:
+    def test_non_current_manifest_version_is_rejected(self, tmp_path: Path) -> None:
         root = _scaffold_workspace(tmp_path / "ws")
         manifest_path = root / "manifest.yaml"
         manifest = yaml.safe_load(manifest_path.read_text())
@@ -93,17 +92,7 @@ class TestWorkspaceLoad:
         manifest["version"] = "0.1.0"
         manifest_path.write_text(yaml.safe_dump(manifest))
 
-        assert Workspace(root).manifest.schema_version == 1
-
-    def test_unknown_legacy_manifest_version_is_rejected(self, tmp_path: Path) -> None:
-        root = _scaffold_workspace(tmp_path / "ws")
-        manifest_path = root / "manifest.yaml"
-        manifest = yaml.safe_load(manifest_path.read_text())
-        manifest.pop("schema_version")
-        manifest["version"] = "9.0.0"
-        manifest_path.write_text(yaml.safe_dump(manifest))
-
-        with pytest.raises(WorkspaceError, match="unsupported legacy workspace manifest version"):
+        with pytest.raises(ValidationError, match="schema_version"):
             Workspace(root)
 
 
@@ -346,131 +335,3 @@ class TestWorkspaceVersioning:
 
         assert second.parent_candidate_id == "baseline"
         assert _git(root, "rev-parse", f"{second.source_revision}^") == first.source_revision
-
-    def test_legacy_migration_requires_expected_source(self, tmp_path: Path) -> None:
-        root = _scaffold_workspace(tmp_path / "ws")
-        _git(root, "init")
-        _git(root, "config", "user.email", "test@example.com")
-        _git(root, "config", "user.name", "test")
-        _git(root, "add", "-A")
-        _git(root, "commit", "-m", "legacy baseline")
-        _git(root, "tag", "evo-0")
-
-        report = Workspace(root).migrate_legacy_versions(
-            WorkspaceMigrationPlan(candidates=(WorkspaceMigrationCandidate(candidate_id="baseline", label="evo-0"),))
-        )
-
-        assert report.complete is False
-        assert report.issues[0].code == "source_ambiguous"
-
-    def test_legacy_migration_reports_moved_label(self, tmp_path: Path) -> None:
-        root = _scaffold_workspace(tmp_path / "ws")
-        _git(root, "init")
-        _git(root, "config", "user.email", "test@example.com")
-        _git(root, "config", "user.name", "test")
-        _git(root, "add", "-A")
-        _git(root, "commit", "-m", "legacy baseline")
-        _git(root, "tag", "evo-0")
-
-        report = Workspace(root).migrate_legacy_versions(
-            WorkspaceMigrationPlan(
-                candidates=(
-                    WorkspaceMigrationCandidate(
-                        candidate_id="baseline",
-                        label="evo-0",
-                        expected_source_revision="f" * 40,
-                    ),
-                )
-            )
-        )
-
-        assert report.complete is False
-        assert report.issues[0].code == "label_moved"
-
-    def test_legacy_migration_preserves_explicit_lineage(self, tmp_path: Path) -> None:
-        root = _scaffold_workspace(tmp_path / "ws")
-        _git(root, "init")
-        _git(root, "config", "user.email", "test@example.com")
-        _git(root, "config", "user.name", "test")
-        _git(root, "add", "-A")
-        _git(root, "commit", "-m", "legacy baseline")
-        baseline_sha = _git(root, "rev-parse", "HEAD")
-        _git(root, "tag", "evo-0")
-        (root / "prompts" / "system.md").write_text("Legacy candidate")
-        _git(root, "add", "-A")
-        _git(root, "commit", "-m", "cycle 1: score 0.750")
-        candidate_sha = _git(root, "rev-parse", "HEAD")
-        _git(root, "tag", "evo-1")
-        (root / "archive.json").write_text(
-            json.dumps({"n_centroids": 1, "entries": [{"snapshot": {"workspace_version": "evo-1"}}]})
-        )
-        (root / "graveyard.json").write_text(json.dumps([{"workspace_version": "evo-1"}]))
-
-        report = Workspace(root).migrate_legacy_versions(
-            WorkspaceMigrationPlan(
-                candidates=(
-                    WorkspaceMigrationCandidate(
-                        candidate_id="baseline",
-                        label="evo-0",
-                        expected_source_revision=baseline_sha,
-                    ),
-                    WorkspaceMigrationCandidate(
-                        candidate_id="legacy:1",
-                        label="evo-1",
-                        parent_candidate_id="baseline",
-                        expected_source_revision=candidate_sha,
-                    ),
-                )
-            )
-        )
-
-        assert report.complete is True
-        migrated = Workspace(root).require_candidate("legacy:1")
-        assert migrated.parent_candidate_id == "baseline"
-        assert migrated.source_revision == candidate_sha
-        assert migrated.score == 0.75
-        archive = json.loads((root / "archive.json").read_text())
-        graveyard = json.loads((root / "graveyard.json").read_text())
-        assert archive["entries"][0]["snapshot"] == {"candidate_id": "legacy:1"}
-        assert graveyard[0] == {"candidate_id": "legacy:1"}
-
-    def test_migration_lists_candidate_outside_head_ancestry(self, tmp_path: Path) -> None:
-        root = _scaffold_workspace(tmp_path / "ws")
-        _git(root, "init")
-        _git(root, "config", "user.email", "test@example.com")
-        _git(root, "config", "user.name", "test")
-        _git(root, "add", "-A")
-        _git(root, "commit", "-m", "legacy baseline")
-        baseline_sha = _git(root, "rev-parse", "HEAD")
-        _git(root, "tag", "evo-0")
-        _git(root, "checkout", "-b", "candidate-side")
-        (root / "prompts" / "system.md").write_text("Side candidate")
-        _git(root, "add", "-A")
-        _git(root, "commit", "-m", "side candidate")
-        side_sha = _git(root, "rev-parse", "HEAD")
-        _git(root, "tag", "evo-side")
-        _git(root, "checkout", "--detach", baseline_sha)
-
-        report = Workspace(root).migrate_legacy_versions(
-            WorkspaceMigrationPlan(
-                candidates=(
-                    WorkspaceMigrationCandidate(
-                        candidate_id="baseline",
-                        label="evo-0",
-                        expected_source_revision=baseline_sha,
-                    ),
-                    WorkspaceMigrationCandidate(
-                        candidate_id="side:1",
-                        label="evo-side",
-                        parent_candidate_id="baseline",
-                        expected_source_revision=side_sha,
-                    ),
-                )
-            )
-        )
-
-        assert report.complete is True
-        assert {candidate.candidate_id for candidate in Workspace(root).list_candidates()} == {
-            "baseline",
-            "side:1",
-        }

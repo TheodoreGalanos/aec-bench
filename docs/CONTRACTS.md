@@ -56,11 +56,11 @@ verification remains because it is the current artifact integrity contract.
 | Evidence verification | Ledger | An explicit verification pass validates current structured records and referenced artifact bytes without changing portable evidence | Current strict records and references; failures are reported as partial command results | [`verify_evidence`](../src/aec_bench/ledger/verification.py) | `aec-bench evidence verify` report |
 | Run review CLI | Experiment orchestration and review | Config planning persists a complete requested specification and ready plan; review commands read persisted contracts and explicit evidence | Documented CLI surface; structured output is authoritative and human output is a compact view | [`run_review.py`](../src/aec_bench/cli/commands/run_review.py) and [`run.py`](../src/aec_bench/cli/commands/run.py) | `run plan`, `run inspect`, `run diff`, and `run reconcile` |
 | Learning Study design and evidence | Experimentation | An authored protocol composes exact task members and family relations, then compiles to existing trials; committed state and explicit comparison-validity evidence stay outside `TrialRecord` | Internal Release A persisted contracts | [`LearningStudyProtocolSpec`, `LearningStudySpec`](../src/aec_bench/contracts/learning_study.py), [`LearningFamilySpec`](../src/aec_bench/contracts/learning_family.py), [`learning_study_evidence.py`](../src/aec_bench/contracts/learning_study_evidence.py), [`learning_study_assessment.py`](../src/aec_bench/contracts/learning_study_assessment.py), and the [Gate A decision](adr/learning-studies-gate-a.md) | Maintained or caller-selected protocol directory, compiled plan, append-only receipts and sequenced events, ordinary trial ledger, and pair-level paired-difference assessment |
-| Evolution workspace candidate lineage | Experimentation and feedback | Mutable workspace files become exact Git source and explicit candidate lineage | Workspace manifest schema 1; legacy labels require an explicit migration plan | [`WorkspaceCandidateVersion`, `WorkspaceManifest`, and `WorkspaceMigrationPlan`](../src/aec_bench/contracts/evolution.py) plus [`Workspace`](../src/aec_bench/evolution/workspace.py) | Persisted workspace Git metadata and manifest |
+| Evolution workspace candidate lineage | Experimentation and feedback | Mutable workspace files become exact Git source and explicit candidate lineage | Current workspace manifest schema 1; candidate lineage is explicit | [`WorkspaceCandidateVersion` and `WorkspaceManifest`](../src/aec_bench/contracts/evolution.py) plus [`Workspace`](../src/aec_bench/evolution/workspace.py) | Persisted workspace Git metadata and manifest |
 | Evolution functional search and swarm coordination | Evolution application and swarm manager | Exact candidate material is paired with its own evaluation evidence before policy or shared effects use it | Internal pre-1.0 values; no new public schema promise | [`EvaluatedCandidate`, `CandidateEvaluationBatch`, `CandidateProposal`, `SwarmAssignment`, `SwarmAgentResult`, and `SwarmState`](../src/aec_bench/evolution/core.py), [`evaluation.py`](../src/aec_bench/evolution/evaluation.py), and [`swarm/core.py`](../src/aec_bench/evolution/swarm/core.py) | In-process functional values, AVO checkpoints, and swarm state outputs |
 | Run plan and published run package | Harness and ledger | One internal execution plan and its trial records become one portable retained package | Internal `RunPlan`; published package schema 1 | [`RunPlan` and `PublishedRunPackage`](../src/aec_bench/contracts/run_bundle.py), [`TaskSnapshotRef`](../src/aec_bench/contracts/task_snapshot.py), and [`run_package.py`](../src/aec_bench/ledger/run_package.py) | Internal plan; persisted and exportable package |
 | Trial and episode record | Harness and ledger | Execution, verifier, and authority evidence becomes reportable benchmark evidence | Protected schema 2; no historical reader | [`RunManifest` and `TrialRecord`](../src/aec_bench/contracts/trial_record.py) plus the owning episode or world protocol | Persisted and exportable |
-| Evaluation regime | Evaluation | Observable evaluation policy becomes one independently published compatibility identity | Envelope schema 1; legacy component plans migrate only when all inputs resolve | [`EvaluationRegimeEnvelope`](../src/aec_bench/contracts/evaluation_plane.py), `EvaluationRegimeRef`, and [`regime.py`](../src/aec_bench/evaluation/regime.py) | Persisted and independently publishable |
+| Evaluation regime | Evaluation | Observable evaluation policy becomes one independently published compatibility identity | Envelope schema 1; strict current format | [`EvaluationRegimeEnvelope`](../src/aec_bench/contracts/evaluation_plane.py), `EvaluationRegimeRef`, and [`regime.py`](../src/aec_bench/evaluation/regime.py) | Persisted and independently publishable |
 | Evaluation result | Evaluation | Verifier output and review evidence become reward, validity, and diagnostics | Protected as part of a persisted trial or published result | [`EvaluationResult`](../src/aec_bench/contracts/evaluation_result.py) | Persisted and externally reported |
 | Lifecycle verification | Lifecycle verification and evaluation | Canonical accepted lifecycle evidence becomes gates and optional semantic diagnostics | Internal until carried by a protected trial or published result | [`LifecycleVerificationResult`](../src/aec_bench/contracts/lifecycle_evaluation.py) | Internal result; persisted when referenced by trial evidence |
 | Dataset manifest and identity | Dataset generation and storage | A semantic task selection resolves to one exact Git source or detached bundle | Protected schema 2 and immutable references | [`DatasetManifest`, `RepositoryDatasetRef`, and `BundleDatasetRef`](../src/aec_bench/contracts/dataset.py) | Persisted and publishable |
@@ -588,10 +588,8 @@ Worlds continue to own state transitions and domain evaluation evidence. An
 evaluation regime can define eligibility, scoring, aggregation, and acceptance
 for that evidence. It does not copy World state or transition authority.
 
-The legacy migration reader resolves and verifies every component before it
-publishes a regime. A missing or mismatched component leaves the source plan
-read-only. `aec-bench evaluation regime show` and `diff` resolve published
-artifacts and report semantic policy paths.
+`aec-bench evaluation regime show` and `diff` resolve published artifacts and
+report semantic policy paths.
 
 ## Evaluation results
 
@@ -643,10 +641,8 @@ task loader. A world entry points to its `world.toml` task package. Dataset
 construction writes task kind from the concrete task family; arbitrary task
 metadata cannot change it.
 
-The named schema-1 migration reader reports `fully_verified`,
-`partially_verified`, or `invalid`. Only a fully verified manifest, including
-its historical top-level and declared task hashes, can become a schema-2
-publication.
+Only a current schema-2 manifest with valid task entries can become a public
+dataset publication. Invalid or older manifests are rejected at the reader.
 
 ## Generated-task replay
 
@@ -682,18 +678,10 @@ Candidate metadata is stored in the `aec-bench-evolution` Git notes reference.
 The metadata does not store a generated historical time. Reports call Git for
 the commit time when they need to display it.
 
-`WorkspaceManifest.schema_version` is the only workspace compatibility
-version. Current writers emit integer schema `1`. The reader explicitly maps
-the old release-style manifest value `0.1.0` to schema `1` and rejects other
-legacy values.
-
-A legacy tag is not enough to prove a candidate. `WorkspaceMigrationPlan`
-must give each candidate ID, label, confirmed full source revision, and parent
-candidate ID. `aec-bench evolve migrate-workspace` reports a missing label, a
-moved label, an unknown parent, duplicate source assignment, or a missing
-confirmed revision. It also replaces legacy label fields in `archive.json` and
-`graveyard.json`. It registers no candidate and writes no sidecar when the plan
-is ambiguous.
+`WorkspaceManifest.schema_version` is the current workspace schema and writers
+emit integer schema `1`. The reader rejects missing or unsupported schema
+values. Candidate lineage uses explicit candidate IDs, full Git source
+revisions, parent IDs, and optional immutable labels.
 
 ## Evolution candidate and evidence contracts
 

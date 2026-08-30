@@ -479,26 +479,26 @@ class TestListRuns:
         assert runs[1]["run_id"] == "20260404T032800"
         assert runs[1]["cycles"] == 2
 
-    def test_migrated_candidate_ids_form_a_run(self, tmp_path: Path) -> None:
+    def test_candidate_ids_form_a_run(self, tmp_path: Path) -> None:
         root = tmp_path / "ws"
         _init_workspace(root)
         workspace = Workspace(root)
         workspace.commit_candidate(
-            candidate_id="legacy:1",
+            candidate_id="run:1",
             parent_candidate_id="baseline",
             summary="cycle 1: score 0.500",
             score=0.5,
         )
         workspace.commit_candidate(
-            candidate_id="legacy:2",
-            parent_candidate_id="legacy:1",
+            candidate_id="run:2",
+            parent_candidate_id="run:1",
             summary="cycle 2: score 0.750",
             score=0.75,
         )
 
         runs = list_runs(root)
         assert len(runs) == 1
-        assert runs[0]["run_id"] == "legacy"
+        assert runs[0]["run_id"] == "run"
         assert runs[0]["cycles"] == 2
 
     def test_empty_workspace_returns_empty(self, tmp_path: Path) -> None:
