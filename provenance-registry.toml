@@ -1782,6 +1782,26 @@ compatibility_behavior = "accept schema 1 and reject every other value"
 compatibility_kind = "external_schema"
 
 [[field]]
+symbol = "aec_bench.contracts.run_plan.RunPlan.created_at"
+surface = "pydantic_model"
+wire_name = "created_at"
+category = "event_time"
+domain_owner = "experiment_orchestration"
+authority = "run_plan_planner"
+authoritative = true
+exposure = "application_memory"
+status = "current"
+payload_contract = "creation time for one UUID-backed requested run plan"
+canonicalization = "timezone-aware datetime serialized in Pydantic JSON mode"
+consumer = "plan review and later run persistence"
+validation_behavior = "RunPlan rejects naive or timezone-less creation times"
+mismatch_behavior = "reject_run_plan"
+retention = "run_plan_lifetime"
+rationale = "Plan review requires an unambiguous creation event time."
+duplication = "unique"
+event = "run plan created"
+
+[[field]]
 symbol = "aec_bench.contracts.task_snapshot.RepositoryTaskSnapshotRef.source_revision"
 surface = "pydantic_model"
 wire_name = "source_revision"
