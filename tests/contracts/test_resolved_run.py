@@ -198,7 +198,7 @@ def test_resolve_run_spec_rejects_literal_secret_values() -> None:
 def test_resolved_run_spec_rejects_unresolved_task_and_secret_values() -> None:
     manifest = _manifest()
     condition = _condition(manifest.agents[0])
-    with pytest.raises(ValidationError, match="task releases must include task identity"):
+    with pytest.raises(ValidationError, match="task_identity"):
         ResolvedRunSpec(
             experiment_identity=_identity(EntityKind.EXPERIMENT, "pump-study"),
             run_identity=_identity(EntityKind.RUN, "pump-study-run"),

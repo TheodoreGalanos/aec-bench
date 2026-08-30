@@ -207,7 +207,7 @@ def test_plan_run_accepts_supported_typed_extensions() -> None:
     assert RunPlan.model_validate_json(plan.model_dump_json()) == plan
 
 
-def test_schema_one_ready_plan_remains_readable_without_family_releases() -> None:
+def test_schema_one_ready_plan_is_rejected_after_current_format_cutover() -> None:
     spec = _resolved_run(repetitions=1)
     plan = plan_run(
         spec,
@@ -220,9 +220,8 @@ def test_schema_one_ready_plan_remains_readable_without_family_releases() -> Non
     payload["schema_version"] = 1
     for trial in payload["trials"]:
         trial.pop("family_release", None)
-    historical = RunPlan.model_validate(payload)
-    assert historical.schema_version == 1
-    assert all(trial.family_release is None for trial in historical.trials)
+    with pytest.raises(ValidationError):
+        RunPlan.model_validate(payload)
 
 
 def test_schema_two_ready_plan_requires_matching_family_releases() -> None:

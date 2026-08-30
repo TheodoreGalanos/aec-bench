@@ -24,13 +24,23 @@ A Pydantic model is not protected merely because it exists. Protection comes
 from documented use outside its owner or from persisted data that must remain
 readable.
 
+## PRD2 current-format cutover
+
+The PRD2 run-condition, task-snapshot, plan, and planned-trial-binding readers
+accept only the current UUID-backed forms. This repository has no retained
+external or published PRD2 legacy run data, so it does not provide migration
+maps, compatibility indexes, default-filling readers, or migration receipts
+for disposable repository and local records. The historical-record acceptance
+criterion is not applicable under this product decision. Existing checksum
+verification remains because it is the current artifact integrity contract.
+
 ## Contract families
 
 | Family | Owner | Trust boundary | Compatibility | Authority | Surface |
 | --- | --- | --- | --- | --- | --- |
 | Task specification | Task authoring and loading | Repository or imported task material becomes runnable input | Protected where task packages are published; otherwise internal | [`TaskDefinition`](../src/aec_bench/contracts/task_definition.py) and task loaders | Persisted task package |
 | Task instance and revision identity | Generation and harness | Selected task bytes become one exact execution identity | Protected when recorded in a dataset or trial | [`ResolvedTaskInstance`](../src/aec_bench/tasks/instance.py), `TaskReference`, and `DatasetTaskEntry` | Internal resolution; persisted references |
-| Task release reference | Task generation and harness | One exact Git or detached-artifact task source retains its task UUID, readable key, and version | New snapshots carry the identity; legacy key-only references remain readable during migration | [`TaskSnapshotRef`](../src/aec_bench/contracts/task_snapshot.py) and [`build_task_snapshot`](../src/aec_bench/harness/compilation/task_snapshot.py) | Internal snapshot reference |
+| Task release reference | Task generation and harness | One exact Git or detached-artifact task source retains its task UUID, readable key, and version | Current format requires the identity; no PRD2 legacy reader is retained | [`TaskSnapshotRef`](../src/aec_bench/contracts/task_snapshot.py) and [`build_task_snapshot`](../src/aec_bench/harness/compilation/task_snapshot.py) | Internal snapshot reference |
 | Task genome review | Tasks and feedback | A derived genome and its source spans become review evidence for one exact task snapshot | Internal; independently retained reviews use current-format artifacts | [`TaskGenomeReview`](../src/aec_bench/contracts/task_genome.py), `TaskSnapshotRef`, and `ArtifactRef` | Regenerable review; optional persisted artifact |
 | Generated-task handoff and replay | Task generation | Generated runnable paths pass in process to normal task loading; template sources and sampling inputs remain optional reproducibility data | `GeneratedTaskSet` is an in-process value; the schema 1 sidecar is not a runtime task contract | [`GeneratedTaskSet`](../src/aec_bench/generation/contracts.py), [`GenerationManifest`](../src/aec_bench/generation/replay.py), and the `generate replay` command | Internal handoff and optional persisted sidecar |
 | Finite lifecycle execution | Lifecycle task and host | Stage-specific task evidence and actor results become one bounded host-controlled progression | Internal package and runtime contract; persisted accepted evidence is current-format only | [`EvidenceLifecycleSpec`](../src/aec_bench/contracts/evidence_lifecycle.py) and the [staged evidence protocol](protocols/staged-evidence-and-publication.md) | Packaged task, runtime state, and persisted accepted evidence |
@@ -65,9 +75,9 @@ readable.
 ## Task release and agent condition
 
 `TaskSnapshotRef` retains the task's `EntityIdentity` alongside its readable
-`task_id` and exact Git or detached-artifact source coordinate. New snapshots
-fail when the source `TaskDefinition` has no identity. Key-only snapshot values
-remain readable during the migration to resolved run specifications.
+`task_id` and exact Git or detached-artifact source coordinate. Snapshots fail
+when the source `TaskDefinition` has no identity. Current readers reject
+key-only snapshot values.
 
 `AgentCondition` is the versioned requested adapter/model condition. It uses
 `EntityIdentity` for the UUID, readable key, and version, and retains explicit
@@ -101,8 +111,8 @@ condition, repetition, execution family, evaluation profile, and expected
 authority identities, including its plan ordinal. Adapter and resolved-model
 values must match the planned agent condition. The TrialRecord attempt count
 remains `1`; repetition is the planned repetition in the binding. Legacy
-`run_experiment` remains available to current callers
-until the later execution migration.
+`run_experiment` remains available to current callers until the later
+execution migration.
 
 Canonical Harbor dispatch validates the persisted ready plan and writes all
 one-trial job configurations and transport sidecars before the first Harbor
@@ -394,7 +404,8 @@ optional variant identities. The persisted world and lifecycle entrypoints
 validate these releases before `start_run`, pass the planned trial binding to
 the family runner, and reject any returned record whose UUID, release, agent,
 compute, repetition, evaluation, authority, or family differs from the plan.
-Schema-1 plans remain readable as historical plans without family releases.
+Current readers reject schema-1 plans. New plans use schema 2 and require the
+family release where the execution family needs one.
 
 `EvidenceRunStore` persists the resolved specification before planning. It uses
 one safe run directory named from the readable run key and full run UUID,

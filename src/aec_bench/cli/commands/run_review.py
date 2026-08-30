@@ -124,7 +124,7 @@ def _condition_view(stored: StoredEvidenceRun) -> dict[str, Any]:
         "run_name": spec.run_name,
         "tasks": {
             str(release.task_id): {
-                "version": release.task_identity.version if release.task_identity is not None else None,
+                "version": release.task_identity.version,
                 "snapshot": release.model_dump(mode="json", exclude={"task_identity": {"id", "aliases"}}),
             }
             for release in spec.task_releases

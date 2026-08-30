@@ -36,7 +36,7 @@ class RepositoryTaskSnapshotRef(FrozenStrictModel):
 
     kind: Literal["repository"] = "repository"
     task_id: NonEmptyStr
-    task_identity: EntityIdentity | None = Field(default=None, exclude_if=lambda value: value is None)
+    task_identity: EntityIdentity
     source_revision: NonEmptyStr
     task_path: NonEmptyStr
 
@@ -52,7 +52,7 @@ class RepositoryTaskSnapshotRef(FrozenStrictModel):
 
     @model_validator(mode="after")
     def validate_task_identity(self) -> RepositoryTaskSnapshotRef:
-        if self.task_identity is not None and str(self.task_identity.key) != self.task_id:
+        if str(self.task_identity.key) != self.task_id:
             raise ValueError("task identity key must match task_id")
         return self
 
@@ -68,12 +68,12 @@ class ArtifactTaskSnapshotRef(FrozenStrictModel):
 
     kind: Literal["artifact"] = "artifact"
     task_id: NonEmptyStr
-    task_identity: EntityIdentity | None = Field(default=None, exclude_if=lambda value: value is None)
+    task_identity: EntityIdentity
     artifact: ArtifactRef
 
     @model_validator(mode="after")
     def validate_task_identity(self) -> ArtifactTaskSnapshotRef:
-        if self.task_identity is not None and str(self.task_identity.key) != self.task_id:
+        if str(self.task_identity.key) != self.task_id:
             raise ValueError("task identity key must match task_id")
         return self
 
@@ -97,7 +97,7 @@ def task_snapshot_id(reference: TaskSnapshotRef) -> str:
 
 
 def task_snapshot_commitment(reference: TaskSnapshotRef) -> str:
-    """Commit to one exact task relationship while preserving legacy omissions."""
+    """Commit to one exact current task relationship."""
 
     return canonical_json_sha256(reference.model_dump(mode="json", exclude_none=True))
 

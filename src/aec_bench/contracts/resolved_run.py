@@ -99,14 +99,10 @@ class ResolvedRunSpec(FrozenStrictModel):
             raise ValueError("resolved run experiment and run identities must be distinct")
         if not self.task_releases:
             raise ValueError("resolved run requires at least one task release")
-        if any(reference.task_identity is None for reference in self.task_releases):
-            raise ValueError("resolved run task releases must include task identity")
         task_keys = [str(reference.task_id) for reference in self.task_releases]
         if len(task_keys) != len(set(task_keys)):
             raise ValueError("resolved run task releases must be unique")
-        task_ids = [
-            reference.task_identity.id for reference in self.task_releases if reference.task_identity is not None
-        ]
+        task_ids = [reference.task_identity.id for reference in self.task_releases]
         if len(task_ids) != len(set(task_ids)):
             raise ValueError("resolved run task identities must be unique")
         if not self.agent_conditions:
@@ -145,9 +141,6 @@ def resolve_run_spec(
         raise ValueError("experiment identity key must match the manifest experiment_id")
     if not task_releases:
         raise ValueError("resolved run requires at least one task release")
-    if any(reference.task_identity is None for reference in task_releases):
-        raise ValueError("resolved run task releases must include task identity")
-
     conditions = tuple(agent_conditions)
     if len(conditions) != len(manifest.agents):
         raise ValueError("resolved run agent conditions must match manifest agents")

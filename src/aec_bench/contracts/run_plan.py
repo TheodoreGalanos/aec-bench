@@ -119,8 +119,6 @@ class PlannedTrial(FrozenStrictModel):
 
     @model_validator(mode="after")
     def validate_references(self) -> Self:
-        if self.task_release.task_identity is None:
-            raise ValueError("planned trial task release must include task identity")
         if self.task_metadata.identity != self.task_release.task_identity:
             raise ValueError("planned trial task metadata must match the task release")
         if self.task_metadata.lifecycle not in {Lifecycle.ACTIVE, Lifecycle.DEPRECATED}:
@@ -161,7 +159,7 @@ class RunPlanSummary(FrozenStrictModel):
 class RunPlan(FrozenStrictModel):
     """One UUID-backed, ordered plan for a resolved run."""
 
-    schema_version: Literal[1, 2] = 1
+    schema_version: Literal[2] = 2
     plan_identity: EntityIdentity
     run_identity: EntityIdentity
     created_at: datetime
@@ -221,20 +219,16 @@ class RunPlan(FrozenStrictModel):
             raise ValueError("ready run plan trial keys must be unique")
         if any(trial.run_identity != self.run_identity for trial in self.trials):
             raise ValueError("ready run plan trials must reference the plan run identity")
-        if self.schema_version == 2:
-            for trial in self.trials:
-                if trial.execution_family == "artifact" and trial.family_release is not None:
-                    raise ValueError("ready artifact trial must not have a family release")
-                if trial.execution_family == "world" and not isinstance(
-                    trial.family_release,
-                    WorldExecutionRelease,
-                ):
-                    raise ValueError("ready world trial requires a world release")
-                if trial.execution_family == "lifecycle" and not isinstance(
-                    trial.family_release,
-                    LifecycleExecutionRelease,
-                ):
-                    raise ValueError("ready lifecycle trial requires a lifecycle release")
+        for trial in self.trials:
+            if trial.execution_family == "artifact" and trial.family_release is not None:
+                raise ValueError("ready artifact trial must not have a family release")
+            if trial.execution_family == "world" and not isinstance(trial.family_release, WorldExecutionRelease):
+                raise ValueError("ready world trial requires a world release")
+            if trial.execution_family == "lifecycle" and not isinstance(
+                trial.family_release,
+                LifecycleExecutionRelease,
+            ):
+                raise ValueError("ready lifecycle trial requires a lifecycle release")
         task_ids = {trial.task_release.task_id for trial in self.trials}
         agent_ids = {trial.agent_condition.identity.id for trial in self.trials}
         if self.summary.selected_task_count != len(task_ids):
@@ -317,7 +311,7 @@ def plan_run(
         raise ValueError("run plan created_at must include a timezone")
     if created_at < spec.created_at:
         raise ValueError("run plan created_at must not precede the resolved run specification")
-    release_ids = {release.task_identity.id for release in spec.task_releases if release.task_identity is not None}
+    release_ids = {release.task_identity.id for release in spec.task_releases}
     if set(task_profiles) != release_ids:
         raise ValueError("task planning profiles must exactly match the resolved task releases")
     make_trial_identity = trial_identity_factory or _new_trial_identity
@@ -325,7 +319,6 @@ def plan_run(
     trials: list[PlannedTrial] = []
     ordinal = 1
     for task_release in spec.task_releases:
-        assert task_release.task_identity is not None
         profile = task_profiles[task_release.task_identity.id]
         if profile.metadata.identity != task_release.task_identity:
             raise ValueError("task planning profile identity must match the task release")

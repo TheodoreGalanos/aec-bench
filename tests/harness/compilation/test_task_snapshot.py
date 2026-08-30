@@ -10,7 +10,6 @@ from typing import Any
 
 import pytest
 
-from aec_bench.contracts.harness_kernel import canonical_json_sha256
 from aec_bench.contracts.identity import EntityKind, new_entity_id
 from aec_bench.contracts.task_review_snapshot import ReviewSnapshot
 from aec_bench.contracts.task_snapshot import ArtifactTaskSnapshotRef
@@ -63,17 +62,15 @@ def test_task_snapshot_requires_task_identity(tmp_path: Path) -> None:
         build_task_snapshot(task=task, tasks_root=tasks_root)
 
 
-def test_legacy_task_snapshot_keeps_its_original_commitment(tmp_path: Path) -> None:
+def test_current_task_snapshot_reader_rejects_missing_identity(tmp_path: Path) -> None:
     tasks_root = tmp_path / "tasks"
     task_dir = _write_task(tasks_root, "civil/calculation/example")
     current = build_task_snapshot(task=load_task_definition(task_dir, tasks_root), tasks_root=tasks_root)
     payload = current.model_dump(mode="json")
     payload.pop("task_identity")
 
-    legacy = ArtifactTaskSnapshotRef.model_validate(payload)
-
-    assert legacy.model_dump(mode="json") == payload
-    assert legacy.commitment_sha256 == canonical_json_sha256(payload)
+    with pytest.raises(ValueError, match="task_identity"):
+        ArtifactTaskSnapshotRef.model_validate(payload)
 
 
 def test_review_data_is_separate_from_task_identity(tmp_path: Path) -> None:
