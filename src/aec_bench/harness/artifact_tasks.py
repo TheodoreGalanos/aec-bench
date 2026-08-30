@@ -11,6 +11,7 @@ import tempfile
 import time
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, replace
+from datetime import datetime
 from pathlib import Path
 from typing import Annotated, Any, Literal, Protocol
 
@@ -20,16 +21,23 @@ from aec_bench.adapters.base import Adapter, AdapterRequest, AdapterResult
 from aec_bench.contracts.agent_output import AgentOutputStatus
 from aec_bench.contracts.canonical_refs import CanonicalRefSet, parse_canonical_refs
 from aec_bench.contracts.evaluation_result import EvaluationResult, ValidityCheck
+from aec_bench.contracts.identity import EntityIdentity
+from aec_bench.contracts.resolved_run import ResolvedRunSpec
+from aec_bench.contracts.run_plan import BestOfAttemptRecipe
+from aec_bench.contracts.run_plan import PlannedTrial as CanonicalPlannedTrial
+from aec_bench.contracts.run_plan import SingleAttemptRecipe as CanonicalSingleAttemptRecipe
 from aec_bench.contracts.task_definition import ToolSpec
 from aec_bench.contracts.trial_extensions import ArtifactReference, VerifierExecutionReceipt
 from aec_bench.contracts.trial_record import (
     EvaluationStatus,
     ExecutionStatus,
+    PlannedTrialBinding,
     TrialRecord,
 )
 from aec_bench.contracts.validators import StrictModel
 from aec_bench.evaluation.normalisation import NormalisationResult, normalise_output
 from aec_bench.evaluation.verifier_outcome import map_verifier_execution
+from aec_bench.harness.compilation.task_snapshot import TaskSnapshotError, assert_task_snapshot_matches_directory
 from aec_bench.harness.local_runtime import (
     patch_workspace_paths,
     read_instruction,
@@ -43,6 +51,7 @@ from aec_bench.harness.verifier_execution import (
     execute_verifier,
     localise_staged_verifier_paths,
 )
+from aec_bench.ledger.evidence_run_store import EvidenceRunStore
 from aec_bench.ledger.writer import materialize_trial_record
 from aec_bench.tasks.instance import ResolvedTaskInstance
 from aec_bench.tasks.snapshot import build_task_snapshot_archive
@@ -632,6 +641,9 @@ def run_trial(
     verify: bool = True,
     keep_workspaces: bool = False,
     selected_workspace_export: Path | None = None,
+    planned_trial_binding: PlannedTrialBinding | None = None,
+    planned_run_spec: ResolvedRunSpec | None = None,
+    result_validator: Callable[[AdapterResult], None] | None = None,
 ) -> TrialRecord:
     """Run one tracked recipe, verify its selection, and return durable trial evidence."""
 
@@ -661,6 +673,8 @@ def run_trial(
             parent=parent,
             instruction=instruction,
         )
+        if result_validator is not None:
+            result_validator(attempt.result)
         attempts.append(attempt)
         return attempt
 
@@ -677,6 +691,8 @@ def run_trial(
                 attempts=attempts,
                 selection=selection,
                 started=started,
+                planned_trial_binding=planned_trial_binding,
+                planned_run_spec=planned_run_spec,
             )
         if all(selected is not item for item in attempts):
             raise ValueError("attempt recipe selected an untracked attempt")
@@ -714,6 +730,8 @@ def run_trial(
             selection_evidence=selection.evidence,
             verifier_receipt=verifier_receipt,
             evaluation_status=evaluation_status,
+            planned_trial_binding=planned_trial_binding,
+            planned_run_spec=planned_run_spec,
         )
     finally:
         if snapshot_dir is not None:
@@ -775,13 +793,13 @@ def run_experiment(
 
     records: list[TrialRecord] = []
     for trial in trials:
-        task = tasks_by_id.get(trial.task_id)
-        if task is None:
+        selected_task = tasks_by_id.get(trial.task_id)
+        if selected_task is None:
             raise ValueError(f"planned trial references an unresolved task: {trial.task_id}")
         records.append(
             run_trial(
                 runtime=runtime,
-                task=task,
+                task=selected_task,
                 trial=trial,
                 recipe=selected_recipe,
                 reviewer=reviewer,
@@ -790,6 +808,133 @@ def run_experiment(
             )
         )
     return records
+
+
+def run_persisted_artifact_plan(
+    *,
+    store: EvidenceRunStore,
+    run_identity: EntityIdentity,
+    runtime: LocalTaskRuntime,
+    tasks: Sequence[ResolvedTaskInstance],
+    started_at: datetime,
+    reviewer: ReviewerRunConfig | None = None,
+    verify: bool = True,
+    keep_workspaces: bool = False,
+) -> list[TrialRecord]:
+    """Execute the artifact subset of one persisted ready plan in ordinal order."""
+
+    stored = store.read_run(run_identity)
+    plan = stored.plan
+    if plan is None or stored.state.state != "ready":
+        raise ValueError("a persisted ready plan is required for local artifact execution")
+
+    tasks_by_id: dict[str, ResolvedTaskInstance] = {}
+    for task in tasks:
+        if task.task.task_id in tasks_by_id:
+            raise ValueError(f"resolved tasks must have unique task ids: {task.task.task_id}")
+        tasks_by_id[task.task.task_id] = task
+
+    artifact_trials = tuple(trial for trial in plan.trials if trial.execution_family == "artifact")
+    if not artifact_trials:
+        raise ValueError("persisted plan contains no artifact-family trials")
+    for trial in artifact_trials:
+        selected_task = tasks_by_id.get(trial.task_release.task_id)
+        if selected_task is None:
+            raise ValueError(f"planned artifact trial references an unresolved task: {trial.task_release.task_id}")
+        _validate_canonical_task_release(trial, selected_task)
+
+    store.start_run(run_identity, started_at=started_at)
+    records: list[TrialRecord] = []
+    for trial in artifact_trials:
+        task = tasks_by_id[trial.task_release.task_id]
+        _validate_canonical_task_release(trial, task)
+        legacy_trial = _legacy_trial_for_canonical(trial, stored.spec)
+        records.append(
+            run_trial(
+                runtime=runtime,
+                task=task,
+                trial=legacy_trial,
+                recipe=_legacy_recipe_for_canonical(trial),
+                reviewer=reviewer,
+                verify=verify,
+                keep_workspaces=keep_workspaces,
+                planned_trial_binding=_planned_trial_binding(trial, stored.spec),
+                planned_run_spec=stored.spec,
+                result_validator=_result_validator(trial),
+            )
+        )
+    return sorted(records, key=lambda record: _trial_ordinal(record, artifact_trials))
+
+
+def _validate_canonical_task_release(trial: CanonicalPlannedTrial, task: ResolvedTaskInstance) -> None:
+    reference = trial.task_release
+    if reference.task_identity is None or task.task.identity != reference.task_identity:
+        raise ValueError(f"task identity does not match planned release: {reference.task_id}")
+    try:
+        assert_task_snapshot_matches_directory(reference=reference, task_dir=task.instance_dir)
+    except TaskSnapshotError as error:
+        raise ValueError(f"task release does not match planned snapshot: {reference.task_id}") from error
+
+
+def _legacy_trial_for_canonical(trial: CanonicalPlannedTrial, spec: ResolvedRunSpec) -> PlannedTrial:
+    from aec_bench.contracts.experiment_manifest import AgentConfig
+
+    condition = trial.agent_condition
+    return PlannedTrial(
+        trial_id=str(trial.trial_identity.id),
+        experiment_id=str(spec.experiment_identity.id),
+        task_id=trial.task_release.task_id,
+        agent=AgentConfig(
+            name=str(condition.identity.key),
+            adapter=condition.adapter,
+            model=condition.model,
+            client=condition.client,
+            parameters=condition.parameters,
+            system_prompt=condition.system_prompt,
+        ),
+        compute=trial.compute,
+        repetition=trial.repetition,
+        extensions={str(extension.extension_kind): extension.value for extension in trial.extensions},
+    )
+
+
+def _legacy_recipe_for_canonical(trial: CanonicalPlannedTrial) -> AttemptRecipe:
+    if isinstance(trial.attempt_recipe, CanonicalSingleAttemptRecipe):
+        return single_attempt()
+    if isinstance(trial.attempt_recipe, BestOfAttemptRecipe):
+        return best_of(k=trial.attempt_recipe.candidates, selector=self_select())
+    raise TypeError(f"unsupported canonical attempt recipe: {type(trial.attempt_recipe).__name__}")
+
+
+def _planned_trial_binding(trial: CanonicalPlannedTrial, spec: ResolvedRunSpec) -> PlannedTrialBinding:
+    return PlannedTrialBinding(
+        run_identity=spec.run_identity,
+        trial_identity=trial.trial_identity,
+        task_release=trial.task_release,
+        agent_condition_identity=trial.agent_condition.identity,
+        ordinal=trial.ordinal,
+        repetition=trial.repetition,
+        execution_family=trial.execution_family,
+        evaluation_profile=trial.evaluation_profile,
+        expected_authorities=spec.expected_authorities,
+    )
+
+
+def _result_validator(trial: CanonicalPlannedTrial) -> Callable[[AdapterResult], None]:
+    def validate(result: AdapterResult) -> None:
+        if result.adapter_name != trial.agent_condition.adapter:
+            raise ValueError("adapter result does not match the planned agent condition")
+        if result.resolved_model != trial.agent_condition.model:
+            raise ValueError("resolved model does not match the planned agent condition")
+
+    return validate
+
+
+def _trial_ordinal(record: TrialRecord, trials: Sequence[CanonicalPlannedTrial]) -> int:
+    for trial in trials:
+        if str(trial.trial_identity.id) == record.trial_id:
+            return trial.ordinal
+    raise ValueError(f"record does not match a planned artifact trial: {record.trial_id}")
 
 
 def run_trial_with_verifier_feedback(
@@ -929,11 +1074,15 @@ def _build_materialized_record(
     selection_evidence: AttemptSelectionEvidence | None = None,
     verifier_receipt: VerifierExecutionReceipt | None = None,
     evaluation_status: EvaluationStatus | None = None,
+    planned_trial_binding: PlannedTrialBinding | None = None,
+    planned_run_spec: ResolvedRunSpec | None = None,
 ) -> TrialRecord:
     output_path = resolve_workspace_path(actor_snapshot, task.task.verifier.expected_output_path)
     record = build_trial_record(
         trial_id=trial.trial_id,
-        experiment_id=trial.experiment_id,
+        experiment_id=(
+            trial.experiment_id if planned_run_spec is None else str(planned_run_spec.experiment_identity.id)
+        ),
         task=task.task,
         task_revision=runtime.task_revision(task),
         request=selected.request,
@@ -951,9 +1100,14 @@ def _build_materialized_record(
         raw_output_path=str(output_path) if output_path.is_file() else None,
         conversation_path=_existing_path(actor_snapshot / "conversation.jsonl"),
         trajectory_path=_existing_path(actor_snapshot / "trajectory.jsonl"),
-        attempt=trial.repetition,
+        attempt=1 if planned_trial_binding is not None else trial.repetition,
         extensions=_trial_extensions(trial, selection_evidence, verifier_receipt),
         evaluation_status=evaluation_status,
+        planned_trial_binding=planned_trial_binding,
+        run_id=None if planned_run_spec is None else str(planned_run_spec.run_identity.id),
+        dataset=None if planned_run_spec is None else planned_run_spec.dataset,
+        expected_authorities=() if planned_run_spec is None else planned_run_spec.expected_authorities,
+        evaluation_regime=None if planned_run_spec is None else planned_run_spec.evaluation_regime,
     )
     _attach_workspace_files(record=record, workspace=actor_snapshot)
     _attach_post_execution_files(record=record, workspace=evidence_workspace)
@@ -968,11 +1122,15 @@ def _build_failed_materialized_record(
     attempts: list[TaskAttempt],
     selection: AttemptSelection,
     started: float,
+    planned_trial_binding: PlannedTrialBinding | None = None,
+    planned_run_spec: ResolvedRunSpec | None = None,
 ) -> TrialRecord:
     representative = attempts[0]
     record = build_trial_record(
         trial_id=trial.trial_id,
-        experiment_id=trial.experiment_id,
+        experiment_id=(
+            trial.experiment_id if planned_run_spec is None else str(planned_run_spec.experiment_identity.id)
+        ),
         task=task.task,
         task_revision=runtime.task_revision(task),
         request=representative.request,
@@ -987,10 +1145,15 @@ def _build_failed_materialized_record(
         verification_seconds=None,
         runtime_image="local",
         compute_backend=trial.compute.backend,
-        attempt=trial.repetition,
+        attempt=1 if planned_trial_binding is not None else trial.repetition,
         extensions=_trial_extensions(trial, selection.evidence),
         execution_status_override=ExecutionStatus.FAILED,
         include_output=False,
+        planned_trial_binding=planned_trial_binding,
+        run_id=None if planned_run_spec is None else str(planned_run_spec.run_identity.id),
+        dataset=None if planned_run_spec is None else planned_run_spec.dataset,
+        expected_authorities=() if planned_run_spec is None else planned_run_spec.expected_authorities,
+        evaluation_regime=None if planned_run_spec is None else planned_run_spec.evaluation_regime,
     )
     return materialize_trial_record(artifact_root=runtime.artifact_root, record=record)
 
@@ -1280,6 +1443,7 @@ __all__ = (
     "best_of",
     "build_attempt_recipe",
     "run_experiment",
+    "run_persisted_artifact_plan",
     "run_trial",
     "run_trial_with_verifier_feedback",
     "self_select",

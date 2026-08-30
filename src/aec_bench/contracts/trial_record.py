@@ -17,7 +17,9 @@ from aec_bench.contracts.authority_evidence import AuthorityEvidenceKind, Author
 from aec_bench.contracts.dataset import DatasetRef, dataset_reference_key
 from aec_bench.contracts.evaluation_refs import EvaluationRegimeRef
 from aec_bench.contracts.evaluation_result import EvaluationResult
+from aec_bench.contracts.identity import EntityIdentity
 from aec_bench.contracts.task_definition import Visibility
+from aec_bench.contracts.task_snapshot import TaskSnapshotRef
 from aec_bench.contracts.trial_extensions import (
     AdaptationProvenance,
     ArtifactReference,
@@ -198,6 +200,32 @@ class TrialInput(FrozenStrictModel):
 InputRecord = TrialInput
 
 
+class PlannedTrialBinding(FrozenStrictModel):
+    """Optional exact binding from one result to its canonical planned trial."""
+
+    schema_version: Literal[1] = 1
+    run_identity: EntityIdentity
+    trial_identity: EntityIdentity
+    task_release: TaskSnapshotRef
+    agent_condition_identity: EntityIdentity
+    ordinal: PositiveInt
+    repetition: PositiveInt
+    execution_family: TrialTaskKind
+    evaluation_profile: EvaluationRegimeRef | None = None
+    expected_authorities: tuple[AuthorityExpectation, ...] = ()
+
+    @field_validator("expected_authorities")
+    @classmethod
+    def validate_expected_authorities(
+        cls,
+        value: tuple[AuthorityExpectation, ...],
+    ) -> tuple[AuthorityExpectation, ...]:
+        keys = [(item.authority_kind, item.protocol) for item in value]
+        if len(keys) != len(set(keys)):
+            raise ValueError("planned trial authority identities must be unique")
+        return value
+
+
 class TrialArtifactRef(FrozenStrictModel):
     role: NonEmptyStr
     artifact: ArtifactRef
@@ -329,6 +357,7 @@ class TrialRecord(StrictModel):
     trial_id: NonEmptyStr
     run_id: NonEmptyStr
     task_id: NonEmptyStr
+    planned_trial_binding: PlannedTrialBinding | None = None
     attempt: PositiveInt = 1
     execution_status: ExecutionStatus
     evaluation_status: EvaluationStatus
@@ -379,6 +408,16 @@ class TrialRecord(StrictModel):
 
     @model_validator(mode="after")
     def validate_statuses(self) -> Self:
+        binding = self.planned_trial_binding
+        if binding is not None:
+            if str(binding.trial_identity.id) != self.trial_id:
+                raise ValueError("planned trial binding trial identity does not match trial_id")
+            if str(binding.run_identity.id) != self.run_id:
+                raise ValueError("planned trial binding run identity does not match run_id")
+            if binding.task_release.task_id != self.task_id:
+                raise ValueError("planned trial binding task release does not match task_id")
+            if binding.execution_family != self.input.task_kind:
+                raise ValueError("planned trial binding execution family does not match task kind")
         terminal = self.execution_status in {
             ExecutionStatus.COMPLETED,
             ExecutionStatus.FAILED,
@@ -409,6 +448,12 @@ class TrialRecord(StrictModel):
             raise ValueError("trial run_id does not match the run manifest")
         self._run_manifest = manifest
         self._validate_evidence_against_manifest()
+        binding = self.planned_trial_binding
+        if binding is not None:
+            if binding.expected_authorities != manifest.expected_authorities:
+                raise ValueError("planned trial binding authority policy does not match the run manifest")
+            if binding.evaluation_profile != manifest.evaluation_regime:
+                raise ValueError("planned trial binding evaluation profile does not match the run manifest")
         return self
 
     def bind_artifact_root(self, root: Path) -> Self:
@@ -652,6 +697,7 @@ __all__ = (
     "LifecycleTrialProvenance",
     "MetaHarnessTrialProvenance",
     "OutputRecord",
+    "PlannedTrialBinding",
     "ProviderRoute",
     "ProposalSessionTrialProvenance",
     "PublicationEligibility",
