@@ -389,6 +389,13 @@ normal protected `TrialRecord`. Persistence is an explicit optional effect and
 uses that same record. `run_lifecycle_experiment()` returns the records that it
 creates, so a caller does not read the ledger to recover its immediate results.
 
+The scheduler-facing lifecycle adapter binds one canonical lifecycle trial to
+one lease-bound operational attempt. The lifecycle runtime owns its complete
+episode, including checkpoints and recovery; those internal actions remain
+invisible to scheduler progress. The adapter publishes one stable final
+`TrialRecord`, one `AttemptReceipt`, and one `TrialFinalization` in the
+portable run package.
+
 New lifecycle invocation manifests use schema version 2. They bind the planned
 trial identity and the complete compiled lifecycle envelope. Schema version 1
 is read and recovered only as historical retained evidence; new runs do not
