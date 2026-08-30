@@ -853,6 +853,20 @@ uv run aec-bench ledger list
 uv run aec-bench ledger export -o trials.jsonl
 ```
 
+### Evidence integrity
+
+```bash
+# Rebuild the disposable metadata index from portable trial records
+uv run aec-bench evidence index rebuild --ledger-root artefacts/ledger
+
+# Verify structured records and referenced exact bytes
+uv run aec-bench evidence verify --ledger-root artefacts/ledger --run <run-id>
+```
+
+The index is a rebuildable SQLite projection. Portable records and artifacts
+remain authoritative. Verification reads and checks those portable files; it
+does not rewrite them.
+
 ### Interactive TUI
 
 Install `aec-bench[tui]` before launching the terminal interface.

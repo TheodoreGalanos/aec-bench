@@ -10,6 +10,7 @@ from aec_bench.ledger.index import (
     EvidenceIndexSchemaError,
 )
 from aec_bench.ledger.query import EvidenceQuery, EvidenceQueryError, EvidenceQueryPage
+from aec_bench.ledger.verification import EvidenceVerificationReport, verify_evidence
 
 __all__ = (
     "EVIDENCE_INDEX_SCHEMA_VERSION",
@@ -21,4 +22,6 @@ __all__ = (
     "EvidenceQuery",
     "EvidenceQueryError",
     "EvidenceQueryPage",
+    "EvidenceVerificationReport",
+    "verify_evidence",
 )
