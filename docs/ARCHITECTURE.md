@@ -80,11 +80,13 @@ Execution coordination uses the small `OperationalStore` under
 backend-submission, and lease rows in SQLite with short transactions. The
 database is disposable local coordination state. The library initializes only
 its current schema and rejects a stale schema; users recreate the database
-instead of applying retained migrations. The store keeps only portable
-references for the resolved run and plan records. `EvidenceRunStore` remains
-authoritative for those portable records, and the ledger remains authoritative
-for final trial evidence. The operational store does not schedule work, retry
-attempts, cancel runs, or interpret task-family fields.
+instead of applying retained migrations. `RunProgress` is a read-only
+projection of the authoritative `RunPlan` plus operational rows and does not
+hydrate portable evidence. The store keeps only portable references for the
+resolved run and plan records. `EvidenceRunStore` remains authoritative for
+those portable records, and the ledger remains authoritative for final trial
+evidence. The operational store does not schedule work, retry attempts, cancel
+runs, or interpret task-family fields.
 
 `HarnessSpec` describes runtime capabilities, bindings, contracts, and
 budgets. It does not control attempt branching or selection. Interactive-world
