@@ -1,4 +1,10 @@
+[identity]
+id = "01a04c6c-4b3c-73d0-ade9-ad8299c3fd08"
+key = "mechanical/stormwater-pump-control/stormwater-pump-station-control-backup-energy-package/stormwater-pump-station-stormwater-pump-control-energy-case-00"
+version = 1
+
 [metadata]
+lifecycle = "proposed"
 domain = "mechanical"
 category = "stormwater-pump-control"
 difficulty = "easy"

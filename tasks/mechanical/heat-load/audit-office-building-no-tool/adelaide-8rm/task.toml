@@ -1,6 +1,13 @@
 version = "1.0"
 
+[identity]
+id = "01a04c6c-4b2c-73ad-a3d2-c71914d72779"
+key = "mechanical/heat-load/audit-office-building-no-tool/adelaide-8rm"
+version = 1
+
 [metadata]
+lifecycle = "proposed"
+visibility = "public"
 difficulty = "medium"
 category = "reasoning"
 tags = ["mechanical", "hvac", "heat-load", "audit", "AS-1668-2", "no-tool"]

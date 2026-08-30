@@ -1,6 +1,13 @@
 version = "1.0"
 
+[identity]
+id = "01a04c6c-4b22-71f5-8f38-87d0ce4657bd"
+key = "mechanical/heat-load/audit-office-building/cairns-8rm"
+version = 1
+
 [metadata]
+lifecycle = "proposed"
+visibility = "public"
 difficulty = "medium"
 category = "reasoning"
 tags = ["mechanical", "hvac", "heat-load", "audit", "AS-1668-2", "with-tool"]

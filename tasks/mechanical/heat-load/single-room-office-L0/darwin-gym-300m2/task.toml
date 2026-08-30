@@ -1,6 +1,13 @@
 version = "1.0"
 
+[identity]
+id = "01a04c6c-4b32-70be-a441-c54124a83b19"
+key = "mechanical/heat-load/single-room-office-l0/darwin-gym-300m2"
+version = 1
+
 [metadata]
+lifecycle = "proposed"
+visibility = "public"
 difficulty = "hard"
 category = "reasoning"
 tags = ["mechanical", "hvac", "heat-load", "deterministic", "AS-1668-2", "no-tool", "ablation-L0"]

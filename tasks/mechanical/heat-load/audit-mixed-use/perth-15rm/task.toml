@@ -1,6 +1,13 @@
 version = "1.0"
 
+[identity]
+id = "01a04c6c-4b21-7908-86bb-bcaf06afd78a"
+key = "mechanical/heat-load/audit-mixed-use/perth-15rm"
+version = 1
+
 [metadata]
+lifecycle = "proposed"
+visibility = "public"
 difficulty = "hard"
 category = "reasoning"
 tags = ["mechanical", "hvac", "heat-load", "audit", "AS-1668-2", "with-tool"]

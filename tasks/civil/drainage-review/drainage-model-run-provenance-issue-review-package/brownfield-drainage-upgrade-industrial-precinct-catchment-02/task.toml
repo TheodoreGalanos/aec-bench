@@ -1,4 +1,10 @@
+[identity]
+id = "01a04c6c-4b1d-7fb8-8532-e6ba5813eda7"
+key = "civil/drainage-review/drainage-model-run-provenance-issue-review-package/brownfield-drainage-upgrade-industrial-precinct-catchment-02"
+version = 1
+
 [metadata]
+lifecycle = "proposed"
 domain = "civil"
 category = "drainage-review"
 difficulty = "hard"

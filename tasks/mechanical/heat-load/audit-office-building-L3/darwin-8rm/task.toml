@@ -1,6 +1,13 @@
 version = "1.0"
 
+[identity]
+id = "01a04c6c-4b2b-7462-868d-ae466c47a6d4"
+key = "mechanical/heat-load/audit-office-building-l3/darwin-8rm"
+version = 1
+
 [metadata]
+lifecycle = "proposed"
+visibility = "public"
 difficulty = "medium"
 category = "reasoning"
 tags = ["mechanical", "hvac", "heat-load", "audit", "AS-1668-2", "no-tool", "ablation-L3"]

@@ -1,6 +1,13 @@
 version = "1.0"
 
+[identity]
+id = "01a04c6c-4b20-7f14-85f8-0cde399b1cba"
+key = "mechanical/heat-load/audit-mixed-use/brisbane-15rm"
+version = 1
+
 [metadata]
+lifecycle = "proposed"
+visibility = "public"
 difficulty = "hard"
 category = "reasoning"
 tags = ["mechanical", "hvac", "heat-load", "audit", "AS-1668-2", "with-tool"]

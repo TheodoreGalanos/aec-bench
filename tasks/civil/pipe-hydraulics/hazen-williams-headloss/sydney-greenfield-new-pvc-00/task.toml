@@ -1,4 +1,10 @@
+[identity]
+id = "01a04c6c-4b1d-7398-8c57-e397028279e8"
+key = "civil/pipe-hydraulics/hazen-williams-headloss/sydney-greenfield-new-pvc-00"
+version = 1
+
 [metadata]
+lifecycle = "proposed"
 domain = "civil"
 category = "pipe-hydraulics"
 difficulty = "easy"

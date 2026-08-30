@@ -69,6 +69,10 @@ During the repository migration, files without `[identity]` use the named
 current legacy defaults and does not allocate a UUID; those defaults do not
 apply to the explicit metadata contract.
 
+Maintained task packages now record the canonical key from their repository
+path. The key uses the identity rules, so legacy path components such as
+`L2` are represented as lowercase `l2`; the filesystem path remains unchanged.
+
 Executable interactive worlds use their registered world definition and
 profile instead of pretending to be a static `TaskDefinition`. Both families
 can still enter the same experiment, trial, evaluation, and reporting layers.

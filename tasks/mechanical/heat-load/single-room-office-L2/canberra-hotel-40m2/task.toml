@@ -1,6 +1,13 @@
 version = "1.0"
 
+[identity]
+id = "01a04c6c-4b36-783e-92ec-7de129268975"
+key = "mechanical/heat-load/single-room-office-l2/canberra-hotel-40m2"
+version = 1
+
 [metadata]
+lifecycle = "proposed"
+visibility = "public"
 difficulty = "medium"
 category = "reasoning"
 tags = ["mechanical", "hvac", "heat-load", "deterministic", "AS-1668-2", "no-tool", "ablation-L2"]

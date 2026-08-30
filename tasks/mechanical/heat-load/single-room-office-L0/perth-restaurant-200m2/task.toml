@@ -1,6 +1,13 @@
 version = "1.0"
 
+[identity]
+id = "01a04c6c-4b33-7d39-a5db-57d7f2f7dfb8"
+key = "mechanical/heat-load/single-room-office-l0/perth-restaurant-200m2"
+version = 1
+
 [metadata]
+lifecycle = "proposed"
+visibility = "public"
 difficulty = "hard"
 category = "reasoning"
 tags = ["mechanical", "hvac", "heat-load", "deterministic", "AS-1668-2", "no-tool", "ablation-L0"]

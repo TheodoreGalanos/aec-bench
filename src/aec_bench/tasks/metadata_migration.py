@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import json
 import os
-import re
 import tempfile
 import tomllib
 from dataclasses import asdict, dataclass
@@ -13,12 +12,11 @@ from pathlib import Path
 from typing import Any
 from uuid import UUID
 
-from aec_bench.contracts.identity import EntityIdentity, EntityKey, EntityKind, new_entity_id, validate_uuidv7
+from aec_bench.contracts.identity import EntityIdentity, EntityKind, new_entity_id, validate_uuidv7
 from aec_bench.contracts.task_definition import Lifecycle, Visibility
-from aec_bench.tasks.loader import iter_task_instance_dirs
+from aec_bench.tasks.loader import canonical_task_key, iter_task_instance_dirs
 
 REPORT_SCHEMA_VERSION = 1
-_KEY_COMPONENT_RE = re.compile(r"[^a-z0-9_-]+")
 
 
 class MigrationReportError(ValueError):
@@ -132,7 +130,7 @@ def _build_entry(
     metadata = raw_toml.get("metadata")
     metadata_mapping = metadata if isinstance(metadata, dict) else {}
     identity = _read_identity(raw_toml)
-    proposed_key = _proposed_key(current_path)
+    proposed_key = str(canonical_task_key(current_path))
 
     if identity is not None:
         generated_uuid = identity.id
@@ -210,16 +208,6 @@ def _read_identity(raw_toml: dict[str, Any]) -> EntityIdentity | None:
         return EntityIdentity.model_validate(identity)
     except (TypeError, ValueError):
         return None
-
-
-def _proposed_key(current_path: str) -> str:
-    components: list[str] = []
-    for component in current_path.split("/"):
-        normalised = _KEY_COMPONENT_RE.sub("-", component.lower()).strip("-_")
-        if not normalised or not normalised[0].isalnum() or not normalised[0].isascii():
-            normalised = f"task-{normalised}" if normalised else "task"
-        components.append(normalised)
-    return str(EntityKey("/".join(components)))
 
 
 def _inferred_lifecycle(metadata: dict[str, Any]) -> str:
