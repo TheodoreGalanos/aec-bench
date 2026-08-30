@@ -908,12 +908,15 @@ def _legacy_recipe_for_canonical(trial: CanonicalPlannedTrial) -> AttemptRecipe:
 
 def _planned_trial_binding(trial: CanonicalPlannedTrial, spec: ResolvedRunSpec) -> PlannedTrialBinding:
     return PlannedTrialBinding(
+        schema_version=2,
         run_identity=spec.run_identity,
         trial_identity=trial.trial_identity,
         task_release=trial.task_release,
         agent_condition_identity=trial.agent_condition.identity,
         ordinal=trial.ordinal,
         repetition=trial.repetition,
+        compute=trial.compute,
+        family_release=trial.family_release,
         execution_family=trial.execution_family,
         evaluation_profile=trial.evaluation_profile,
         expected_authorities=spec.expected_authorities,
