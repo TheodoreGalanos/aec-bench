@@ -187,6 +187,24 @@ def test_child_attempt_copies_parent_without_changing_parent(tmp_path: Path) -> 
     assert child.request.instruction == "Improve it"
 
 
+def test_child_attempt_rejects_parent_symlink_before_copy(tmp_path: Path) -> None:
+    task = _resolved_task(tmp_path)
+    runtime = LocalTaskRuntime(
+        work_root=tmp_path / "attempts",
+        adapter_builder=lambda **kwargs: _WorkspaceAdapter(Path(kwargs["workspace"]), []),
+    )
+    parent = runtime.run_once(task, _planned_trial(), attempt_id="draft")
+    outside = tmp_path / "private.txt"
+    outside.write_text("private\n", encoding="utf-8")
+    (parent.workspace / "escape.txt").symlink_to(outside)
+
+    with pytest.raises(ValueError, match="symbolic links"):
+        runtime.run_once(task, _planned_trial(), attempt_id="refined", parent=parent)
+
+    assert len(runtime.attempt_workspaces) == 1
+    assert outside.read_bytes() == b"private\n"
+
+
 def test_run_once_rejects_parent_from_another_trial(tmp_path: Path) -> None:
     task = _resolved_task(tmp_path)
     runtime = LocalTaskRuntime(
@@ -244,11 +262,33 @@ Path(args.output).write_text(json.dumps({"reward": 1.0}))
     assert record.evaluation_status is EvaluationStatus.COMPLETED
     assert record.evaluation.breakdown == {"multi_file": True}
     assert all(not workspace.exists() for workspace in observed_workspaces)
+    with pytest.raises(RuntimeError, match="no captured base manifest"):
+        runtime.base_workspace_manifest(observed_workspaces[0])
     assert record.outputs.raw_output_path is not None
     assert Path(record.outputs.raw_output_path).read_bytes() == b"Complete\n"
     support_path = record.outputs.artifact_path("workspace")
     assert support_path is not None
     assert Path(support_path).is_file()
+    logical_paths = {item.logical_path for item in record.outputs.artifacts}
+    assert "instruction.md" not in logical_paths
+    assert "workspace/base.json" in logical_paths
+    assert "workspace/final.json" in logical_paths
+    assert "workspace/delta.json" in logical_paths
+    delta_artifact = next(
+        item.artifact for item in record.outputs.artifacts if item.logical_path == "workspace/delta.json"
+    )
+    delta_payload = json.loads((runtime.artifact_root / delta_artifact.artifact_id).read_text(encoding="utf-8"))
+    assert [item["relative_path"] for item in delta_payload["deleted"]] == ["remove-me.txt"]
+    final_artifact = next(
+        item.artifact for item in record.outputs.artifacts if item.logical_path == "workspace/final.json"
+    )
+    final_payload = json.loads((runtime.artifact_root / final_artifact.artifact_id).read_text(encoding="utf-8"))
+    assert final_payload["strategy"] == "full_copy"
+    assert final_payload["files_traversed"] > 0
+    assert final_payload["bytes_attached"] > 0
+    final_files = {item["relative_path"]: item for item in final_payload["files"]}
+    assert final_files["instruction.md"]["source_role"] == "task_input"
+    assert not any(path == "tests" or path.startswith("tests/") for path in final_files)
     assert any(item.extension_kind == "verifier_execution" for item in record.extension_refs)
     assert any(item.logical_path == "logs/verifier/receipt.json" for item in record.outputs.artifacts)
 
@@ -282,6 +322,7 @@ Path(args.output).write_text(json.dumps({"reward": 1.0}))
 
     def draft_then_refine(run_once):  # noqa: ANN001, ANN202
         draft = run_once(attempt_id="draft")
+        (draft.workspace / "parent-only.txt").write_text("parent evidence\n", encoding="utf-8")
         refined = run_once(attempt_id="refined", parent=draft, instruction="Improve the draft")
         return AttemptSelection.selected(refined, reason="refinement completed")
 
@@ -294,6 +335,26 @@ Path(args.output).write_text(json.dumps({"reward": 1.0}))
     assert record.cost.tokens_in == 20
     assert record.cost.tokens_out == 8
     assert record.evaluation is not None and record.evaluation.reward == 1.0
+    assert any(item.logical_path == "parent-only.txt" for item in record.outputs.artifacts)
+
+
+def test_run_trial_retains_actor_files_across_two_parent_generations(tmp_path: Path) -> None:
+    task = _resolved_task(tmp_path)
+    runtime = LocalTaskRuntime(
+        work_root=tmp_path / "attempts",
+        adapter_builder=lambda **kwargs: _WorkspaceAdapter(Path(kwargs["workspace"]), []),
+    )
+
+    def three_generations(run_once):  # noqa: ANN001, ANN202
+        first = run_once(attempt_id="first")
+        (first.workspace / "first-generation.txt").write_text("retained\n", encoding="utf-8")
+        second = run_once(attempt_id="second", parent=first)
+        third = run_once(attempt_id="third", parent=second)
+        return AttemptSelection.selected(third, reason="selected final generation")
+
+    record = run_trial(runtime=runtime, task=task, trial=_planned_trial(), recipe=three_generations)
+
+    assert any(item.logical_path == "first-generation.txt" for item in record.outputs.artifacts)
 
 
 def test_run_trial_exports_exact_selected_actor_workspace_before_verification(tmp_path: Path) -> None:
@@ -546,7 +607,12 @@ def test_best_of_returns_failed_trial_without_verification_when_all_candidates_f
     assert record.execution_status.value == "failed"
     assert record.evaluation_status.value == "failed"
     assert record.evaluation is None
-    assert record.output is None
+    assert record.output is not None
+    failed_logical_paths = {item.logical_path for item in record.output.artifacts}
+    assert "workspace/base.json" in failed_logical_paths
+    assert "workspace/final.json" in failed_logical_paths
+    assert "workspace/delta.json" in failed_logical_paths
+    assert "instruction.md" not in failed_logical_paths
     assert record.cost is not None and record.cost.model_calls == 3
     assert not marker.exists()
     assert all(not workspace.exists() for workspace in runtime.attempt_workspaces)
