@@ -85,8 +85,8 @@ class AgentConfig(StrictModel):
 class AgentCondition(FrozenStrictModel):
     """One explicit, versioned requested agent condition.
 
-    ``AgentConfig`` remains the user-facing configuration. This resolved
-    condition is a separate value until ``ResolvedRunSpec`` owns conversion.
+    ``AgentConfig`` remains the user-facing configuration. A caller supplies
+    this stable condition when resolving a ``ResolvedRunSpec``.
     """
 
     identity: EntityIdentity

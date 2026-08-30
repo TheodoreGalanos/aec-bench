@@ -35,7 +35,8 @@ readable.
 | Generated-task handoff and replay | Task generation | Generated runnable paths pass in process to normal task loading; template sources and sampling inputs remain optional reproducibility data | `GeneratedTaskSet` is an in-process value; the schema 1 sidecar is not a runtime task contract | [`GeneratedTaskSet`](../src/aec_bench/generation/contracts.py), [`GenerationManifest`](../src/aec_bench/generation/replay.py), and the `generate replay` command | Internal handoff and optional persisted sidecar |
 | Finite lifecycle execution | Lifecycle task and host | Stage-specific task evidence and actor results become one bounded host-controlled progression | Internal package and runtime contract; persisted accepted evidence is current-format only | [`EvidenceLifecycleSpec`](../src/aec_bench/contracts/evidence_lifecycle.py) and the [staged evidence protocol](protocols/staged-evidence-and-publication.md) | Packaged task, runtime state, and persisted accepted evidence |
 | Experiment manifest | Experiment orchestration | User configuration becomes an executable plan | Internal, except documented CLI/config behavior | [`ExperimentManifest`](../src/aec_bench/contracts/experiment_manifest.py) | Persisted configuration |
-| Agent condition | Experiment orchestration | One requested adapter/model condition retains a stable UUID-backed identity and explicit runtime inputs | Internal foundation; conversion from `AgentConfig` is deferred to `ResolvedRunSpec` | [`AgentCondition`](../src/aec_bench/contracts/experiment_manifest.py) and [`EntityIdentity`](../src/aec_bench/contracts/identity.py) | In-process resolved condition |
+| Agent condition | Experiment orchestration | One requested adapter/model condition retains a stable UUID-backed identity and explicit runtime inputs | Internal foundation; callers supply stable conditions when resolving a run | [`AgentCondition`](../src/aec_bench/contracts/experiment_manifest.py) and [`EntityIdentity`](../src/aec_bench/contracts/identity.py) | In-process resolved condition |
+| Resolved run specification | Experiment orchestration | One experiment manifest, exact task releases, and stable agent conditions become one explicit requested run condition | Internal schema 1; no persistence or execution ownership yet | [`ResolvedRunSpec`](../src/aec_bench/contracts/resolved_run.py) and [`resolve_run_spec`](../src/aec_bench/contracts/resolved_run.py) | In-process requested run condition |
 | Learning Study design and evidence | Experimentation | An authored protocol composes exact task members and family relations, then compiles to existing trials; committed state and explicit comparison-validity evidence stay outside `TrialRecord` | Internal Release A persisted contracts | [`LearningStudyProtocolSpec`, `LearningStudySpec`](../src/aec_bench/contracts/learning_study.py), [`LearningFamilySpec`](../src/aec_bench/contracts/learning_family.py), [`learning_study_evidence.py`](../src/aec_bench/contracts/learning_study_evidence.py), [`learning_study_assessment.py`](../src/aec_bench/contracts/learning_study_assessment.py), and the [Gate A decision](adr/learning-studies-gate-a.md) | Maintained or caller-selected protocol directory, compiled plan, append-only receipts and sequenced events, ordinary trial ledger, and pair-level paired-difference assessment |
 | Evolution workspace candidate lineage | Experimentation and feedback | Mutable workspace files become exact Git source and explicit candidate lineage | Workspace manifest schema 1; legacy labels require an explicit migration plan | [`WorkspaceCandidateVersion`, `WorkspaceManifest`, and `WorkspaceMigrationPlan`](../src/aec_bench/contracts/evolution.py) plus [`Workspace`](../src/aec_bench/evolution/workspace.py) | Persisted workspace Git metadata and manifest |
 | Evolution functional search and swarm coordination | Evolution application and swarm manager | Exact candidate material is paired with its own evaluation evidence before policy or shared effects use it | Internal pre-1.0 values; no new public schema promise | [`EvaluatedCandidate`, `CandidateEvaluationBatch`, `CandidateProposal`, `SwarmAssignment`, `SwarmAgentResult`, and `SwarmState`](../src/aec_bench/evolution/core.py), [`evaluation.py`](../src/aec_bench/evolution/evaluation.py), and [`swarm/core.py`](../src/aec_bench/evolution/swarm/core.py) | In-process functional values, AVO checkpoints, and swarm state outputs |
@@ -66,8 +67,23 @@ remain readable during the migration to resolved run specifications.
 `AgentCondition` is the versioned requested adapter/model condition. It uses
 `EntityIdentity` for the UUID, readable key, and version, and retains explicit
 client, prompt, tool, parameter, and limit values. `ExperimentManifest` stays
-the user-facing configuration; conversion into conditions is deferred to
-`ResolvedRunSpec`.
+the user-facing configuration. `resolve_run_spec` accepts caller-supplied,
+stable conditions and checks their identity keys, adapter, model, client,
+prompt, and parameters against the manifest. It rejects unresolved prompt
+files. Secret-bearing settings retain named `api_key_env` or `env:VARIABLE`
+references and are not resolved into the run specification; model environment
+references follow the existing `AgentConfig` resolution behaviour.
+
+`ResolvedRunSpec` is the requested state before planning, persistence, or
+execution. It retains the experiment and run identities, run name, creation
+metadata, exact task snapshot identities and source coordinates, agent
+conditions, dataset, compute and repetition settings, verification and reviewer
+requests, visibility, optional authority and evaluation expectations, provider
+route request, randomisation seed, and execution policy version. It requires
+timezone-aware `created_at`, at least one task release and agent condition, and
+rejects duplicate task or condition identities. Direct model loading applies
+the same task identity and secret value checks; secret-bearing values may use
+named environment references such as `api_key_env` or `env:VARIABLE`.
 
 ## Task specification
 
