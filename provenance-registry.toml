@@ -1320,6 +1320,27 @@ compatibility_behavior = "the migration command accepts schema 1 only"
 compatibility_kind = "external_schema"
 
 [[field]]
+symbol = "aec_bench.contracts.identity.EntityIdentity.version"
+surface = "pydantic_model"
+wire_name = "version"
+category = "compatibility"
+domain_owner = "contracts_foundation"
+authority = "entity_author"
+authoritative = true
+exposure = "public"
+status = "current"
+payload_contract = "one durable entity identity"
+canonicalization = "positive base-10 integer"
+consumer = "task, run, trial, attempt, artifact, world, lifecycle, study, and catalogue identity consumers"
+validation_behavior = "Pydantic rejects zero, negative, boolean, fractional, and non-integer version values"
+mismatch_behavior = "reject_entity_identity"
+retention = "entity_identity_lifetime"
+rationale = "A durable entity revision changes through an explicit positive version instead of a content-derived ID."
+duplication = "unique"
+compatibility_behavior = "resolve the exact entity version and reject unavailable or mismatched revisions"
+compatibility_kind = "entity_revision"
+
+[[field]]
 symbol = "aec_bench.contracts.learning_study.RunExperienceStep.commit_post_state"
 surface = "pydantic_model"
 wire_name = "commit_post_state"
