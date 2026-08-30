@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 from fastapi import FastAPI, Request
@@ -18,6 +19,7 @@ from aec_bench.web.routes.export import router as export_router
 from aec_bench.web.routes.inspection import router as inspection_router
 from aec_bench.web.routes.leaderboard import router as leaderboard_router
 from aec_bench.web.routes.library import router as library_router
+from aec_bench.web.routes.progress import router as progress_router
 from aec_bench.web.routes.review import router as review_router
 from aec_bench.web.routes.search import router as search_router
 from aec_bench.web.routes.swarm import router as swarm_router
@@ -35,6 +37,8 @@ def create_app(
     benchmark_templates_root: Path | None = None,
     frontend_dist: Path | None = None,
     workspaces_root: Path | None = None,
+    operational_store_path: Path | None = None,
+    plan_root: Path | None = None,
 ) -> FastAPI:
     app = FastAPI(
         title="aec-bench communication and feedback",
@@ -50,6 +54,8 @@ def create_app(
         benchmark_templates_root=resolved_benchmark,
         internal_token=internal_token,
         workspaces_root=workspaces_root,
+        operational_store_path=operational_store_path,
+        plan_root=plan_root,
     )
 
     app.include_router(analyze_router)
@@ -65,6 +71,7 @@ def create_app(
     app.include_router(search_router)
     app.include_router(triage_router)
     app.include_router(viewer_router)
+    app.include_router(progress_router)
 
     # Serve Svelte SPA if frontend dist directory exists
     resolved_frontend_dist = frontend_dist
@@ -88,3 +95,30 @@ def create_app(
             return response
 
     return app
+
+
+def _optional_environment_path(name: str) -> Path | None:
+    value = os.environ.get(name)
+    return None if value is None else Path(value).expanduser().absolute()
+
+
+def _required_environment_path(name: str) -> Path:
+    value = _optional_environment_path(name)
+    if value is None:
+        raise RuntimeError(f"development web server requires {name}")
+    return value
+
+
+def create_dev_app() -> FastAPI:
+    """Create the reloadable development app from explicit launcher values."""
+
+    return create_app(
+        ledger_root=_required_environment_path("AEC_BENCH_WEB_LEDGER_ROOT"),
+        tasks_root=_required_environment_path("AEC_BENCH_WEB_TASKS_ROOT"),
+        feedback_root=_required_environment_path("AEC_BENCH_WEB_FEEDBACK_ROOT"),
+        datasets_root=_required_environment_path("AEC_BENCH_WEB_DATASETS_ROOT"),
+        internal_token=os.environ.get("AEC_BENCH_WEB_INTERNAL_TOKEN"),
+        workspaces_root=_optional_environment_path("AEC_BENCH_WEB_WORKSPACES_ROOT"),
+        operational_store_path=_optional_environment_path("AEC_BENCH_OPERATIONAL_STORE"),
+        plan_root=_optional_environment_path("AEC_BENCH_PLAN_ROOT"),
+    )

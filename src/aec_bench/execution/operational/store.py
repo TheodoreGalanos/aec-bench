@@ -12,6 +12,7 @@ from datetime import UTC, datetime, timedelta
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from typing import cast
+from urllib.parse import quote
 from uuid import UUID
 
 from aec_bench.contracts.identity import (
@@ -160,11 +161,39 @@ class LeaseRecord:
 class OperationalStore:
     """Short-transaction repository for mutable execution state."""
 
-    def __init__(self, path: Path, *, application_version: str | None = None) -> None:
+    def __init__(
+        self,
+        path: Path,
+        *,
+        application_version: str | None = None,
+        read_only: bool = False,
+        require_existing: bool = False,
+    ) -> None:
         self.path = Path(path).expanduser().absolute()
-        self.path.parent.mkdir(parents=True, exist_ok=True)
+        self.read_only = read_only or require_existing
+        if read_only or require_existing:
+            if self.path.is_symlink() or not self.path.is_file():
+                raise OperationalStoreError("operational database must already be a regular file")
+        else:
+            self.path.parent.mkdir(parents=True, exist_ok=True)
         self.application_version = _required_text(application_version or _installed_version(), "application_version")
-        self._initialize_schema()
+        if read_only or require_existing:
+            self._validate_existing_schema()
+            self.read_only = read_only
+        else:
+            self._initialize_schema()
+
+    @classmethod
+    def open_read_only(cls, path: Path) -> OperationalStore:
+        """Open an existing current-schema database without any write capability."""
+
+        return cls(path, read_only=True)
+
+    @classmethod
+    def open_existing(cls, path: Path) -> OperationalStore:
+        """Open an existing current-schema database for an explicit write operation."""
+
+        return cls(path, require_existing=True)
 
     def schema_version(self) -> int:
         with self._connection() as connection:
@@ -1378,22 +1407,48 @@ class OperationalStore:
 
     @contextmanager
     def _connection(self, *, immediate: bool = False) -> Iterator[sqlite3.Connection]:
-        connection = sqlite3.connect(self.path, timeout=30.0)
-        connection.row_factory = sqlite3.Row
-        connection.execute("PRAGMA foreign_keys = ON")
-        connection.execute("PRAGMA busy_timeout = 30000")
-        connection.execute("PRAGMA journal_mode = WAL")
-        connection.execute("PRAGMA synchronous = FULL")
+        if self.read_only and immediate:
+            raise OperationalStoreError("read-only operational store rejects write transactions")
+        connection: sqlite3.Connection | None = None
         try:
-            if immediate:
+            if self.read_only:
+                location = f"file:{quote(str(self.path), safe='/')}?mode=ro"
+                connection = sqlite3.connect(location, timeout=30.0, uri=True)
+            else:
+                connection = sqlite3.connect(self.path, timeout=30.0)
+            connection.row_factory = sqlite3.Row
+            connection.execute("PRAGMA foreign_keys = ON")
+            connection.execute("PRAGMA busy_timeout = 30000")
+            if not self.read_only:
+                connection.execute("PRAGMA journal_mode = WAL")
+                connection.execute("PRAGMA synchronous = FULL")
+            if immediate and not self.read_only:
                 connection.execute("BEGIN IMMEDIATE")
             yield connection
-            connection.commit()
+            if not self.read_only:
+                connection.commit()
+        except sqlite3.Error as error:
+            if connection is not None and not self.read_only:
+                connection.rollback()
+            raise OperationalStoreError(f"operational database operation failed: {error}") from error
         except Exception:
-            connection.rollback()
+            if connection is not None and not self.read_only:
+                connection.rollback()
             raise
         finally:
-            connection.close()
+            if connection is not None:
+                connection.close()
+
+    def _validate_existing_schema(self) -> None:
+        try:
+            with self._connection() as connection:
+                row = connection.execute("SELECT schema_version FROM operational_schema WHERE singleton = 1").fetchone()
+        except OperationalStoreError as error:
+            raise OperationalStoreError("operational database does not contain the current schema") from error
+        if row is None or int(row[0]) != SCHEMA_VERSION:
+            raise OperationalStoreError(
+                "operational database schema is stale; delete and recreate this disposable local database"
+            )
 
     def _initialize_schema(self) -> None:
         with self._connection(immediate=True) as connection:

@@ -123,6 +123,59 @@ def test_store_rejects_conflicting_portable_references(tmp_path: Path) -> None:
         store.create_run(run_id, spec_ref="runs/run-2/spec.json")
 
 
+def test_read_only_store_requires_existing_current_schema(tmp_path: Path) -> None:
+    path = tmp_path / "missing.sqlite3"
+
+    with pytest.raises(OperationalStoreError, match="already be a regular file"):
+        OperationalStore.open_read_only(path)
+    assert not path.exists()
+
+    path.write_bytes(b"")
+    with pytest.raises(OperationalStoreError, match="does not contain the current schema"):
+        OperationalStore.open_read_only(path)
+    path.unlink()
+
+    writable = OperationalStore(path)
+    readonly = OperationalStore.open_read_only(path)
+    assert readonly.schema_version() == writable.schema_version() == 4
+
+    connection = sqlite3.connect(path)
+    try:
+        connection.execute("UPDATE operational_schema SET schema_version = 999 WHERE singleton = 1")
+        connection.commit()
+    finally:
+        connection.close()
+
+    with pytest.raises(OperationalStoreError, match="schema is stale"):
+        OperationalStore.open_read_only(path)
+
+
+def test_read_only_store_rejects_write_transactions_and_sqlite_mutations(tmp_path: Path) -> None:
+    path = tmp_path / "operational.sqlite3"
+    store = OperationalStore(path)
+    run_id = _id(EntityKind.RUN)
+    store.create_run(run_id, spec_ref="runs/run-1/spec.json")
+    readonly = OperationalStore.open_read_only(path)
+
+    with pytest.raises(OperationalStoreError, match="write transactions"):
+        readonly.update_run(run_id, status="running")
+    with pytest.raises(OperationalStoreError, match="readonly"):
+        with readonly._connection() as connection:
+            connection.execute("UPDATE operational_runs SET status = 'running' WHERE run_id = ?", (run_id,))
+
+    assert readonly.get_run(run_id).status == "created"
+
+
+def test_open_existing_rejects_an_invalid_database_without_rewriting_it(tmp_path: Path) -> None:
+    path = tmp_path / "invalid.sqlite3"
+    path.write_bytes(b"not a sqlite database")
+
+    with pytest.raises(OperationalStoreError, match="does not contain the current schema"):
+        OperationalStore.open_existing(path)
+
+    assert path.read_bytes() == b"not a sqlite database"
+
+
 def test_identity_relationships_are_idempotent_but_conflicts_are_rejected(tmp_path: Path) -> None:
     store = OperationalStore(tmp_path / "operational.sqlite3")
     run_id = _id(EntityKind.RUN)

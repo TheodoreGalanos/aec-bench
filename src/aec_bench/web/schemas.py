@@ -5,6 +5,10 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
+from aec_bench.harness.run_progress import RunProgressSurface
+
+RunProgressResponse = RunProgressSurface
+
 # ---------------------------------------------------------------------------
 # Dashboard
 # ---------------------------------------------------------------------------

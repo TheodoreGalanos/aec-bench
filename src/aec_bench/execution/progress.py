@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from collections import Counter
 from datetime import datetime
-from typing import Literal, Self
+from typing import Literal, Self, cast
 from uuid import UUID
 
 from pydantic import NonNegativeInt, field_validator, model_validator
@@ -21,6 +21,8 @@ from aec_bench.execution.operational import (
     PlannedTrialRecord,
     WorkItemRecord,
 )
+
+RunStatus = Literal["created", "ready", "running", "completed", "failed", "cancelled"]
 
 
 class WorkItemProgressCounts(FrozenStrictModel):
@@ -83,6 +85,7 @@ class RunProgress(FrozenStrictModel):
     schema_version: Literal[1] = 1
     run_id: UUID
     plan_id: UUID
+    status: RunStatus
     planned: NonNegativeInt
     work_items: WorkItemProgressCounts
     trials: TrialProgressCounts
@@ -213,6 +216,7 @@ def project_run_progress(run_plan: RunPlan, store: OperationalStore) -> RunProgr
     return RunProgress(
         run_id=run_plan.run_id,
         plan_id=run_plan.plan_id,
+        status=cast(RunStatus, run_record.status),
         planned=len(planned_ids),
         work_items=work_counts,
         trials=trial_counts,

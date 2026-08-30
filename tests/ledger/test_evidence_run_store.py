@@ -221,6 +221,24 @@ def test_store_rejects_symlink_root(tmp_path: Path) -> None:
         EvidenceRunStore(alias)
 
 
+def test_read_only_store_requires_an_existing_root_and_rejects_writes(tmp_path: Path) -> None:
+    root = tmp_path / "runs"
+    with pytest.raises(EvidenceRunStoreError, match="regular directory"):
+        EvidenceRunStore.open_read_only(root)
+    assert not root.exists()
+
+    spec = _resolved_run(repetitions=1)
+    writable = EvidenceRunStore(root)
+    writable.create_run(spec)
+    lock_paths_before = {path.relative_to(root) for path in (root / "_locks").rglob("*")}
+    readonly = EvidenceRunStore.open_read_only(root)
+
+    assert readonly.find_run(str(spec.run_identity.id)).spec == spec
+    assert {path.relative_to(root) for path in (root / "_locks").rglob("*")} == lock_paths_before
+    with pytest.raises(EvidenceRunStoreError, match="rejects write operations"):
+        readonly.create_run(spec)
+
+
 def test_store_rejects_raw_path_as_run_identity(tmp_path: Path) -> None:
     store = EvidenceRunStore(tmp_path / "runs")
     with pytest.raises(EvidenceRunStoreError, match="not a raw path"):
