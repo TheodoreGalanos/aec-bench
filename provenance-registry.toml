@@ -1479,6 +1479,7 @@ compatibility_kind = "package_distribution"
 
 [[field]]
 symbol = "aec_bench.contracts.identity.EntityIdentity.version"
+aliases = ["mapping:aec_bench.cli.commands.run_review._condition_view.experiment.version"]
 surface = "pydantic_model"
 wire_name = "version"
 category = "compatibility"
@@ -1793,6 +1794,7 @@ qualification_state_behavior = "an expected reported-version mismatch makes the 
 
 [[field]]
 symbol = "aec_bench.contracts.resolved_run.ResolvedRunSpec.created_at"
+aliases = ["mapping:aec_bench.cli.commands.run_review.inspect_data.created_at"]
 surface = "pydantic_model"
 wire_name = "created_at"
 category = "event_time"
@@ -1813,6 +1815,7 @@ event = "resolved run specification created"
 
 [[field]]
 symbol = "aec_bench.contracts.resolved_run.ResolvedRunSpec.execution_policy_version"
+aliases = ["mapping:aec_bench.cli.commands.run_review._condition_view.execution_policy_version"]
 surface = "pydantic_model"
 wire_name = "execution_policy_version"
 category = "compatibility"

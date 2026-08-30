@@ -250,6 +250,32 @@ class EvidenceRunStore:
         with self._lock(run_identity):
             return self._read_run_unlocked(run_identity)
 
+    def find_run(self, selector: str) -> StoredEvidenceRun:
+        """Find one stored run by its readable key or UUID."""
+
+        if not selector.strip():
+            raise EvidenceRunStoreError("run lookup selector must not be blank")
+        matches: list[EntityIdentity] = []
+        try:
+            candidates = tuple(self.root.iterdir())
+        except OSError as cause:
+            raise EvidenceRunStoreError("evidence run store root cannot be listed") from cause
+        for directory in candidates:
+            try:
+                details = directory.lstat()
+            except OSError as cause:
+                raise EvidenceRunStoreError("evidence run directory cannot be inspected") from cause
+            if not stat.S_ISDIR(details.st_mode):
+                continue
+            spec = self._read_optional_model(directory / self._SPEC_FILE, ResolvedRunSpec)
+            if spec is not None and selector in {str(spec.run_identity.key), str(spec.run_identity.id)}:
+                matches.append(spec.run_identity)
+        if not matches:
+            raise EvidenceRunStoreIncomplete(f"no evidence run matches selector: {selector}")
+        if len(matches) > 1:
+            raise EvidenceRunStoreConflict(f"run selector matches multiple evidence runs: {selector}")
+        return self.read_run(matches[0])
+
     @contextmanager
     def _lock(self, run_identity: EntityIdentity) -> Iterator[None]:
         with exclusive_local_file_lock(self.root, f"_locks/{self._locator(run_identity)}.lock"):
