@@ -51,6 +51,8 @@ def _git(root: Path, *args: str, check: bool = True) -> subprocess.CompletedProc
 
 
 def _repository_reference(*, task: TaskDefinition, task_dir: Path) -> RepositoryTaskSnapshotRef:
+    if task.identity is None:
+        raise TaskSnapshotError(f"task identity is required to create a snapshot: {task.task_id}")
     root_output = _git(task_dir, "rev-parse", "--show-toplevel").stdout.decode().strip()
     repository_root = Path(root_output).resolve()
     try:
@@ -84,6 +86,7 @@ def _repository_reference(*, task: TaskDefinition, task_dir: Path) -> Repository
         raise TaskSnapshotError(f"repository task is absent at revision: {task.task_id}")
     return RepositoryTaskSnapshotRef(
         task_id=task.task_id,
+        task_identity=task.identity,
         source_revision=revision,
         task_path=task_path,
     )
@@ -101,6 +104,9 @@ def build_task_snapshot(
     artifact_repository: ArtifactRepository | None = None,
 ) -> TaskSnapshotRef:
     """Bind one validated task to Git, or publish one detached task archive."""
+
+    if task.identity is None:
+        raise TaskSnapshotError(f"task identity is required to create a snapshot: {task.task_id}")
 
     root = Path(tasks_root).resolve()
     task_dir = (root / task.task_id).resolve()
@@ -121,7 +127,7 @@ def build_task_snapshot(
         data=build_task_snapshot_archive(task_dir),
         media_type=TASK_SNAPSHOT_MEDIA_TYPE,
     )
-    return ArtifactTaskSnapshotRef(task_id=task.task_id, artifact=artifact)
+    return ArtifactTaskSnapshotRef(task_id=task.task_id, task_identity=task.identity, artifact=artifact)
 
 
 def assert_task_snapshot_matches_directory(*, reference: TaskSnapshotRef, task_dir: Path) -> None:

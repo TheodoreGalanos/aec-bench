@@ -36,7 +36,7 @@ def test_run_plan_embeds_ordinary_configuration_without_parallel_identity(tmp_pa
     assert "repetitions" not in payload
     assert isinstance(plan.task_snapshots[0], ArtifactTaskSnapshotRef)
     task_payload = payload["task_snapshots"][0]
-    assert set(task_payload) == {"kind", "task_id", "artifact"}
+    assert set(task_payload) == {"kind", "task_id", "task_identity", "artifact"}
     assert "provider" not in task_payload
     assert "definition_sha256" not in task_payload
     assert "package_sha256" not in task_payload

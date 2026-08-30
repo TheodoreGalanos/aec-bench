@@ -10,6 +10,7 @@ from typing import Any
 
 import pytest
 
+from aec_bench.contracts.harness_kernel import canonical_json_sha256
 from aec_bench.contracts.identity import EntityKind, new_entity_id
 from aec_bench.contracts.task_review_snapshot import ReviewSnapshot
 from aec_bench.contracts.task_snapshot import ArtifactTaskSnapshotRef
@@ -36,6 +37,10 @@ def test_detached_task_snapshot_binds_one_exact_archive(tmp_path: Path) -> None:
     assert isinstance(first, ArtifactTaskSnapshotRef)
     assert first == second
     assert first.task_id == task.task_id
+    assert first.task_identity == task.identity
+    assert first.task_identity is not None
+    assert first.task_identity.key == task.task_id
+    assert first.task_identity.version == 1
     assert (
         read_task_snapshot_archive(repository.read_bytes(first.artifact))["environment/data.json"] == b'{"value": 1}\n'
     )
@@ -47,6 +52,28 @@ def test_detached_task_snapshot_binds_one_exact_archive(tmp_path: Path) -> None:
         artifact_repository=repository,
     )
     assert changed != first
+
+
+def test_task_snapshot_requires_task_identity(tmp_path: Path) -> None:
+    tasks_root = tmp_path / "tasks"
+    task_dir = _write_task(tasks_root, "civil/calculation/example")
+    task = load_task_definition(task_dir, tasks_root).model_copy(update={"identity": None})
+
+    with pytest.raises(TaskSnapshotError, match="identity is required"):
+        build_task_snapshot(task=task, tasks_root=tasks_root)
+
+
+def test_legacy_task_snapshot_keeps_its_original_commitment(tmp_path: Path) -> None:
+    tasks_root = tmp_path / "tasks"
+    task_dir = _write_task(tasks_root, "civil/calculation/example")
+    current = build_task_snapshot(task=load_task_definition(task_dir, tasks_root), tasks_root=tasks_root)
+    payload = current.model_dump(mode="json")
+    payload.pop("task_identity")
+
+    legacy = ArtifactTaskSnapshotRef.model_validate(payload)
+
+    assert legacy.model_dump(mode="json") == payload
+    assert legacy.commitment_sha256 == canonical_json_sha256(payload)
 
 
 def test_review_data_is_separate_from_task_identity(tmp_path: Path) -> None:
