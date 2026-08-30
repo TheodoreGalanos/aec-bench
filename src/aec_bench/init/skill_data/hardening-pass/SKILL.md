@@ -91,7 +91,7 @@ uv run aec-bench generate validate-template <template_dir>
 Then generate a test instance and compute with sample values:
 
 ```bash
-uv run aec-bench generate task <template-name> --instances 1 --seed 42 --output /tmp/hardening-preview/ --dry-run
+uv run aec-bench generate task <template-name> --instances 1 --seed 42 --lifecycle proposed --visibility public --output /tmp/hardening-preview/ --dry-run
 ```
 
 Check: does the generated instruction look correct with concrete parameter values?

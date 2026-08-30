@@ -11,6 +11,7 @@ from pathlib import Path
 
 import pytest
 
+from aec_bench.contracts.task_definition import Lifecycle, Visibility
 from aec_bench.generation.sampler import sample_instance
 from aec_bench.generation.scaffolder import scaffold_task_instance
 from aec_bench.templates.registry import discover_templates, load_template
@@ -124,7 +125,13 @@ def _instance_for_variant(variant: str, max_seeds: int = 1000):
 def _scaffold_variant(tmp_path: Path, variant: str) -> tuple[Path, dict]:
     loaded_template, config, template_dir, engine, instance = _instance_for_variant(variant)
     (template_dir / "engine.py").read_text(encoding="utf-8")
-    instance_dir = scaffold_task_instance(loaded_template, instance, tmp_path)
+    instance_dir = scaffold_task_instance(
+        loaded_template,
+        instance,
+        tmp_path,
+        task_lifecycle=Lifecycle.PROPOSED,
+        task_visibility=Visibility.PUBLIC,
+    )
     return instance_dir, instance.ground_truth
 
 

@@ -110,7 +110,7 @@ jobs:
       - name: Validate maintained task metadata
         run: >-
           uv run pytest -q
-          tests/tasks/test_metadata_migration.py::test_repository_tasks_have_complete_explicit_metadata_and_strict_loader_success
+          tests/tasks/test_loader.py::test_maintained_catalogue_uses_strict_identity_and_policy_metadata
 
       - name: Check lifecycle and visibility selection
         run: uv run pytest -q tests/tasks/test_selector.py tests/harness/test_scheduler.py
@@ -154,7 +154,6 @@ jobs:
           src/aec_bench/harness/scheduler.py
           src/aec_bench/harness/verifier_execution.py
           src/aec_bench/tasks/loader.py
-          src/aec_bench/tasks/metadata_migration.py
           src/aec_bench/tasks/registry.py
           src/aec_bench/tasks/selector.py
           src/aec_bench/trials.py
@@ -172,7 +171,6 @@ jobs:
           src/aec_bench/harness/scheduler.py
           src/aec_bench/harness/verifier_execution.py
           src/aec_bench/tasks/loader.py
-          src/aec_bench/tasks/metadata_migration.py
           src/aec_bench/tasks/registry.py
           src/aec_bench/tasks/selector.py
           src/aec_bench/trials.py
@@ -186,7 +184,6 @@ jobs:
           src/aec_bench/harness/scheduler.py
           src/aec_bench/harness/verifier_execution.py
           src/aec_bench/tasks/loader.py
-          src/aec_bench/tasks/metadata_migration.py
           src/aec_bench/tasks/registry.py
           src/aec_bench/tasks/selector.py
           src/aec_bench/trials.py

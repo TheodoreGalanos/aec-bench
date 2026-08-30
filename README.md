@@ -48,7 +48,7 @@ uv sync --all-extras --dev
 uv run aec-bench generate list-templates
 
 # Generate 3 task instances from a template
-uv run aec-bench generate task terzaghi-bearing-capacity --instances 3
+uv run aec-bench generate task terzaghi-bearing-capacity --instances 3 --lifecycle proposed --visibility public
 
 # Run tests
 uv run pytest tests/ -q
@@ -86,13 +86,13 @@ AEC-Bench lets you:
 
 ```bash
 # Generate instances from a built-in template
-uv run aec-bench generate task <template-name> --instances 5 --seed 42
+uv run aec-bench generate task <template-name> --instances 5 --seed 42 --lifecycle proposed --visibility public
 
 # Generate from a local template directory
-uv run aec-bench generate task --template path/to/template/ --instances 3
+uv run aec-bench generate task --template path/to/template/ --instances 3 --lifecycle proposed --visibility public
 
 # Preview without writing files
-uv run aec-bench generate task terzaghi-bearing-capacity --dry-run
+uv run aec-bench generate task terzaghi-bearing-capacity --lifecycle proposed --visibility public --dry-run
 
 # Generate a full suite from a suite configuration
 uv run aec-bench generate suite --config suite.toml
@@ -106,6 +106,10 @@ uv run aec-bench generate list-templates
 # Validate a template
 uv run aec-bench generate validate-template path/to/template/
 ```
+
+Suite configurations must declare `task_lifecycle` and `task_visibility`. These
+values are written to every generated task and to the replay manifest; they are
+not inferred from difficulty visibility.
 
 The built-in catalogue is larger than a README can usefully list. Use
 `uv run aec-bench generate list-templates` for the live template list, or

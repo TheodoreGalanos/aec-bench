@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import tomllib
 from pathlib import Path
 
 import yaml
@@ -18,9 +19,13 @@ runner = CliRunner()
 def _make_valid_task(root: Path) -> Path:
     task_dir = root / "electrical" / "test-task"
     task_dir.mkdir(parents=True)
+    task_id = new_entity_id(EntityKind.TASK)
     (task_dir / "task.toml").write_text(
         'version = "1.0"\n\n'
+        f'[identity]\nid = "{task_id}"\nkey = "electrical/test-task"\nversion = 2\n\n'
         "[metadata]\n"
+        'lifecycle = "active"\n'
+        'visibility = "public"\n'
         'difficulty = "easy"\n'
         'category = "reasoning"\n'
         'tags = ["electrical"]\n\n'
@@ -42,9 +47,13 @@ def _make_valid_task(root: Path) -> Path:
 def _make_valid_named_task(root: Path, *segments: str) -> Path:
     task_dir = root.joinpath(*segments)
     task_dir.mkdir(parents=True)
+    task_id = new_entity_id(EntityKind.TASK)
     (task_dir / "task.toml").write_text(
         'version = "1.0"\n\n'
+        f'[identity]\nid = "{task_id}"\nkey = "{"/".join(segments).lower()}"\nversion = 1\n\n'
         "[metadata]\n"
+        'lifecycle = "active"\n'
+        'visibility = "public"\n'
         'difficulty = "easy"\n'
         'category = "reasoning"\n'
         f'tags = ["{segments[0]}"]\n\n'
@@ -63,16 +72,8 @@ def _make_valid_named_task(root: Path, *segments: str) -> Path:
     return task_dir
 
 
-def _add_explicit_identity(task_dir: Path, *, lifecycle: str = "active", visibility: str = "public") -> str:
-    task_id = new_entity_id(EntityKind.TASK)
-    task_toml = (task_dir / "task.toml").read_text(encoding="utf-8")
-    task_toml = task_toml.replace(
-        "[metadata]\n",
-        f'[identity]\nid = "{task_id}"\nkey = "electrical/test-task"\nversion = 2\n\n'
-        f'[metadata]\nlifecycle = "{lifecycle}"\nvisibility = "{visibility}"\n',
-    )
-    (task_dir / "task.toml").write_text(task_toml, encoding="utf-8")
-    return str(task_id)
+def _task_identity_id(task_dir: Path) -> str:
+    return str(tomllib.loads((task_dir / "task.toml").read_text(encoding="utf-8"))["identity"]["id"])
 
 
 class TestTaskValidate:
@@ -94,7 +95,7 @@ class TestTaskValidate:
 
     def test_json_output_has_findings(self, tmp_path: Path) -> None:
         task_dir = _make_valid_task(tmp_path)
-        task_id = _add_explicit_identity(task_dir)
+        task_id = _task_identity_id(task_dir)
         result = runner.invoke(app, ["--json", "task", "validate", str(task_dir)])
 
         assert result.exit_code == 0
@@ -117,7 +118,6 @@ class TestTaskValidate:
 
     def test_output_includes_explicit_identity_and_policy(self, tmp_path: Path) -> None:
         task_dir = _make_valid_task(tmp_path)
-        _add_explicit_identity(task_dir)
 
         result = runner.invoke(app, ["--text", "task", "validate", str(task_dir)])
 
@@ -135,7 +135,7 @@ class TestTaskValidate:
 class TestTaskExplain:
     def test_explain_resolves_key_and_uuid(self, tmp_path: Path) -> None:
         task_dir = _make_valid_task(tmp_path)
-        task_id = _add_explicit_identity(task_dir)
+        task_id = _task_identity_id(task_dir)
 
         result = runner.invoke(app, ["--text", "task", "explain", task_id, "--tasks-root", str(tmp_path)])
 
@@ -152,113 +152,6 @@ class TestTaskExplain:
 
         assert result.exit_code == 1
         assert "task not found" in result.output
-
-
-class TestTaskMetadataMigration:
-    def test_check_write_and_second_check_are_idempotent(self, tmp_path: Path) -> None:
-        task_dir = _make_valid_task(tmp_path)
-        report_path = tmp_path / "migration-report.json"
-        task_toml = (
-            (task_dir / "task.toml")
-            .read_text(encoding="utf-8")
-            .replace("[metadata]\n", '[metadata]\nlifecycle = "active"\nvisibility = "public"\n')
-        )
-        (task_dir / "task.toml").write_text(task_toml, encoding="utf-8")
-
-        check = runner.invoke(
-            app,
-            [
-                "--text",
-                "task",
-                "migrate-metadata",
-                "--check",
-                "--tasks-root",
-                str(tmp_path),
-                "--report-path",
-                str(report_path),
-            ],
-        )
-        write = runner.invoke(
-            app,
-            [
-                "--text",
-                "task",
-                "migrate-metadata",
-                "--write",
-                "--tasks-root",
-                str(tmp_path),
-                "--report-path",
-                str(report_path),
-            ],
-        )
-        second_check = runner.invoke(
-            app,
-            [
-                "--text",
-                "task",
-                "migrate-metadata",
-                "--check",
-                "--tasks-root",
-                str(tmp_path),
-                "--report-path",
-                str(report_path),
-            ],
-        )
-
-        assert check.exit_code == 0
-        assert "would update 1" in check.output
-        assert write.exit_code == 0
-        assert "updated 1" in write.output
-        assert second_check.exit_code == 0
-        assert "would update 0" in second_check.output
-
-    def test_write_refuses_missing_policy_instead_of_inventing_it(self, tmp_path: Path) -> None:
-        task_dir = _make_valid_task(tmp_path)
-        task_toml = (
-            (task_dir / "task.toml")
-            .read_text(encoding="utf-8")
-            .replace("[metadata]\n", '[metadata]\nvisibility = "public"\n')
-        )
-        (task_dir / "task.toml").write_text(task_toml, encoding="utf-8")
-
-        check = runner.invoke(
-            app,
-            ["--text", "task", "migrate-metadata", "--check", "--tasks-root", str(tmp_path)],
-        )
-        result = runner.invoke(
-            app,
-            ["--text", "task", "migrate-metadata", "--write", "--tasks-root", str(tmp_path)],
-        )
-
-        assert check.exit_code == 0
-        assert "review:" in check.output
-        assert result.exit_code == 1
-        assert "reviewer must author" in result.output
-
-    def test_json_output_is_single_envelope(self, tmp_path: Path) -> None:
-        task_dir = _make_valid_task(tmp_path)
-        _add_explicit_identity(task_dir)
-        report_path = tmp_path / "migration-report.json"
-
-        result = runner.invoke(
-            app,
-            [
-                "--json",
-                "task",
-                "migrate-metadata",
-                "--check",
-                "--tasks-root",
-                str(tmp_path),
-                "--report-path",
-                str(report_path),
-            ],
-        )
-
-        assert result.exit_code == 0
-        payload = json.loads(result.output)
-        assert payload["status"] == "success"
-        assert payload["data"]["mode"] == "check"
-        assert payload["data"]["task_count"] == 1
 
 
 class TestTaskGenome:

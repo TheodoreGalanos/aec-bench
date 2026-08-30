@@ -13,6 +13,8 @@ from pathlib import Path
 
 from pydantic import Field
 
+from aec_bench.contracts.identity import EntityKind, new_entity_id
+from aec_bench.contracts.task_definition import Lifecycle, Visibility
 from aec_bench.contracts.validators import StrictModel
 from aec_bench.generation.contracts import GeneratedTaskSet
 from aec_bench.templates.contracts import ToolMode
@@ -78,6 +80,8 @@ class SuiteConfig(StrictModel):
     coverage: CoverageConfig
     templates: TemplateSelection
     visibility: VisibilityMix
+    task_lifecycle: Lifecycle
+    task_visibility: Visibility
     tool_mode: ToolModeMix
     instances: InstanceConfig
     output: OutputConfig
@@ -274,6 +278,8 @@ class PlannedInstance:
     difficulty: str
     tool_mode: str
     visibility: str
+    task_lifecycle: Lifecycle
+    task_visibility: Visibility
     seed_offset: int
 
 
@@ -502,6 +508,8 @@ def plan_suite(
                     difficulty=diff_name,
                     tool_mode=tm,
                     visibility=vis,
+                    task_lifecycle=config.task_lifecycle,
+                    task_visibility=config.task_visibility,
                     seed_offset=config.seed + cumulative_index,
                 )
             )
@@ -571,11 +579,15 @@ def generate_instances(
         )
 
         # Scaffold to disk
+        task_identity_id = new_entity_id(EntityKind.TASK)
         instance_dir = scaffold_task_instance(
             template=template,
             instance=sampled,
             output_dir=output_dir,
             tool_mode_override=planned.tool_mode,
+            task_lifecycle=planned.task_lifecycle,
+            task_visibility=planned.task_visibility,
+            task_identity_id=task_identity_id,
         )
 
         rel_path = instance_dir.relative_to(output_dir).as_posix()
@@ -587,6 +599,9 @@ def generate_instances(
                 instance_index=instance_index,
                 difficulty=planned.difficulty,
                 tool_mode=ToolMode(planned.tool_mode),
+                task_lifecycle=planned.task_lifecycle,
+                task_visibility=planned.task_visibility,
+                task_identity_id=task_identity_id,
             )
         )
 
@@ -614,6 +629,8 @@ def _suite_generation_config(config: SuiteConfig) -> dict[str, object]:
         "coverage": config.coverage.model_dump(mode="json"),
         "templates": {"include": config.templates.include},
         "visibility": config.visibility.model_dump(mode="json"),
+        "task_lifecycle": config.task_lifecycle.value,
+        "task_visibility": config.task_visibility.value,
         "tool_mode": config.tool_mode.model_dump(mode="json"),
         "instances": config.instances.model_dump(mode="json"),
     }

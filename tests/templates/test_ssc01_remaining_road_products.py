@@ -10,6 +10,7 @@ from pathlib import Path
 
 import pytest
 
+from aec_bench.contracts.task_definition import Lifecycle, Visibility
 from aec_bench.generation.sampler import sample_instance
 from aec_bench.generation.scaffolder import scaffold_task_instance
 from aec_bench.templates.registry import discover_templates
@@ -233,7 +234,13 @@ def test_ssc01_remaining_product_instruction_is_source_bound(case: dict[str, obj
     template_dir = loaded_template.path
     instance = sample_instance(loaded_template, difficulty_name="easy", seed=71, instance_index=0)
     (template_dir / "engine.py").read_text(encoding="utf-8")
-    instance_dir = scaffold_task_instance(loaded_template, instance, tmp_path)
+    instance_dir = scaffold_task_instance(
+        loaded_template,
+        instance,
+        tmp_path,
+        task_lifecycle=Lifecycle.PROPOSED,
+        task_visibility=Visibility.PUBLIC,
+    )
     instruction = (instance_dir / "instruction.md").read_text(encoding="utf-8")
 
     assert case["product_id"] in instruction
@@ -250,7 +257,13 @@ def test_ssc01_remaining_product_golden_pass_scores_one(case: dict[str, object],
     template_dir = loaded_template.path
     instance = sample_instance(loaded_template, difficulty_name="easy", seed=71, instance_index=0)
     (template_dir / "engine.py").read_text(encoding="utf-8")
-    instance_dir = scaffold_task_instance(loaded_template, instance, tmp_path)
+    instance_dir = scaffold_task_instance(
+        loaded_template,
+        instance,
+        tmp_path,
+        task_lifecycle=Lifecycle.PROPOSED,
+        task_visibility=Visibility.PUBLIC,
+    )
     golden_pass = instance_dir / "tests" / "fixtures" / "golden_pass.md"
     reward_file = tmp_path / f"{case['name']}-reward.json"
 

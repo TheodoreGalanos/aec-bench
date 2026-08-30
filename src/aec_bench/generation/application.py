@@ -5,7 +5,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from aec_bench.contracts.task_definition import TaskDefinition, Visibility
+from aec_bench.contracts.identity import EntityKind, new_entity_id
+from aec_bench.contracts.task_definition import Lifecycle, TaskDefinition, Visibility
 from aec_bench.generation.contracts import GeneratedTaskSet
 from aec_bench.generation.replay import (
     GenerationInstance,
@@ -44,7 +45,8 @@ def generate_template_instances(
     seed: int,
     start_index: int = 0,
     tool_mode: str | None = None,
-    task_visibility: Visibility = Visibility.PUBLIC,
+    task_lifecycle: Lifecycle,
+    task_visibility: Visibility,
     suite_id: str | None = None,
 ) -> GeneratedTaskSet:
     """Generate one template's runnable instances and optional replay data."""
@@ -72,12 +74,15 @@ def generate_template_instances(
             seed=seed,
             instance_index=instance_index,
         )
+        task_identity_id = new_entity_id(EntityKind.TASK)
         task_path = scaffold_task_instance(
             template=template,
             instance=sampled,
             output_dir=root,
             tool_mode_override=tool_mode,
+            task_lifecycle=task_lifecycle,
             task_visibility=task_visibility,
+            task_identity_id=task_identity_id,
         )
         task_paths.append(task_path)
         entries.append(
@@ -88,7 +93,9 @@ def generate_template_instances(
                 instance_index=instance_index,
                 difficulty=difficulty,
                 tool_mode=effective_tool_mode,
+                task_lifecycle=task_lifecycle,
                 task_visibility=task_visibility,
+                task_identity_id=task_identity_id,
             )
         )
     resolved_suite_id = suite_id or f"{template.config.meta.name}-standalone"
@@ -103,6 +110,7 @@ def generate_template_instances(
             "instances": count,
             "difficulties": difficulties,
             "tool_mode": effective_tool_mode.value,
+            "task_lifecycle": task_lifecycle.value,
             "task_visibility": task_visibility.value,
         },
     )

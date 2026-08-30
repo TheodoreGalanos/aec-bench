@@ -5,10 +5,11 @@ import json
 import tomllib
 from dataclasses import replace
 from pathlib import Path
+from uuid import UUID
 
 import pytest
 
-from aec_bench.contracts.task_definition import Visibility
+from aec_bench.contracts.task_definition import Lifecycle, Visibility
 from aec_bench.contracts.task_review import TaskReviewProfile
 from aec_bench.generation.sampler import sample_instance
 from aec_bench.templates.registry import load_template
@@ -30,7 +31,9 @@ def _generate_test_instance(tmp_path: Path) -> Path:
     inst = sample_instance(template, "easy", seed=42, instance_index=0)
     from aec_bench.generation.scaffolder import scaffold_task_instance
 
-    return scaffold_task_instance(template, inst, tmp_path)
+    return scaffold_task_instance(
+        template, inst, tmp_path, task_lifecycle=Lifecycle.PROPOSED, task_visibility=Visibility.PUBLIC
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -69,15 +72,18 @@ def test_scaffold_creates_directory_structure(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_scaffold_task_toml_excludes_replay_metadata(tmp_path: Path) -> None:
-    """task.toml must contain runtime semantics and no generation replay fields."""
+def test_scaffold_task_toml_contains_explicit_identity_and_policy(tmp_path: Path) -> None:
+    """Generated task packages must contain explicit identity and policy."""
     instance_dir = _generate_test_instance(tmp_path)
     toml_path = instance_dir / "task.toml"
 
     with open(toml_path, "rb") as fh:
         data = tomllib.load(fh)
 
-    assert "version" not in data
+    assert data["identity"]["version"] == 1
+    assert UUID(data["identity"]["id"]).version == 7
+    assert data["metadata"]["lifecycle"] == "proposed"
+    assert data["metadata"]["visibility"] == "public"
     assert "generation" not in data
     assert data["metadata"]["domain"] == "ground"
 
@@ -90,7 +96,9 @@ def test_scaffold_task_toml_preserves_nonstandard_generation_difficulty(tmp_path
 
     from aec_bench.generation.scaffolder import scaffold_task_instance
 
-    instance_dir = scaffold_task_instance(template, inst, tmp_path)
+    instance_dir = scaffold_task_instance(
+        template, inst, tmp_path, task_lifecycle=Lifecycle.PROPOSED, task_visibility=Visibility.PUBLIC
+    )
 
     with open(instance_dir / "task.toml", "rb") as fh:
         data = tomllib.load(fh)
@@ -164,7 +172,9 @@ def test_scaffold_golden_pass_has_correct_values(tmp_path: Path) -> None:
 
     from aec_bench.generation.scaffolder import scaffold_task_instance
 
-    instance_dir = scaffold_task_instance(template, inst, tmp_path)
+    instance_dir = scaffold_task_instance(
+        template, inst, tmp_path, task_lifecycle=Lifecycle.PROPOSED, task_visibility=Visibility.PUBLIC
+    )
 
     golden_pass = (instance_dir / "tests" / "fixtures" / "golden_pass.md").read_text()
 
@@ -195,7 +205,14 @@ def test_scaffold_no_tool_mode_omits_calc_script(tmp_path: Path) -> None:
 
     from aec_bench.generation.scaffolder import scaffold_task_instance
 
-    instance_dir = scaffold_task_instance(template, inst, tmp_path, tool_mode_override="no-tool")
+    instance_dir = scaffold_task_instance(
+        template,
+        inst,
+        tmp_path,
+        tool_mode_override="no-tool",
+        task_lifecycle=Lifecycle.PROPOSED,
+        task_visibility=Visibility.PUBLIC,
+    )
 
     calc_scripts = list((instance_dir / "environment").glob("*_calc.py"))
     assert calc_scripts == [], "No *_calc.py should be present in no-tool mode"
@@ -230,7 +247,9 @@ def test_scaffold_copies_custom_verifier(tmp_path: Path) -> None:
 
     from aec_bench.generation.scaffolder import scaffold_task_instance
 
-    instance_dir = scaffold_task_instance(template, inst, tmp_path / "output")
+    instance_dir = scaffold_task_instance(
+        template, inst, tmp_path / "output", task_lifecycle=Lifecycle.PROPOSED, task_visibility=Visibility.PUBLIC
+    )
 
     verify_py = (instance_dir / "tests" / "verify.py").read_text()
     assert "custom verifier" in verify_py, "Custom verify.py content must be copied verbatim"
@@ -277,7 +296,14 @@ def test_scaffold_task_toml_no_tools_section_in_no_tool_mode(tmp_path: Path) -> 
 
     from aec_bench.generation.scaffolder import scaffold_task_instance
 
-    instance_dir = scaffold_task_instance(template, inst, tmp_path, tool_mode_override="no-tool")
+    instance_dir = scaffold_task_instance(
+        template,
+        inst,
+        tmp_path,
+        tool_mode_override="no-tool",
+        task_lifecycle=Lifecycle.PROPOSED,
+        task_visibility=Visibility.PUBLIC,
+    )
 
     with open(instance_dir / "task.toml", "rb") as fh:
         data = tomllib.load(fh)
@@ -285,8 +311,8 @@ def test_scaffold_task_toml_no_tools_section_in_no_tool_mode(tmp_path: Path) -> 
     assert "tools" not in data, "[tools] section should not be present in no-tool mode"
 
 
-def test_scaffold_records_task_visibility_without_replay_identity(tmp_path: Path) -> None:
-    """Runtime metadata retains visibility but excludes the sampling identity."""
+def test_scaffold_records_task_visibility_and_identity(tmp_path: Path) -> None:
+    """Runtime metadata retains explicit visibility and generated identity."""
     template = load_template(TEMPLATE_DIR)
     instance = sample_instance(template, "easy", seed=42, instance_index=12)
 
@@ -296,6 +322,7 @@ def test_scaffold_records_task_visibility_without_replay_identity(tmp_path: Path
         template,
         instance,
         tmp_path,
+        task_lifecycle=Lifecycle.PROPOSED,
         task_visibility=Visibility.HOLDOUT,
     )
 
@@ -303,6 +330,8 @@ def test_scaffold_records_task_visibility_without_replay_identity(tmp_path: Path
         data = tomllib.load(fh)
 
     assert data["metadata"]["visibility"] == "holdout"
+    assert data["identity"]["version"] == 1
+    assert data["metadata"]["lifecycle"] == "proposed"
     assert "generation" not in data
 
 

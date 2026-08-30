@@ -10,6 +10,7 @@ from pathlib import Path
 
 import pytest
 
+from aec_bench.contracts.task_definition import Lifecycle, Visibility
 from aec_bench.generation.sampler import sample_instance
 from aec_bench.generation.scaffolder import scaffold_task_instance
 from aec_bench.templates.registry import discover_templates, load_template
@@ -47,7 +48,13 @@ def _sample_ssc18_instance(tmp_path: Path) -> Path:
     template_dir = loaded_template.path
     instance = sample_instance(loaded_template, difficulty_name="easy", seed=48, instance_index=0)
     (template_dir / "engine.py").read_text(encoding="utf-8")
-    return scaffold_task_instance(loaded_template, instance, tmp_path)
+    return scaffold_task_instance(
+        loaded_template,
+        instance,
+        tmp_path,
+        task_lifecycle=Lifecycle.PROPOSED,
+        task_visibility=Visibility.PUBLIC,
+    )
 
 
 def test_template_is_discoverable_by_builtin_name() -> None:

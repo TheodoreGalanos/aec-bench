@@ -17,6 +17,7 @@ from aec_bench.contracts.output_completion import (
     OutputCompletionReason,
     evaluate_output_completion,
 )
+from aec_bench.contracts.task_definition import Lifecycle, Visibility
 from aec_bench.generation.sampler import sample_instance
 from aec_bench.generation.scaffolder import scaffold_task_instance
 from aec_bench.templates.registry import load_template
@@ -275,7 +276,13 @@ def test_drainage_template_scaffolds_validated_contract_into_environment(tmp_pat
     template_dir = loaded_template.path
     instance = sample_instance(loaded_template, "hard", seed=7_301, instance_index=0)
 
-    task_dir = scaffold_task_instance(loaded_template, instance, tmp_path)
+    task_dir = scaffold_task_instance(
+        loaded_template,
+        instance,
+        tmp_path,
+        task_lifecycle=Lifecycle.PROPOSED,
+        task_visibility=Visibility.PUBLIC,
+    )
 
     template_contract = (template_dir / "output_contract.json").read_bytes()
     generated_contract_path = task_dir / "environment" / "output_contract.json"

@@ -60,6 +60,10 @@ def _generate_external_task(tmp_path: Path, source_template: Path = BUILTIN_TEMP
             "1",
             "--seed",
             "71",
+            "--lifecycle",
+            "proposed",
+            "--visibility",
+            "public",
             "--output",
             str(output),
         ],
@@ -74,7 +78,8 @@ def test_standalone_generation_keeps_replay_data_out_of_task_runtime(tmp_path: P
     task_dir = output / manifest.instances[0].task_id
     task_config = tomllib.loads((task_dir / "task.toml").read_text(encoding="utf-8"))
 
-    assert "version" not in task_config
+    assert task_config["identity"]["version"] == 1
+    assert task_config["metadata"]["lifecycle"] == "proposed"
     assert "generation" not in task_config
     assert isinstance(manifest.source, ArtifactTemplateSource)
     assert manifest.config_ref == "generation-config.json"
@@ -102,6 +107,10 @@ def test_clean_builtin_template_uses_one_git_revision(tmp_path: Path) -> None:
             "terzaghi-bearing-capacity",
             "--instances",
             "1",
+            "--lifecycle",
+            "proposed",
+            "--visibility",
+            "public",
             "--output",
             str(output),
         ],

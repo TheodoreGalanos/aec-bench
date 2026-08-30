@@ -10,6 +10,7 @@ from typing import Any
 
 import pytest
 
+from aec_bench.contracts.identity import EntityKind, new_entity_id
 from aec_bench.contracts.task_review_snapshot import ReviewSnapshot
 from aec_bench.contracts.task_snapshot import ArtifactTaskSnapshotRef
 from aec_bench.harness.compilation.task_snapshot import (
@@ -159,12 +160,19 @@ def test_resolve_task_snapshots_preserves_requested_order(tmp_path: Path) -> Non
 
 def _write_task(tasks_root: Path, task_id: str) -> Path:
     task_dir = tasks_root / task_id
+    identity_id = new_entity_id(EntityKind.TASK)
     (task_dir / "environment").mkdir(parents=True)
     (task_dir / "tests").mkdir()
     (task_dir / "task.toml").write_text(
-        """
+        f"""
+[identity]
+id = "{identity_id}"
+key = "{task_id}"
+version = 1
+
 [metadata]
 difficulty = "easy"
+lifecycle = "proposed"
 visibility = "public"
 tags = ["snapshot"]
 

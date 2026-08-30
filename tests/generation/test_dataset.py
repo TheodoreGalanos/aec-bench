@@ -53,6 +53,8 @@ def _parse_suite_toml(toml_str: str) -> SuiteConfig:
 MINIMAL_SUITE_TOML = textwrap.dedent("""\
     name = "test-suite"
     seed = 42
+    task_lifecycle = "proposed"
+    task_visibility = "public"
 
     [coverage]
     difficulties = {easy = 0.5, medium = 0.5}
@@ -98,6 +100,8 @@ def test_suite_config_defaults() -> None:
     """Fields with defaults should be populated when omitted."""
     toml_str = textwrap.dedent("""\
         name = "defaults-test"
+        task_lifecycle = "proposed"
+        task_visibility = "public"
         seed = 1
 
         [coverage]
@@ -620,5 +624,7 @@ def test_manifest_instance_entries_keep_only_replay_inputs(tmp_path: Path) -> No
             "instance_index",
             "difficulty",
             "tool_mode",
+            "task_lifecycle",
             "task_visibility",
+            "task_identity_id",
         }

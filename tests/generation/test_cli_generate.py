@@ -69,6 +69,10 @@ def test_generate_task_creates_instances(tmp_path: Path) -> None:
             "terzaghi-bearing-capacity",
             "--instances",
             "2",
+            "--lifecycle",
+            "proposed",
+            "--visibility",
+            "public",
             "--seed",
             "42",
             "--output",
@@ -89,6 +93,10 @@ def test_generate_task_deterministic(tmp_path: Path) -> None:
         "terzaghi-bearing-capacity",
         "--instances",
         "1",
+        "--lifecycle",
+        "proposed",
+        "--visibility",
+        "public",
         "--seed",
         "99",
         "--output",
@@ -109,9 +117,15 @@ def test_generate_task_deterministic(tmp_path: Path) -> None:
 
     toml_a = next(out_a.rglob("task.toml"))
     toml_b = next(out_b.rglob("task.toml"))
-    assert toml_a.read_bytes() == toml_b.read_bytes()
-    task_config = tomllib.loads(toml_a.read_text(encoding="utf-8"))
-    assert "version" not in task_config
+    config_a = tomllib.loads(toml_a.read_text(encoding="utf-8"))
+    config_b = tomllib.loads(toml_b.read_text(encoding="utf-8"))
+    assert config_a["identity"]["id"] != config_b["identity"]["id"]
+    config_a["identity"].pop("id")
+    config_b["identity"].pop("id")
+    assert config_a == config_b
+    task_config = config_a
+    assert task_config["identity"]["version"] == 1
+    assert task_config["metadata"]["lifecycle"] == "proposed"
     assert "generation" not in task_config
     manifest = (out_a / "generation-manifest.json").read_text(encoding="utf-8")
     assert "template_source_sha256" not in manifest
@@ -127,6 +141,10 @@ def test_generate_task_dry_run_creates_nothing(tmp_path: Path) -> None:
             "terzaghi-bearing-capacity",
             "--instances",
             "2",
+            "--lifecycle",
+            "proposed",
+            "--visibility",
+            "public",
             "--seed",
             "42",
             "--output",
@@ -148,7 +166,17 @@ def test_generate_task_name_not_found() -> None:
     """generate task with an unknown template name should exit with error."""
     result = runner.invoke(
         app,
-        ["generate", "task", "nonexistent-template", "--output", "/tmp/nowhere"],
+        [
+            "generate",
+            "task",
+            "nonexistent-template",
+            "--lifecycle",
+            "proposed",
+            "--visibility",
+            "public",
+            "--output",
+            "/tmp/nowhere",
+        ],
     )
     assert result.exit_code == 1
 
@@ -163,6 +191,10 @@ def test_generate_task_with_difficulty_filter(tmp_path: Path) -> None:
             "terzaghi-bearing-capacity",
             "--instances",
             "2",
+            "--lifecycle",
+            "proposed",
+            "--visibility",
+            "public",
             "--seed",
             "42",
             "--difficulty",
@@ -190,6 +222,10 @@ def test_generate_task_from_local_template(tmp_path: Path) -> None:
             TERZAGHI_DIR,
             "--instances",
             "1",
+            "--lifecycle",
+            "proposed",
+            "--visibility",
+            "public",
             "--seed",
             "10",
             "--output",
@@ -210,7 +246,19 @@ def test_generate_task_keeps_unexpected_template_import_errors_visible(
 
     monkeypatch.setattr("aec_bench.cli.commands.generate.load_template", fail_to_import_template)
 
-    result = runner.invoke(app, ["generate", "task", "--template", str(tmp_path)])
+    result = runner.invoke(
+        app,
+        [
+            "generate",
+            "task",
+            "--template",
+            str(tmp_path),
+            "--lifecycle",
+            "proposed",
+            "--visibility",
+            "public",
+        ],
+    )
 
     assert isinstance(result.exception, ModuleNotFoundError)
     assert str(result.exception) == "missing_template_dependency"
@@ -232,6 +280,8 @@ def test_generate_task_supports_explicit_visibility_and_start_index(tmp_path: Pa
             "901",
             "--start-index",
             "10",
+            "--lifecycle",
+            "proposed",
             "--visibility",
             "holdout",
             "--output",
@@ -280,6 +330,10 @@ def test_generate_task_refuses_to_overwrite_an_existing_instance(tmp_path: Path)
         "1",
         "--difficulty",
         "easy",
+        "--lifecycle",
+        "proposed",
+        "--visibility",
+        "public",
         "--seed",
         "901",
         "--start-index",

@@ -14,12 +14,10 @@ from aec_bench.contracts.identity import EntityKey
 from aec_bench.contracts.task_definition import (
     Difficulty,
     EnvironmentSpec,
-    Lifecycle,
     TaskDefinition,
     TaskMetadata,
     ToolSpec,
     VerifierSpec,
-    Visibility,
 )
 
 logger = logging.getLogger(__name__)
@@ -61,29 +59,13 @@ def canonical_task_key(relative_path: str) -> EntityKey:
 
 
 def load_task_definition(instance_dir: Path, tasks_root: Path) -> TaskDefinition:
-    """Load a task, dispatching old files to the bounded compatibility reader."""
+    """Load a task with explicit identity and policy metadata."""
 
     raw_toml, instruction = _read_task_files(instance_dir)
-    if "identity" in raw_toml:
-        return _load_task_definition_with_metadata(instance_dir, tasks_root, raw_toml, instruction)
-    return _load_legacy_task_definition(instance_dir, tasks_root, raw_toml, instruction)
+    return _load_task_definition(instance_dir, tasks_root, raw_toml, instruction)
 
 
-def load_legacy_task_definition(
-    instance_dir: Path,
-    tasks_root: Path,
-) -> TaskDefinition:
-    """Load a pre-identity task using the temporary legacy metadata defaults."""
-
-    raw_toml, instruction = _read_task_files(instance_dir)
-    if "identity" in raw_toml:
-        raise LoadError(
-            "legacy task reader cannot load a task with [identity]; use load_task_definition for strict metadata"
-        )
-    return _load_legacy_task_definition(instance_dir, tasks_root, raw_toml, instruction)
-
-
-def _load_task_definition_with_metadata(
+def _load_task_definition(
     instance_dir: Path,
     tasks_root: Path,
     raw_toml: dict[str, Any],
@@ -169,56 +151,6 @@ def _read_task_files(instance_dir: Path) -> tuple[dict[str, Any], str]:
     except UnicodeDecodeError as error:
         raise LoadError(f"invalid instruction.md: {instruction_path}: {error}") from error
     return raw_toml, instruction
-
-
-def _load_legacy_task_definition(
-    instance_dir: Path,
-    tasks_root: Path,
-    raw_toml: dict[str, Any],
-    instruction: str,
-) -> TaskDefinition:
-    task_id = derive_task_id(instance_dir, tasks_root)
-    segments = task_id.split("/")
-    metadata = _metadata_mapping(raw_toml)
-    agent = _agent_mapping(raw_toml)
-
-    task_def = TaskDefinition.model_validate(
-        {
-            "task_id": task_id,
-            "task_type": _infer_task_type(segments),
-            "domain": _infer_domain(segments, metadata),
-            "category": _infer_category(segments, metadata),
-            "difficulty": metadata.get("difficulty", Difficulty.MEDIUM),
-            "lifecycle": Lifecycle.PROPOSED,
-            "visibility": metadata.get("visibility", Visibility.PUBLIC),
-            "instruction": instruction,
-            "environment": EnvironmentSpec(
-                dockerfile="environment/Dockerfile",
-                compose_file=_optional_relative_file(
-                    instance_dir,
-                    "environment/docker-compose.yaml",
-                ),
-                manifest=_optional_relative_file(instance_dir, "environment/manifest.jsonl"),
-                build_args={},
-                tools=_load_tools(raw_toml),
-            ),
-            "verifier": VerifierSpec(
-                script=_verifier_script(instance_dir),
-                expected_output_path=_infer_expected_output_path(instruction),
-                reward_path="/logs/verifier/reward.json",
-                details_path="/logs/verifier/details.json",
-            ),
-            "timeout_seconds": max(1, round(float(agent.get("timeout_sec", 600.0)))),
-            "tags": list(metadata.get("tags", [])),
-            "metadata": metadata,
-        }
-    )
-
-    # Warn about Dockerfile/extension mismatches
-    for warning in _check_dockerfile_status(instance_dir, raw_toml):
-        logger.warning(warning)
-
-    return task_def
 
 
 def _metadata_mapping(raw_toml: Mapping[str, Any]) -> dict[str, Any]:

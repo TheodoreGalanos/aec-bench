@@ -65,10 +65,8 @@ New task packages declare identity and policy in explicit TOML tables:
 `[identity]` contains `id`, `key`, and positive `version`; `[metadata]`
 contains `lifecycle` and `visibility`. The strict reader rejects missing or
 invalid identity and policy values, and preserves the UUID in `TaskDefinition`.
-During the repository migration, files without `[identity]` use the named
-`load_legacy_task_definition()` compatibility reader. That reader keeps the
-current legacy defaults and does not allocate a UUID; those defaults do not
-apply to the explicit metadata contract.
+There is no filesystem compatibility reader: missing identity or policy is an
+actionable load error, and the loader never synthesises lifecycle or visibility.
 
 `TaskSelector.lifecycle_filter` defaults to `active` and is passed unchanged to
 task selection. `deprecated` requires explicit inclusion. Proposed and retired
@@ -86,10 +84,8 @@ validate <task-path>` reports the display identity, task version, lifecycle,
 visibility, runnable state, verifier entrypoint and verifier protocol version,
 plus classified errors and warnings. `aec-bench task explain <task-key-or-id>`
 resolves the canonical key, aliases, UUID, version, policy, output contract,
-and verifier. `aec-bench task migrate-metadata --check` writes and displays a
-stable migration report, including unresolved reviewer decisions, without
-changing task files. `--write` changes identity only when lifecycle and
-visibility are already explicit and supported; it refuses to invent policy.
+and verifier. New task packages must contain all identity and policy fields;
+the filesystem loader rejects packages that omit them.
 
 Executable interactive worlds use their registered world definition and
 profile instead of pretending to be a static `TaskDefinition`. Both families
