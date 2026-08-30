@@ -86,6 +86,119 @@ jobs:
           tests/test_provenance_policy.py
           tests/test_provenance_manifest_discovery.py
 
+  prd1-foundation:
+    name: PRD1 foundation
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Python 3.13.2
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13.2"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+        with:
+          enable-cache: true
+
+      - name: Install locked dependencies
+        run: uv sync --frozen
+
+      - name: Validate maintained task metadata
+        run: >-
+          uv run pytest -q
+          tests/tasks/test_metadata_migration.py::test_repository_tasks_have_complete_explicit_metadata_and_strict_loader_success
+
+      - name: Check lifecycle and visibility selection
+        run: uv run pytest -q tests/tasks/test_selector.py tests/harness/test_scheduler.py
+
+      - name: Check identity and portable path boundaries
+        run: uv run pytest -q tests/contracts/test_identity.py
+
+      - name: Check task snapshot path traversal boundaries
+        run: uv run pytest -q tests/harness/compilation/test_task_snapshot.py
+
+      - name: Check verifier receipt and outcome boundaries
+        run: >-
+          uv run pytest -q
+          tests/harness/test_verifier_execution.py
+          tests/harness/test_verifier_artifacts.py
+          tests/evaluation/test_verifier_outcome.py
+
+      - name: Check package ownership and dependency direction
+        run: >-
+          uv run pytest -q
+          tests/test_package_ownership.py::test_neutral_contracts_and_domains_do_not_import_optional_runtimes
+          tests/test_package_ownership.py::test_contracts_do_not_import_implementation_owners
+          'tests/test_package_ownership.py::test_core_owners_do_not_import_forbidden_owners[evaluation-forbidden_prefixes1]'
+          'tests/test_package_ownership.py::test_core_owners_do_not_import_forbidden_owners[harness-forbidden_prefixes4]'
+
+      - name: Run provider-free artifact trial
+        run: >-
+          uv run pytest -q
+          tests/harness/test_artifact_tasks.py::test_run_trial_verifies_multi_file_workspace_and_retains_artifacts
+
+      - name: Check PRD1 foundation lint
+        run: >-
+          uv run ruff check
+          src/aec_bench/cli/commands/task.py
+          src/aec_bench/contracts/identity.py
+          src/aec_bench/contracts/task_definition.py
+          src/aec_bench/contracts/trial_extensions.py
+          src/aec_bench/evaluation/verifier_outcome.py
+          src/aec_bench/harness/artifact_tasks.py
+          src/aec_bench/harness/compilation/task_snapshot.py
+          src/aec_bench/harness/scheduler.py
+          src/aec_bench/harness/verifier_execution.py
+          src/aec_bench/tasks/loader.py
+          src/aec_bench/tasks/metadata_migration.py
+          src/aec_bench/tasks/registry.py
+          src/aec_bench/tasks/selector.py
+          src/aec_bench/trials.py
+
+      - name: Check PRD1 foundation formatting
+        run: >-
+          uv run ruff format --check
+          src/aec_bench/cli/commands/task.py
+          src/aec_bench/contracts/identity.py
+          src/aec_bench/contracts/task_definition.py
+          src/aec_bench/contracts/trial_extensions.py
+          src/aec_bench/evaluation/verifier_outcome.py
+          src/aec_bench/harness/artifact_tasks.py
+          src/aec_bench/harness/compilation/task_snapshot.py
+          src/aec_bench/harness/scheduler.py
+          src/aec_bench/harness/verifier_execution.py
+          src/aec_bench/tasks/loader.py
+          src/aec_bench/tasks/metadata_migration.py
+          src/aec_bench/tasks/registry.py
+          src/aec_bench/tasks/selector.py
+          src/aec_bench/trials.py
+
+      - name: Check PRD1 foundation strict types
+        run: >-
+          uv run mypy
+          src/aec_bench/contracts/identity.py
+          src/aec_bench/contracts/task_definition.py
+          src/aec_bench/contracts/trial_extensions.py
+          src/aec_bench/harness/scheduler.py
+          src/aec_bench/harness/verifier_execution.py
+          src/aec_bench/tasks/loader.py
+          src/aec_bench/tasks/metadata_migration.py
+          src/aec_bench/tasks/registry.py
+          src/aec_bench/tasks/selector.py
+          src/aec_bench/trials.py
+
+      # These modules cross package initializers with unrelated baseline errors.
+      # Skip imported modules while still checking the PRD1-owned source files.
+      - name: Check PRD1 cross-package strict types
+        run: >-
+          uv run mypy --follow-imports=skip
+          src/aec_bench/evaluation/verifier_outcome.py
+          src/aec_bench/harness/compilation/task_snapshot.py
+
   packaged-base:
     name: Provider-free wheel
     runs-on: ubuntu-latest
