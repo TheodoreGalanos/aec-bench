@@ -151,7 +151,25 @@ uv run aec-bench run export <run-id> --output run-package.tar.zst
 
 # Verify and import a portable run package
 uv run aec-bench run import run-package.tar.zst
+
+# Inspect a persisted resolved run and its canonical plan
+uv run aec-bench run inspect <run-key-or-uuid> --store-root artefacts/runs
+
+# Resolve and persist a requested specification and complete ready plan
+uv run aec-bench run plan --config experiment.yaml --tasks-root tasks --store-root artefacts/runs
+
+# Show the full persisted requested specification and plan for an existing run
+uv run aec-bench run plan <run-key-or-uuid> --store-root artefacts/runs
+
+# Show semantic field changes between two persisted runs
+uv run aec-bench run diff <left-run-key-or-uuid> <right-run-key-or-uuid> --store-root artefacts/runs
+
+# Reconcile explicit typed trial outcomes against a persisted plan
+uv run aec-bench run reconcile <run-key-or-uuid> --observations outcomes.json --store-root artefacts/runs
 ```
+
+`run plan --config` currently accepts identity-bearing artifact tasks. It rejects Interactive World and lifecycle
+task values until those loaders expose the same identity-bearing task snapshot boundary.
 
 `aec-bench run` defaults to Harbor's `modal` backend. Morph Cloud runs use Harbor's normal task, agent, artifact, and verifier lifecycle through `--backend morph`; set `MORPH_API_KEY` in `.env` before using it.
 Remote runs use the same synchronous Harbor dispatch-and-import workflow and

@@ -4,6 +4,8 @@
 from __future__ import annotations
 
 import time
+from datetime import UTC, datetime
+from getpass import getuser
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -80,6 +82,7 @@ def run_experiment(
     tasks_root: str | None = typer.Option(None, "--tasks-root", help="Tasks directory"),
     tasks_path: str | None = typer.Argument(None, help="Task path (simple invocation)"),
     package_value: str | None = typer.Argument(None, help="Run ID or archive path for export/import"),
+    comparison_value: str | None = typer.Argument(None, help="Second run selector for `run diff`"),
     model: str | None = typer.Option(None, "--model", help="Model name"),
     adapter: str = typer.Option(
         "tool_loop",
@@ -110,6 +113,13 @@ def run_experiment(
     ),
     output: Path | None = typer.Option(None, "--output", "-o", help="Exported .tar.zst path"),
     ledger_root: str | None = typer.Option(None, "--ledger-root", help="Ledger directory"),
+    store_root: str | None = typer.Option(None, "--store-root", help="Evidence run store directory"),
+    observations: Path | None = typer.Option(None, "--observations", help="JSON trial outcomes for `run reconcile`"),
+    cancellation_requested: bool = typer.Option(
+        False,
+        "--cancellation-requested",
+        help="Account reconciled cancellations as a cancelled run",
+    ),
 ) -> None:
     """Run an experiment.
 
@@ -130,6 +140,19 @@ def run_experiment(
       aec-bench run import run-package.tar.zst
       aec-bench --json run --config experiment.yaml | jq '.data.experiment_id'
     """
+    if tasks_path in {"plan", "inspect", "diff", "reconcile"}:
+        _review_run(
+            operation=tasks_path,
+            selector=package_value,
+            comparison_selector=comparison_value,
+            config=config,
+            tasks_root=tasks_root,
+            no_verify=no_verify,
+            store_root=store_root,
+            observations=observations,
+            cancellation_requested=cancellation_requested,
+        )
+        return
     if tasks_path == "export":
         if package_value is None or output is None:
             raise typer.BadParameter("run export requires <run-id> and --output <path>")
@@ -180,6 +203,315 @@ def run_experiment(
             start_time=start,
         )
         return
+
+
+def _review_run(
+    *,
+    operation: str,
+    selector: str | None,
+    comparison_selector: str | None,
+    config: Path | None,
+    tasks_root: str | None,
+    no_verify: bool,
+    store_root: str | None,
+    observations: Path | None,
+    cancellation_requested: bool,
+) -> None:
+    start = time.monotonic()
+    from aec_bench.cli.commands.run_review import diff_data, inspect_data, load_run, plan_data, reconcile_data
+    from aec_bench.ledger.evidence_run_store import EvidenceRunStoreError
+
+    if config is not None and operation != "plan":
+        emit(f"run {operation}", data=None, errors=["--config is supported only by 'run plan'"], start_time=start)
+        return
+    if config is not None and selector is not None:
+        emit("run plan", data=None, errors=["run plan accepts --config or a run selector, not both"], start_time=start)
+        return
+    if selector is None and config is None:
+        emit(f"run {operation}", data=None, errors=[f"run {operation} requires a run key or UUID"], start_time=start)
+        return
+    resolved_store = resolve_path("ledger_root", cli_override=store_root)
+    try:
+        if operation == "plan" and config is not None:
+            data = _persist_plan_from_config(
+                config,
+                tasks_root=tasks_root,
+                no_verify=no_verify,
+                store_root=resolved_store,
+            )
+        else:
+            if selector is None:
+                raise ValueError("run plan requires --config <path> or a run key or UUID")
+            selected = load_run(resolved_store, selector)
+            if operation == "plan":
+                data = plan_data(selected)
+            elif operation == "inspect":
+                data = inspect_data(selected, observations)
+            elif operation == "reconcile":
+                if observations is None:
+                    raise ValueError("run reconcile requires --observations <path>")
+                data = reconcile_data(
+                    selected,
+                    observations,
+                    cancellation_requested=cancellation_requested,
+                )
+            else:
+                if comparison_selector is None:
+                    raise ValueError("run diff requires two run keys or UUIDs")
+                comparison = load_run(resolved_store, comparison_selector)
+                data = diff_data(selected, comparison, left_selector=selector, right_selector=comparison_selector)
+    except (EvidenceRunStoreError, OSError, ValueError) as error:
+        emit(f"run {operation}", data=None, errors=[str(error)], start_time=start)
+        return
+    emit(f"run {operation}", data=data, start_time=start, human_renderer=_render_review)
+
+
+def _persist_plan_from_config(
+    config_path: Path,
+    *,
+    tasks_root: str | None,
+    no_verify: bool,
+    store_root: Path,
+) -> dict[str, Any]:
+    """Resolve an artifact manifest, persist its spec and ready plan, and return both views."""
+
+    from aec_bench.cli.commands.run_review import plan_data
+
+    manifest, resolved_tasks = _load_manifest_config(config_path, tasks_root=tasks_root, no_verify=no_verify)
+    from aec_bench.contracts.identity import EntityIdentity, EntityKey, EntityKind, new_entity_id
+    from aec_bench.contracts.resolved_run import resolve_run_spec
+    from aec_bench.contracts.run_plan import TaskPlanningProfile, plan_run
+    from aec_bench.contracts.task_definition import TaskDefinition, TaskMetadata
+    from aec_bench.harness.compilation.task_snapshot import resolve_task_snapshots
+    from aec_bench.harness.scheduler import select_manifest_task_values
+    from aec_bench.ledger.evidence_run_store import EvidenceRunStore
+    from aec_bench.tasks.registry import TaskRegistry
+    from aec_bench.tasks.selector import validate_execution_tasks
+
+    registry = TaskRegistry(tasks_root=resolved_tasks)
+    registry.reload()
+    selected = select_manifest_task_values(
+        registry.all(),
+        manifest,
+        project_root=resolved_tasks.parent,
+        tasks_root=resolved_tasks,
+    )
+    if not selected:
+        raise ValueError("no tasks matched the manifest selector")
+    validate_execution_tasks(selected, permitted_visibility=manifest.tasks.visibility_filter)
+    if any(not isinstance(task, TaskDefinition) for task in selected):
+        raise ValueError(
+            "run plan --config requires identity-bearing artifact task releases; "
+            "Interactive World and lifecycle task values are not yet supported by this planner boundary"
+        )
+    task_definitions = tuple(task for task in selected if isinstance(task, TaskDefinition))
+    for task in task_definitions:
+        if task.identity is None:
+            raise ValueError("run plan --config requires every selected task to declare an identity")
+    task_releases = resolve_task_snapshots(
+        task_refs=tuple(task.task_id for task in task_definitions),
+        tasks_root=resolved_tasks,
+    )
+    created_at = datetime.now(UTC)
+    experiment_identity = EntityIdentity(
+        id=new_entity_id(EntityKind.EXPERIMENT),
+        key=EntityKey(manifest.experiment_id),
+        version=1,
+    )
+    run_id = new_entity_id(EntityKind.RUN)
+    occurrence = created_at.strftime("%Y%m%d-%H%M%S-%f")
+    run_identity = EntityIdentity(
+        id=run_id,
+        key=EntityKey(f"{manifest.experiment_id}-run-{occurrence}"),
+        version=1,
+    )
+    from aec_bench.contracts.experiment_manifest import AgentCondition
+
+    conditions = tuple(
+        AgentCondition(
+            identity=EntityIdentity(
+                id=new_entity_id(EntityKind.AGENT_CONDITION),
+                key=EntityKey(agent.name),
+                version=1,
+            ),
+            adapter=agent.adapter,
+            model=agent.model,
+            client=agent.client,
+            system_prompt=agent.system_prompt,
+            parameters=agent.parameters,
+        )
+        for agent in manifest.agents
+    )
+    spec = resolve_run_spec(
+        manifest,
+        task_releases=task_releases,
+        agent_conditions=conditions,
+        experiment_identity=experiment_identity,
+        run_identity=run_identity,
+        created_at=created_at,
+        created_by=getuser() or "unknown",
+    )
+    profiles = {}
+    for task in task_definitions:
+        identity = task.identity
+        if identity is None:
+            raise ValueError("run plan --config requires every selected task to declare an identity")
+        profiles[identity.id] = TaskPlanningProfile(
+            metadata=TaskMetadata(
+                identity=identity,
+                lifecycle=task.lifecycle,
+                visibility=task.visibility,
+            ),
+            execution_family="artifact",
+        )
+    plan = plan_run(
+        spec,
+        plan_identity=EntityIdentity(
+            id=new_entity_id(EntityKind.PLAN),
+            key=EntityKey(f"{run_identity.key}-plan"),
+            version=1,
+        ),
+        created_at=created_at,
+        task_profiles=profiles,
+        validate_combination=_validate_artifact_combination,
+    )
+    store = EvidenceRunStore(store_root)
+    store.create_run(spec)
+    store.write_draft_plan(run_identity, plan.model_copy(update={"state": "draft"}))
+    store.promote_ready_plan(run_identity, plan)
+    return plan_data(store.read_run(run_identity))
+
+
+def _validate_artifact_combination(task_release: object, condition: object, execution_family: str) -> None:
+    """Keep the config planner honest: this boundary creates artifact-only plans."""
+
+    del task_release, condition
+    if execution_family != "artifact":
+        raise ValueError(f"run plan --config does not support execution family: {execution_family}")
+
+
+def _load_manifest_config(
+    config_path: Path,
+    *,
+    tasks_root: str | None,
+    no_verify: bool = False,
+) -> tuple[ExperimentManifest, Path]:
+    """Load one config with prompt files and dataset selectors resolved."""
+
+    if not config_path.exists():
+        raise ValueError(f"config file not found: {config_path}")
+    config_dir = config_path.parent.resolve()
+    raw = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    resolved_tasks = resolve_path("tasks_root", cli_override=tasks_root)
+    raw = _resolve_interactive_dataset_alias(raw, project_root=resolved_tasks.parent)
+    from aec_bench.contracts.experiment_manifest import ExperimentManifest
+
+    manifest = ExperimentManifest.model_validate(raw)
+    if no_verify:
+        manifest = manifest.model_copy(update={"disable_verification": True})
+    resolved_agents = []
+    for agent in manifest.agents:
+        if agent.system_prompt_file is not None:
+            prompt_path = config_dir / agent.system_prompt_file
+            if not prompt_path.exists():
+                raise ValueError(f"system prompt not found: {prompt_path}")
+            agent = agent.model_copy(
+                update={
+                    "system_prompt": prompt_path.read_text(encoding="utf-8"),
+                    "system_prompt_file": None,
+                }
+            )
+        resolved_agents.append(agent)
+    return manifest.model_copy(update={"agents": resolved_agents}), resolved_tasks
+
+
+def _render_review(data: object) -> None:
+    import json
+
+    if isinstance(data, dict) and isinstance(data.get("plan"), dict):
+        from aec_bench.contracts.identity import format_display_ref
+
+        run = data.get("run", {})
+        plan = data["plan"]
+        summary = data.get("summary", plan.get("summary", {}))
+        run_identity = run.get("run_identity", {})
+        run_ref = (
+            format_display_ref(run_identity["key"], run_identity["id"])
+            if run_identity.get("key") and run_identity.get("id")
+            else "unknown"
+        )
+        console.print(f"Run: {run_ref}")
+        console.print(f"Experiment: {run.get('experiment_identity', {}).get('key', 'unknown')}")
+        console.print(f"Plan: {summary.get('total_trials', 0)} trials")
+        console.print(f"Tasks: {summary.get('selected_task_count', 0)}")
+        console.print(f"Agents: {summary.get('agent_condition_count', 0)}")
+        console.print(f"Repetitions: {summary.get('repetitions', 0)}")
+        console.print(f"Families: {summary.get('trials_by_execution_family', {})}")
+        console.print(f"Backends: {summary.get('trials_by_backend', {})}")
+        console.print(f"Visibility: {summary.get('tasks_by_visibility', {})}")
+        console.print(f"Deprecated tasks: {summary.get('deprecated_task_count', 0)}")
+        console.print(f"Status: {plan.get('state', 'unknown')}")
+        return
+    if isinstance(data, dict) and "plan_trial_count" in data:
+        from aec_bench.contracts.identity import format_display_ref
+
+        run_identity = data.get("run_identity", {})
+        run_ref = (
+            format_display_ref(run_identity["key"], run_identity["id"])
+            if run_identity.get("key") and run_identity.get("id")
+            else "unknown"
+        )
+        console.print(f"Run: {run_ref}")
+        console.print(f"State: {data.get('state', 'unknown')}")
+        console.print(f"Trials: {data.get('plan_trial_count', 0)}")
+        console.print(f"Task releases: {len(data.get('task_releases', []))}")
+        console.print(f"Agent conditions: {len(data.get('agent_conditions', []))}")
+        console.print(f"Plan readiness: {data.get('plan_readiness', 'unknown')}")
+        provider_identity = data.get("provider_identity", {})
+        console.print(f"Requested provider: {provider_identity.get('requested')}")
+        console.print(f"Observed provider: {provider_identity.get('observed')}")
+        accounting = data.get("accounting")
+        if isinstance(accounting, dict):
+            console.print(f"Result completeness: {accounting.get('completeness', 'unknown')}")
+            console.print(f"Validity: {accounting.get('validity', 'unknown')}")
+            console.print(f"Missing trials: {len(accounting.get('missing_trial_ids', []))}")
+            console.print(f"Conflicting duplicates: {len(accounting.get('conflicting_duplicate_trial_ids', []))}")
+        else:
+            console.print("Result completeness: unknown (no observations supplied)")
+        return
+    if isinstance(data, dict) and "changes" in data:
+        changes = data["changes"]
+        console.print(f"Diff: {data.get('left', 'unknown')} -> {data.get('right', 'unknown')}")
+        if not changes:
+            console.print("Unchanged")
+        else:
+            console.print("Changed:")
+            for change in changes:
+                console.print(f"  {change['path']}: {change['before']} -> {change['after']}")
+            stable = data.get("unchanged", [])
+            if stable:
+                console.print("Unchanged:")
+                for path in stable[:10]:
+                    console.print(f"  {path}")
+        return
+    if isinstance(data, dict) and "counts" in data and "status" in data:
+        counts = data["counts"]
+        for name in (
+            "planned",
+            "succeeded",
+            "failed",
+            "cancelled",
+            "timed_out",
+            "invalid",
+            "missing",
+            "duplicate",
+            "unexpected",
+        ):
+            console.print(f"{name.replace('_', ' ').title()}: {counts.get(name, 0)}")
+        console.print(f"Run status: {data['status']}")
+        console.print(f"Validity: {data.get('validity', 'unknown')}")
+        return
+    console.print(json.dumps(data, indent=2, default=str))
 
 
 def _run_from_config(
