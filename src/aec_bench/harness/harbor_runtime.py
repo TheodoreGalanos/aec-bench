@@ -50,6 +50,7 @@ class HarborExperimentRuntime:
             agents=effective_manifest.agents,
             compute=effective_manifest.compute,
             repetitions=effective_manifest.repetitions,
+            permitted_visibility=effective_manifest.tasks.visibility_filter,
         )
         if list(trials) != expected_trials:
             raise ValueError("planned trials do not match the Harbor experiment manifest")

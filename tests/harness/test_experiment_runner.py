@@ -15,6 +15,7 @@ from aec_bench.contracts.experiment_manifest import (
     ExperimentManifest,
     TaskSelector,
 )
+from aec_bench.contracts.task_definition import Lifecycle, Visibility
 from aec_bench.contracts.trial_record import (
     AgentReference,
     EnvironmentSnapshot,
@@ -70,7 +71,9 @@ def test_runner_transforms_records_before_validation_and_persistence(tmp_path: P
     monkeypatch.setattr(
         HarborImportExperimentRunner,
         "_selected_tasks",
-        lambda _self, _manifest: [SimpleNamespace(task_id=task_id)],
+        lambda _self, _manifest: [
+            SimpleNamespace(task_id=task_id, lifecycle=Lifecycle.ACTIVE, visibility=Visibility.PUBLIC)
+        ],
     )
     transformed_trial_ids: list[str] = []
 
@@ -165,7 +168,9 @@ def test_runner_returns_replayable_paths_for_identical_duplicate_records(
     monkeypatch.setattr(
         HarborImportExperimentRunner,
         "_selected_tasks",
-        lambda _self, _manifest: [SimpleNamespace(task_id=task_id)],
+        lambda _self, _manifest: [
+            SimpleNamespace(task_id=task_id, lifecycle=Lifecycle.ACTIVE, visibility=Visibility.PUBLIC)
+        ],
     )
     runner = HarborImportExperimentRunner(
         repo_root=tmp_path,

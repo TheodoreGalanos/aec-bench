@@ -24,7 +24,8 @@ Controls which tasks are included in the experiment.
 | `domains` | list[string] | No | [] | Discipline filter. Values come from the task directory structure (e.g., `civil`, `electrical`, `ground`, `maritime`, `mechanical`, `structural`). Empty means all domains. |
 | `difficulties` | list[string] | No | [] | Difficulty filter: `easy`, `medium`, `hard`. Empty means all difficulties. |
 
-**Note:** The contract also has a `lifecycle_filter` field, but it is not currently consumed by the scheduler. Do not include it in generated YAML.
+| `lifecycle_filter` | list[string] | No | [`active`] | Lifecycle filter passed to task selection. `deprecated` requires explicit opt-in; `proposed` and `retired` are rejected for new runs. |
+| `visibility_filter` | list[string] | No | [`public`] | Visibility context passed to task selection. Private and holdout tasks require explicit inclusion; public runs do not include holdout tasks. |
 
 ## agents (list of AgentConfig)
 

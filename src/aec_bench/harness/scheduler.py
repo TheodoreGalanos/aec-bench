@@ -5,8 +5,8 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from aec_bench.contracts.experiment_manifest import ExperimentManifest
-from aec_bench.contracts.task_definition import Lifecycle, TaskDefinition
-from aec_bench.tasks.selector import select_tasks
+from aec_bench.contracts.task_definition import TaskDefinition
+from aec_bench.tasks.selector import select_tasks, validate_execution_tasks
 from aec_bench.trials import PlannedTrial
 from aec_bench.worlds.tasks import WorldTask
 
@@ -74,19 +74,17 @@ def select_manifest_task_values(
             tasks_root=tasks_root or resolved_project / "tasks",
         )
 
-    return select_tasks(
+    selected = select_tasks(
         tasks,
         domains=manifest.tasks.domains or None,
         difficulties=manifest.tasks.difficulties or None,
         include_patterns=manifest.tasks.include_patterns or None,
         exclude_patterns=manifest.tasks.exclude_patterns or None,
-        lifecycle=[
-            Lifecycle.PROPOSED,
-            Lifecycle.ACTIVE,
-            Lifecycle.DEPRECATED,
-            Lifecycle.RETIRED,
-        ],
+        lifecycle=manifest.tasks.lifecycle_filter,
+        visibility=manifest.tasks.visibility_filter,
     )
+    validate_execution_tasks(selected, permitted_visibility=manifest.tasks.visibility_filter)
+    return selected
 
 
 def batch_planned_trials(

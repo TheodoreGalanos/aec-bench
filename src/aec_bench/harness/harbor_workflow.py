@@ -127,6 +127,7 @@ class SynchronousHarborWorkflow:
                     agents=manifest.agents,
                     compute=manifest.compute,
                     repetitions=manifest.repetitions,
+                    permitted_visibility=manifest.tasks.visibility_filter,
                 )
             ),
         )
@@ -192,6 +193,7 @@ class SynchronousHarborWorkflow:
             agents=manifest.agents,
             compute=manifest.compute,
             repetitions=manifest.repetitions,
+            permitted_visibility=manifest.tasks.visibility_filter,
         )
         progress_tracker = WorkflowProgressTracker(
             experiment_id=manifest.experiment_id,

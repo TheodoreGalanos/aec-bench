@@ -749,6 +749,7 @@ def _reconcile_dispatch(
                     agents=lowered.manifest.agents,
                     compute=lowered.manifest.compute,
                     repetitions=lowered.manifest.repetitions,
+                    permitted_visibility=lowered.manifest.tasks.visibility_filter,
                 )
             ),
             exit_code=0,

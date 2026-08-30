@@ -10,6 +10,8 @@ from typing import Any, Protocol
 from pydantic import BaseModel
 
 from aec_bench.contracts.experiment_manifest import AgentConfig, ComputeConfig
+from aec_bench.contracts.task_definition import Visibility
+from aec_bench.tasks.selector import SelectableTask, validate_execution_tasks
 
 
 @dataclass(frozen=True)
@@ -36,11 +38,8 @@ def build_trial_id(
     return f"{experiment_id}--{normalized_task_id}--{agent_name}--rep{repetition:02d}"
 
 
-class PlannableTask(Protocol):
-    """The task identity needed by deterministic trial planning."""
-
-    @property
-    def task_id(self) -> str: ...
+class PlannableTask(SelectableTask, Protocol):
+    """The task identity and execution policy needed by trial planning."""
 
 
 def plan_trials(
@@ -50,6 +49,7 @@ def plan_trials(
     agents: Sequence[AgentConfig],
     compute: ComputeConfig | None = None,
     repetitions: int = 1,
+    permitted_visibility: Sequence[Visibility] = (Visibility.PUBLIC,),
 ) -> list[PlannedTrial]:
     """Expand tasks, agents, and repetitions into stable planned trials."""
 
@@ -59,6 +59,7 @@ def plan_trials(
         raise ValueError("trial planning requires at least one agent")
     if repetitions < 1:
         raise ValueError("repetitions must be positive")
+    validate_execution_tasks(tasks, permitted_visibility=permitted_visibility)
     selected_compute = compute or ComputeConfig(backend="local")
     plan: list[PlannedTrial] = []
     for task in sorted(tasks, key=lambda item: item.task_id):

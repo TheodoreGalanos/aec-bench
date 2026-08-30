@@ -69,6 +69,13 @@ During the repository migration, files without `[identity]` use the named
 current legacy defaults and does not allocate a UUID; those defaults do not
 apply to the explicit metadata contract.
 
+`TaskSelector.lifecycle_filter` defaults to `active` and is passed unchanged to
+task selection. `deprecated` requires explicit inclusion. Proposed and retired
+tasks are rejected at selection and again before a new trial plan is created.
+`TaskSelector.visibility_filter` defaults to `public`; private and holdout tasks
+require explicit visibility context, and a public selection does not include
+holdout tasks.
+
 Maintained task packages now record the canonical key from their repository
 path. The key uses the identity rules, so legacy path components such as
 `L2` are represented as lowercase `l2`; the filesystem path remains unchanged.
@@ -867,7 +874,7 @@ and discovery only. There is no current response field named generic `version`,
 
 ## Visibility classification
 
-`Visibility.PUBLIC` and `Visibility.HOLDOUT` are independent of lifecycle,
+`Visibility.PUBLIC`, `Visibility.PRIVATE`, and `Visibility.HOLDOUT` are independent of lifecycle,
 difficulty, task name, and storage path. Importers and evaluators preserve the
 explicit value. Historical records that omit visibility remain unknown and are
 ineligible for operations that require a public or holdout classification.

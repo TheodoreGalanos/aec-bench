@@ -174,7 +174,11 @@ Write to `experiment.yaml` in the project root (or a user-chosen filename).
 
 Show the file contents with YAML syntax highlighting.
 
-Important: do NOT include `lifecycle_filter` in the YAML — it's in the contract but not consumed by the scheduler.
+The generated YAML may include `lifecycle_filter` and `visibility_filter` under
+`tasks`. `lifecycle_filter` defaults to `[active]`; add `deprecated` only when
+you explicitly want deprecated tasks. Proposed and retired tasks are rejected
+before a new run. `visibility_filter` defaults to `[public]`; private and
+holdout tasks require an explicit permitted visibility context.
 
 ### Step 6 — Dry Run
 
