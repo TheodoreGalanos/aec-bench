@@ -20,7 +20,7 @@ from aec_bench.tasks.loader import (
     load_task_definition,
     parse_task_metadata,
 )
-from aec_bench.tasks.metadata_migration import generate_task_metadata_migration_report
+from aec_bench.tasks.metadata_migration import apply_task_metadata_migration, generate_task_metadata_migration_report
 
 TASKS_ROOT = Path(__file__).resolve().parents[2] / "tasks"
 
@@ -226,6 +226,15 @@ def test_migration_report_rejects_new_duplicate_generated_uuids(tmp_path: Path) 
     with patch.object(metadata_migration, "new_entity_id", return_value=task_id):
         with pytest.raises(ValueError, match="duplicate generated UUID.*electrical/first.*electrical/second"):
             generate_task_metadata_migration_report(tasks_root, tmp_path / "report.json")
+
+
+def test_metadata_migration_write_refuses_inferred_lifecycle(tmp_path: Path) -> None:
+    tasks_root = tmp_path / "tasks"
+    _write_task(tasks_root, "electrical", "voltage-drop", lifecycle=None, visibility="public")
+    report = generate_task_metadata_migration_report(tasks_root, tmp_path / "report.json")
+
+    with pytest.raises(ValueError, match="reviewer must author.*lifecycle"):
+        apply_task_metadata_migration(tasks_root, report)
 
 
 def test_migration_report_keeps_existing_bytes_when_replacement_fails(tmp_path: Path) -> None:

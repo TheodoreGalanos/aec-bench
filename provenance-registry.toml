@@ -805,6 +805,50 @@ compatibility_behavior = "reject unsupported protocol versions"
 compatibility_kind = "protocol"
 
 [[field]]
+symbol = "aec_bench.cli.commands.task._task_authoring_details.verifier_version"
+aliases = ["mapping:aec_bench.cli.commands.task._task_authoring_details.verifier_version", "mapping:aec_bench.cli.commands.task.explain_command.verifier.version"]
+surface = "mapping"
+wire_name = "verifier_version"
+category = "compatibility"
+domain_owner = "task_authoring"
+authority = "verifier_protocol"
+authoritative = true
+exposure = "public"
+status = "current"
+payload_contract = "task authoring diagnostics and task explanation output"
+canonicalization = "positive base-10 integer for the verifier protocol"
+consumer = "task authors and migration reviewers"
+validation_behavior = "The authoring commands report the configured verifier protocol version without deriving it from task identity."
+mismatch_behavior = "report_task_diagnostic"
+retention = "task_authoring_output_lifetime"
+rationale = "Authoring diagnostics must identify the verifier protocol separately from the task revision."
+duplication = "projection"
+compatibility_behavior = "Consumers read the reported verifier protocol version as an explicit compatibility value."
+compatibility_kind = "protocol"
+
+[[field]]
+symbol = "aec_bench.cli.commands.task._task_authoring_details.version"
+aliases = ["mapping:aec_bench.cli.commands.task._task_authoring_details.version", "mapping:aec_bench.cli.commands.task.explain_command.version"]
+surface = "mapping"
+wire_name = "version"
+category = "compatibility"
+domain_owner = "task_authoring"
+authority = "task_identity"
+authoritative = true
+exposure = "public"
+status = "current"
+payload_contract = "task authoring diagnostics and task explanation output"
+canonicalization = "positive base-10 integer from the task identity"
+consumer = "task authors and migration reviewers"
+validation_behavior = "The authoring commands report the explicit task identity version and do not infer a replacement revision."
+mismatch_behavior = "report_task_diagnostic"
+retention = "task_authoring_output_lifetime"
+rationale = "Task authoring output must expose the semantic task revision as distinct from verifier protocol identity."
+duplication = "projection"
+compatibility_behavior = "Consumers resolve the task identity version before applying metadata changes."
+compatibility_kind = "entity_revision"
+
+[[field]]
 symbol = "aec_bench.contracts.artifacts.ArtifactRef.sha256"
 aliases = ["aec_bench.web.schemas.ArtifactIntegrityResponse.sha256"]
 surface = "pydantic_model"
