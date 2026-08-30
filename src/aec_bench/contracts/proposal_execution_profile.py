@@ -8,13 +8,13 @@ from typing import Literal, Self
 
 from pydantic import Field, field_validator, model_validator
 
+from aec_bench.contracts.content_address import ContentAddressedModel
 from aec_bench.contracts.harness_instance import ProgramOperationScope
 from aec_bench.contracts.harness_kernel import (
     FrozenStrictModel,
     KernelCapabilityRef,
     validate_sha256,
 )
-from aec_bench.contracts.legacy_content_address import LegacyContentAddressedModel
 from aec_bench.contracts.validators import NonEmptyStr
 
 
@@ -136,7 +136,7 @@ class ProposalSchedulingPolicy(FrozenStrictModel):
         return self
 
 
-class ProposalExecutionProfile(LegacyContentAddressedModel):
+class ProposalExecutionProfile(ContentAddressedModel):
     """Content-addressed policy shared by freeze, compiler, dispatch, and import."""
 
     schema_version: Literal["aecbench.proposal-execution-profile.v1"] = "aecbench.proposal-execution-profile.v1"

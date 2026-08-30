@@ -13,8 +13,8 @@ from typing import Literal, Self
 
 from pydantic import field_validator, model_validator
 
+from aec_bench.contracts.content_address import ContentAddressedModel
 from aec_bench.contracts.harness_kernel import FrozenStrictModel, validate_sha256
-from aec_bench.contracts.legacy_content_address import LegacyContentAddressedModel
 from aec_bench.contracts.trial_record import ArtifactReference
 from aec_bench.contracts.validators import NonEmptyStr
 from aec_bench.ledger.durability import fsync_directory, mkdir_durable
@@ -24,7 +24,7 @@ class ProposalImportConsumptionError(RuntimeError):
     """Reject a corrupt, conflicting, or unconfined import-consumption index."""
 
 
-class ProposalImportConsumptionClaim(LegacyContentAddressedModel):
+class ProposalImportConsumptionClaim(ContentAddressedModel):
     """First-writer claim fixing the one import identity for an execution receipt."""
 
     schema_version: Literal["aecbench.proposal-import-consumption-claim.v1"] = (
@@ -53,7 +53,7 @@ class ProposalImportConsumptionClaim(LegacyContentAddressedModel):
         return value
 
 
-class ProposalImportTerminalRecord(LegacyContentAddressedModel):
+class ProposalImportTerminalRecord(ContentAddressedModel):
     """Terminal index entry proving the execution was consumed exactly once."""
 
     schema_version: Literal["aecbench.proposal-import-terminal-record.v1"] = (

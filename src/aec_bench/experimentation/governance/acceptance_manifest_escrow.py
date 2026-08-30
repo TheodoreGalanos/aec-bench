@@ -10,6 +10,7 @@ from typing import Literal, Never
 
 from pydantic import JsonValue, TypeAdapter, field_validator
 
+from aec_bench.contracts.content_address import ContentAddressedModel
 from aec_bench.contracts.evaluation_plane import (
     AcceptanceManifestCommitment,
     AcceptanceManifestRevealRule,
@@ -17,7 +18,6 @@ from aec_bench.contracts.evaluation_plane import (
 )
 from aec_bench.contracts.evaluation_refs import CriticRole, EvaluationRegimeRef
 from aec_bench.contracts.harness_kernel import validate_sha256
-from aec_bench.contracts.legacy_content_address import LegacyContentAddressedModel
 from aec_bench.contracts.validators import NonEmptyStr
 from aec_bench.experimentation.governance.authority_ledger import AuthorityLedger
 from aec_bench.ledger.immutable_artifact_store import (
@@ -45,7 +45,7 @@ class AcceptanceManifestEscrowIntegrityError(AcceptanceManifestEscrowError):
     """Raised when persisted escrow bytes do not verify against their commitment."""
 
 
-class AcceptanceManifestEscrowPayload(LegacyContentAddressedModel):
+class AcceptanceManifestEscrowPayload(ContentAddressedModel):
     """Host-only recoverable material needed to reveal one retired acceptance critic."""
 
     schema_version: Literal["aecbench.acceptance-manifest-escrow-payload.v1"] = (
@@ -58,7 +58,7 @@ class AcceptanceManifestEscrowPayload(LegacyContentAddressedModel):
     salt: NonEmptyStr
 
 
-class AcceptanceManifestEscrowPublicationReceipt(LegacyContentAddressedModel):
+class AcceptanceManifestEscrowPublicationReceipt(ContentAddressedModel):
     """Publicly safe proof identity for one durably published hidden payload."""
 
     schema_version: Literal["aecbench.acceptance-manifest-escrow-publication.v1"] = (
@@ -75,7 +75,7 @@ class AcceptanceManifestEscrowPublicationReceipt(LegacyContentAddressedModel):
         return validate_sha256(value)
 
 
-class _AcceptanceManifestEscrowClaim(LegacyContentAddressedModel):
+class _AcceptanceManifestEscrowClaim(ContentAddressedModel):
     """Exclusive logical binding from one regime critic to its escrow receipt."""
 
     schema_version: Literal["aecbench.acceptance-manifest-escrow-claim.v1"] = (

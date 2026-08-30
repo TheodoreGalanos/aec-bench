@@ -8,11 +8,11 @@ from typing import Literal, Self
 
 from pydantic import Field, field_validator, model_validator
 
+from aec_bench.contracts.content_address import ContentAddressedModel
 from aec_bench.contracts.harness_kernel import (
     FrozenStrictModel,
     validate_sha256,
 )
-from aec_bench.contracts.legacy_content_address import LegacyContentAddressedModel
 from aec_bench.contracts.task_review_snapshot import TaskReviewSnapshot
 from aec_bench.contracts.task_snapshot import TaskSnapshotRef, task_snapshot_source_key
 from aec_bench.contracts.validators import NonEmptyStr
@@ -28,7 +28,7 @@ class EvaluationCohortPurpose(StrEnum):
     TRANSFER = "transfer"
 
 
-class EvaluationTaskIdentity(LegacyContentAddressedModel):
+class EvaluationTaskIdentity(ContentAddressedModel):
     """One public task identity paired with its hidden evaluation lineage."""
 
     schema_version: Literal["aecbench.evaluation-task-identity.v4"] = "aecbench.evaluation-task-identity.v4"
@@ -50,7 +50,7 @@ class EvaluationTaskIdentity(LegacyContentAddressedModel):
         return self
 
 
-class EvaluationCohortTask(LegacyContentAddressedModel):
+class EvaluationCohortTask(ContentAddressedModel):
     """One cohort task and its preregistered evaluation seeds."""
 
     schema_version: Literal["aecbench.evaluation-cohort-task.v2"] = "aecbench.evaluation-cohort-task.v2"
@@ -70,7 +70,7 @@ class EvaluationCohortTask(LegacyContentAddressedModel):
         return tuple(sorted(value))
 
 
-class EvaluationCohortManifest(LegacyContentAddressedModel):
+class EvaluationCohortManifest(ContentAddressedModel):
     """Released task cohort whose size and coordinates are supplied as data."""
 
     schema_version: Literal["aecbench.evaluation-cohort-manifest.v2"] = "aecbench.evaluation-cohort-manifest.v2"
@@ -140,7 +140,7 @@ class EvaluationCohortBinding(FrozenStrictModel):
         return validate_sha256(value)
 
 
-class EvaluationCohortRetirement(LegacyContentAddressedModel):
+class EvaluationCohortRetirement(ContentAddressedModel):
     """Human-signable retirement of one exact released evaluation cohort."""
 
     schema_version: Literal["aecbench.evaluation-cohort-retirement.v2"] = "aecbench.evaluation-cohort-retirement.v2"

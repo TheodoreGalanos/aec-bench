@@ -12,9 +12,9 @@ from typing import Literal, Never, Self
 
 from pydantic import field_validator, model_validator
 
+from aec_bench.contracts.content_address import ContentAddressedModel
 from aec_bench.contracts.harness_instance import TaskSourceBindingConfig
 from aec_bench.contracts.harness_kernel import FrozenStrictModel, validate_sha256
-from aec_bench.contracts.legacy_content_address import LegacyContentAddressedModel
 from aec_bench.contracts.task_snapshot import TaskSnapshotRef
 from aec_bench.contracts.trial_record import ArtifactReference
 from aec_bench.contracts.validators import NonEmptyStr
@@ -43,7 +43,7 @@ from aec_bench.harness.harbor_workflow import SynchronousHarborWorkflow
 from aec_bench.harness.kernel_catalogue import KernelRuntimeRegistry
 
 
-class RepairRunSpec(LegacyContentAddressedModel):
+class RepairRunSpec(ContentAddressedModel):
     """Immutable inputs needed to execute exactly one evidence-gated paired repair."""
 
     schema_version: Literal["aecbench.repair-run-spec.v3"] = "aecbench.repair-run-spec.v3"
@@ -90,7 +90,7 @@ class RepairAttemptClaimError(RuntimeError):
     """Fail-closed attempt-identity error that never authorises an automatic resume."""
 
 
-class RepairAttemptClaim(LegacyContentAddressedModel):
+class RepairAttemptClaim(ContentAddressedModel):
     """Exclusive declaration that one exact repair spec owns an attempt identity."""
 
     schema_version: Literal["aecbench.repair-attempt-claim.v1"] = "aecbench.repair-attempt-claim.v1"
@@ -116,7 +116,7 @@ class RepairAttemptClaim(LegacyContentAddressedModel):
         return self
 
 
-class RepairAttemptCompletion(LegacyContentAddressedModel):
+class RepairAttemptCompletion(ContentAddressedModel):
     """Immutable success receipt joining an exclusive attempt claim to its terminal artifact."""
 
     schema_version: Literal["aecbench.repair-attempt-completion.v2"] = "aecbench.repair-attempt-completion.v2"

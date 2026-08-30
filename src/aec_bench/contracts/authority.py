@@ -8,9 +8,9 @@ from typing import Literal, Self
 
 from pydantic import Field, field_validator, model_validator
 
+from aec_bench.contracts.content_address import ContentAddressedModel
 from aec_bench.contracts.evaluation_refs import CriticRef, EvaluationRegimeRef
 from aec_bench.contracts.harness_kernel import FrozenStrictModel, KernelRef, validate_sha256
-from aec_bench.contracts.legacy_content_address import LegacyContentAddressedModel
 from aec_bench.contracts.validators import NonEmptyStr
 
 
@@ -109,7 +109,7 @@ class CriticEvaluationOutcomeIdentity(FrozenStrictModel):
         return validate_sha256(value)
 
 
-class HumanAuthorityApproval(LegacyContentAddressedModel):
+class HumanAuthorityApproval(ContentAddressedModel):
     """Human decision bound to one exact consequential action and subject identity."""
 
     schema_version: Literal["aecbench.human-authority-approval.v1"] = "aecbench.human-authority-approval.v1"
@@ -146,7 +146,7 @@ class BasisReference(FrozenStrictModel):
         return validate_sha256(value)
 
 
-class PromotionSubjectLineage(LegacyContentAddressedModel):
+class PromotionSubjectLineage(ContentAddressedModel):
     """Host-derived join from one evaluated candidate to one promotion subject."""
 
     schema_version: Literal["aecbench.promotion-subject-lineage.v1"] = "aecbench.promotion-subject-lineage.v1"
@@ -190,7 +190,7 @@ class PromotionSubjectLineage(LegacyContentAddressedModel):
         return self
 
 
-class MotifPromotionAssurance(LegacyContentAddressedModel):
+class MotifPromotionAssurance(ContentAddressedModel):
     """Exact active motif-assurance state admitted as promotion basis."""
 
     schema_version: Literal["aecbench.motif-promotion-assurance.v1"] = "aecbench.motif-promotion-assurance.v1"
@@ -211,7 +211,7 @@ class MotifPromotionAssurance(LegacyContentAddressedModel):
         return validate_sha256(value)
 
 
-class MotifPromotionQualification(LegacyContentAddressedModel):
+class MotifPromotionQualification(ContentAddressedModel):
     """Host-derived proof that one exact provisional motif passed the first promotion gate."""
 
     schema_version: Literal["aecbench.motif-promotion-qualification.v1"] = "aecbench.motif-promotion-qualification.v1"
@@ -252,7 +252,7 @@ class MotifPromotionQualification(LegacyContentAddressedModel):
         return self
 
 
-class PromotionMonitorAttestation(LegacyContentAddressedModel):
+class PromotionMonitorAttestation(ContentAddressedModel):
     """Host-policy attestation joining a passing monitor to one promotion regime."""
 
     schema_version: Literal["aecbench.promotion-monitor-attestation.v1"] = "aecbench.promotion-monitor-attestation.v1"
@@ -274,7 +274,7 @@ class PromotionMonitorAttestation(LegacyContentAddressedModel):
         return validate_sha256(value)
 
 
-class OriginStamp(LegacyContentAddressedModel):
+class OriginStamp(ContentAddressedModel):
     """Host-observed producer and taint lineage for one consequential artifact."""
 
     schema_version: Literal["aecbench.origin-stamp.v1"] = "aecbench.origin-stamp.v1"
@@ -326,7 +326,7 @@ class OriginStamp(LegacyContentAddressedModel):
         return self
 
 
-class AuthorityEvent(LegacyContentAddressedModel):
+class AuthorityEvent(ContentAddressedModel):
     """Scoped trust decision whose grant authority is validated by principal kind."""
 
     schema_version: Literal["aecbench.authority-event.v1"] = "aecbench.authority-event.v1"
@@ -396,7 +396,7 @@ class OperatorCapability(StrEnum):
     WRITE_CHALLENGE_CASE = "write_challenge_case"
 
 
-class OperatorAuthority(LegacyContentAddressedModel):
+class OperatorAuthority(ContentAddressedModel):
     """Closed capability set for one non-authoritative adaptive operator."""
 
     schema_version: Literal["aecbench.operator-authority.v1"] = "aecbench.operator-authority.v1"

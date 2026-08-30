@@ -14,11 +14,11 @@ from typing import Literal, Protocol
 
 from pydantic import TypeAdapter, field_validator
 
+from aec_bench.contracts.content_address import ContentAddressedModel
 from aec_bench.contracts.harness_kernel import (
     FrozenStrictModel,
     validate_sha256,
 )
-from aec_bench.contracts.legacy_content_address import LegacyContentAddressedModel
 from aec_bench.contracts.validators import NonEmptyStr
 from aec_bench.experimentation.governance.standing_monitors import ForbiddenFlowRule
 from aec_bench.ledger.immutable_artifact_store import (
@@ -64,7 +64,7 @@ class _RuntimeManifestIdentity(Protocol):
         """Return the cycle identity carried by a runtime manifest."""
 
 
-class _RuntimeManifestClaim(LegacyContentAddressedModel):
+class _RuntimeManifestClaim(ContentAddressedModel):
     """Exclusive cycle identity binding to one runtime manifest."""
 
     schema_version: Literal["aecbench.monitor-runtime-manifest-claim.v1"] = "aecbench.monitor-runtime-manifest-claim.v1"
@@ -77,7 +77,7 @@ class _RuntimeManifestClaim(LegacyContentAddressedModel):
         return validate_sha256(value)
 
 
-class _RuntimeFlowClaim(LegacyContentAddressedModel):
+class _RuntimeFlowClaim(ContentAddressedModel):
     """Exclusive flow_id binding to one durable runtime observation."""
 
     schema_version: Literal["aecbench.monitor-runtime-flow-claim.v1"] = "aecbench.monitor-runtime-flow-claim.v1"
@@ -91,7 +91,7 @@ class _RuntimeFlowClaim(LegacyContentAddressedModel):
         return validate_sha256(value)
 
 
-class _CanaryReferenceClaim(LegacyContentAddressedModel):
+class _CanaryReferenceClaim(ContentAddressedModel):
     """Exclusive reference_id binding to one canary-reference event."""
 
     schema_version: Literal["aecbench.monitor-canary-reference-claim.v1"] = "aecbench.monitor-canary-reference-claim.v1"
@@ -105,7 +105,7 @@ class _CanaryReferenceClaim(LegacyContentAddressedModel):
         return validate_sha256(value)
 
 
-class _CanarySurfaceActivationClaim(LegacyContentAddressedModel):
+class _CanarySurfaceActivationClaim(ContentAddressedModel):
     """Exclusive canary commitment binding to one verified surface activation."""
 
     schema_version: Literal["aecbench.canary-surface-activation-claim.v1"] = (
@@ -125,7 +125,7 @@ class _CanarySurfaceActivationClaim(LegacyContentAddressedModel):
         return validate_sha256(value)
 
 
-class _FlowCollectorActivationClaim(LegacyContentAddressedModel):
+class _FlowCollectorActivationClaim(ContentAddressedModel):
     """Exclusive forbidden-flow rule binding to one verified collector activation."""
 
     schema_version: Literal["aecbench.flow-collector-activation-claim.v1"] = (
@@ -141,7 +141,7 @@ class _FlowCollectorActivationClaim(LegacyContentAddressedModel):
         return validate_sha256(value)
 
 
-class _CheckpointClaim(LegacyContentAddressedModel):
+class _CheckpointClaim(ContentAddressedModel):
     """Exclusive checkpoint-stage binding to one immutable checkpoint."""
 
     schema_version: Literal["aecbench.monitor-runtime-checkpoint-claim.v1"] = (
@@ -157,7 +157,7 @@ class _CheckpointClaim(LegacyContentAddressedModel):
         return validate_sha256(value)
 
 
-class _EffectPermitClaim(LegacyContentAddressedModel):
+class _EffectPermitClaim(ContentAddressedModel):
     """Exclusive cycle binding to one pre-effect permit."""
 
     schema_version: Literal["aecbench.monitor-effect-permit-claim.v1"] = "aecbench.monitor-effect-permit-claim.v1"
@@ -170,7 +170,7 @@ class _EffectPermitClaim(LegacyContentAddressedModel):
         return validate_sha256(value)
 
 
-class _RuntimeClosureClaim(LegacyContentAddressedModel):
+class _RuntimeClosureClaim(ContentAddressedModel):
     """Exclusive cycle binding to one incident-preserving closure."""
 
     schema_version: Literal["aecbench.monitor-runtime-closure-claim.v1"] = "aecbench.monitor-runtime-closure-claim.v1"

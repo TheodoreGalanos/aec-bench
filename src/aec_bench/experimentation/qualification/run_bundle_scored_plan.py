@@ -17,12 +17,12 @@ from pydantic import (
     model_validator,
 )
 
+from aec_bench.contracts.content_address import ContentAddressedModel
 from aec_bench.contracts.harness_kernel import (
     FrozenStrictModel,
     canonical_json_sha256,
     validate_sha256,
 )
-from aec_bench.contracts.legacy_content_address import LegacyContentAddressedModel
 from aec_bench.contracts.run_bundle import RunPlan
 from aec_bench.contracts.stage_execution import KernelInstructionOverride
 from aec_bench.contracts.trial_record import ArtifactReference
@@ -47,7 +47,7 @@ from aec_bench.harness.program_execution import OperationExecutionContext
 from aec_bench.ledger.durability import fsync_directory, mkdir_durable
 
 
-class RunBundleScoredAttemptPlan(LegacyContentAddressedModel):
+class RunBundleScoredAttemptPlan(ContentAddressedModel):
     """Durable host plan that freezes lowering inputs before a governed effect."""
 
     schema_version: Literal["aecbench.run-bundle-scored-attempt-plan.v1"] = "aecbench.run-bundle-scored-attempt-plan.v1"

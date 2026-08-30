@@ -13,13 +13,13 @@ from typing import Literal, Self
 
 from pydantic import Field, FiniteFloat, NonNegativeFloat, PositiveInt, field_validator, model_validator
 
+from aec_bench.contracts.content_address import ContentAddressedModel
 from aec_bench.contracts.evaluation_result import EvaluationResult
 from aec_bench.contracts.harness_kernel import (
     FrozenStrictModel,
     canonical_json_sha256,
     validate_sha256,
 )
-from aec_bench.contracts.legacy_content_address import LegacyContentAddressedModel
 from aec_bench.contracts.run_bundle import RunPlan
 from aec_bench.contracts.task_definition import Visibility
 from aec_bench.contracts.trial_record import ArtifactReference, TrialRecord
@@ -104,7 +104,7 @@ class MotifTransferTrialEvidence(FrozenStrictModel):
         return self
 
 
-class MotifTransferEvaluationReport(LegacyContentAddressedModel):
+class MotifTransferEvaluationReport(ContentAddressedModel):
     """Content-addressed holdout study from which transfer evidence is mechanically derived."""
 
     schema_version: Literal["aecbench.motif-transfer-evaluation.v2"] = "aecbench.motif-transfer-evaluation.v2"

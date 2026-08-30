@@ -10,6 +10,7 @@ from pydantic import Field, JsonValue, field_validator, model_validator
 
 from aec_bench.adapters.base import AdapterStopReason
 from aec_bench.contracts.agent_output import AgentOutputStatus
+from aec_bench.contracts.content_address import ContentAddressedModel
 from aec_bench.contracts.execution_program import ExecutionProgramRef, ProgramLimits, RetryPolicy
 from aec_bench.contracts.harness_instance import HarnessInstanceRef, prohibited_retry_safe_error_codes
 from aec_bench.contracts.harness_kernel import (
@@ -19,7 +20,6 @@ from aec_bench.contracts.harness_kernel import (
     canonical_json_sha256,
     validate_sha256,
 )
-from aec_bench.contracts.legacy_content_address import LegacyContentAddressedModel
 from aec_bench.contracts.output_completion import OutputCompletionEvaluation
 from aec_bench.contracts.stage_execution import DeclaredStageGraph
 from aec_bench.contracts.task_review_snapshot import TaskReviewSnapshot
@@ -416,7 +416,7 @@ class RepairProgramExecutionEvidence(FrozenStrictModel):
         return self
 
 
-class RepairRuntimeEvidence(LegacyContentAddressedModel):
+class RepairRuntimeEvidence(ContentAddressedModel):
     """Content-addressed verifier/runtime evidence supplied to a typed diagnoser."""
 
     candidate_id: NonEmptyStr
@@ -476,7 +476,7 @@ class RepairRuntimeEvidence(LegacyContentAddressedModel):
         return self
 
 
-class RepairAttemptPlan(LegacyContentAddressedModel):
+class RepairAttemptPlan(ContentAddressedModel):
     """Pre-run causal artifact shared by both arms of one paired repair attempt."""
 
     schema_version: Literal["aecbench.repair-attempt-plan.v2"] = "aecbench.repair-attempt-plan.v2"
@@ -511,7 +511,7 @@ class RepairSeedExecution(FrozenStrictModel):
         return self
 
 
-class RepairRunArtifactManifest(LegacyContentAddressedModel):
+class RepairRunArtifactManifest(ContentAddressedModel):
     """Persisted, tamper-evident manifest for every seeded execution of one candidate."""
 
     schema_version: Literal["aecbench.repair-run.v3"] = "aecbench.repair-run.v3"
@@ -548,7 +548,7 @@ class RepairRunArtifactManifest(LegacyContentAddressedModel):
         return self
 
 
-class RepairTerminalRecord(LegacyContentAddressedModel):
+class RepairTerminalRecord(ContentAddressedModel):
     """Final content-addressed repair decision linked to its controlling attempt plan."""
 
     schema_version: Literal["aecbench.repair-terminal.v3"] = "aecbench.repair-terminal.v3"

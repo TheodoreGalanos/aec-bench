@@ -14,12 +14,12 @@ from pydantic import (
 )
 
 from aec_bench.contracts.authority import OperatorAuthority, OperatorRole
+from aec_bench.contracts.content_address import ContentAddressedModel
 from aec_bench.contracts.evaluation_generation.cohort import EvaluationCohortBinding
 from aec_bench.contracts.evaluation_plane import CandidateManifestScope
 from aec_bench.contracts.evaluation_refs import EvaluationRegimeRef
 from aec_bench.contracts.harness_instance import HarnessInstanceRef
 from aec_bench.contracts.harness_kernel import validate_sha256
-from aec_bench.contracts.legacy_content_address import LegacyContentAddressedModel
 from aec_bench.contracts.program_proposal._canonical import canonical_unique_models
 from aec_bench.contracts.program_proposal.candidate import (
     CandidateGenerationManifest,
@@ -50,7 +50,7 @@ class ProposalFreezeBindings(Protocol):
     incumbent_candidate: ProgramCandidateRef | None
 
 
-class ProposalFreeze(LegacyContentAddressedModel):
+class ProposalFreeze(ContentAddressedModel):
     """Phase-neutral host freeze binding proposals to an optional evaluation cohort."""
 
     schema_version: Literal["aecbench.evaluation-proposal-freeze.v3"] = "aecbench.evaluation-proposal-freeze.v3"

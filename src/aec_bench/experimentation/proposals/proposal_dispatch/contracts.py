@@ -14,11 +14,11 @@ from aec_bench.contracts.authority import (
     BasisReference,
     OriginStamp,
 )
+from aec_bench.contracts.content_address import ContentAddressedModel
 from aec_bench.contracts.harness_kernel import (
     canonical_json_sha256,
     validate_sha256,
 )
-from aec_bench.contracts.legacy_content_address import LegacyContentAddressedModel
 from aec_bench.contracts.program_proposal.candidate import ProgramCandidateRef
 from aec_bench.contracts.program_proposal.study import MatchedEvaluationCoordinate
 from aec_bench.contracts.task_definition import TaskDefinition
@@ -44,7 +44,7 @@ from aec_bench.experimentation.proposals.task_packaging.contracts import (
 )
 
 
-class GovernedProposalDispatch(LegacyContentAddressedModel):
+class GovernedProposalDispatch(ContentAddressedModel):
     """Exact host-validated proposal dispatch surface authorized for one provider job."""
 
     schema_version: Literal["aecbench.governed-proposal-dispatch.v1"] = "aecbench.governed-proposal-dispatch.v1"

@@ -41,10 +41,9 @@ particular:
 
 - ordinary Kernel, Harness, execution-program, evaluation, stage, and
   run-bundle contracts are plain immutable models with stable references;
-- schemas awaiting an owning-format migration use
-  `LegacyContentAddressedModel` as explicit compatibility debt; its reader
-  validates and removes `content_sha256` before it returns a plain migrated
-  model;
+- current content-reference contracts use `ContentAddressedModel` only when
+  the digest is part of the current contract; ordinary records use strict
+  domain fields;
 - `ArtifactRef` is the universal exact-byte store reference, including for
   current trial inputs, outputs, authority evidence, provider evidence, and
   typed extensions;
@@ -381,8 +380,8 @@ fields.
 uses the Python AST. It inspects persisted or public fields declared through
 Pydantic models, dataclasses, typed dictionaries, computed serializers,
 manifest-building code, and Python Web schemas. It also identifies inherited
-`ContentAddressedModel.content_sha256` and
-`LegacyContentAddressedModel.content_sha256` fields as legacy occurrences.
+`ContentAddressedModel.content_sha256` fields as explicit content-reference
+fields.
 
 Run:
 
@@ -429,13 +428,10 @@ Changes that later migrate a protected or persisted form follow these rules:
 - new writers emit the selected canonical form;
 - readers accept only the documented legacy forms during the stated
   transition window;
-- a legacy digest is verified before it is discarded when its payload is
-  available;
 - invalid authoritative evidence is rejected or quarantined;
 - migration does not invent a missing payload to preserve an old hash;
 - DeepSeek evidence v2, qualification v1, Prime lifecycle schema 2, and World
   actor protocols remain readable through their explicit retained readers;
-- compatibility code lives in a clearly named legacy module;
 - golden fixtures state whether each old form migrates, remains read-only, is
   corrupt, or is unsupported; and
 - the current contract, architecture, or protocol document changes in the same

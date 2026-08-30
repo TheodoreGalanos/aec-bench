@@ -10,7 +10,7 @@ from typing import Literal, Self
 
 from pydantic import field_validator, model_validator
 
-from aec_bench.contracts.legacy_content_address import LegacyContentAddressedModel
+from aec_bench.contracts.content_address import ContentAddressedModel
 from aec_bench.contracts.validators import FrozenStrictModel, NonEmptyStr
 
 _SAFE_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
@@ -59,7 +59,7 @@ class TemporalEvidenceEventKind(StrEnum):
     POLICY_CHANGED = "policy_changed"
 
 
-class TemporalEvidenceSource(LegacyContentAddressedModel):
+class TemporalEvidenceSource(ContentAddressedModel):
     """One source and its immutable rights declaration."""
 
     source_id: NonEmptyStr
@@ -81,7 +81,7 @@ class TemporalEvidenceSource(LegacyContentAddressedModel):
         return self
 
 
-class TemporalEvidenceLineage(LegacyContentAddressedModel):
+class TemporalEvidenceLineage(ContentAddressedModel):
     """Rights, derivation, assumption, transformation, and treatment authority."""
 
     parent_profile_id: NonEmptyStr
@@ -107,7 +107,7 @@ class TemporalEvidenceLineage(LegacyContentAddressedModel):
         return self
 
 
-class TemporalEvidenceVersion(LegacyContentAddressedModel):
+class TemporalEvidenceVersion(ContentAddressedModel):
     """One immutable documentary version with distinct temporal meanings."""
 
     logical_document_id: NonEmptyStr
@@ -191,7 +191,7 @@ class TemporalEvidenceVersionRef(FrozenStrictModel):
     content_sha256: NonEmptyStr
 
 
-class TemporalEvidenceAvailabilityEvent(LegacyContentAddressedModel):
+class TemporalEvidenceAvailabilityEvent(ContentAddressedModel):
     """One scheduled documentary event that never creates an agent turn itself."""
 
     event_id: NonEmptyStr
@@ -213,7 +213,7 @@ class TemporalEvidenceAvailabilityEvent(LegacyContentAddressedModel):
         return self
 
 
-class TemporalEvidenceAvailabilitySchedule(LegacyContentAddressedModel):
+class TemporalEvidenceAvailabilitySchedule(ContentAddressedModel):
     """Content-pinned chronological epistemic event schedule."""
 
     schedule_id: NonEmptyStr
@@ -228,7 +228,7 @@ class TemporalEvidenceAvailabilitySchedule(LegacyContentAddressedModel):
         return self
 
 
-class TemporalRetrievalPolicy(LegacyContentAddressedModel):
+class TemporalRetrievalPolicy(ContentAddressedModel):
     """Pinned normalization, ranking, tie-break, snippet, and limit policy."""
 
     policy_id: NonEmptyStr
@@ -255,7 +255,7 @@ class TemporalRetrievalPolicy(LegacyContentAddressedModel):
         return self
 
 
-class TemporalAccessPolicy(LegacyContentAddressedModel):
+class TemporalAccessPolicy(ContentAddressedModel):
     """Pinned role and bounded actor-selected scope policy."""
 
     policy_id: NonEmptyStr
@@ -269,7 +269,7 @@ class TemporalAccessPolicy(LegacyContentAddressedModel):
         return self
 
 
-class TemporalBranchPolicy(LegacyContentAddressedModel):
+class TemporalBranchPolicy(ContentAddressedModel):
     """Pinned branch namespace and pre-fork inheritance policy."""
 
     policy_id: NonEmptyStr
@@ -277,7 +277,7 @@ class TemporalBranchPolicy(LegacyContentAddressedModel):
     initial_branch_id: NonEmptyStr
 
 
-class TemporalCostPolicy(LegacyContentAddressedModel):
+class TemporalCostPolicy(ContentAddressedModel):
     """Pinned retrieval cost and invocation/completion ordering."""
 
     policy_id: NonEmptyStr
@@ -310,7 +310,7 @@ class RetrievalBudgetVector(FrozenStrictModel):
         return self
 
 
-class TemporalCorpusManifest(LegacyContentAddressedModel):
+class TemporalCorpusManifest(ContentAddressedModel):
     """Complete immutable snapshot and its parent-world and lineage bindings."""
 
     evidence_corpus_id: NonEmptyStr
@@ -332,7 +332,7 @@ class TemporalCorpusManifest(LegacyContentAddressedModel):
         return self
 
 
-class TemporalEvidenceCapability(LegacyContentAddressedModel):
+class TemporalEvidenceCapability(ContentAddressedModel):
     """Present-only declaration for one deterministic temporal corpus."""
 
     profile: Literal["deterministic_snapshot"] = "deterministic_snapshot"
@@ -346,7 +346,7 @@ class TemporalEvidenceCapability(LegacyContentAddressedModel):
     initial_budget: RetrievalBudgetVector
 
 
-class TemporalEvidenceBundle(LegacyContentAddressedModel):
+class TemporalEvidenceBundle(ContentAddressedModel):
     """Complete enabled local corpus and every policy needed to replay it."""
 
     capability: TemporalEvidenceCapability

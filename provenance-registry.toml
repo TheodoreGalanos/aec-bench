@@ -940,6 +940,30 @@ compatibility_behavior = "reject unsupported authority evidence protocols"
 compatibility_kind = "protocol"
 
 [[field]]
+symbol = "aec_bench.contracts.content_address.ContentAddressedModel.content_sha256"
+surface = "pydantic_model"
+wire_name = "content_sha256"
+category = "artifact_integrity"
+domain_owner = "content_reference_contract"
+authority = "content_addressed_model"
+authoritative = true
+exposure = "persisted"
+status = "current"
+payload_contract = "canonical JSON of the current model with content_sha256 excluded"
+canonicalization = "SHA-256 over canonical JSON with sorted keys, compact separators, UTF-8, and NaN rejected"
+consumer = "explicit content-reference contract and immutable artifact store"
+validation_behavior = "The model recomputes and validates content_sha256; the artifact store validates exact retained bytes"
+mismatch_behavior = "reject_content_reference"
+retention = "referenced_model_lifetime"
+rationale = "Some current contracts use a self-digest as an explicit content reference; ordinary models do not inherit this base."
+duplication = "unique"
+algorithm = "sha256"
+canonicalizer = "aec_bench.contracts.content_address.canonical_json_sha256"
+artifact_boundary = "current explicitly content-addressed model"
+read_verification = "ImmutableArtifactStore validates the published bytes, size, and digest when loading the model"
+fail_closed = true
+
+[[field]]
 symbol = "aec_bench.contracts.dataset.DatasetManifest.schema_version"
 surface = "pydantic_model"
 wire_name = "schema_version"
@@ -1493,32 +1517,6 @@ mismatch_behavior = "compile a different immutable study plan"
 retention = "learning_study_spec_lifetime"
 rationale = "The author must make any override of the default probe-discard policy explicit."
 duplication = "unique"
-
-[[field]]
-symbol = "aec_bench.contracts.legacy_content_address.LegacyContentAddressedModel.content_sha256"
-surface = "pydantic_model"
-wire_name = "content_sha256"
-category = "artifact_integrity"
-domain_owner = "legacy_contract_compatibility"
-authority = "historical_self_addressed_model"
-authoritative = false
-exposure = "persisted"
-status = "temporary_exception"
-payload_contract = "compatibility-era ContentAddressedModel canonical JSON"
-canonicalization = "SHA-256 over the historical JSON-mode model payload with content_sha256 excluded"
-consumer = "ImmutableArtifactStore.load_legacy_model"
-validation_behavior = "The compatibility reader recalculates the historical digest before it returns a plain current model"
-mismatch_behavior = "reject_legacy_artifact"
-retention = "legacy_fixture_migration_window"
-rationale = "Self-addressed compatibility records need one narrow reader while owning repositories migrate their formats."
-duplication = "temporary_exception"
-algorithm = "sha256"
-artifact_boundary = "historical self-addressed JSON model"
-fail_closed = true
-read_verification = "read_legacy_content_addressed_model validates the embedded digest before model conversion"
-exception_scope = "Only persisted compatibility records that still inherit LegacyContentAddressedModel"
-exception_reason = "The staged migration retains old record shapes until their owning formats have explicit readers."
-removal_milestone = "all legacy self-addressed fixtures have owning-format migrations"
 
 [[field]]
 symbol = "aec_bench.contracts.library_catalogue.LibraryCatalogue.schema_version"

@@ -8,6 +8,7 @@ from typing import Any, Self, TypeVar
 
 from pydantic import Field, PositiveInt, field_validator, model_validator
 
+from aec_bench.contracts.content_address import ContentAddressedModel
 from aec_bench.contracts.execution_program import ExecutionProgram, ExecutionProgramRef, ProgramLimits, ProgramNode
 from aec_bench.contracts.harness_instance import (
     AgentBindingConfig,
@@ -27,7 +28,6 @@ from aec_bench.contracts.harness_kernel import (
     canonical_json_sha256,
     kernel_abi_commitment,
 )
-from aec_bench.contracts.legacy_content_address import LegacyContentAddressedModel
 from aec_bench.contracts.run_bundle import RunPlan
 from aec_bench.contracts.task_snapshot import TaskSnapshotRef
 from aec_bench.contracts.validators import NonEmptyStr
@@ -44,7 +44,7 @@ from aec_bench.harness.compilation import (
 from aec_bench.harness.kernel_catalogue import KernelRuntimeRegistry
 
 
-class ProgramFactorTemplate(LegacyContentAddressedModel):
+class ProgramFactorTemplate(ContentAddressedModel):
     """Harness-independent program factor rebound explicitly to each compiled Hx."""
 
     factor_id: NonEmptyStr
@@ -74,7 +74,7 @@ class ProgramFactorTemplate(LegacyContentAddressedModel):
         return ExecutionProgramRef(program_id=self.factor_id, version=self.version)
 
 
-class HarnessProgramCandidateRequest(LegacyContentAddressedModel):
+class HarnessProgramCandidateRequest(ContentAddressedModel):
     """Explicit source factors and shared controls for one matched candidate set."""
 
     candidate_set_id: NonEmptyStr
@@ -126,7 +126,7 @@ class MaterializedHarnessProgramCandidate(FrozenStrictModel):
         return self
 
 
-class MaterializedHarnessProgramCandidateSet(LegacyContentAddressedModel):
+class MaterializedHarnessProgramCandidateSet(ContentAddressedModel):
     """Integrity-checked four-cell references, source factors, and executable bundles."""
 
     request: HarnessProgramCandidateRequest

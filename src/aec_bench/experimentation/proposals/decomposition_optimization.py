@@ -9,6 +9,7 @@ from typing import Literal, Self
 
 from pydantic import Field, FiniteFloat, field_validator, model_validator
 
+from aec_bench.contracts.content_address import ContentAddressedModel
 from aec_bench.contracts.evaluation_outcome import (
     EvaluationDisposition,
     EvaluationOutcome,
@@ -19,7 +20,6 @@ from aec_bench.contracts.harness_kernel import (
     KernelRef,
     validate_sha256,
 )
-from aec_bench.contracts.legacy_content_address import LegacyContentAddressedModel
 from aec_bench.contracts.program_proposal.candidate import ProgramCandidateRef
 from aec_bench.contracts.program_proposal.freeze import ProposalFreeze
 from aec_bench.contracts.program_proposal.study import (
@@ -44,7 +44,7 @@ class OptimizationExperimentError(ValueError):
     disposition = OptimizationDisposition.EXPERIMENT_ERROR
 
 
-class CandidateExecutionAssignment(LegacyContentAddressedModel):
+class CandidateExecutionAssignment(ContentAddressedModel):
     """One immutable candidate-coordinate execution assignment."""
 
     schema_version: Literal["aecbench.candidate-execution-assignment.v1"] = "aecbench.candidate-execution-assignment.v1"
@@ -52,7 +52,7 @@ class CandidateExecutionAssignment(LegacyContentAddressedModel):
     coordinate: MatchedEvaluationCoordinate
 
 
-class DecompositionExecutionSchedule(LegacyContentAddressedModel):
+class DecompositionExecutionSchedule(ContentAddressedModel):
     """Complete outcome-blind execution matrix for an incumbent and frozen proposals."""
 
     schema_version: Literal["aecbench.decomposition-execution-schedule.v1"] = (
@@ -195,7 +195,7 @@ def _validate_schedule_cross_product(
         raise ValueError("schedule requires the exact incumbent-and-proposal coordinate cross product")
 
 
-class EvidenceOutcomeBinding(LegacyContentAddressedModel):
+class EvidenceOutcomeBinding(ContentAddressedModel):
     """Exact resolution of one study evidence reference to its typed outcome."""
 
     schema_version: Literal["aecbench.evidence-outcome-binding.v1"] = "aecbench.evidence-outcome-binding.v1"
@@ -209,7 +209,7 @@ class EvidenceOutcomeBinding(LegacyContentAddressedModel):
         return validate_sha256(value)
 
 
-class FrozenSelectionRule(LegacyContentAddressedModel):
+class FrozenSelectionRule(ContentAddressedModel):
     """Preregistered deterministic rule for selecting at most one proposal."""
 
     schema_version: Literal["aecbench.frozen-selection-rule.v1"] = "aecbench.frozen-selection-rule.v1"
@@ -218,7 +218,7 @@ class FrozenSelectionRule(LegacyContentAddressedModel):
     candidate_tie_break: Literal["candidate_id_ascending"] = "candidate_id_ascending"
 
 
-class DevelopmentSelectionRegime(LegacyContentAddressedModel):
+class DevelopmentSelectionRegime(ContentAddressedModel):
     """Exact Vdev critic and frozen rule allowed to select an optimization candidate."""
 
     schema_version: Literal["aecbench.development-selection-regime.v1"] = "aecbench.development-selection-regime.v1"
@@ -241,7 +241,7 @@ class DevelopmentSelectionRegime(LegacyContentAddressedModel):
         return self
 
 
-class DecompositionOptimizationResult(LegacyContentAddressedModel):
+class DecompositionOptimizationResult(ContentAddressedModel):
     """Internal exact cycle result nested inside the current development selection."""
 
     schedule: DecompositionExecutionSchedule
@@ -285,7 +285,7 @@ class DecompositionOptimizationResult(LegacyContentAddressedModel):
         return self
 
 
-class DevelopmentSelectionResult(LegacyContentAddressedModel):
+class DevelopmentSelectionResult(ContentAddressedModel):
     """Vdev-only selection artifact that cannot authorize acceptance or promotion."""
 
     schema_version: Literal["aecbench.development-selection-result.v1"] = "aecbench.development-selection-result.v1"

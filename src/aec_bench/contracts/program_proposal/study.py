@@ -7,10 +7,10 @@ from typing import Literal, Self
 
 from pydantic import Field, FiniteFloat, field_validator, model_validator
 
+from aec_bench.contracts.content_address import ContentAddressedModel
 from aec_bench.contracts.evaluation_refs import EvaluationRegimeRef
 from aec_bench.contracts.harness_instance import HarnessBudget, HarnessInstanceRef
 from aec_bench.contracts.harness_kernel import KernelRef, validate_sha256
-from aec_bench.contracts.legacy_content_address import LegacyContentAddressedModel
 from aec_bench.contracts.program_proposal._canonical import (
     canonical_unique_models,
     canonical_unique_strings,
@@ -26,7 +26,7 @@ from aec_bench.contracts.program_proposal.types import (
 from aec_bench.contracts.validators import NonEmptyStr
 
 
-class MatchedEvaluationCoordinate(LegacyContentAddressedModel):
+class MatchedEvaluationCoordinate(ContentAddressedModel):
     """One task-lineage-seed repetition shared by every candidate in a study."""
 
     schema_version: Literal["aecbench.matched-evaluation-coordinate.v2"] = "aecbench.matched-evaluation-coordinate.v2"
@@ -44,7 +44,7 @@ class MatchedEvaluationCoordinate(LegacyContentAddressedModel):
         return validate_sha256(value)
 
 
-class MatchedCandidateEvidenceRef(LegacyContentAddressedModel):
+class MatchedCandidateEvidenceRef(ContentAddressedModel):
     """Evidence identity for one candidate evaluated on one matched coordinate."""
 
     schema_version: Literal["aecbench.matched-candidate-evidence-ref.v1"] = "aecbench.matched-candidate-evidence-ref.v1"
@@ -77,7 +77,7 @@ class MatchedCandidateEvidenceRef(LegacyContentAddressedModel):
         return self
 
 
-class ProgramCandidateStudy(LegacyContentAddressedModel):
+class ProgramCandidateStudy(ContentAddressedModel):
     """Complete fixed-K/H0 matched evidence matrix for an incumbent and frozen proposals."""
 
     schema_version: Literal["aecbench.program-candidate-study.v1"] = "aecbench.program-candidate-study.v1"
@@ -148,7 +148,7 @@ class ProgramCandidateStudy(LegacyContentAddressedModel):
         return self
 
 
-class PairedCandidateComparison(LegacyContentAddressedModel):
+class PairedCandidateComparison(ContentAddressedModel):
     """Fail-closed comparison of one frozen proposal with the incumbent."""
 
     schema_version: Literal["aecbench.paired-candidate-comparison.v1"] = "aecbench.paired-candidate-comparison.v1"
@@ -200,7 +200,7 @@ class PairedCandidateComparison(LegacyContentAddressedModel):
         return self
 
 
-class DecompositionOptimizationCycle(LegacyContentAddressedModel):
+class DecompositionOptimizationCycle(ContentAddressedModel):
     """Complete frozen-candidate optimization cycle with no diagnostic-repair semantics."""
 
     schema_version: Literal["aecbench.decomposition-optimization-cycle.v1"] = (

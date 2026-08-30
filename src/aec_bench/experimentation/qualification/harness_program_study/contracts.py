@@ -10,6 +10,7 @@ from typing import Literal, Self
 
 from pydantic import Field, FiniteFloat, NonNegativeFloat, NonNegativeInt, PositiveInt, field_validator, model_validator
 
+from aec_bench.contracts.content_address import ContentAddressedModel
 from aec_bench.contracts.execution_program import ExecutionProgramRef
 from aec_bench.contracts.harness_instance import HarnessInstanceRef
 from aec_bench.contracts.harness_kernel import (
@@ -18,7 +19,6 @@ from aec_bench.contracts.harness_kernel import (
     canonical_json_sha256,
     validate_sha256,
 )
-from aec_bench.contracts.legacy_content_address import LegacyContentAddressedModel
 from aec_bench.contracts.task_snapshot import TaskSnapshotRef
 from aec_bench.contracts.trial_record import ArtifactReference, TrialRecord
 from aec_bench.contracts.validators import NonEmptyStr
@@ -39,7 +39,7 @@ from .artifact_io import _sha256_path
 HarnessProgramStudySplit = Literal["discovery", "calibration"]
 
 
-class HarnessProgramStudySpec(LegacyContentAddressedModel):
+class HarnessProgramStudySpec(ContentAddressedModel):
     """Strict, immutable inputs and preregistered candidate references for one harness-program-study run."""
 
     schema_version: Literal["aecbench.harness-program-study-spec.v1"] = "aecbench.harness-program-study-spec.v1"
@@ -187,7 +187,7 @@ class HarnessProgramStudyTrialEvidence(FrozenStrictModel):
         return self
 
 
-class HarnessProgramStudyReport(LegacyContentAddressedModel):
+class HarnessProgramStudyReport(ContentAddressedModel):
     """Complete content-addressed harness-program-study report; never represents harness learning."""
 
     schema_version: Literal["aecbench.harness-program-study-report.v1"] = "aecbench.harness-program-study-report.v1"

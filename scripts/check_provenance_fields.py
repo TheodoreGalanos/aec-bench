@@ -147,7 +147,7 @@ _ACTOR_REQUEST_FINGERPRINT_EXPRESSIONS = {
     "decision_id": "request.decision_id",
     "semantics": "ACTOR_INVOCATION_SEMANTICS",
 }
-_CONTENT_ADDRESSED_BASE_NAMES = {"ContentAddressedModel", "LegacyContentAddressedModel"}
+_CONTENT_ADDRESSED_BASE_NAMES = {"ContentAddressedModel"}
 _SELF_PATH = "scripts/check_provenance_fields.py"
 
 

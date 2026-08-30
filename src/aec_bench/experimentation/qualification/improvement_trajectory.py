@@ -9,6 +9,7 @@ from typing import Literal, Self
 
 from pydantic import NonNegativeInt, field_validator, model_validator
 
+from aec_bench.contracts.content_address import ContentAddressedModel
 from aec_bench.contracts.evaluation_outcome import NonNegativeFiniteFloat
 from aec_bench.contracts.evaluation_plane import (
     EvaluationBudget,
@@ -17,7 +18,6 @@ from aec_bench.contracts.evaluation_plane import (
 from aec_bench.contracts.harness_kernel import (
     FrozenStrictModel,
 )
-from aec_bench.contracts.legacy_content_address import LegacyContentAddressedModel
 from aec_bench.contracts.validators import NonEmptyStr
 
 
@@ -33,7 +33,7 @@ class EvaluationAccountingPlane(StrEnum):
     HUMAN_AUDIT = "human_audit"
 
 
-class EvaluationWorkReceipt(LegacyContentAddressedModel):
+class EvaluationWorkReceipt(ContentAddressedModel):
     """One immutable unit of observed work that may serve more than one plane."""
 
     schema_version: Literal["aecbench.evaluation-work-receipt.v1"] = "aecbench.evaluation-work-receipt.v1"
@@ -95,7 +95,7 @@ class EvaluationPlaneAccounting(FrozenStrictModel):
     totals: EvaluationUsageTotals
 
 
-class GenerationEvaluationAccounting(LegacyContentAddressedModel):
+class GenerationEvaluationAccounting(ContentAddressedModel):
     """Complete receipt-addressed accounting for one evaluation generation."""
 
     schema_version: Literal["aecbench.generation-evaluation-accounting.v1"] = (

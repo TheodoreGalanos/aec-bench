@@ -12,7 +12,7 @@ from aec_bench.contracts.authority import (
     AuthorityPrincipal,
     AuthorityPrincipalKind,
 )
-from aec_bench.contracts.legacy_content_address import LegacyContentAddressedModel
+from aec_bench.contracts.content_address import ContentAddressedModel
 from aec_bench.experimentation.governance.monitor_runtime import (
     CanaryLogicalProjectionConfiguration,
     CanaryReferenceEvent,
@@ -73,7 +73,7 @@ def _sha(label: str) -> str:
     return hashlib.sha256(label.encode("utf-8")).hexdigest()
 
 
-def _canonical_bytes(model: LegacyContentAddressedModel) -> bytes:
+def _canonical_bytes(model: ContentAddressedModel) -> bytes:
     return (
         json.dumps(
             model.model_dump(mode="json"),
@@ -85,7 +85,7 @@ def _canonical_bytes(model: LegacyContentAddressedModel) -> bytes:
     ).encode("utf-8")
 
 
-def _historical_contracts() -> Mapping[str, LegacyContentAddressedModel]:
+def _historical_contracts() -> Mapping[str, ContentAddressedModel]:
     observer = AuthorityPrincipal(
         principal_id="host.production-monitor-runtime",
         kind=AuthorityPrincipalKind.HOST_RUNTIME,

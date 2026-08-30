@@ -7,7 +7,7 @@ from collections.abc import Mapping
 
 from pydantic import model_validator
 
-from aec_bench.contracts.legacy_content_address import LegacyContentAddressedModel
+from aec_bench.contracts.content_address import ContentAddressedModel
 from aec_bench.contracts.validators import FrozenStrictModel, NonEmptyStr
 from aec_bench.worlds.stewardship.wastewater_pump_station.reference_package_models import (
     ReferencePackage,
@@ -51,7 +51,7 @@ class TemporalActionEvidenceSets(FrozenStrictModel):
     accepted_evidence_refs: tuple[NonEmptyStr, ...]
 
 
-class TemporalEvidenceVerificationReport(LegacyContentAddressedModel):
+class TemporalEvidenceVerificationReport(ContentAddressedModel):
     """Independent result over one complete local temporal-evidence ledger."""
 
     valid: bool

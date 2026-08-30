@@ -12,6 +12,7 @@ from typing import Literal, Self
 
 from pydantic import field_validator, model_validator
 
+from aec_bench.contracts.content_address import ContentAddressedModel
 from aec_bench.contracts.harness_instance import prohibited_retry_safe_error_codes
 from aec_bench.contracts.harness_kernel import (
     FrozenStrictModel,
@@ -25,7 +26,6 @@ from aec_bench.contracts.harness_kernel import (
     KernelPortSpec,
     KernelSourceDigest,
 )
-from aec_bench.contracts.legacy_content_address import LegacyContentAddressedModel
 from aec_bench.contracts.validators import NonEmptyStr
 
 
@@ -750,7 +750,7 @@ class KernelRuntimePrimitive(FrozenStrictModel):
         return self
 
 
-class KernelOperationDefinition(LegacyContentAddressedModel):
+class KernelOperationDefinition(ContentAddressedModel):
     """Single registry-owned definition shared by compilation and dispatch."""
 
     operation_id: NonEmptyStr

@@ -13,6 +13,7 @@ from typing import Literal, Self
 
 from pydantic import Field, field_validator, model_validator
 
+from aec_bench.contracts.content_address import ContentAddressedModel
 from aec_bench.contracts.execution_program import (
     ActionNode,
     BranchNode,
@@ -33,7 +34,6 @@ from aec_bench.contracts.harness_kernel import (
     kernel_abi_commitment,
     validate_sha256,
 )
-from aec_bench.contracts.legacy_content_address import LegacyContentAddressedModel
 from aec_bench.contracts.trial_record import ArtifactReference
 from aec_bench.contracts.validators import NonEmptyStr
 from aec_bench.evolution.paired_repair import RepairTrialOutcome, decide_repair
@@ -98,7 +98,7 @@ from aec_bench.harness.kernel_catalogue import KernelRuntimeRegistry
 SelectionSplit = Literal["discovery", "calibration"]
 
 
-class AcceptedRepairEvidence(LegacyContentAddressedModel):
+class AcceptedRepairEvidence(ContentAddressedModel):
     """Accepted paired-repair evidence pinned to its persisted terminal artifact and child Hx/px."""
 
     schema_version: Literal["aecbench.accepted-repair-evidence.v1"] = "aecbench.accepted-repair-evidence.v1"
@@ -128,7 +128,7 @@ class AcceptedRepairEvidence(LegacyContentAddressedModel):
         return self
 
 
-class MotifLearningReport(LegacyContentAddressedModel):
+class MotifLearningReport(ContentAddressedModel):
     """Causal audit record for candidate creation and every attempted promotion edge."""
 
     schema_version: Literal["aecbench.motif-learning-report.v3"] = "aecbench.motif-learning-report.v3"
@@ -182,7 +182,7 @@ class MotifLearningResult:
     report: MotifLearningReport
 
 
-class MotifTransferPlan(LegacyContentAddressedModel):
+class MotifTransferPlan(ContentAddressedModel):
     """Frozen pre-holdout selection and target-specific Hx/px materialization plan."""
 
     schema_version: Literal["aecbench.motif-transfer-plan.v1"] = "aecbench.motif-transfer-plan.v1"
@@ -215,7 +215,7 @@ class MotifTransferPlan(LegacyContentAddressedModel):
         return self
 
 
-class GovernedMotifTransferPlan(LegacyContentAddressedModel):
+class GovernedMotifTransferPlan(ContentAddressedModel):
     """Selection-time assurance bound to one exact transfer plan."""
 
     schema_version: Literal["aecbench.governed-motif-transfer-plan.v2"] = "aecbench.governed-motif-transfer-plan.v2"
@@ -262,7 +262,7 @@ class GovernedMotifTransferPlan(LegacyContentAddressedModel):
         )
 
 
-class MotifTransferPromotionReport(LegacyContentAddressedModel):
+class MotifTransferPromotionReport(ContentAddressedModel):
     """Auditable holdout evidence and governed transfer-promotion outcome."""
 
     schema_version: Literal["aecbench.motif-transfer-promotion-report.v1"] = (

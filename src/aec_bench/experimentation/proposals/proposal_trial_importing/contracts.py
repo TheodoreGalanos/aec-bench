@@ -9,9 +9,9 @@ from typing import Literal, Self
 
 from pydantic import Field, field_validator, model_validator
 
+from aec_bench.contracts.content_address import ContentAddressedModel
 from aec_bench.contracts.evaluation_result import EvaluationResult
 from aec_bench.contracts.harness_kernel import validate_sha256
-from aec_bench.contracts.legacy_content_address import LegacyContentAddressedModel
 from aec_bench.contracts.proposal_execution.session import ProposalSessionReceipt
 from aec_bench.contracts.proposal_execution_types import ProposalSessionStatus
 from aec_bench.contracts.task_review_snapshot import TaskReviewSnapshot
@@ -29,7 +29,7 @@ class ProposalTrialImportError(ValueError):
     """Reject incomplete, drifted, or unauthorized proposal import evidence."""
 
 
-class ProposalVerifierEvidence(LegacyContentAddressedModel):
+class ProposalVerifierEvidence(ContentAddressedModel):
     """Exact task-authority verifier evidence used by one proposal import."""
 
     schema_version: Literal["aecbench.proposal-verifier-evidence.v1"] = "aecbench.proposal-verifier-evidence.v1"
@@ -41,7 +41,7 @@ class ProposalVerifierEvidence(LegacyContentAddressedModel):
     evaluation: EvaluationResult
 
 
-class ProposalTrialImportReceipt(LegacyContentAddressedModel):
+class ProposalTrialImportReceipt(ContentAddressedModel):
     """Non-circular receipt binding one persisted TrialRecord to its proposal run."""
 
     schema_version: Literal["aecbench.proposal-trial-import-receipt.v3"] = "aecbench.proposal-trial-import-receipt.v3"
@@ -89,7 +89,7 @@ class ProposalTrialImportReceipt(LegacyContentAddressedModel):
         return tuple(sorted(value))
 
 
-class ProposalCandidateFailureRecord(LegacyContentAddressedModel):
+class ProposalCandidateFailureRecord(ContentAddressedModel):
     """Preserved candidate-failure evidence that explicitly forbids a TrialRecord."""
 
     schema_version: Literal["aecbench.proposal-candidate-failure-import.v1"] = (

@@ -27,12 +27,12 @@ from aec_bench.contracts.authority import (
     BasisKind,
     TaintLabel,
 )
+from aec_bench.contracts.content_address import ContentAddressedModel
 from aec_bench.contracts.evaluation_refs import EvaluationRegimeRef
 from aec_bench.contracts.harness_kernel import (
     FrozenStrictModel,
     validate_sha256,
 )
-from aec_bench.contracts.legacy_content_address import LegacyContentAddressedModel
 from aec_bench.contracts.run_bundle import RunPlan
 from aec_bench.contracts.trial_record import ArtifactReference
 from aec_bench.contracts.validators import NonEmptyStr
@@ -128,7 +128,7 @@ class HarborJobFileDigest(FrozenStrictModel):
         return validate_sha256(value)
 
 
-class HarborInvocationReceipt(LegacyContentAddressedModel):
+class HarborInvocationReceipt(ContentAddressedModel):
     """Durable byte-level receipt for one completed external Harbor invocation."""
 
     schema_version: Literal["aecbench.harbor-invocation-receipt.v1"] = "aecbench.harbor-invocation-receipt.v1"

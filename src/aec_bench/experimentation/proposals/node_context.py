@@ -14,12 +14,12 @@ from typing import Literal, Self
 
 from pydantic import Field, field_validator, model_validator
 
+from aec_bench.contracts.content_address import ContentAddressedModel
 from aec_bench.contracts.harness_kernel import (
     FrozenStrictModel,
     canonical_json_sha256,
     validate_sha256,
 )
-from aec_bench.contracts.legacy_content_address import LegacyContentAddressedModel
 from aec_bench.contracts.proposal_execution.graph import FinalSynthesisSpec, SemanticSubtaskSpec
 from aec_bench.contracts.proposal_execution_context import CompiledNodeContextScope, ScopedSourceMaterialization
 from aec_bench.contracts.proposal_execution_types import NodeInstructionVisibility
@@ -98,7 +98,7 @@ class PersistedProposalHandoffArtifact(FrozenStrictModel):
         return value
 
 
-class ProposalNodeContextArtifact(LegacyContentAddressedModel):
+class ProposalNodeContextArtifact(ContentAddressedModel):
     """One exact file materialized into the node-visible workspace."""
 
     schema_version: Literal["aecbench.proposal-node-context-artifact.v1"] = "aecbench.proposal-node-context-artifact.v1"
@@ -122,7 +122,7 @@ class ProposalNodeContextArtifact(LegacyContentAddressedModel):
         return validate_sha256(value)
 
 
-class ProposalNodeContextManifest(LegacyContentAddressedModel):
+class ProposalNodeContextManifest(ContentAddressedModel):
     """Content-addressed inventory of one least-privilege node workspace."""
 
     schema_version: Literal["aecbench.proposal-node-context-manifest.v1"] = "aecbench.proposal-node-context-manifest.v1"
