@@ -39,6 +39,7 @@ readable.
 | Resolved run specification | Experiment orchestration | One experiment manifest, exact task releases, and stable agent conditions become one explicit requested run condition | Internal schema 1; strict local persistence before execution | [`ResolvedRunSpec`](../src/aec_bench/contracts/resolved_run.py) and [`resolve_run_spec`](../src/aec_bench/contracts/resolved_run.py) | Requested run condition and persisted spec |
 | Runtime observation and provider resolution | Harness and provider boundary | Requested provider state is compared with observed runtime state under an explicit versioned resolution mapping | Internal schema 1; strict typed outcomes | [`RuntimeObservation`, `ProviderResolutionMapping`, and `observe_runtime`](../src/aec_bench/contracts/runtime_observation.py) | Persisted runtime observation |
 | Canonical run plan and planned trial | Experiment orchestration and harness | One resolved run becomes UUID-backed, ordered, complete work with typed execution details | Internal schema; pure planning remains separate from storage and execution | [`RunPlan`, `PlannedTrial`, and `plan_run`](../src/aec_bench/contracts/run_plan.py) | In-process requested work plan |
+| Run accounting and aggregate safeguards | Harness and evaluation boundary | Exact planned trial UUID membership becomes typed run status and accepted aggregate input | Internal schema 1; unexpected and invalid results are quarantined | [`RunAccounting`, `TrialAccountingObservation`, and `account_run`](../src/aec_bench/contracts/run_accounting.py) | Run status, counts, and accepted records |
 | Evidence run store | Experiment orchestration and ledger | Requested run state is durably retained before execution and cannot change after start | Internal schema 1; strict local reader with no legacy migration | [`EvidenceRunStore`](../src/aec_bench/ledger/evidence_run_store.py) | Local persisted resolved specification, plan, and operational state |
 | Learning Study design and evidence | Experimentation | An authored protocol composes exact task members and family relations, then compiles to existing trials; committed state and explicit comparison-validity evidence stay outside `TrialRecord` | Internal Release A persisted contracts | [`LearningStudyProtocolSpec`, `LearningStudySpec`](../src/aec_bench/contracts/learning_study.py), [`LearningFamilySpec`](../src/aec_bench/contracts/learning_family.py), [`learning_study_evidence.py`](../src/aec_bench/contracts/learning_study_evidence.py), [`learning_study_assessment.py`](../src/aec_bench/contracts/learning_study_assessment.py), and the [Gate A decision](adr/learning-studies-gate-a.md) | Maintained or caller-selected protocol directory, compiled plan, append-only receipts and sequenced events, ordinary trial ledger, and pair-level paired-difference assessment |
 | Evolution workspace candidate lineage | Experimentation and feedback | Mutable workspace files become exact Git source and explicit candidate lineage | Workspace manifest schema 1; legacy labels require an explicit migration plan | [`WorkspaceCandidateVersion`, `WorkspaceManifest`, and `WorkspaceMigrationPlan`](../src/aec_bench/contracts/evolution.py) plus [`Workspace`](../src/aec_bench/evolution/workspace.py) | Persisted workspace Git metadata and manifest |
@@ -139,6 +140,18 @@ illustrative):
   }
 }
 ```
+
+`TrialAccountingObservation` is the typed final outcome at the run boundary.
+It includes `succeeded`, `failed`, `cancelled`, `timed_out`, `invalid`, and
+`missing`; timeout is never inferred from free-text result fields. `account_run`
+matches observations to the exact `ResolvedRunSpec` and `RunPlan`, and requires
+the canonical schema-2 planned binding on every accepted record. An identical
+duplicate is idempotent and counted once. A conflicting duplicate, invalid
+evidence, or unexpected UUID makes the run invalid. Missing results make the
+run incomplete. Cancellation requested with reconciled cancelled trials gives
+the `cancelled` status; other terminal failures give
+`complete_with_failures`. Only accepted terminal records are returned for
+downstream aggregates. Quarantined and unexpected records are excluded.
 
 ## Task specification
 
