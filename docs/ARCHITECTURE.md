@@ -85,8 +85,13 @@ projection of the authoritative `RunPlan` plus operational rows and does not
 hydrate portable evidence. The store keeps only portable references for the
 resolved run and plan records. `EvidenceRunStore` remains authoritative for
 those portable records, and the ledger remains authoritative for final trial
-evidence. The operational store does not schedule work, retry attempts, cancel
-runs, or interpret task-family fields.
+evidence. `LocalScheduler` owns only queue selection, bounded local dispatch,
+and lease-backed work state. Its resolved `ExecutionPolicy` applies global,
+run, backend, provider-route, model-route, resource-class, and execution-family
+limits, with priority aging for fairness. It does not choose retries, cancel
+runs, interpret task-family fields, or hydrate evidence. Every dispatch creates
+one lease-bound attempt, renews active leases at the resolved heartbeat
+interval, and closes the run and plan only after all planned work is terminal.
 
 `HarnessSpec` describes runtime capabilities, bindings, contracts, and
 budgets. It does not control attempt branching or selection. Interactive-world
