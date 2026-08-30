@@ -3109,6 +3109,49 @@ compatibility_behavior = "accept protocol 1 only"
 compatibility_kind = "protocol"
 
 [[field]]
+symbol = "aec_bench.tasks.metadata_migration.TaskMetadataMigrationEntry.proposed_version"
+surface = "dataclass"
+wire_name = "proposed_version"
+category = "compatibility"
+domain_owner = "task_metadata_migration"
+authority = "task_metadata_migration_report"
+authoritative = true
+exposure = "persisted"
+status = "current"
+payload_contract = "one proposed task metadata revision in a migration report"
+canonicalization = "positive base-10 integer"
+consumer = "task metadata reviewer and migration writer"
+validation_behavior = "migration reports emit a positive proposed task version"
+mismatch_behavior = "reject_task_metadata_migration_report"
+retention = "task_metadata_migration_lifetime"
+rationale = "A migrated task needs an explicit semantic version before metadata is written."
+duplication = "unique"
+compatibility_behavior = "migration readers preserve the proposed version while task metadata is reviewed"
+compatibility_kind = "entity_revision"
+
+[[field]]
+symbol = "aec_bench.tasks.metadata_migration.TaskMetadataMigrationReport.schema_version"
+aliases = ["mapping:aec_bench.tasks.metadata_migration.TaskMetadataMigrationReport.to_dict.schema_version"]
+surface = "dataclass"
+wire_name = "schema_version"
+category = "compatibility"
+domain_owner = "task_metadata_migration"
+authority = "task_metadata_migration_report_reader"
+authoritative = true
+exposure = "persisted"
+status = "current"
+payload_contract = "task metadata migration report schema 1"
+canonicalization = "fixed integer literal 1"
+consumer = "task metadata migration report reader"
+validation_behavior = "migration report readers accept schema version 1 only"
+mismatch_behavior = "reject_task_metadata_migration_report"
+retention = "task_metadata_migration_lifetime"
+rationale = "The review report needs one explicit compatibility selector for stable reads."
+duplication = "projection"
+compatibility_behavior = "migration report readers accept schema 1 only"
+compatibility_kind = "external_schema"
+
+[[field]]
 symbol = "aec_bench.web.schemas.AnnotationSchema.reviewed_at"
 aliases = ["mapping:aec_bench.web.routes.triage.post_triage_annotation.reviewed_at"]
 surface = "pydantic_model"

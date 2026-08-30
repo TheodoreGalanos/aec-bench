@@ -6,6 +6,7 @@ from typing import Any
 
 from pydantic import Field, PositiveInt, field_validator
 
+from aec_bench.contracts.identity import EntityIdentity
 from aec_bench.contracts.validators import (
     NonEmptyStr,
     StrictModel,
@@ -30,7 +31,16 @@ class Lifecycle(StrEnum):
 
 class Visibility(StrEnum):
     PUBLIC = "public"
+    PRIVATE = "private"
     HOLDOUT = "holdout"
+
+
+class TaskMetadata(StrictModel):
+    """Explicit identity and policy metadata in a task package."""
+
+    identity: EntityIdentity
+    lifecycle: Lifecycle
+    visibility: Visibility
 
 
 class ToolSpec(StrictModel):
@@ -76,6 +86,7 @@ class VerifierSpec(StrictModel):
 
 
 class TaskDefinition(StrictModel):
+    identity: EntityIdentity | None = None
     task_id: NonEmptyStr
     task_type: NonEmptyStr
     domain: NonEmptyStr

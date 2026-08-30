@@ -4,14 +4,19 @@
 import logging
 import re
 import tomllib
+from collections.abc import Mapping
 from pathlib import Path, PurePosixPath
 from typing import Any, Final, cast
 
+from pydantic import ValidationError
+
+from aec_bench.contracts.identity import EntityKey
 from aec_bench.contracts.task_definition import (
     Difficulty,
     EnvironmentSpec,
     Lifecycle,
     TaskDefinition,
+    TaskMetadata,
     ToolSpec,
     VerifierSpec,
     Visibility,
@@ -43,6 +48,98 @@ def derive_task_id(instance_dir: Path, tasks_root: Path) -> str:
 
 
 def load_task_definition(instance_dir: Path, tasks_root: Path) -> TaskDefinition:
+    """Load a task, dispatching old files to the bounded compatibility reader."""
+
+    raw_toml, instruction = _read_task_files(instance_dir)
+    if "identity" in raw_toml:
+        return _load_task_definition_with_metadata(instance_dir, tasks_root, raw_toml, instruction)
+    return _load_legacy_task_definition(instance_dir, tasks_root, raw_toml, instruction)
+
+
+def load_legacy_task_definition(
+    instance_dir: Path,
+    tasks_root: Path,
+) -> TaskDefinition:
+    """Load a pre-identity task using the temporary legacy metadata defaults."""
+
+    raw_toml, instruction = _read_task_files(instance_dir)
+    if "identity" in raw_toml:
+        raise LoadError(
+            "legacy task reader cannot load a task with [identity]; use load_task_definition for strict metadata"
+        )
+    return _load_legacy_task_definition(instance_dir, tasks_root, raw_toml, instruction)
+
+
+def _load_task_definition_with_metadata(
+    instance_dir: Path,
+    tasks_root: Path,
+    raw_toml: dict[str, Any],
+    instruction: str,
+) -> TaskDefinition:
+    try:
+        task_metadata = parse_task_metadata(raw_toml)
+    except ValueError as error:
+        raise LoadError(f"invalid task metadata in {instance_dir / 'task.toml'}: {error}") from error
+
+    relative_path = derive_task_id(instance_dir, tasks_root)
+    try:
+        path_key = EntityKey(relative_path)
+    except (TypeError, ValueError) as error:
+        raise LoadError(f"task path is not a valid entity key: {relative_path}") from error
+    if task_metadata.identity.key != path_key and path_key not in task_metadata.identity.aliases:
+        raise LoadError(
+            f"task identity key {task_metadata.identity.key!r} does not match task path {relative_path!r} "
+            "or an explicit identity alias"
+        )
+
+    metadata = _metadata_mapping(raw_toml)
+    agent = _agent_mapping(raw_toml)
+    try:
+        return TaskDefinition.model_validate(
+            {
+                "identity": task_metadata.identity,
+                "task_id": str(task_metadata.identity.key),
+                "task_type": _infer_task_type(relative_path.split("/")),
+                "domain": _infer_domain(relative_path.split("/"), metadata),
+                "category": _infer_category(relative_path.split("/"), metadata),
+                "difficulty": metadata.get("difficulty", Difficulty.MEDIUM),
+                "lifecycle": task_metadata.lifecycle,
+                "visibility": task_metadata.visibility,
+                "instruction": instruction,
+                "environment": _build_environment(instance_dir, raw_toml),
+                "verifier": _build_verifier(instance_dir, instruction),
+                "timeout_seconds": max(1, round(float(agent.get("timeout_sec", 600.0)))),
+                "tags": list(metadata.get("tags", [])),
+                "metadata": metadata,
+            }
+        )
+    except (ValidationError, KeyError, TypeError, ValueError) as error:
+        raise LoadError(f"invalid task definition in {instance_dir / 'task.toml'}: {error}") from error
+
+
+def parse_task_metadata(raw_toml: Mapping[str, Any]) -> TaskMetadata:
+    """Parse the explicit ``[identity]`` and ``[metadata]`` task contract."""
+
+    identity = raw_toml.get("identity")
+    if not isinstance(identity, Mapping):
+        raise ValueError("[identity] must declare id, key, and version")
+    metadata = raw_toml.get("metadata")
+    if not isinstance(metadata, Mapping):
+        raise ValueError("[metadata] must declare lifecycle and visibility")
+    if "lifecycle" not in metadata:
+        raise ValueError("[metadata].lifecycle is required")
+    if "visibility" not in metadata:
+        raise ValueError("[metadata].visibility is required; it has no default")
+    return TaskMetadata.model_validate(
+        {
+            "identity": dict(identity),
+            "lifecycle": metadata["lifecycle"],
+            "visibility": metadata["visibility"],
+        }
+    )
+
+
+def _read_task_files(instance_dir: Path) -> tuple[dict[str, Any], str]:
     task_toml_path = instance_dir / "task.toml"
     instruction_path = instance_dir / "instruction.md"
 
@@ -50,15 +147,27 @@ def load_task_definition(instance_dir: Path, tasks_root: Path) -> TaskDefinition
         raw_toml = tomllib.loads(task_toml_path.read_text(encoding="utf-8"))
     except FileNotFoundError:
         raise LoadError(f"missing task.toml: {task_toml_path}") from None
+    except (tomllib.TOMLDecodeError, UnicodeDecodeError) as error:
+        raise LoadError(f"invalid task.toml: {task_toml_path}: {error}") from error
     try:
         instruction = instruction_path.read_text(encoding="utf-8")
     except FileNotFoundError:
         raise LoadError(f"missing instruction.md: {instruction_path}") from None
+    except UnicodeDecodeError as error:
+        raise LoadError(f"invalid instruction.md: {instruction_path}: {error}") from error
+    return raw_toml, instruction
 
+
+def _load_legacy_task_definition(
+    instance_dir: Path,
+    tasks_root: Path,
+    raw_toml: dict[str, Any],
+    instruction: str,
+) -> TaskDefinition:
     task_id = derive_task_id(instance_dir, tasks_root)
     segments = task_id.split("/")
-    metadata = raw_toml.get("metadata", {})
-    agent = raw_toml.get("agent", {})
+    metadata = _metadata_mapping(raw_toml)
+    agent = _agent_mapping(raw_toml)
 
     task_def = TaskDefinition.model_validate(
         {
@@ -97,6 +206,39 @@ def load_task_definition(instance_dir: Path, tasks_root: Path) -> TaskDefinition
         logger.warning(warning)
 
     return task_def
+
+
+def _metadata_mapping(raw_toml: Mapping[str, Any]) -> dict[str, Any]:
+    value = raw_toml.get("metadata", {})
+    if not isinstance(value, Mapping):
+        raise LoadError("task metadata must be a TOML table")
+    return dict(value)
+
+
+def _agent_mapping(raw_toml: Mapping[str, Any]) -> dict[str, Any]:
+    value = raw_toml.get("agent", {})
+    if not isinstance(value, Mapping):
+        raise LoadError("task agent configuration must be a TOML table")
+    return dict(value)
+
+
+def _build_environment(instance_dir: Path, raw_toml: Mapping[str, Any]) -> EnvironmentSpec:
+    return EnvironmentSpec(
+        dockerfile="environment/Dockerfile",
+        compose_file=_optional_relative_file(instance_dir, "environment/docker-compose.yaml"),
+        manifest=_optional_relative_file(instance_dir, "environment/manifest.jsonl"),
+        build_args={},
+        tools=_load_tools(dict(raw_toml)),
+    )
+
+
+def _build_verifier(instance_dir: Path, instruction: str) -> VerifierSpec:
+    return VerifierSpec(
+        script=_verifier_script(instance_dir),
+        expected_output_path=_infer_expected_output_path(instruction),
+        reward_path="/logs/verifier/reward.json",
+        details_path="/logs/verifier/details.json",
+    )
 
 
 def iter_task_instance_dirs(tasks_root: Path) -> list[Path]:

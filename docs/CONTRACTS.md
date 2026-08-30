@@ -60,6 +60,15 @@ workspace task. It owns task identity, lifecycle, visibility, instruction,
 environment, verifier, limits, tools, and task metadata. Task-family payloads
 remain task-owned; the global contract does not attempt to model every output.
 
+New task packages declare identity and policy in explicit TOML tables:
+`[identity]` contains `id`, `key`, and positive `version`; `[metadata]`
+contains `lifecycle` and `visibility`. The strict reader rejects missing or
+invalid identity and policy values, and preserves the UUID in `TaskDefinition`.
+During the repository migration, files without `[identity]` use the named
+`load_legacy_task_definition()` compatibility reader. That reader keeps the
+current legacy defaults and does not allocate a UUID; those defaults do not
+apply to the explicit metadata contract.
+
 Executable interactive worlds use their registered world definition and
 profile instead of pretending to be a static `TaskDefinition`. Both families
 can still enter the same experiment, trial, evaluation, and reporting layers.
