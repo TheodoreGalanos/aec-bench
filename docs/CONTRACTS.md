@@ -36,8 +36,9 @@ readable.
 | Finite lifecycle execution | Lifecycle task and host | Stage-specific task evidence and actor results become one bounded host-controlled progression | Internal package and runtime contract; persisted accepted evidence is current-format only | [`EvidenceLifecycleSpec`](../src/aec_bench/contracts/evidence_lifecycle.py) and the [staged evidence protocol](protocols/staged-evidence-and-publication.md) | Packaged task, runtime state, and persisted accepted evidence |
 | Experiment manifest | Experiment orchestration | User configuration becomes an executable plan | Internal, except documented CLI/config behavior | [`ExperimentManifest`](../src/aec_bench/contracts/experiment_manifest.py) | Persisted configuration |
 | Agent condition | Experiment orchestration | One requested adapter/model condition retains a stable UUID-backed identity and explicit runtime inputs | Internal foundation; callers supply stable conditions when resolving a run | [`AgentCondition`](../src/aec_bench/contracts/experiment_manifest.py) and [`EntityIdentity`](../src/aec_bench/contracts/identity.py) | In-process resolved condition |
-| Resolved run specification | Experiment orchestration | One experiment manifest, exact task releases, and stable agent conditions become one explicit requested run condition | Internal schema 1; no persistence or execution ownership yet | [`ResolvedRunSpec`](../src/aec_bench/contracts/resolved_run.py) and [`resolve_run_spec`](../src/aec_bench/contracts/resolved_run.py) | In-process requested run condition |
-| Canonical run plan and planned trial | Experiment orchestration and harness | One resolved run becomes UUID-backed, ordered, complete work with typed execution details | Internal schema; pure in-process planning only in this increment | [`RunPlan`, `PlannedTrial`, and `plan_run`](../src/aec_bench/contracts/run_plan.py) | In-process requested work plan |
+| Resolved run specification | Experiment orchestration | One experiment manifest, exact task releases, and stable agent conditions become one explicit requested run condition | Internal schema 1; strict local persistence before execution | [`ResolvedRunSpec`](../src/aec_bench/contracts/resolved_run.py) and [`resolve_run_spec`](../src/aec_bench/contracts/resolved_run.py) | Requested run condition and persisted spec |
+| Canonical run plan and planned trial | Experiment orchestration and harness | One resolved run becomes UUID-backed, ordered, complete work with typed execution details | Internal schema; pure planning remains separate from storage and execution | [`RunPlan`, `PlannedTrial`, and `plan_run`](../src/aec_bench/contracts/run_plan.py) | In-process requested work plan |
+| Evidence run store | Experiment orchestration and ledger | Requested run state is durably retained before execution and cannot change after start | Internal schema 1; strict local reader with no legacy migration | [`EvidenceRunStore`](../src/aec_bench/ledger/evidence_run_store.py) | Local persisted resolved specification, plan, and operational state |
 | Learning Study design and evidence | Experimentation | An authored protocol composes exact task members and family relations, then compiles to existing trials; committed state and explicit comparison-validity evidence stay outside `TrialRecord` | Internal Release A persisted contracts | [`LearningStudyProtocolSpec`, `LearningStudySpec`](../src/aec_bench/contracts/learning_study.py), [`LearningFamilySpec`](../src/aec_bench/contracts/learning_family.py), [`learning_study_evidence.py`](../src/aec_bench/contracts/learning_study_evidence.py), [`learning_study_assessment.py`](../src/aec_bench/contracts/learning_study_assessment.py), and the [Gate A decision](adr/learning-studies-gate-a.md) | Maintained or caller-selected protocol directory, compiled plan, append-only receipts and sequenced events, ordinary trial ledger, and pair-level paired-difference assessment |
 | Evolution workspace candidate lineage | Experimentation and feedback | Mutable workspace files become exact Git source and explicit candidate lineage | Workspace manifest schema 1; legacy labels require an explicit migration plan | [`WorkspaceCandidateVersion`, `WorkspaceManifest`, and `WorkspaceMigrationPlan`](../src/aec_bench/contracts/evolution.py) plus [`Workspace`](../src/aec_bench/evolution/workspace.py) | Persisted workspace Git metadata and manifest |
 | Evolution functional search and swarm coordination | Evolution application and swarm manager | Exact candidate material is paired with its own evaluation evidence before policy or shared effects use it | Internal pre-1.0 values; no new public schema promise | [`EvaluatedCandidate`, `CandidateEvaluationBatch`, `CandidateProposal`, `SwarmAssignment`, `SwarmAgentResult`, and `SwarmState`](../src/aec_bench/evolution/core.py), [`evaluation.py`](../src/aec_bench/evolution/evaluation.py), and [`swarm/core.py`](../src/aec_bench/evolution/swarm/core.py) | In-process functional values, AVO checkpoints, and swarm state outputs |
@@ -317,6 +318,20 @@ task, condition, repetition, total, family, backend, visibility, and deprecated
 task counts without requiring callers to inspect every trial. Planning does not
 persist data or start execution. The existing compiled `RunPlan` below remains
 the specialised run-package contract until a later migration.
+
+`EvidenceRunStore` persists the resolved specification before planning. It uses
+one safe run directory named from the readable run key and full run UUID,
+confined local locks, and durable atomic file replacement. Each directory
+contains `resolved-run-spec.json`, the latest `run-plan.json`, and a strictly
+validated `state.json` that binds the exact run and plan identities. Draft
+plans may be incomplete and may be replaced only with a higher
+`plan_identity.version`; identical writes are idempotent and conflicting writes
+fail. A revision after readiness returns operational state to `draft`.
+Promotion requires a validated ready form of the persisted draft and cannot
+change its content. Starting requires that recorded ready transition and records the
+stable started condition before external execution, after which the resolved
+specification and plan cannot be replaced. Closing changes only operational
+state from `started` to `closed`.
 
 `RunPlan` is the plain internal execution value. It contains one `RunManifest`,
 the ordered exact task references, the compiled Harness, the compiled execution
