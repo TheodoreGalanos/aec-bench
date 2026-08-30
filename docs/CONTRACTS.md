@@ -37,6 +37,7 @@ readable.
 | Experiment manifest | Experiment orchestration | User configuration becomes an executable plan | Internal, except documented CLI/config behavior | [`ExperimentManifest`](../src/aec_bench/contracts/experiment_manifest.py) | Persisted configuration |
 | Agent condition | Experiment orchestration | One requested adapter/model condition retains a stable UUID-backed identity and explicit runtime inputs | Internal foundation; callers supply stable conditions when resolving a run | [`AgentCondition`](../src/aec_bench/contracts/experiment_manifest.py) and [`EntityIdentity`](../src/aec_bench/contracts/identity.py) | In-process resolved condition |
 | Resolved run specification | Experiment orchestration | One experiment manifest, exact task releases, and stable agent conditions become one explicit requested run condition | Internal schema 1; strict local persistence before execution | [`ResolvedRunSpec`](../src/aec_bench/contracts/resolved_run.py) and [`resolve_run_spec`](../src/aec_bench/contracts/resolved_run.py) | Requested run condition and persisted spec |
+| Runtime observation and provider resolution | Harness and provider boundary | Requested provider state is compared with observed runtime state under an explicit versioned resolution mapping | Internal schema 1; strict typed outcomes | [`RuntimeObservation`, `ProviderResolutionMapping`, and `observe_runtime`](../src/aec_bench/contracts/runtime_observation.py) | Persisted runtime observation |
 | Canonical run plan and planned trial | Experiment orchestration and harness | One resolved run becomes UUID-backed, ordered, complete work with typed execution details | Internal schema; pure planning remains separate from storage and execution | [`RunPlan`, `PlannedTrial`, and `plan_run`](../src/aec_bench/contracts/run_plan.py) | In-process requested work plan |
 | Evidence run store | Experiment orchestration and ledger | Requested run state is durably retained before execution and cannot change after start | Internal schema 1; strict local reader with no legacy migration | [`EvidenceRunStore`](../src/aec_bench/ledger/evidence_run_store.py) | Local persisted resolved specification, plan, and operational state |
 | Learning Study design and evidence | Experimentation | An authored protocol composes exact task members and family relations, then compiles to existing trials; committed state and explicit comparison-validity evidence stay outside `TrialRecord` | Internal Release A persisted contracts | [`LearningStudyProtocolSpec`, `LearningStudySpec`](../src/aec_bench/contracts/learning_study.py), [`LearningFamilySpec`](../src/aec_bench/contracts/learning_family.py), [`learning_study_evidence.py`](../src/aec_bench/contracts/learning_study_evidence.py), [`learning_study_assessment.py`](../src/aec_bench/contracts/learning_study_assessment.py), and the [Gate A decision](adr/learning-studies-gate-a.md) | Maintained or caller-selected protocol directory, compiled plan, append-only receipts and sequenced events, ordinary trial ledger, and pair-level paired-difference assessment |
@@ -717,6 +718,31 @@ configuration, resolved model identity, stop reason, failure kind, raw output,
 and collected artifacts must survive normalization when they can affect
 validity. Aggregate usage normalizes into `CostRecord`; it is not duplicated in
 `OutputRecord.agent_result`.
+
+`RuntimeObservation` retains requested and observed provider route, model, tool,
+and limit values. `ProviderResolutionMapping` records an expected alias or
+dated model resolution with a mapping ID and version. A complete observation
+with that mapping is valid and keeps both model identities visible. A missing
+resolved identity with no other known drift is `incomplete`. An undeclared
+route or model-family change, tool change, or limit change is `invalid` with one or more typed
+`RuntimeMismatch` values. These outcomes do not depend on free-text warning
+messages.
+
+Example:
+
+```json
+{
+  "requested_model": "gpt-4.1-mini",
+  "resolved_model": "gpt-4.1-mini-2025-04-14",
+  "resolution": {
+    "mapping_id": "azure-gpt-4.1-dated",
+    "mapping_version": 1,
+    "kind": "declared_dated"
+  },
+  "status": "complete",
+  "mismatches": []
+}
+```
 
 The local composition edge uses `build_local_adapter` from
 [`local_registry.py`](../src/aec_bench/adapters/local_registry.py) for its fixed
