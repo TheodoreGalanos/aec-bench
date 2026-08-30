@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "run_id": "0190abcd-1234-7abc-8def-0123456789ab",
+  "plan_id": "0190abcd-1234-7abd-8def-0123456789ab",
+  "status": "complete_with_failures",
+  "completeness": "complete",
+  "validity": "valid",
+  "cancellation_requested": false,
+  "counts": {
+    "planned": 4,
+    "succeeded": 1,
+    "failed": 1,
+    "cancelled": 1,
+    "timed_out": 1,
+    "invalid": 0,
+    "missing": 0,
+    "duplicate": 0,
+    "unexpected": 0
+  },
+  "accepted_trial_ids": [
+    "0190abcd-1234-7abe-8def-0123456789ab",
+    "0190abcd-1234-7abf-8def-0123456789ab",
+    "0190abcd-1234-7ab0-8def-0123456789ab",
+    "0190abcd-1234-7ab1-8def-0123456789ab"
+  ],
+  "missing_trial_ids": [],
+  "invalid_trial_ids": [],
+  "duplicate_trial_ids": [],
+  "conflicting_duplicate_trial_ids": [],
+  "unexpected_trial_ids": [],
+  "unexpected_duplicate_trial_ids": []
+}

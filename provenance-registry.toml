@@ -1854,6 +1854,27 @@ compatibility_behavior = "accept schema 1 and reject every other value"
 compatibility_kind = "external_schema"
 
 [[field]]
+symbol = "aec_bench.contracts.run_accounting.RunAccounting.schema_version"
+surface = "pydantic_model"
+wire_name = "schema_version"
+category = "compatibility"
+domain_owner = "harness"
+authority = "run_accounting_reader"
+authoritative = true
+exposure = "persisted"
+status = "current"
+payload_contract = "run accounting schema 1"
+canonicalization = "fixed integer literal 1"
+consumer = "run status and aggregate readers"
+validation_behavior = "RunAccounting accepts schema version 1 only"
+mismatch_behavior = "reject_run_accounting"
+retention = "run_accounting_lifetime"
+rationale = "Run status and accepted aggregate membership require a stable reader contract."
+duplication = "unique"
+compatibility_behavior = "accept schema 1 only"
+compatibility_kind = "external_schema"
+
+[[field]]
 symbol = "aec_bench.contracts.run_bundle.PublishedRunPackage.schema_version"
 surface = "pydantic_model"
 wire_name = "schema_version"
