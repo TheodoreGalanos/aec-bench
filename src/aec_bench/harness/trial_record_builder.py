@@ -12,6 +12,7 @@ from aec_bench.contracts.agent_output import AgentOutputStatus
 from aec_bench.contracts.artifacts import ArtifactRef
 from aec_bench.contracts.authority_evidence import AuthorityEvidenceRef
 from aec_bench.contracts.dataset import DatasetRef
+from aec_bench.contracts.evaluation_refs import EvaluationRegimeRef
 from aec_bench.contracts.evaluation_result import EvaluationResult
 from aec_bench.contracts.task_definition import TaskDefinition
 from aec_bench.contracts.trial_record import (
@@ -23,6 +24,7 @@ from aec_bench.contracts.trial_record import (
     ExecutionEnvironmentRef,
     ExecutionStatus,
     FileReference,
+    PlannedTrialBinding,
     ProviderRoute,
     QualificationRequirement,
     RunManifest,
@@ -107,6 +109,8 @@ def build_trial_record(
     evaluation_status: EvaluationStatus | None = None,
     execution_status_override: ExecutionStatus | None = None,
     include_output: bool = True,
+    planned_trial_binding: PlannedTrialBinding | None = None,
+    evaluation_regime: EvaluationRegimeRef | None = None,
 ) -> TrialRecord:
     stop_reason = result.stop_reason or result.failure_kind
     final_reason = result.completion_reason or stop_reason
@@ -136,11 +140,13 @@ def build_trial_record(
         provider_route=provider_route or _provider_route(result),
         expected_authorities=expected_authorities,
         qualification=qualification,
+        evaluation_regime=evaluation_regime,
     )
     record = TrialRecord(
         trial_id=trial_id,
         run_id=selected_run_id,
         task_id=task.task_id,
+        planned_trial_binding=planned_trial_binding,
         attempt=attempt,
         execution_status=execution_status,
         evaluation_status=(

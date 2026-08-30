@@ -87,6 +87,20 @@ rejects duplicate task or condition identities. Direct model loading applies
 the same task identity and secret value checks; secret-bearing values may use
 named environment references such as `api_key_env` or `env:VARIABLE`.
 
+The canonical local artifact entrypoint, `run_persisted_artifact_plan`, reads
+one persisted ready plan from `EvidenceRunStore`. It validates each selected
+artifact task against its exact task snapshot reference before calling
+`start_run`; no adapter effect occurs before the run is started. It executes
+only artifact-family planned trial UUIDs, uses each planned UUID as the
+`TrialRecord.trial_id`, and returns records in plan ordinal order. Each record
+may carry a `PlannedTrialBinding` with the run, trial, task release, agent
+condition, repetition, execution family, evaluation profile, and expected
+authority identities, including its plan ordinal. Adapter and resolved-model
+values must match the planned agent condition. The TrialRecord attempt count
+remains `1`; repetition is the planned repetition in the binding. Legacy
+`run_experiment` remains available to current callers
+until the later execution migration.
+
 ## Task specification
 
 `TaskDefinition` is the validated runnable description of an artifact or

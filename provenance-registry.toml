@@ -2036,6 +2036,27 @@ duplication = "unique"
 format = "lowercase 40-character Git commit"
 
 [[field]]
+symbol = "aec_bench.contracts.trial_record.PlannedTrialBinding.schema_version"
+surface = "pydantic_model"
+wire_name = "schema_version"
+category = "compatibility"
+domain_owner = "trial_record"
+authority = "canonical_local_artifact_execution"
+authoritative = true
+exposure = "persisted"
+status = "current"
+payload_contract = "optional binding from one TrialRecord to one canonical planned artifact trial"
+canonicalization = "fixed integer literal 1"
+consumer = "trial reconstruction and run comparison consumers"
+validation_behavior = "PlannedTrialBinding accepts only schema_version 1 and validates its run, trial, task release, repetition, execution family, evaluation profile, and expected authorities"
+mismatch_behavior = "reject the trial record binding"
+retention = "trial_record_lifetime"
+rationale = "Local artifact execution must retain the canonical plan binding while keeping TrialRecord readable for legacy callers."
+duplication = "unique"
+compatibility_behavior = "read the optional schema-1 binding or treat its absence as a legacy unbound record"
+compatibility_kind = "external_schema"
+
+[[field]]
 symbol = "aec_bench.contracts.trial_record.RunManifest.schema_version"
 surface = "pydantic_model"
 wire_name = "schema_version"
