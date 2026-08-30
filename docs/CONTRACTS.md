@@ -46,6 +46,7 @@ readable.
 | Public library catalogue | Templates and tasks | Public template and seed source becomes one site-facing content document | Protected schema; the current writer emits schema 2 | [`LibraryCatalogue`](../src/aec_bench/contracts/library_catalogue.py) and [`library_export.py`](../src/aec_bench/tasks/library_export.py) | Public JSON export |
 | Adapter and Harbor execution | Adapters and harness | Harness input crosses into local model execution or the supported Harbor workflow and returns untrusted output | Internal adapter values; Harbor result documents are lenient ingestion boundaries | [`AdapterRequest` and `AdapterResult`](../src/aec_bench/adapters/base.py), the [Harbor workflow](../src/aec_bench/harness/harbor_workflow.py), and [Harbor ingestion models](../src/aec_bench/harness/harbor_contract.py) | Internal, cross-process, and external |
 | Artifact-task attempt composition | Harness | One resolved task and one planned trial produce tracked attempts, one selection, one official verification, and one durable trial record | Supported Python composition API; optional built-in recipe specifications are internal configuration | [`artifact_tasks.py`](../src/aec_bench/harness/artifact_tasks.py), `ResolvedTaskInstance`, and `PlannedTrial` | Internal execution with persisted trial evidence |
+| Verifier execution receipt | Harness and trial ledger | One local verifier process outcome becomes explicit, bounded evidence | Persisted as a typed TrialRecord extension; old verifier fields remain during the compatibility window | [`VerifierExecutionReceipt`](../src/aec_bench/contracts/trial_extensions.py) and [`verifier_execution.py`](../src/aec_bench/harness/verifier_execution.py) | Persisted trial evidence |
 | Output completion and explicit commit | Adapter infrastructure and task contract | A fixed candidate artifact becomes structurally complete and, when required, bound by exact bytes | Versioned when persisted in trial evidence; adapter integration is internal | [`OutputCompletionContract` and `OutputCommitAttestation`](../src/aec_bench/contracts/output_completion.py) plus the shared [commit authority](../src/aec_bench/adapters/output_commit.py) | Request configuration, adapter result, and persisted attestation |
 | Prime package and evaluation integration | Prime integration | Current public task or lifecycle material becomes an independently installed package; hosted samples return as untrusted provider evidence | Public command and external package behavior; samples normalize into current records | [`exporter.py`](../src/aec_bench/prime_lab/exporter.py), [`lifecycle_exporter.py`](../src/aec_bench/prime_lab/lifecycle_exporter.py), and [`eval_import.py`](../src/aec_bench/prime_lab/eval_import.py) | External package and provider ingestion |
 | Artifact and evidence reference | Harness, ledger, and the producing domain | Filesystem or provider output becomes content-bound evidence | Protected when stored in a trial, dataset, freeze, or published record | `ArtifactRef` in [`artifacts.py`](../src/aec_bench/contracts/artifacts.py), `ArtifactReference` in [`trial_record.py`](../src/aec_bench/contracts/trial_record.py), and narrower owner-specific references | Persisted reference |
@@ -95,6 +96,23 @@ A file-backed world task contains `instruction.md` and `world.toml`. The task
 directory path relative to `tasks/` supplies `task_id`. `world.toml` declares
 the exact registered world, profile, and selection metadata. Loading rejects a
 stale build, stale profile, or metadata that differs from registration.
+
+## Verifier execution receipt
+
+The local artifact-task harness records a `VerifierExecutionReceipt` for the
+official verifier execution included with a materialized trial. The receipt records the verifier process interval,
+redacted command arguments, a workspace role instead of a host path, exit code,
+timeout or cancellation, bounded stdout and stderr references, reward and
+details references, parse status, failure information, and the named runtime
+path-transform version. A verifier is complete only when it was not cancelled
+or timed out, exited with code `0`, produced a valid reward, and retained that
+reward artifact. A reward file cannot turn a failed process into a successful
+verification.
+
+Verifier output is staged after the actor workspace snapshot is taken. The
+receipt and bounded logs are retained as trial evidence; private verifier files
+are not copied to the actor-facing snapshot. During the compatibility window,
+the existing evaluation fields remain alongside this receipt.
 
 ## Task genome reviews
 

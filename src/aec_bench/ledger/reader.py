@@ -9,6 +9,7 @@ from pathlib import Path
 from pydantic import BaseModel
 
 from aec_bench.contracts.artifacts import ArtifactRef
+from aec_bench.contracts.trial_extensions import VerifierExecutionReceipt
 from aec_bench.contracts.trial_record import (
     AdaptationProvenance,
     LifecycleExecutionRecord,
@@ -113,6 +114,7 @@ def _hydrate_extensions(record: TrialRecord, repository: ArtifactRepository) -> 
         "lifecycle_execution": LifecycleExecutionRecord,
         "lifecycle_provenance": LifecycleTrialProvenance,
         "meta_harness_provenance": MetaHarnessTrialProvenance,
+        "verifier_execution": VerifierExecutionReceipt,
     }
     for extension in record.extension_refs:
         model_type = known.get(extension.extension_kind)

@@ -27,6 +27,7 @@ from aec_bench.contracts.trial_extensions import (
     LifecycleTrialProvenance,
     MetaHarnessTrialProvenance,
     ProposalSessionTrialProvenance,
+    VerifierExecutionReceipt,
 )
 from aec_bench.contracts.validators import FrozenStrictModel, NonEmptyStr, StrictModel
 
@@ -557,6 +558,10 @@ class TrialRecord(StrictModel):
     @property
     def meta_harness_provenance(self) -> MetaHarnessTrialProvenance | None:
         return self._extension_value("meta_harness_provenance", MetaHarnessTrialProvenance)
+
+    @property
+    def verifier_execution(self) -> VerifierExecutionReceipt | None:
+        return self._extension_value("verifier_execution", VerifierExecutionReceipt)
 
     @property
     def episode_artifact(self) -> ArtifactRef | None:
