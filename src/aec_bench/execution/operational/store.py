@@ -822,6 +822,37 @@ class OperationalStore:
                 ).fetchone()
             )
 
+    def bind_backend_submission_external_id(
+        self, submission_id: UUID | str, *, external_id: str, now: datetime | None = None
+    ) -> BackendSubmissionRecord:
+        """Bind the provider identifier after a submission is accepted."""
+
+        selected_id = _required_id(submission_id, "submission_id")
+        selected_external_id = _required_text(external_id, "external_id")
+        stamp = _timestamp(_aware(now or datetime.now(UTC), "now"))
+        with self._connection(immediate=True) as connection:
+            current = self._require_row(connection, "operational_backend_submissions", "submission_id", selected_id)
+            if current[3] is not None and current[3] != selected_external_id:
+                raise OperationalStoreConflict(f"submission already has a different external ID: {selected_id}")
+            owner = connection.execute(
+                "SELECT submission_id FROM operational_backend_submissions "
+                "WHERE external_id = ? AND submission_id != ?",
+                (selected_external_id, selected_id),
+            ).fetchone()
+            if owner is not None:
+                raise OperationalStoreConflict(
+                    f"external ID already belongs to another submission: {selected_external_id}"
+                )
+            connection.execute(
+                "UPDATE operational_backend_submissions SET external_id = ?, updated_at = ? WHERE submission_id = ?",
+                (selected_external_id, stamp, selected_id),
+            )
+            return self._submission_from_row(
+                connection.execute(
+                    "SELECT * FROM operational_backend_submissions WHERE submission_id = ?", (selected_id,)
+                ).fetchone()
+            )
+
     def get_backend_submission(self, submission_id: UUID | str) -> BackendSubmissionRecord:
         selected_id = _required_id(submission_id, "submission_id")
         with self._connection() as connection:
