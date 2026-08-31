@@ -21,6 +21,7 @@ class InteractiveWorldOwnerDescriptor:
 
     task_world_id: str
     entry_point: str
+    conformance_entry_point: str
 
     def __post_init__(self) -> None:
         if not self.task_world_id.strip():
@@ -28,6 +29,9 @@ class InteractiveWorldOwnerDescriptor:
         module_name, separator, attribute_name = self.entry_point.partition(":")
         if not separator or not module_name.strip() or not attribute_name.strip():
             raise ValueError("Interactive World owner entry point must use module:attribute form")
+        module_name, separator, attribute_name = self.conformance_entry_point.partition(":")
+        if not separator or not module_name.strip() or not attribute_name.strip():
+            raise ValueError("Interactive World conformance entry point must use module:attribute form")
 
     def load(self) -> InteractiveWorldDefinition:
         """Load and validate the concrete definition owned by this descriptor."""
@@ -42,6 +46,16 @@ class InteractiveWorldOwnerDescriptor:
         if definition.build.task_world_id != self.task_world_id:
             raise ValueError(f"Interactive World owner ID differs from definition: {self.task_world_id}")
         return definition
+
+    def load_conformance_case(self) -> object:
+        """Load the owner-local conformance case for this world."""
+        module_name, _, attribute_name = self.conformance_entry_point.partition(":")
+        factory = getattr(import_module(module_name), attribute_name, None)
+        if not callable(factory):
+            raise TypeError(
+                f"Interactive World conformance entry point is not callable: {self.conformance_entry_point}"
+            )
+        return factory()
 
 
 @dataclass(frozen=True, slots=True)

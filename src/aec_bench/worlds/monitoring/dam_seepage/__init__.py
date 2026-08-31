@@ -38,4 +38,5 @@ __all__ = [
 WORLD_DESCRIPTOR = InteractiveWorldOwnerDescriptor(
     task_world_id="dam-seepage-monitoring",
     entry_point="aec_bench.worlds.monitoring.dam_seepage.definition:dam_seepage_world_definition",
+    conformance_entry_point="aec_bench.worlds.monitoring.dam_seepage.conformance:world_conformance_case",
 )

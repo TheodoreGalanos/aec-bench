@@ -103,7 +103,8 @@ evidence must never enter the actor view.
 A registered world supplies a
 [`InteractiveWorldDefinition`](../src/aec_bench/worlds/runtime/definition.py)
 with build identity, profile references, and a profile loader. Expose one
-`InteractiveWorldOwnerDescriptor` from the concrete world owner package. Add
+`InteractiveWorldOwnerDescriptor` from the concrete world owner package,
+including its owner-local conformance case. Add
 that owner to the explicit list in
 [`generate_world_catalogue.py`](../scripts/generate_world_catalogue.py), then
 regenerate the committed
@@ -148,15 +149,22 @@ uv run aec-bench task world run <world-id> --profile <profile-id> --instruction 
 ### 5. Prove the owning boundaries
 
 Use
-[`assert_world_conformance`](../tests/worlds/world_conformance.py)
+[`assert_world_conformance`](../src/aec_bench/worlds/conformance.py)
 for deterministic initialization and observation, safe rejection,
 deterministic accepted transitions, optional boundary round trips, evaluation,
 and terminal rejection. Add task-owned reference or property tests for
 engineering behaviour that can change benchmark outcomes.
 
-Decision freshness, recorder ordering, limits, and truncation belong to the
-existing [episode tests](../tests/worlds/runtime/test_episode.py),
-not every world test suite.
+Run the installed check with the canonical world key:
+
+```bash
+uv run aec-bench conformance world monitoring/dam-seepage
+uv run aec-bench conformance world stewardship/wastewater-pump-station
+```
+
+Decision freshness, limits, and truncation belong to the existing
+[episode tests](../tests/worlds/runtime/test_episode.py). The conformance kit
+also checks the owner action sequence order.
 
 ## Optional capabilities
 
@@ -182,6 +190,7 @@ the [interactive-world runtime protocol](protocols/interactive-world-runtime.md)
 uv run pytest tests/worlds/monitoring/dam_seepage/test_world.py -q
 uv run pytest tests/worlds/test_pump_station_world_conformance.py -q
 uv run pytest tests/worlds/runtime/test_episode.py -q
+uv run aec-bench conformance world <world-key>
 uv run ruff check <changed-python-paths>
 uv run ruff format --check <changed-python-paths>
 uv run mypy <changed-production-boundary>
