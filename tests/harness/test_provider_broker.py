@@ -133,7 +133,7 @@ def test_broker_process_disables_linux_dumpability(
 def test_broker_pins_model_and_budget_and_returns_content_addressed_receipt(
     tmp_path: Path,
 ) -> None:
-    socket_path = Path("/private/tmp") / (
+    socket_path = Path("/tmp") / (
         "aec-broker-" + hashlib.sha256(str(tmp_path).encode("utf-8")).hexdigest()[:16] + ".sock"
     )
     policy = ProviderBrokerPolicy(
@@ -243,7 +243,7 @@ def test_broker_enforces_main_and_auxiliary_call_budgets_independently(
     max_main_calls: int,
     max_auxiliary_calls: int,
 ) -> None:
-    socket_path = Path("/private/tmp") / (
+    socket_path = Path("/tmp") / (
         "aec-broker-planes-"
         + hashlib.sha256(
             f"{tmp_path}:{limited_plane.value}".encode(),
@@ -335,7 +335,7 @@ def test_broker_enforces_main_and_auxiliary_call_budgets_independently(
 def test_broker_rejects_unbound_call_plane_before_provider_effect(
     tmp_path: Path,
 ) -> None:
-    socket_path = Path("/private/tmp") / (
+    socket_path = Path("/tmp") / (
         "aec-broker-plane-spoof-" + hashlib.sha256(str(tmp_path).encode("utf-8")).hexdigest()[:16] + ".sock"
     )
     policy = ProviderBrokerPolicy(
@@ -441,7 +441,7 @@ class _EffectUnknownReplayClient(ReplayRlmClient):
 def test_broker_closes_with_typed_effect_unknown_evidence_after_provider_exception(
     tmp_path: Path,
 ) -> None:
-    socket_path = Path("/private/tmp") / (
+    socket_path = Path("/tmp") / (
         "aec-broker-effect-unknown-" + hashlib.sha256(str(tmp_path).encode("utf-8")).hexdigest()[:16] + ".sock"
     )
     receipt_path = tmp_path / "provider-broker-receipt.json"
@@ -512,7 +512,7 @@ def test_broker_closes_with_typed_effect_unknown_evidence_after_provider_excepti
 def test_broker_persists_known_call_before_post_effect_transport_failure(
     tmp_path: Path,
 ) -> None:
-    socket_path = Path("/private/tmp") / (
+    socket_path = Path("/tmp") / (
         "aec-broker-transport-" + hashlib.sha256(str(tmp_path).encode("utf-8")).hexdigest()[:16] + ".sock"
     )
     receipt_path = tmp_path / "provider-broker-receipt.json"
@@ -589,7 +589,7 @@ def test_broker_persists_known_call_before_post_effect_transport_failure(
 def test_broker_preserves_admission_error_precedence_before_provider_effect(
     tmp_path: Path,
 ) -> None:
-    socket_path = Path("/private/tmp") / (
+    socket_path = Path("/tmp") / (
         "aec-broker-precedence-" + hashlib.sha256(str(tmp_path).encode("utf-8")).hexdigest()[:16] + ".sock"
     )
     policy = ProviderBrokerPolicy(
@@ -654,7 +654,7 @@ def test_broker_preserves_admission_error_precedence_before_provider_effect(
 def test_broker_denies_decoding_failure_without_closing_provider_authority(
     tmp_path: Path,
 ) -> None:
-    socket_path = Path("/private/tmp") / (
+    socket_path = Path("/tmp") / (
         "aec-broker-decode-" + hashlib.sha256(str(tmp_path).encode("utf-8")).hexdigest()[:16] + ".sock"
     )
     policy = ProviderBrokerPolicy(

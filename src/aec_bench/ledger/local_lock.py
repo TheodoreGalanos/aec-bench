@@ -3,15 +3,16 @@
 
 from __future__ import annotations
 
-import fcntl
 import os
 import stat
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from pathlib import Path, PurePosixPath
-from typing import NoReturn
+from typing import NoReturn, Protocol, cast
 
 from aec_bench.ledger.durability import mkdir_durable
+
+_PLATFORM_NAME = os.name
 
 
 class LocalFileLockError(RuntimeError):
@@ -23,6 +24,13 @@ class LocalFileLockConfinementError(LocalFileLockError):
 
 
 type LocalFileLockErrorFactory = Callable[[LocalFileLockError], BaseException]
+
+
+class _WindowsLocking(Protocol):
+    LK_LOCK: int
+    LK_UNLCK: int
+
+    def locking(self, descriptor: int, operation: int, length: int) -> None: ...
 
 
 @contextmanager
@@ -41,7 +49,7 @@ def exclusive_local_file_lock(
                 Path(root).absolute(),
                 relative_path,
             )
-            fcntl.flock(lock_descriptor, fcntl.LOCK_EX)
+            _acquire_platform_lock(lock_descriptor)
         except LocalFileLockError as lock_error:
             _close_after_setup_failure(lock_descriptor, directory_descriptors, lock_error)
             _raise_lock_error(lock_error, error_factory)
@@ -75,6 +83,8 @@ def _open_confined_lock(root: Path, relative_path: str) -> tuple[list[int], int]
     parts = _relative_lock_parts(relative_path)
     if root.name in {"", ".", ".."}:
         raise LocalFileLockConfinementError("local lock root must select one directory")
+    if _PLATFORM_NAME == "nt":
+        return [], _open_confined_windows_lock(root, parts)
     try:
         mkdir_durable(root)
     except OSError as cause:
@@ -91,6 +101,86 @@ def _open_confined_lock(root: Path, relative_path: str) -> tuple[list[int], int]
         _close_after_setup_failure(None, descriptors, error)
         raise
     return descriptors, lock_descriptor
+
+
+def _open_confined_windows_lock(root: Path, parts: tuple[str, ...]) -> int:
+    """Open one confined lock without POSIX descriptor-relative operations."""
+    try:
+        root.mkdir(parents=True, exist_ok=True)
+        if _is_windows_link(root) or not root.is_dir():
+            raise LocalFileLockConfinementError("local lock root is unsafe")
+        parent = root
+        for part in parts[:-1]:
+            parent = parent / part
+            try:
+                parent.mkdir(mode=0o700)
+            except FileExistsError:
+                pass
+            if _is_windows_link(parent) or not parent.is_dir():
+                raise LocalFileLockConfinementError(
+                    "local lock parent directory is unsafe",
+                )
+        return _open_private_windows_regular_file(parent / parts[-1])
+    except LocalFileLockError:
+        raise
+    except OSError as cause:
+        raise LocalFileLockError(f"local lock cannot be prepared: {cause}") from cause
+
+
+def _is_windows_link(path: Path) -> bool:
+    return path.is_symlink() or path.is_junction()
+
+
+def _open_private_windows_regular_file(path: Path) -> int:
+    flags = os.O_RDWR | os.O_CREAT | getattr(os, "O_BINARY", 0)
+    try:
+        descriptor = os.open(path, flags, 0o600)
+    except OSError as cause:
+        raise LocalFileLockConfinementError(f"local lock file is unsafe: {cause}") from cause
+    try:
+        selected = path.lstat()
+        opened = os.fstat(descriptor)
+        if (
+            stat.S_ISLNK(selected.st_mode)
+            or not stat.S_ISREG(selected.st_mode)
+            or not stat.S_ISREG(opened.st_mode)
+            or (selected.st_dev, selected.st_ino) != (opened.st_dev, opened.st_ino)
+        ):
+            raise LocalFileLockConfinementError("local lock target is not a safe regular file")
+        if opened.st_size == 0:
+            os.write(descriptor, b"\0")
+            os.fsync(descriptor)
+        os.lseek(descriptor, 0, os.SEEK_SET)
+        return descriptor
+    except BaseException as error:
+        _close_after_setup_failure(descriptor, [], error)
+        raise
+
+
+def _acquire_platform_lock(descriptor: int) -> None:
+    if _PLATFORM_NAME == "nt":
+        import msvcrt
+
+        backend = cast(_WindowsLocking, msvcrt)
+        os.lseek(descriptor, 0, os.SEEK_SET)
+        backend.locking(descriptor, backend.LK_LOCK, 1)
+        return
+    import fcntl
+
+    fcntl.flock(descriptor, fcntl.LOCK_EX)
+
+
+def _release_platform_lock(descriptor: int) -> None:
+    if _PLATFORM_NAME == "nt":
+        import msvcrt
+
+        backend = cast(_WindowsLocking, msvcrt)
+        os.lseek(descriptor, 0, os.SEEK_SET)
+        backend.locking(descriptor, backend.LK_UNLCK, 1)
+        return
+    import fcntl
+
+    fcntl.flock(descriptor, fcntl.LOCK_UN)
 
 
 def _relative_lock_parts(relative_path: str) -> tuple[str, ...]:
@@ -197,7 +287,7 @@ def _release_and_close(
     errors: list[tuple[str, BaseException]] = []
     if lock_descriptor is not None:
         try:
-            fcntl.flock(lock_descriptor, fcntl.LOCK_UN)
+            _release_platform_lock(lock_descriptor)
         except BaseException as cause:
             errors.append(("release", cause))
     errors.extend(_close_descriptors(lock_descriptor, directory_descriptors))
