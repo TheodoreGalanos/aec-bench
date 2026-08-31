@@ -76,6 +76,13 @@ def stage_verifier_assets(task_dir: str | Path, workspace: str | Path) -> None:
     shutil.copytree(source, destination, symlinks=False)
 
 
+def copy_validated_workspace(source: str | Path, destination: str | Path) -> None:
+    """Copy a workspace after validating that its tree stays inside its root."""
+    source_path = Path(source)
+    _validate_copy_source(source_path)
+    shutil.copytree(source_path, destination, symlinks=False, dirs_exist_ok=True)
+
+
 def unstage_verifier_assets(workspace: str | Path) -> None:
     """Remove private verifier assets before another agent turn."""
     destination = Path(workspace) / "tests"

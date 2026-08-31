@@ -7,7 +7,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Any
 
-from aec_bench.harness.artifact_tasks import resolve_workspace_path
+from aec_bench.harness.artifact.workspace_port import resolve_workspace_path
 from aec_bench.harness.local_runtime import (
     cleanup_workspace,
     setup_workspace,
