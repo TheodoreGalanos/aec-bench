@@ -13,6 +13,7 @@ import tomllib
 from pathlib import Path
 
 import pytest
+from click import unstyle
 from typer.testing import CliRunner
 
 from aec_bench.cli.main import app
@@ -670,7 +671,7 @@ def test_prime_export_cli_rejects_dataset_with_task_filter(tmp_path: Path) -> No
     )
 
     assert result.exit_code != 0
-    assert "--dataset cannot be combined" in result.output
+    assert "--dataset cannot be combined" in unstyle(result.output)
 
 
 def test_prime_export_cli_defaults_to_repo_prime_rl_directory(tmp_path: Path) -> None:
@@ -1468,7 +1469,7 @@ def test_prime_train_config_rejects_duplicate_difficulty_ratios(tmp_path: Path) 
     )
 
     assert result.exit_code != 0
-    assert "duplicate --difficulty-ratio difficulty" in result.output
+    assert "duplicate --difficulty-ratio difficulty" in unstyle(result.output)
 
 
 def test_prime_train_runs_hosted_training_config(monkeypatch, tmp_path: Path) -> None:
