@@ -125,6 +125,15 @@ no generation time, package version, provider route, transport identity, or
 absolute path. Deleting the sidecar does not change task discovery, validation,
 execution, or evaluation.
 
+World and lifecycle owner catalogues are generated Python composition files.
+Use `uv run aec-bench catalogue build` after an owner change and
+`uv run aec-bench catalogue check` in review or CI. The check validates
+descriptor shape, identities, versions, capabilities, registration IDs, and
+stable order. To save a semantic snapshot for review, pass
+`--snapshot path/to/catalogue.json` to `build`; compare it later with
+`uv run aec-bench catalogue diff --against path/to/catalogue.json`.
+Snapshots compare entities through their IDs, keys, and explicit versions.
+
 ### Run Experiments
 
 Install `aec-bench[execution]` before using Harbor. Add the `morph` extra for a
