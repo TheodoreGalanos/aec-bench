@@ -185,13 +185,13 @@ def run_persisted_lifecycle_plan(
         lifecycle = by_id.get(str(planned.trial_identity.id))
         if lifecycle is None:
             raise ValueError(f"planned lifecycle trial has no supplied trial: {planned.trial_identity.id}")
-        _validate_lifecycle_release(planned, lifecycle, stored.spec)
+        validate_lifecycle_release(planned, lifecycle, stored.spec)
 
     store.start_run(run_identity, started_at=started_at)
     records: list[TrialRecord] = []
     for planned in lifecycle_trials:
         lifecycle = by_id[str(planned.trial_identity.id)]
-        _validate_lifecycle_release(planned, lifecycle, stored.spec)
+        validate_lifecycle_release(planned, lifecycle, stored.spec)
         binding = planned_trial_binding(planned, stored.spec)
         record = run_lifecycle_trial(
             trial=lifecycle,
@@ -212,7 +212,7 @@ def run_persisted_lifecycle_plan(
     return sorted(records, key=lambda record: _planned_ordinal(record, lifecycle_trials))
 
 
-def _validate_lifecycle_release(
+def validate_lifecycle_release(
     planned: PlannedTrial,
     trial: LifecycleTrial,
     spec: ResolvedRunSpec,
@@ -293,5 +293,6 @@ __all__ = (
     "run_lifecycle_experiment",
     "run_persisted_lifecycle_plan",
     "run_lifecycle_trial",
+    "validate_lifecycle_release",
     "submit_checkpoint",
 )
