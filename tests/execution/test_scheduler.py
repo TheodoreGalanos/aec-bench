@@ -12,7 +12,21 @@ import pytest
 from aec_bench.contracts.execution_policy import ExecutionPolicy
 from aec_bench.contracts.identity import EntityIdentity, EntityKind, new_entity_id
 from aec_bench.contracts.run_plan import PlannedTrial, RunPlan
-from aec_bench.execution.models import RetryPolicy, TrialWorkItem
+from aec_bench.execution.models import (
+    AttemptProcessStatus,
+    AttemptReceipt,
+    AttemptResourceUsage,
+    CancellationStatus,
+    FailureClass,
+    FailureClassification,
+    FailureKind,
+    FinalizationState,
+    ReconciliationState,
+    RetryPolicy,
+    TrialFinalization,
+    TrialWorkItem,
+    WorkerOutcome,
+)
 from aec_bench.execution.operational import AttemptRecord, LeaseUnavailable, OperationalStore, WorkItemRecord
 from aec_bench.execution.progress import project_run_progress
 from aec_bench.execution.scheduler import LocalScheduler
@@ -173,6 +187,87 @@ def test_dispatch_creates_one_attempt_per_work_item_and_passes_it_to_worker(tmp_
         assert attempts[0].state == "succeeded"
         assert attempts[0].started_at is not None
         assert attempts[0].finished_at is not None
+
+
+def test_worker_outcome_owns_trial_state_without_overwriting_candidate_attempt(tmp_path: Path) -> None:
+    plan = _plan(1)
+    store, scheduler = _store_and_scheduler(tmp_path, plan, ExecutionPolicy(max_concurrency=1))
+    now = datetime.now(UTC)
+    scheduler.enqueue_ready_plan(plan, (_item(plan, plan.trials[0], created_at=now),))
+
+    def worker(_: WorkItemRecord, attempt: AttemptRecord) -> WorkerOutcome:
+        failed = store.transition_attempt(attempt.attempt_id, state="failed", now=now + timedelta(seconds=1))
+        second = store.create_attempt_for_lease(
+            attempt.work_id,
+            trial_id=attempt.trial_id,
+            lease_id=attempt.lease_id,
+            candidate_index=2,
+            retry_number=0,
+            now=now + timedelta(seconds=1),
+        )
+        second = store.transition_attempt(second.attempt_id, state="running", now=now + timedelta(seconds=1))
+        second = store.transition_attempt(second.attempt_id, state="succeeded", now=now + timedelta(seconds=2))
+        failed_receipt = AttemptReceipt(
+            receipt_id=new_entity_id(EntityKind.RECEIPT),
+            receipt_key="candidate-1-receipt",
+            attempt_id=failed.attempt_id,
+            backend="local",
+            submission_id=new_entity_id(EntityKind.BACKEND_SUBMISSION),
+            requested_condition=_identity(EntityKind.AGENT_CONDITION, "condition"),
+            started_at=now,
+            finished_at=now + timedelta(seconds=1),
+            process_status=AttemptProcessStatus.FAILED,
+            cancellation_status=CancellationStatus.NOT_REQUESTED,
+            resource_usage=AttemptResourceUsage(wall_seconds=1.0),
+            failure=FailureClassification(
+                failure_class=FailureClass.BENCHMARK,
+                kind=FailureKind.TASK_FAILURE,
+                message="candidate failed",
+            ),
+            reconciliation_status=ReconciliationState.NOT_REQUIRED,
+        )
+        succeeded_receipt = AttemptReceipt(
+            receipt_id=new_entity_id(EntityKind.RECEIPT),
+            receipt_key="candidate-2-receipt",
+            attempt_id=second.attempt_id,
+            backend="local",
+            submission_id=new_entity_id(EntityKind.BACKEND_SUBMISSION),
+            requested_condition=_identity(EntityKind.AGENT_CONDITION, "condition"),
+            started_at=now + timedelta(seconds=1),
+            finished_at=now + timedelta(seconds=2),
+            process_status=AttemptProcessStatus.SUCCEEDED,
+            cancellation_status=CancellationStatus.NOT_REQUESTED,
+            resource_usage=AttemptResourceUsage(wall_seconds=1.0),
+            output_references=(
+                {
+                    "artifact_id": "outputs/result.json",
+                    "sha256": "0" * 64,
+                    "size_bytes": 1,
+                    "media_type": "application/json",
+                },
+            ),
+            reconciliation_status=ReconciliationState.NOT_REQUIRED,
+        )
+        return WorkerOutcome(
+            terminal_state="succeeded",
+            receipts=(failed_receipt, succeeded_receipt),
+            finalization=TrialFinalization(
+                finalization_id=new_entity_id(EntityKind.RECEIPT),
+                trial_id=plan.trials[0].trial_id,
+                attempt_id=second.attempt_id,
+                record_version=1,
+                trial_record_ref="trial-records/trial.json",
+                published_at=now + timedelta(seconds=1),
+                state=FinalizationState.CURRENT,
+            ),
+        )
+
+    report = scheduler.dispatch_once(worker, owner="scheduler", now=now)
+
+    assert report.succeeded_count == 1
+    assert store.list_attempts(plan.trials[0].trial_id)[0].state == "failed"
+    assert store.get_work_item(next(iter(store.list_work_items(plan.run_id))).work_id).state == "succeeded"
+    assert store.get_planned_trial(plan.trials[0].trial_id).state == "succeeded"
 
 
 def test_full_dispatch_closes_plan_and_run_for_progress_projection(tmp_path: Path) -> None:

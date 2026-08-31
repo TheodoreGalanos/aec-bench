@@ -74,6 +74,17 @@ The current path is:
 6. Persist records through the ledger owner. Evaluation can summarize the
    returned records directly without another ledger query.
 
+The scheduler-facing `ArtifactTrialAdapter` is the next composition boundary
+for local artifact work. It receives one exact canonical planned trial and the
+lease-bound scheduler attempt, then delegates execution to `LocalTaskRuntime`
+and the existing recipe and verifier path. The scheduler attempt is the first
+candidate identity; additional best-of candidates keep the same planned trial
+identity and receive their own UUIDv7 operational attempts, backend submissions,
+and portable `AttemptReceipt` files. The adapter publishes one deterministic
+stable final `TrialRecord` and one `TrialFinalization` under the evidence run. It
+returns all candidate receipts, and rejects release, identity, recipe, and
+duplicate-finalization mismatches before any second execution effect.
+
 Execution coordination uses the small `OperationalStore` under
 `aec_bench.execution.operational` and the provider-neutral strict values under
 `aec_bench.execution.models`. It stores mutable status, work-item, attempt,

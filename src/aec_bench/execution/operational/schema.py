@@ -1,7 +1,7 @@
 # ABOUTME: Defines the one current disposable SQLite schema for execution coordination.
 # ABOUTME: Rejects stale local databases instead of retaining migration history or compatibility code.
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 SCHEMA_STATEMENTS = (
     """
@@ -85,6 +85,8 @@ SCHEMA_STATEMENTS = (
         run_id TEXT NOT NULL REFERENCES operational_runs(run_id),
         trial_id TEXT NOT NULL REFERENCES operational_planned_trials(trial_id),
         attempt_number INTEGER NOT NULL CHECK (attempt_number > 0),
+        candidate_index INTEGER NOT NULL CHECK (candidate_index > 0),
+        retry_number INTEGER NOT NULL CHECK (retry_number >= 0),
         lease_id TEXT REFERENCES operational_leases(lease_id),
         state TEXT NOT NULL CHECK (
             state IN ('created', 'submitted', 'running', 'succeeded', 'failed', 'cancelled', 'unknown')
@@ -93,7 +95,8 @@ SCHEMA_STATEMENTS = (
         started_at TEXT,
         finished_at TEXT,
         updated_at TEXT NOT NULL,
-        UNIQUE (work_id, attempt_number)
+        UNIQUE (work_id, attempt_number),
+        UNIQUE (work_id, candidate_index, retry_number)
     )
     """,
     """

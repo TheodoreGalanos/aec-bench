@@ -116,6 +116,16 @@ remains `1`; repetition is the planned repetition in the binding. Legacy
 `run_experiment` remains available to current callers until the later
 execution migration.
 
+`ArtifactTrialAdapter` is the scheduler-facing local artifact boundary. It
+accepts one exact `RunPlan` and one running lease-bound operational attempt,
+validates the planned task snapshot and work identity, and delegates to the
+existing `LocalTaskRuntime`, attempt recipe, and verifier. The first candidate
+uses the scheduler attempt UUID; additional best-of candidates use new UUIDv7
+operational attempt and backend-submission identities while retaining the
+planned trial UUID. The adapter writes one portable receipt per candidate, one
+stable final `TrialRecord`, and one `TrialFinalization`. A second finalization for the same planned
+trial fails before another adapter call.
+
 Canonical Harbor dispatch validates the persisted ready plan and writes all
 one-trial job configurations and transport sidecars before the first Harbor
 effect. Each job contains one task, one agent, and one attempt.

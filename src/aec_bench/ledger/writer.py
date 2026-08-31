@@ -27,6 +27,10 @@ class DuplicateTrialRecordError(Exception):
     pass
 
 
+class DuplicateAppendOnlyFileError(Exception):
+    """Raised when append-only evidence already has the requested path."""
+
+
 class RunManifestConflictError(Exception):
     pass
 
@@ -44,6 +48,24 @@ def write_trial_record(*, ledger_root: Path, record: TrialRecord) -> Path:
         artifact_root=ledger_root / "_artifacts",
         record=record,
     )
+
+
+def write_append_only_json_at(*, path: Path, payload: str) -> Path:
+    """Publish one JSON evidence file without replacing an existing entry."""
+
+    selected_path = Path(path)
+    mkdir_durable(selected_path.parent)
+    temporary = _temporary_path(selected_path.parent)
+    try:
+        _write_record_temp(temporary, payload)
+        try:
+            os.link(temporary, selected_path)
+        except FileExistsError as error:
+            raise DuplicateAppendOnlyFileError(f"append-only file already exists: {selected_path}") from error
+        fsync_directory(selected_path.parent)
+    finally:
+        temporary.unlink(missing_ok=True)
+    return selected_path
 
 
 def write_trial_record_at(*, path: Path, record: TrialRecord) -> Path:

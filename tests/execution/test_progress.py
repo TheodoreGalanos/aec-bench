@@ -90,6 +90,8 @@ def test_progress_uses_authoritative_plan_and_reports_operational_counts(tmp_pat
         work_id=work_items[str(plan.trials[0].trial_id)].work_id,
         trial_id=plan.trials[0].trial_id,
         attempt_number=1,
+        candidate_index=1,
+        retry_number=0,
         state="succeeded",
         now=now + timedelta(seconds=1),
     )
@@ -98,6 +100,8 @@ def test_progress_uses_authoritative_plan_and_reports_operational_counts(tmp_pat
         work_id=work_items[str(plan.trials[0].trial_id)].work_id,
         trial_id=plan.trials[0].trial_id,
         attempt_number=2,
+        candidate_index=2,
+        retry_number=2,
         state="failed",
         now=now + timedelta(seconds=2),
     )
@@ -106,6 +110,8 @@ def test_progress_uses_authoritative_plan_and_reports_operational_counts(tmp_pat
         work_id=work_items[str(plan.trials[0].trial_id)].work_id,
         trial_id=plan.trials[0].trial_id,
         attempt_number=3,
+        candidate_index=3,
+        retry_number=0,
         state="failed",
         now=now + timedelta(seconds=2),
     )
@@ -128,7 +134,7 @@ def test_progress_uses_authoritative_plan_and_reports_operational_counts(tmp_pat
     assert progress.attempts.failed == 2
     assert progress.backend_submissions.completed == 1
     assert progress.active_leases == 1
-    assert progress.retries == 2
+    assert progress.retries == 1
     assert progress.completion_blocked
     assert progress.completion_blocked_by_non_terminal
     assert not progress.completion_blocked_by_unknown
@@ -173,6 +179,8 @@ def test_progress_is_scoped_to_the_authoritative_plan(tmp_path: Path) -> None:
         new_entity_id(EntityKind.ATTEMPT),
         work_id=work_id,
         trial_id=trial.trial_id,
+        candidate_index=1,
+        retry_number=0,
         lease_id=lease.lease_id,
         now=created_at,
     )
