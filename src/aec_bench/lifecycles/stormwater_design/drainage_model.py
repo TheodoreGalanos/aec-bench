@@ -1162,8 +1162,7 @@ LIFECYCLE_DESCRIPTOR = LifecycleOwnerDescriptor(
         variant_metadata=drainage_variants.get_drainage_model_variant,
     ),
     conformance_entry_point=(
-        "aec_bench.lifecycles.stormwater_design.drainage_model_conformance:"
-        "lifecycle_conformance_case"
+        "aec_bench.lifecycles.stormwater_design.drainage_model_conformance:lifecycle_conformance_case"
     ),
 )
 
