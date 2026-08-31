@@ -24,6 +24,14 @@ from aec_bench.execution.models import (
     TrialWorkItem,
     WorkItemState,
 )
+from aec_bench.execution.progress import (
+    AttemptProgressCounts,
+    BackendSubmissionProgressCounts,
+    RunProgress,
+    TrialProgressCounts,
+    WorkItemProgressCounts,
+    project_run_progress,
+)
 
 __all__ = (
     "Attempt",
@@ -45,4 +53,10 @@ __all__ = (
     "TrialFinalization",
     "TrialWorkItem",
     "WorkItemState",
+    "AttemptProgressCounts",
+    "BackendSubmissionProgressCounts",
+    "RunProgress",
+    "TrialProgressCounts",
+    "WorkItemProgressCounts",
+    "project_run_progress",
 )

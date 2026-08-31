@@ -41,6 +41,7 @@ class RunRecord:
     created_at: datetime
     started_at: datetime | None
     finished_at: datetime | None
+    updated_at: datetime
 
 
 @dataclass(frozen=True, slots=True)
@@ -519,7 +520,7 @@ class OperationalStore:
         selected_id = _required_id(run_id, "run_id")
         with self._connection() as connection:
             rows = connection.execute(
-                "SELECT * FROM operational_work_items WHERE run_id = ? ORDER BY priority DESC, created_at",
+                "SELECT * FROM operational_work_items WHERE run_id = ? ORDER BY priority DESC, created_at, work_id",
                 (selected_id,),
             ).fetchall()
         return tuple(self._work_item_from_row(row) for row in rows)
@@ -528,7 +529,19 @@ class OperationalStore:
         selected_id = _required_id(trial_id, "trial_id")
         with self._connection() as connection:
             rows = connection.execute(
-                "SELECT * FROM operational_attempts WHERE trial_id = ? ORDER BY attempt_number", (selected_id,)
+                "SELECT * FROM operational_attempts WHERE trial_id = ? ORDER BY attempt_number, attempt_id",
+                (selected_id,),
+            ).fetchall()
+        return tuple(self._attempt_from_row(row) for row in rows)
+
+    def list_attempts_for_run(self, run_id: UUID | str) -> tuple[AttemptRecord, ...]:
+        """Return all attempts for one run in stable trial and attempt order."""
+
+        selected_id = _required_id(run_id, "run_id")
+        with self._connection() as connection:
+            rows = connection.execute(
+                "SELECT * FROM operational_attempts WHERE run_id = ? ORDER BY trial_id, attempt_number, attempt_id",
+                (selected_id,),
             ).fetchall()
         return tuple(self._attempt_from_row(row) for row in rows)
 
@@ -536,7 +549,21 @@ class OperationalStore:
         selected_id = _required_id(attempt_id, "attempt_id")
         with self._connection() as connection:
             rows = connection.execute(
-                "SELECT * FROM operational_backend_submissions WHERE attempt_id = ? ORDER BY submitted_at",
+                "SELECT * FROM operational_backend_submissions "
+                "WHERE attempt_id = ? ORDER BY submitted_at, submission_id",
+                (selected_id,),
+            ).fetchall()
+        return tuple(self._submission_from_row(row) for row in rows)
+
+    def list_backend_submissions_for_run(self, run_id: UUID | str) -> tuple[BackendSubmissionRecord, ...]:
+        """Return all backend submissions for one run in stable identity order."""
+
+        selected_id = _required_id(run_id, "run_id")
+        with self._connection() as connection:
+            rows = connection.execute(
+                "SELECT submissions.* FROM operational_backend_submissions AS submissions "
+                "JOIN operational_attempts AS attempts ON attempts.attempt_id = submissions.attempt_id "
+                "WHERE attempts.run_id = ? ORDER BY submissions.submitted_at, submissions.submission_id",
                 (selected_id,),
             ).fetchall()
         return tuple(self._submission_from_row(row) for row in rows)
@@ -545,6 +572,19 @@ class OperationalStore:
         selected_id = _required_id(lease_id, "lease_id")
         with self._connection() as connection:
             return self._lease_from_row(self._require_row(connection, "operational_leases", "lease_id", selected_id))
+
+    def list_leases_for_run(self, run_id: UUID | str) -> tuple[LeaseRecord, ...]:
+        """Return all leases for one run in stable acquisition order."""
+
+        selected_id = _required_id(run_id, "run_id")
+        with self._connection() as connection:
+            rows = connection.execute(
+                "SELECT leases.* FROM operational_leases AS leases "
+                "JOIN operational_work_items AS work_items ON work_items.work_id = leases.work_id "
+                "WHERE work_items.run_id = ? ORDER BY leases.acquired_at, leases.lease_id",
+                (selected_id,),
+            ).fetchall()
+        return tuple(self._lease_from_row(row) for row in rows)
 
     def acquire_lease(
         self, work_id: UUID | str, *, owner: str, now: datetime, ttl: timedelta, lease_id: UUID | str | None = None
@@ -682,7 +722,13 @@ class OperationalStore:
     @staticmethod
     def _run_from_row(row: sqlite3.Row) -> RunRecord:
         return RunRecord(
-            row[0], row[1], row[2], _parse_timestamp(row[3]), _optional_timestamp(row[4]), _optional_timestamp(row[5])
+            row[0],
+            row[1],
+            row[2],
+            _parse_timestamp(row[3]),
+            _optional_timestamp(row[4]),
+            _optional_timestamp(row[5]),
+            _parse_timestamp(row[6]),
         )
 
     @staticmethod
