@@ -1405,6 +1405,25 @@ class OperationalStore:
                 connection.execute("SELECT * FROM operational_leases WHERE lease_id = ?", (selected_id,)).fetchone()
             )
 
+    def expire_leases(self, *, run_id: UUID | str | None = None, now: datetime) -> int:
+        """Expire leases at or before ``now`` and expose their reconciliation state."""
+
+        selected_now = _aware(now, "now")
+        selected_run = None if run_id is None else _required_id(run_id, "run_id")
+        stamp = _timestamp(selected_now)
+        with self._connection(immediate=True) as connection:
+            before = connection.execute(
+                "SELECT COUNT(*) FROM operational_leases WHERE state = 'active' AND expires_at <= ? "
+                + (
+                    "AND work_id IN (SELECT work_id FROM operational_work_items WHERE run_id = ?)"
+                    if selected_run
+                    else ""
+                ),
+                (stamp,) if selected_run is None else (stamp, selected_run),
+            ).fetchone()[0]
+            self._expire_leases(connection, stamp, run_id=selected_run)
+            return int(before)
+
     @contextmanager
     def _connection(self, *, immediate: bool = False) -> Iterator[sqlite3.Connection]:
         if self.read_only and immediate:
@@ -1472,19 +1491,20 @@ class OperationalStore:
                 )
 
     @staticmethod
-    def _expire_leases(connection: sqlite3.Connection, now_stamp: str) -> None:
-        expired = connection.execute(
-            "SELECT lease_id, work_id FROM operational_leases WHERE state = 'active' AND expires_at <= ?",
-            (now_stamp,),
-        ).fetchall()
+    def _expire_leases(connection: sqlite3.Connection, now_stamp: str, *, run_id: str | None = None) -> None:
+        query = "SELECT lease_id, work_id FROM operational_leases WHERE state = 'active' AND expires_at <= ?"
+        parameters: tuple[str, ...] = (now_stamp,)
+        if run_id is not None:
+            query += " AND work_id IN (SELECT work_id FROM operational_work_items WHERE run_id = ?)"
+            parameters += (run_id,)
+        expired = connection.execute(query, parameters).fetchall()
         if not expired:
             return
-        connection.execute(
-            "UPDATE operational_leases SET state = 'expired', released_at = expires_at "
-            "WHERE state = 'active' AND expires_at <= ?",
-            (now_stamp,),
-        )
         for lease_id, work_id in expired:
+            connection.execute(
+                "UPDATE operational_leases SET state = 'expired', released_at = expires_at WHERE lease_id = ?",
+                (lease_id,),
+            )
             attempt_exists = (
                 connection.execute(
                     "SELECT 1 FROM operational_attempts WHERE lease_id = ? LIMIT 1", (lease_id,)
