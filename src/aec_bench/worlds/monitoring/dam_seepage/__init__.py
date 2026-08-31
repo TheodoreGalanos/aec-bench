@@ -1,4 +1,4 @@
-# ABOUTME: Exposes the registered dam seepage monitoring world and its direct task functions.
+# ABOUTME: Exposes the dam seepage world owner and its direct task functions.
 # ABOUTME: Keeps provider, persistence, emergency authority, and evaluation orchestration outside the task.
 
 from aec_bench.worlds.monitoring.dam_seepage.definition import (
@@ -17,10 +17,12 @@ from aec_bench.worlds.monitoring.dam_seepage.world import (
     requires_engineering_review,
     transition,
 )
+from aec_bench.worlds.runtime.definition import InteractiveWorldOwnerDescriptor
 
 __all__ = [
     "DAM_SEEPAGE_TASK_WORLD_ID",
     "DamSeepageProfile",
+    "WORLD_DESCRIPTOR",
     "SeepageAction",
     "SeepageScenario",
     "SeepageState",
@@ -32,3 +34,8 @@ __all__ = [
     "requires_engineering_review",
     "transition",
 ]
+
+WORLD_DESCRIPTOR = InteractiveWorldOwnerDescriptor(
+    task_world_id="dam-seepage-monitoring",
+    entry_point="aec_bench.worlds.monitoring.dam_seepage.definition:dam_seepage_world_definition",
+)

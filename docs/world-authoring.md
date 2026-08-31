@@ -102,15 +102,30 @@ evidence must never enter the actor view.
 
 A registered world supplies a
 [`InteractiveWorldDefinition`](../src/aec_bench/worlds/runtime/definition.py)
-with build identity, profile references, and a profile loader. Add it once to
-the private composition root in [`catalogue.py`](../src/aec_bench/worlds/catalogue.py).
+with build identity, profile references, and a profile loader. Expose one
+`InteractiveWorldOwnerDescriptor` from the concrete world owner package. Add
+that owner to the explicit list in
+[`generate_world_catalogue.py`](../scripts/generate_world_catalogue.py), then
+regenerate the committed
+[`generated_catalogue.py`](../src/aec_bench/worlds/generated_catalogue.py).
+The runtime loads this generated composition through
+[`catalogue.py`](../src/aec_bench/worlds/catalogue.py). Do not use filesystem
+scans, import side effects, or a mutable registration store.
 Supply one title, summary, domain, stable tag set, real capability set, and
 profile title, summary, selection metadata, and tags. The public
 `aec_bench.worlds` discovery facade projects these values directly.
 
+Regenerate the composition from the repository root after changing the owner
+list:
+
+```bash
+uv run python scripts/generate_world_catalogue.py
+```
+
 A minimum contribution normally changes only the task-owned implementation,
-its tests, and the catalogue composition root. It does not require episode,
-actor-contract, provider, recorder, rollout, or persistence changes.
+its tests, the owner descriptor, and the generated composition. It does not
+require episode, actor-contract, provider, recorder, rollout, or persistence
+changes.
 
 ### 4. Add a runnable task package when a dataset needs it
 

@@ -1,5 +1,5 @@
 # ABOUTME: Resolves Interactive World definitions by stable identity and exact content reference.
-# ABOUTME: Keeps concrete task imports in the external catalogue composition root.
+# ABOUTME: Loads the committed generated owner composition without concrete imports here.
 
 from __future__ import annotations
 
@@ -7,13 +7,8 @@ from dataclasses import dataclass
 from functools import cache
 
 from aec_bench.contracts.interactive_world import WorldBuildRef
-from aec_bench.worlds.monitoring.dam_seepage.definition import (
-    dam_seepage_world_definition,
-)
+from aec_bench.worlds.generated_catalogue import load_world_definitions
 from aec_bench.worlds.runtime.definition import InteractiveWorldDefinition
-from aec_bench.worlds.stewardship.wastewater_pump_station.continual_definition import (
-    pump_station_continual_world_definition,
-)
 
 
 @dataclass(frozen=True)
@@ -63,10 +58,5 @@ class WorldCatalogue:
 
 @cache
 def _catalogue() -> WorldCatalogue:
-    """Return the registered causal worlds."""
-    return WorldCatalogue(
-        definitions=(
-            dam_seepage_world_definition(),
-            pump_station_continual_world_definition(),
-        )
-    )
+    """Return the generated registered causal worlds."""
+    return WorldCatalogue(definitions=load_world_definitions())
