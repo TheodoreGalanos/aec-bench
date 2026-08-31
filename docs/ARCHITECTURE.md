@@ -75,10 +75,11 @@ The current path is:
    returned records directly without another ledger query.
 
 Execution coordination uses the small `OperationalStore` under
-`aec_bench.execution.operational`. It stores mutable status, work-item,
-attempt, backend-submission, and lease rows in SQLite with short transactions.
-The database is disposable local coordination state. The library initializes
-only its current schema and rejects a stale schema; users recreate the database
+`aec_bench.execution.operational` and the provider-neutral strict values under
+`aec_bench.execution.models`. It stores mutable status, work-item, attempt,
+backend-submission, and lease rows in SQLite with short transactions. The
+database is disposable local coordination state. The library initializes only
+its current schema and rejects a stale schema; users recreate the database
 instead of applying retained migrations. The store keeps only portable
 references for the resolved run and plan records. `EvidenceRunStore` remains
 authoritative for those portable records, and the ledger remains authoritative
