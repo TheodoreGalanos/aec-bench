@@ -8,9 +8,9 @@ from typing import Literal
 
 from pydantic import Field, field_validator, model_validator
 
+from aec_bench.contracts.content_address import ContentAddressedModel
 from aec_bench.contracts.harness_instance import HarnessInstanceRef
 from aec_bench.contracts.harness_kernel import KernelRef, validate_sha256
-from aec_bench.contracts.legacy_content_address import LegacyContentAddressedModel
 from aec_bench.contracts.program_proposal.study import MatchedEvaluationCoordinate
 from aec_bench.contracts.proposal_execution._canonical import (
     canonical_unique_models,
@@ -28,7 +28,7 @@ from aec_bench.contracts.stage_execution import StageResourceEvidence
 from aec_bench.contracts.validators import NonEmptyStr
 
 
-class ProposalSessionPlan(LegacyContentAddressedModel):
+class ProposalSessionPlan(ContentAddressedModel):
     """One task-resident dispatch plan over a complete compiled proposal."""
 
     schema_version: Literal["aecbench.proposal-session-plan.v1"] = "aecbench.proposal-session-plan.v1"
@@ -64,7 +64,7 @@ class ProposalSessionPlan(LegacyContentAddressedModel):
         return self
 
 
-class ProposalSessionExecutionRef(LegacyContentAddressedModel):
+class ProposalSessionExecutionRef(ContentAddressedModel):
     """Runtime-known identity of one task-resident Harbor sandbox execution."""
 
     schema_version: Literal["aecbench.proposal-session-execution-ref.v1"] = "aecbench.proposal-session-execution-ref.v1"
@@ -92,7 +92,7 @@ class ProposalSessionExecutionRef(LegacyContentAddressedModel):
         return validate_sha256(value)
 
 
-class ProposalNodeExecutionResultRef(LegacyContentAddressedModel):
+class ProposalNodeExecutionResultRef(ContentAddressedModel):
     """Persisted child AdapterResult identity for one attempted proposal node."""
 
     schema_version: Literal["aecbench.proposal-node-execution-result-ref.v1"] = (
@@ -122,7 +122,7 @@ class ProposalNodeExecutionResultRef(LegacyContentAddressedModel):
         return value
 
 
-class ProposalContractCheckResultRef(LegacyContentAddressedModel):
+class ProposalContractCheckResultRef(ContentAddressedModel):
     """Persisted structural contract-check result for one attempted proposal node."""
 
     schema_version: Literal["aecbench.proposal-contract-check-result-ref.v1"] = (
@@ -163,7 +163,7 @@ class ProposalContractCheckResultRef(LegacyContentAddressedModel):
         return self
 
 
-class ProposalContainerTransitionRef(LegacyContentAddressedModel):
+class ProposalContainerTransitionRef(ContentAddressedModel):
     """Persisted proof that one model invocation received a fresh candidate container."""
 
     schema_version: Literal["aecbench.proposal-container-transition-ref.v1"] = (
@@ -205,7 +205,7 @@ class ProposalContainerTransitionRef(LegacyContentAddressedModel):
         return self
 
 
-class ProposalHandoffArtifactRef(LegacyContentAddressedModel):
+class ProposalHandoffArtifactRef(ContentAddressedModel):
     """One canonical semantic output bound to an exact frozen graph edge."""
 
     schema_version: Literal["aecbench.proposal-handoff-artifact-ref.v1"] = "aecbench.proposal-handoff-artifact-ref.v1"
@@ -237,7 +237,7 @@ class ProposalHandoffArtifactRef(LegacyContentAddressedModel):
         return value
 
 
-class ProposalNodeReceipt(LegacyContentAddressedModel):
+class ProposalNodeReceipt(ContentAddressedModel):
     """Per-node evidence inside one task-resident proposal session."""
 
     schema_version: Literal["aecbench.proposal-node-receipt.v1"] = "aecbench.proposal-node-receipt.v1"
@@ -405,7 +405,7 @@ class ProposalNodeReceipt(LegacyContentAddressedModel):
         return self
 
 
-class ProposalSessionReceipt(LegacyContentAddressedModel):
+class ProposalSessionReceipt(ContentAddressedModel):
     """Complete planned-node evidence for one task-resident candidate execution."""
 
     schema_version: Literal["aecbench.proposal-session-receipt.v1"] = "aecbench.proposal-session-receipt.v1"

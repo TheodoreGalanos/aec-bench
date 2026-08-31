@@ -7,6 +7,7 @@ from typing import Literal, Self
 
 from pydantic import JsonValue, PositiveInt, field_validator, model_validator
 
+from aec_bench.contracts.content_address import ContentAddressedModel
 from aec_bench.contracts.execution_program import (
     ActionNode,
     FanoutNode,
@@ -28,7 +29,6 @@ from aec_bench.contracts.harness_kernel import (
     kernel_abi_commitment,
     validate_sha256,
 )
-from aec_bench.contracts.legacy_content_address import LegacyContentAddressedModel
 from aec_bench.contracts.validators import NonEmptyStr
 from aec_bench.experimentation.governance.motifs import (
     MotifLibrary,
@@ -58,7 +58,7 @@ class ProgramMotifTemplatePayload(FrozenStrictModel):
     factor: ProgramFactorTemplate
 
 
-class MotifHarnessProgramInstantiationRequest(LegacyContentAddressedModel):
+class MotifHarnessProgramInstantiationRequest(ContentAddressedModel):
     """Target-world controls used to instantiate one selected motif beside H0/p0."""
 
     candidate_set_id: NonEmptyStr
@@ -88,7 +88,7 @@ class MotifHarnessProgramInstantiationRequest(LegacyContentAddressedModel):
         return self
 
 
-class InstantiatedMotifFactors(LegacyContentAddressedModel):
+class InstantiatedMotifFactors(ContentAddressedModel):
     """Auditable selected-motif lineage plus the genuine matched candidate request it produced."""
 
     selected_motif_sha256: str

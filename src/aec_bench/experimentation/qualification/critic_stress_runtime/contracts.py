@@ -14,6 +14,7 @@ from aec_bench.contracts.authority import (
     OriginStamp,
     TaintLabel,
 )
+from aec_bench.contracts.content_address import ContentAddressedModel
 from aec_bench.contracts.evaluation_outcome import (
     CriticGapDecomposition,
     NonNegativeFiniteFloat,
@@ -23,7 +24,6 @@ from aec_bench.contracts.harness_kernel import (
     FrozenStrictModel,
     validate_sha256,
 )
-from aec_bench.contracts.legacy_content_address import LegacyContentAddressedModel
 from aec_bench.contracts.validators import NonEmptyStr
 
 
@@ -39,7 +39,7 @@ class RecordReceiptBinding(FrozenStrictModel):
         return validate_sha256(value)
 
 
-class SeedEvidenceClaim(LegacyContentAddressedModel):
+class SeedEvidenceClaim(ContentAddressedModel):
     """Derived claim surface used to seed integrity attacks without changing source bytes."""
 
     schema_version: Literal["aecbench.seed-evidence-claim.v1"] = "aecbench.seed-evidence-claim.v1"
@@ -117,7 +117,7 @@ class AcceptanceGrounding(FrozenStrictModel):
         return validate_sha256(value)
 
 
-class CriticStressMeasurement(LegacyContentAddressedModel):
+class CriticStressMeasurement(ContentAddressedModel):
     """Raw critic gains and null decomposition before any exploit classification."""
 
     schema_version: Literal["aecbench.adaptive-critic-stress-measurement.v1"] = (
@@ -129,7 +129,7 @@ class CriticStressMeasurement(LegacyContentAddressedModel):
     acceptance_grounding: AcceptanceGrounding
 
 
-class CriticStressClassificationPolicy(LegacyContentAddressedModel):
+class CriticStressClassificationPolicy(ContentAddressedModel):
     """Preregistered residual threshold and exact regime transition."""
 
     schema_version: Literal["aecbench.critic-stress-classification-policy.v1"] = (
@@ -152,7 +152,7 @@ class CriticStressClassificationPolicy(LegacyContentAddressedModel):
         return self
 
 
-class VRedChallengeEvidence(LegacyContentAddressedModel):
+class VRedChallengeEvidence(ContentAddressedModel):
     """Host-observed red-team challenge that can modify only the next critic."""
 
     schema_version: Literal["aecbench.vred-challenge-evidence.v1"] = "aecbench.vred-challenge-evidence.v1"
@@ -189,7 +189,7 @@ class VRedChallengeEvidence(LegacyContentAddressedModel):
         return self
 
 
-class VerifiedCausalSeamEvidence(LegacyContentAddressedModel):
+class VerifiedCausalSeamEvidence(ContentAddressedModel):
     """Host-verified replay linking one candidate action to one critic seam."""
 
     schema_version: Literal["aecbench.verified-causal-seam-evidence.v1"] = "aecbench.verified-causal-seam-evidence.v1"
@@ -217,7 +217,7 @@ class VerifiedCausalSeamEvidence(LegacyContentAddressedModel):
         return self
 
 
-class ReplayedBoundaryEvidence(LegacyContentAddressedModel):
+class ReplayedBoundaryEvidence(ContentAddressedModel):
     """Host-replayed forbidden flow or integrity failure bound to one measurement."""
 
     schema_version: Literal["aecbench.replayed-boundary-evidence.v1"] = "aecbench.replayed-boundary-evidence.v1"
@@ -238,7 +238,7 @@ class ReplayedBoundaryEvidence(LegacyContentAddressedModel):
         return self
 
 
-class CriticStressFinding(LegacyContentAddressedModel):
+class CriticStressFinding(ContentAddressedModel):
     """Causal interpretation derived separately from the raw gap measurement."""
 
     schema_version: Literal["aecbench.critic-stress-finding.v1"] = "aecbench.critic-stress-finding.v1"
@@ -279,7 +279,7 @@ class CriticStressFinding(LegacyContentAddressedModel):
         return self
 
 
-class CriticRegressionCase(LegacyContentAddressedModel):
+class CriticRegressionCase(ContentAddressedModel):
     """Immutable grounded case available only to the next regime critic."""
 
     schema_version: Literal["aecbench.critic-regression-case.v1"] = "aecbench.critic-regression-case.v1"
@@ -326,7 +326,7 @@ class CriticRegressionCase(LegacyContentAddressedModel):
         return self
 
 
-class CriticStressReport(LegacyContentAddressedModel):
+class CriticStressReport(ContentAddressedModel):
     """Provider-free causal classification and next-regime regression output."""
 
     schema_version: Literal["aecbench.adaptive-critic-stress-report.v1"] = "aecbench.adaptive-critic-stress-report.v1"

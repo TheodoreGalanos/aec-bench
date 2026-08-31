@@ -10,6 +10,7 @@ from typing import Literal, Self
 
 from pydantic import Field, field_validator, model_validator
 
+from aec_bench.contracts.content_address import ContentAddressedModel
 from aec_bench.contracts.harness_kernel import (
     FrozenStrictModel,
     KernelCapabilityRef,
@@ -17,7 +18,6 @@ from aec_bench.contracts.harness_kernel import (
     KernelRef,
     validate_sha256,
 )
-from aec_bench.contracts.legacy_content_address import LegacyContentAddressedModel
 from aec_bench.contracts.validators import NonEmptyStr
 from aec_bench.harness.compilation import CompilationError
 from aec_bench.harness.kernel_catalogue import KernelRuntimeRegistry
@@ -129,7 +129,7 @@ class MissingPrimitiveEvidenceRef(FrozenStrictModel):
         return validate_sha256(value)
 
 
-class MissingPrimitiveEvidence(LegacyContentAddressedModel):
+class MissingPrimitiveEvidence(ContentAddressedModel):
     """One immutable observation that fixed K lacks a requested capability."""
 
     evidence_id: NonEmptyStr
@@ -146,7 +146,7 @@ class MissingPrimitiveEvidence(LegacyContentAddressedModel):
         )
 
 
-class MissingPrimitiveEvidenceSet(LegacyContentAddressedModel):
+class MissingPrimitiveEvidenceSet(ContentAddressedModel):
     """Frozen reward-free selection of evidence used for one promotion decision."""
 
     evidence_set_id: NonEmptyStr
@@ -171,7 +171,7 @@ class MissingPrimitiveEvidenceSet(LegacyContentAddressedModel):
         return tuple(sorted(value, key=lambda reference: (reference.evidence_id, reference.content_sha256)))
 
 
-class HumanApprovalArtifact(LegacyContentAddressedModel):
+class HumanApprovalArtifact(ContentAddressedModel):
     """Human decision bound to the exact source K, evidence set, capability, and target version."""
 
     approval_id: NonEmptyStr
@@ -189,7 +189,7 @@ class HumanApprovalArtifact(LegacyContentAddressedModel):
         return validate_sha256(value)
 
 
-class KernelRegressionEvidence(LegacyContentAddressedModel):
+class KernelRegressionEvidence(ContentAddressedModel):
     """Regression-suite result bound to one exact proposed kernel transition."""
 
     regression_id: NonEmptyStr
@@ -207,7 +207,7 @@ class KernelRegressionEvidence(LegacyContentAddressedModel):
         return validate_sha256(value)
 
 
-class KernelChangeRequest(LegacyContentAddressedModel):
+class KernelChangeRequest(ContentAddressedModel):
     """Closed request evaluated by the fixed-kernel governance gate."""
 
     request_id: NonEmptyStr
@@ -232,7 +232,7 @@ class KernelChangeRequest(LegacyContentAddressedModel):
         return tuple(sorted(value, key=lambda evidence: (evidence.regression_id, evidence.content_sha256)))
 
 
-class KernelChangeProposal(LegacyContentAddressedModel):
+class KernelChangeProposal(ContentAddressedModel):
     """Governed authorization to implement a new kernel version, never a registry mutation."""
 
     proposal_id: NonEmptyStr
@@ -246,7 +246,7 @@ class KernelChangeProposal(LegacyContentAddressedModel):
     regression_evidence: tuple[KernelRegressionEvidence, ...]
 
 
-class KernelChangeDecision(LegacyContentAddressedModel):
+class KernelChangeDecision(ContentAddressedModel):
     """Deterministic output of evaluating one kernel-change request."""
 
     request_sha256: str

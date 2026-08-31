@@ -9,13 +9,13 @@ from typing import Literal, Self
 
 from pydantic import Field, FiniteFloat, field_validator, model_validator
 
+from aec_bench.contracts.content_address import ContentAddressedModel
 from aec_bench.contracts.evaluation_refs import EvaluationRegimeRef
 from aec_bench.contracts.harness_instance import HarnessBudget
 from aec_bench.contracts.harness_kernel import (
     canonical_json_sha256,
     validate_sha256,
 )
-from aec_bench.contracts.legacy_content_address import LegacyContentAddressedModel
 from aec_bench.contracts.program_proposal.candidate import ProgramCandidateRef
 from aec_bench.contracts.program_proposal.study import MatchedCandidateEvidenceRef, MatchedEvaluationCoordinate
 from aec_bench.contracts.program_proposal.types import ProgramCandidateKind
@@ -49,7 +49,7 @@ class ProgramNecessityLineageRole(StrEnum):
     REPLICATION = "replication"
 
 
-class ProgramNecessityArmTemplateRef(LegacyContentAddressedModel):
+class ProgramNecessityArmTemplateRef(ContentAddressedModel):
     """Evergreen family-level construction identity for one confirmatory arm."""
 
     schema_version: Literal["aecbench.program-necessity-arm-template-ref.v1"] = (
@@ -79,7 +79,7 @@ class ProgramNecessityArmTemplateRef(LegacyContentAddressedModel):
         return self
 
 
-class ProgramTopologyProfile(LegacyContentAddressedModel):
+class ProgramTopologyProfile(ContentAddressedModel):
     """Small topology signature used only when sham topology matching is feasible."""
 
     schema_version: Literal["aecbench.program-topology-profile.v1"] = "aecbench.program-topology-profile.v1"
@@ -90,7 +90,7 @@ class ProgramTopologyProfile(LegacyContentAddressedModel):
     max_fan_out: int = Field(ge=0)
 
 
-class ProgramComplexityDerivationRef(LegacyContentAddressedModel):
+class ProgramComplexityDerivationRef(ContentAddressedModel):
     """Auditable derivation receipt over exact graph, source, and budget bytes."""
 
     schema_version: Literal["aecbench.program-complexity-derivation-ref.v1"] = (
@@ -118,7 +118,7 @@ class ProgramComplexityDerivationRef(LegacyContentAddressedModel):
         return validate_sha256(value)
 
 
-class ProgramComplexityEvidence(LegacyContentAddressedModel):
+class ProgramComplexityEvidence(ContentAddressedModel):
     """Measured program shape bound to the artifacts from which it was derived."""
 
     schema_version: Literal["aecbench.program-complexity-evidence.v1"] = "aecbench.program-complexity-evidence.v1"
@@ -154,7 +154,7 @@ class ProgramComplexityEvidence(LegacyContentAddressedModel):
         return self
 
 
-class ShamMatchAttestation(LegacyContentAddressedModel):
+class ShamMatchAttestation(ContentAddressedModel):
     """Host evidence that sham and structural arms differ mainly in semantics."""
 
     schema_version: Literal["aecbench.sham-match-attestation.v1"] = "aecbench.sham-match-attestation.v1"
@@ -272,7 +272,7 @@ def _validate_sham_tolerances(
         )
 
 
-class ProgramNecessityProblemViewRef(LegacyContentAddressedModel):
+class ProgramNecessityProblemViewRef(ContentAddressedModel):
     """Opaque problem-view identity tied to one exact public task snapshot."""
 
     schema_version: Literal["aecbench.program-necessity-problem-view-ref.v2"] = (
@@ -294,7 +294,7 @@ class ProgramNecessityProblemViewRef(LegacyContentAddressedModel):
         return validate_sha256(value)
 
 
-class ProgramNecessityLineageCandidateRef(LegacyContentAddressedModel):
+class ProgramNecessityLineageCandidateRef(ContentAddressedModel):
     """One lineage-specific candidate tied to its family arm template."""
 
     schema_version: Literal["aecbench.program-necessity-lineage-candidate-ref.v1"] = (
@@ -323,7 +323,7 @@ class ProgramNecessityLineageCandidateRef(LegacyContentAddressedModel):
         return self
 
 
-class ProgramNecessityExecutionScheduleRef(LegacyContentAddressedModel):
+class ProgramNecessityExecutionScheduleRef(ContentAddressedModel):
     """Exact identity of one lineage-specific executable candidate matrix."""
 
     schema_version: Literal["aecbench.program-necessity-execution-schedule-ref.v2"] = (
@@ -366,7 +366,7 @@ class ProgramNecessityExecutionScheduleRef(LegacyContentAddressedModel):
         return tuple(sorted(value))
 
 
-class ProgramNecessityStudyRef(LegacyContentAddressedModel):
+class ProgramNecessityStudyRef(ContentAddressedModel):
     """Exact identity of one completed lineage-specific matched study."""
 
     schema_version: Literal["aecbench.program-necessity-study-ref.v3"] = "aecbench.program-necessity-study-ref.v3"
@@ -403,7 +403,7 @@ class ProgramNecessityStudyRef(LegacyContentAddressedModel):
         return tuple(sorted(value))
 
 
-class ProgramNecessityLineagePlan(LegacyContentAddressedModel):
+class ProgramNecessityLineagePlan(ContentAddressedModel):
     """Exact executable three-arm plan for one independent task world."""
 
     schema_version: Literal["aecbench.program-necessity-lineage-plan.v2"] = "aecbench.program-necessity-lineage-plan.v2"
@@ -547,7 +547,7 @@ class ProgramNecessityLineagePlan(LegacyContentAddressedModel):
         return self.candidate_binding_for(arm).candidate
 
 
-class ProgramNecessityFamilyPlan(LegacyContentAddressedModel):
+class ProgramNecessityFamilyPlan(ContentAddressedModel):
     """Frozen templates and independent executable worlds for one task mechanism."""
 
     schema_version: Literal["aecbench.program-necessity-family-plan.v2"] = "aecbench.program-necessity-family-plan.v2"
@@ -675,7 +675,7 @@ class ProgramNecessityFamilyPlan(LegacyContentAddressedModel):
         return next(lineage for lineage in self.lineage_plans if lineage.review_lineage_id == review_lineage_id)
 
 
-class ProgramNecessityMeasurementPolicy(LegacyContentAddressedModel):
+class ProgramNecessityMeasurementPolicy(ContentAddressedModel):
     """Frozen estimand and aggregation semantics for the confirmatory study."""
 
     schema_version: Literal["aecbench.program-necessity-measurement-policy.v2"] = (
@@ -692,7 +692,7 @@ class ProgramNecessityMeasurementPolicy(LegacyContentAddressedModel):
     report_full_family_distribution: Literal[True] = True
 
 
-class ProgramNecessityMissingDataPolicy(LegacyContentAddressedModel):
+class ProgramNecessityMissingDataPolicy(ContentAddressedModel):
     """Fail-closed handling for absent, invalid, or compromised evidence."""
 
     schema_version: Literal["aecbench.program-necessity-missing-data-policy.v1"] = (
@@ -704,7 +704,7 @@ class ProgramNecessityMissingDataPolicy(LegacyContentAddressedModel):
     any_invalid_family: Literal["close_campaign_gate"] = "close_campaign_gate"
 
 
-class ProgramNecessityDesign(LegacyContentAddressedModel):
+class ProgramNecessityDesign(ContentAddressedModel):
     """Phase-neutral family, lineage, replication, and opening requirements."""
 
     schema_version: Literal["aecbench.program-necessity-design.v1"] = "aecbench.program-necessity-design.v1"
@@ -765,7 +765,7 @@ class ProgramNecessityDesign(LegacyContentAddressedModel):
         return self
 
 
-class ProgramNecessityOpeningPolicy(LegacyContentAddressedModel):
+class ProgramNecessityOpeningPolicy(ContentAddressedModel):
     """Preregistered family-level directional replication gate."""
 
     schema_version: Literal["aecbench.program-necessity-opening-policy.v1"] = (
@@ -778,7 +778,7 @@ class ProgramNecessityOpeningPolicy(LegacyContentAddressedModel):
     evidence_rule: Literal["all_families_valid"] = "all_families_valid"
 
 
-class ProgramNecessityStudyPlan(LegacyContentAddressedModel):
+class ProgramNecessityStudyPlan(ContentAddressedModel):
     """Phase-neutral preregistration governed by an explicit study design."""
 
     schema_version: Literal["aecbench.program-necessity-study-plan.v1"] = "aecbench.program-necessity-study-plan.v1"
@@ -867,7 +867,7 @@ class ProgramNecessityStudyPlan(LegacyContentAddressedModel):
         return self
 
 
-class ProgramNecessityPreregistration(LegacyContentAddressedModel):
+class ProgramNecessityPreregistration(ContentAddressedModel):
     """Top-level freeze for all six families and all evaluation-plane identities."""
 
     schema_version: Literal["aecbench.program-necessity-preregistration.v1"] = (
@@ -946,7 +946,7 @@ class ProgramNecessityPreregistration(LegacyContentAddressedModel):
         return self
 
 
-class ProgramNecessityObservation(LegacyContentAddressedModel):
+class ProgramNecessityObservation(ContentAddressedModel):
     """One utility bound to an exact lineage, candidate, study, and outcome."""
 
     schema_version: Literal["aecbench.program-necessity-observation.v3"] = "aecbench.program-necessity-observation.v3"
@@ -990,7 +990,7 @@ class ProgramNecessityObservation(LegacyContentAddressedModel):
         return self
 
 
-class ProgramNecessityLineageContrast(LegacyContentAddressedModel):
+class ProgramNecessityLineageContrast(ContentAddressedModel):
     """Lineage-level arm means and the three preregistered contrasts."""
 
     schema_version: Literal["aecbench.program-necessity-lineage-contrast.v2"] = (

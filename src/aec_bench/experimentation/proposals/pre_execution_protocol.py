@@ -18,9 +18,9 @@ from pydantic import (
 )
 
 from aec_bench.contracts.authority import AuthorityPrincipalKind, TaintLabel
+from aec_bench.contracts.content_address import ContentAddressedModel
 from aec_bench.contracts.harness_instance import HarnessInstanceRef
 from aec_bench.contracts.harness_kernel import KernelRef, validate_sha256
-from aec_bench.contracts.legacy_content_address import LegacyContentAddressedModel
 from aec_bench.contracts.validators import NonEmptyStr
 from aec_bench.experimentation.governance.authority_ledger import (
     AuthorityLedger,
@@ -46,7 +46,7 @@ _REPORT_COLLECTION = "pre-execution-protocol-reports"
 _REPORT_FILENAME = "pre-execution-protocol-report.json"
 
 
-class PreExecutionProtocolSpec(LegacyContentAddressedModel):
+class PreExecutionProtocolSpec(ContentAddressedModel):
     """Versioned claim policy for one pre-execution readiness gate."""
 
     schema_version: Literal["aecbench.pre-execution-protocol-spec.v1"] = "aecbench.pre-execution-protocol-spec.v1"
@@ -75,7 +75,7 @@ class PreExecutionProtocolSpec(LegacyContentAddressedModel):
         return tuple(sorted(value))
 
 
-class PreExecutionProtocolReport(LegacyContentAddressedModel):
+class PreExecutionProtocolReport(ContentAddressedModel):
     """Replayable proposal-readiness report with no candidate execution authority."""
 
     schema_version: Literal["aecbench.pre-execution-protocol-report.v1"] = "aecbench.pre-execution-protocol-report.v1"

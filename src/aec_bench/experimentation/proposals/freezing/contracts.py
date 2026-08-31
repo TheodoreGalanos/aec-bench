@@ -23,7 +23,7 @@ from aec_bench.contracts.authority import (
     BasisKind,
     BasisReference,
 )
-from aec_bench.contracts.legacy_content_address import LegacyContentAddressedModel
+from aec_bench.contracts.content_address import ContentAddressedModel
 from aec_bench.contracts.program_proposal.candidate import ProgramCandidateRef
 from aec_bench.contracts.program_proposal.freeze import ProposalFreeze
 from aec_bench.experimentation.governance.standing_monitors import (
@@ -87,7 +87,7 @@ class SelectedTaskBinding:
     review_lineage_id: str
 
 
-class ProposalFreezeBasis(LegacyContentAddressedModel):
+class ProposalFreezeBasis(ContentAddressedModel):
     """Complete reference set for the host-confined proposal-freeze evidence."""
 
     schema_version: Literal["aecbench.proposal-freeze-basis.v1"] = "aecbench.proposal-freeze-basis.v1"
@@ -200,7 +200,7 @@ class ProposalFreezeBasis(LegacyContentAddressedModel):
         )
 
 
-class GovernedProposalFreezeResult(LegacyContentAddressedModel):
+class GovernedProposalFreezeResult(ContentAddressedModel):
     """Host-side freeze authority without full regime, assignment, or proposal payloads."""
 
     schema_version: Literal["aecbench.governed-proposal-freeze-result.v1"] = (

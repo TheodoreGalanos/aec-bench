@@ -10,12 +10,12 @@ from typing import Literal, Self
 
 from pydantic import Field, PositiveInt, field_validator, model_validator
 
+from aec_bench.contracts.content_address import ContentAddressedModel
 from aec_bench.contracts.harness_kernel import (
     FrozenStrictModel,
     KernelRef,
     validate_sha256,
 )
-from aec_bench.contracts.legacy_content_address import LegacyContentAddressedModel
 from aec_bench.contracts.task_definition import Visibility
 from aec_bench.contracts.trial_record import ArtifactReference
 from aec_bench.contracts.validators import NonEmptyStr
@@ -103,7 +103,7 @@ class AdaptiveHarnessProgramStageSpec(FrozenStrictModel):
         return self
 
 
-class AdaptiveCycleSpec(LegacyContentAddressedModel):
+class AdaptiveCycleSpec(ContentAddressedModel):
     """Immutable plan for source search, paired repair, child calibration, and transfer."""
 
     schema_version: Literal["aecbench.adaptive-cycle-spec.v2"] = "aecbench.adaptive-cycle-spec.v2"
@@ -143,7 +143,7 @@ class AdaptiveCycleExecutors:
     child_calibration: HarborCommandExecutor | None = None
 
 
-class AdaptiveCycleReport(LegacyContentAddressedModel):
+class AdaptiveCycleReport(ContentAddressedModel):
     """Durable causal index over one complete or evidence-gated fixed-K cycle prefix."""
 
     schema_version: Literal["aecbench.adaptive-cycle-report.v2"] = "aecbench.adaptive-cycle-report.v2"

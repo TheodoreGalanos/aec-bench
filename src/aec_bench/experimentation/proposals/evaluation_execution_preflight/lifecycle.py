@@ -7,6 +7,7 @@ from typing import Literal, Self
 
 from pydantic import Field, field_validator, model_validator
 
+from aec_bench.contracts.content_address import ContentAddressedModel
 from aec_bench.contracts.evaluation_generation.batch import EvaluationBatchPlan
 from aec_bench.contracts.evaluation_plane import (
     EvaluationAssignment,
@@ -20,7 +21,6 @@ from aec_bench.contracts.harness_kernel import (
     KernelRef,
     validate_sha256,
 )
-from aec_bench.contracts.legacy_content_address import LegacyContentAddressedModel
 from aec_bench.contracts.program_proposal.candidate import ProgramCandidateRef
 from aec_bench.contracts.program_proposal.types import ProgramCandidateKind
 from aec_bench.contracts.proposal_execution.compilation import ProposalCompilationRejection
@@ -52,7 +52,7 @@ class EvaluationExecutionPreflightError(ValueError):
     """Reject incomplete or identity-drifted execution preflight evidence."""
 
 
-class ProposalInvocationRef(LegacyContentAddressedModel):
+class ProposalInvocationRef(ContentAddressedModel):
     """Content-pinned successful proposer invocation for one task plan."""
 
     schema_version: Literal["aecbench.proposal-invocation-ref.v1"] = "aecbench.proposal-invocation-ref.v1"
@@ -93,7 +93,7 @@ class ProposalInvocationRef(LegacyContentAddressedModel):
         return tuple(sorted(value, key=lambda candidate: candidate.candidate_id))
 
 
-class ProposalBatchClosure(LegacyContentAddressedModel):
+class ProposalBatchClosure(ContentAddressedModel):
     """Task-scoped proposer invocations closed before compilation."""
 
     schema_version: Literal["aecbench.proposal-batch-closure.v1"] = "aecbench.proposal-batch-closure.v1"
@@ -126,7 +126,7 @@ class ProposalBatchClosure(LegacyContentAddressedModel):
         )
 
 
-class VerifiedSchedule(LegacyContentAddressedModel):
+class VerifiedSchedule(ContentAddressedModel):
     """Exact join between a plan schedule reference and its concrete schedule."""
 
     schema_version: Literal["aecbench.verified-evaluation-schedule.v1"] = "aecbench.verified-evaluation-schedule.v1"
@@ -166,7 +166,7 @@ class VerifiedSchedule(LegacyContentAddressedModel):
         return self
 
 
-class ScheduleClosure(LegacyContentAddressedModel):
+class ScheduleClosure(ContentAddressedModel):
     """Concrete schedules verified against the frozen evaluation batch."""
 
     schema_version: Literal["aecbench.evaluation-schedule-closure.v1"] = "aecbench.evaluation-schedule-closure.v1"
@@ -202,7 +202,7 @@ class ScheduleClosure(LegacyContentAddressedModel):
         )
 
 
-class CompilationResultRef(LegacyContentAddressedModel):
+class CompilationResultRef(ContentAddressedModel):
     """One assignment-scoped compile result retaining a typed rejection."""
 
     schema_version: Literal["aecbench.compilation-result-ref.v1"] = "aecbench.compilation-result-ref.v1"
@@ -321,7 +321,7 @@ class CompilationResultRef(LegacyContentAddressedModel):
         )
 
 
-class CompilationBatchClosure(LegacyContentAddressedModel):
+class CompilationBatchClosure(ContentAddressedModel):
     """Compilation results with an explicit fail-closed dispatch flag."""
 
     schema_version: Literal["aecbench.compilation-batch-closure.v1"] = "aecbench.compilation-batch-closure.v1"
@@ -375,7 +375,7 @@ class CompilationBatchClosure(LegacyContentAddressedModel):
         return self
 
 
-class MonitorReadiness(LegacyContentAddressedModel):
+class MonitorReadiness(ContentAddressedModel):
     """Exact standing monitor, cycle, evaluation, and assurance preflight."""
 
     schema_version: Literal["aecbench.monitor-readiness.v1"] = "aecbench.monitor-readiness.v1"
@@ -413,7 +413,7 @@ class MonitorReadiness(LegacyContentAddressedModel):
         return self
 
 
-class AuthorizedDispatchRef(LegacyContentAddressedModel):
+class AuthorizedDispatchRef(ContentAddressedModel):
     """Materialized and provider-authorized dispatch identity for one assignment."""
 
     schema_version: Literal["aecbench.authorized-dispatch-ref.v1"] = "aecbench.authorized-dispatch-ref.v1"
@@ -453,7 +453,7 @@ class AuthorizedDispatchRef(LegacyContentAddressedModel):
         return validate_sha256(value)
 
 
-class PreparedExecutionBatch(LegacyContentAddressedModel):
+class PreparedExecutionBatch(ContentAddressedModel):
     """Only complete preflight object from which batch execution may open."""
 
     schema_version: Literal["aecbench.prepared-execution-batch.v1"] = "aecbench.prepared-execution-batch.v1"
@@ -525,7 +525,7 @@ class PreparedExecutionBatch(LegacyContentAddressedModel):
         return self
 
 
-class ExecutionGate(LegacyContentAddressedModel):
+class ExecutionGate(ContentAddressedModel):
     """Minimal public execution surface derivable only from a prepared batch."""
 
     schema_version: Literal["aecbench.execution-gate.v1"] = "aecbench.execution-gate.v1"

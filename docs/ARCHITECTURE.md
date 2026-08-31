@@ -547,9 +547,9 @@ artifact digest replaces compatibility checks over policy and critic hash
 matrices.
 Kernel, Harness, execution-program, evaluation, stage, task-snapshot, and
 run-plan contracts remain plain domain models. Their joins use stable IDs,
-typed references, direct values, and named commitments. They do not calculate
-or carry a universal self-digest. A legacy compatibility reader validates old
-self-addressed JSON before it creates a plain current model.
+typed references, direct values, and named commitments. Explicit
+content-reference contracts use `ContentAddressedModel`; artifact storage
+still validates the exact retained bytes at its boundary.
 `RunPlan` owns the internal execution join. The ledger publishes one
 `PublishedRunPackage` archive that contains the plan, exact trial references,
 and all referenced artifact bytes. The archive receives one `ArtifactRef` and

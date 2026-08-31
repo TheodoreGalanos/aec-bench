@@ -17,12 +17,12 @@ from aec_bench.contracts.authority import (
     AuthorityPrincipal,
     AuthorityPrincipalKind,
 )
+from aec_bench.contracts.content_address import ContentAddressedModel
 from aec_bench.contracts.harness_kernel import (
     FrozenStrictModel,
     canonical_json_sha256,
     validate_sha256,
 )
-from aec_bench.contracts.legacy_content_address import LegacyContentAddressedModel
 from aec_bench.experimentation.governance.authority_ledger import (
     AuthorityLedger,
     AuthorityLedgerIntegrityError,
@@ -66,7 +66,7 @@ class MonitorInstrumentationError(ValueError):
     """Raised when a real monitor probe cannot close exactly."""
 
 
-class MotifCanaryProbeContext(LegacyContentAddressedModel):
+class MotifCanaryProbeContext(ContentAddressedModel):
     """Real frozen selector and assurance inputs for one planted motif canary."""
 
     schema_version: Literal["aecbench.motif-canary-probe-context.v1"] = "aecbench.motif-canary-probe-context.v1"
@@ -84,7 +84,7 @@ class MotifCanaryProbeContext(LegacyContentAddressedModel):
         return self
 
 
-class MotifCanaryProbeEvidence(LegacyContentAddressedModel):
+class MotifCanaryProbeEvidence(ContentAddressedModel):
     """Selector and assurance result for one historically attractive revoked motif."""
 
     schema_version: Literal["aecbench.motif-canary-probe-evidence.v1"] = "aecbench.motif-canary-probe-evidence.v1"
@@ -115,7 +115,7 @@ class MotifCanaryProbeEvidence(LegacyContentAddressedModel):
         return validate_sha256(value)
 
 
-class OrdinaryLedgerCanaryProbeEvidence(LegacyContentAddressedModel):
+class OrdinaryLedgerCanaryProbeEvidence(ContentAddressedModel):
     """Real authority resolver rejection for one ordinary-ledger canary."""
 
     schema_version: Literal["aecbench.ordinary-ledger-canary-probe-evidence.v1"] = (
@@ -137,7 +137,7 @@ class OrdinaryLedgerCanaryProbeEvidence(LegacyContentAddressedModel):
         return validate_sha256(value)
 
 
-class SurfaceGuardProbeEvidence(LegacyContentAddressedModel):
+class SurfaceGuardProbeEvidence(ContentAddressedModel):
     """Exact attempted operation submitted to the principal-aware surface guard."""
 
     schema_version: Literal["aecbench.surface-guard-probe-evidence.v1"] = "aecbench.surface-guard-probe-evidence.v1"
@@ -154,7 +154,7 @@ class SurfaceGuardProbeEvidence(LegacyContentAddressedModel):
         return validate_sha256(value)
 
 
-class FlowCollectorConfigurationEvidence(LegacyContentAddressedModel):
+class FlowCollectorConfigurationEvidence(ContentAddressedModel):
     """Exact guard, policy rule, and denied receipt wired into one collector."""
 
     schema_version: Literal["aecbench.flow-collector-configuration-evidence.v1"] = (
@@ -175,7 +175,7 @@ class FlowCollectorConfigurationEvidence(LegacyContentAddressedModel):
         return validate_sha256(value)
 
 
-class MonitorInstrumentationActivation(LegacyContentAddressedModel):
+class MonitorInstrumentationActivation(ContentAddressedModel):
     """Complete external activation result for one exact monitor runtime."""
 
     schema_version: Literal["aecbench.monitor-instrumentation-activation.v1"] = (

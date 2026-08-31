@@ -22,12 +22,12 @@ from aec_bench.contracts.authority import (
     AuthorityPrincipal,
     AuthorityPrincipalKind,
 )
+from aec_bench.contracts.content_address import ContentAddressedModel
 from aec_bench.contracts.harness_kernel import (
     FrozenStrictModel,
     canonical_json_sha256,
     validate_sha256,
 )
-from aec_bench.contracts.legacy_content_address import LegacyContentAddressedModel
 from aec_bench.contracts.pricing import estimate_cost_usd, match_pricing
 from aec_bench.contracts.program_proposal.candidate import CandidateGenerationManifest, ProgramCandidateRef
 from aec_bench.contracts.program_proposal.problem import DecompositionProblemView
@@ -71,7 +71,7 @@ class BoundedProgramProposalClient(Protocol):
     ) -> DirectCompletionResponse: ...
 
 
-class ProgramProposalTurnReceipt(LegacyContentAddressedModel):
+class ProgramProposalTurnReceipt(ContentAddressedModel):
     """Exact raw response and metered usage for one grammar-bounded turn."""
 
     schema_version: Literal["aecbench.program-proposal-turn-receipt.v1"] = "aecbench.program-proposal-turn-receipt.v1"
@@ -117,7 +117,7 @@ class ProgramProposalTurnReceipt(LegacyContentAddressedModel):
         return self
 
 
-class ProgramProposalArtifact(LegacyContentAddressedModel):
+class ProgramProposalArtifact(ContentAddressedModel):
     """Canonical proposal bytes and the exact candidate reference they realize."""
 
     schema_version: Literal["aecbench.program-proposal-artifact.v1"] = "aecbench.program-proposal-artifact.v1"
@@ -145,7 +145,7 @@ class ProgramProposalArtifact(LegacyContentAddressedModel):
         return self
 
 
-class ProgramProposalInvocation(LegacyContentAddressedModel):
+class ProgramProposalInvocation(ContentAddressedModel):
     """Complete result of one policy-pinned proposer session over one public view."""
 
     schema_version: Literal["aecbench.program-proposal-invocation.v1"] = "aecbench.program-proposal-invocation.v1"

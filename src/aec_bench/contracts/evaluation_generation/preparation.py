@@ -7,6 +7,7 @@ from typing import Literal, Self
 
 from pydantic import Field, field_validator, model_validator
 
+from aec_bench.contracts.content_address import ContentAddressedModel
 from aec_bench.contracts.evaluation_generation.cohort import (
     EvaluationCohortBinding,
     EvaluationCohortManifest,
@@ -25,13 +26,12 @@ from aec_bench.contracts.evaluation_plane import (
 from aec_bench.contracts.evaluation_refs import EvaluationRegimeRef
 from aec_bench.contracts.harness_instance import HarnessBudget, HarnessInstanceRef
 from aec_bench.contracts.harness_kernel import KernelRef, validate_sha256
-from aec_bench.contracts.legacy_content_address import LegacyContentAddressedModel
 from aec_bench.contracts.program_proposal.candidate import CandidateGenerationManifest
 from aec_bench.contracts.program_proposal.problem import DecompositionLeakageAudit, DecompositionProblemView
 from aec_bench.contracts.validators import NonEmptyStr
 
 
-class PreparedProposalTask(LegacyContentAddressedModel):
+class PreparedProposalTask(ContentAddressedModel):
     """One public task surface prepared before proposal generation."""
 
     schema_version: Literal["aecbench.prepared-proposal-task.v2"] = "aecbench.prepared-proposal-task.v2"
@@ -60,7 +60,7 @@ class PreparedProposalTask(LegacyContentAddressedModel):
         return self
 
 
-class PreparedEvaluationGeneration(LegacyContentAddressedModel):
+class PreparedEvaluationGeneration(ContentAddressedModel):
     """Provider-ready, outcome-blind inputs checked against one supplied design."""
 
     schema_version: Literal["aecbench.prepared-evaluation-generation.v2"] = "aecbench.prepared-evaluation-generation.v2"

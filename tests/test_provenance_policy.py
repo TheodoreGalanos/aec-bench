@@ -181,8 +181,8 @@ def test_discovers_supported_model_fields_and_persisted_manifest_keys(tmp_path: 
     assert not any(symbol.endswith("local_hash_input.content_sha256") for symbol in symbols)
 
 
-@pytest.mark.parametrize("base_name", ["ContentAddressedModel", "LegacyContentAddressedModel"])
-def test_synthesizes_inherited_content_address_for_each_ambient_model(tmp_path: Path, base_name: str) -> None:
+def test_synthesizes_inherited_content_address_for_current_model(tmp_path: Path) -> None:
+    base_name = "ContentAddressedModel"
     _write_source(
         tmp_path,
         "src/aec_bench/contracts/ambient.py",

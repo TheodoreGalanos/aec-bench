@@ -11,13 +11,13 @@ from pydantic import (
     model_validator,
 )
 
+from aec_bench.contracts.content_address import ContentAddressedModel
 from aec_bench.contracts.execution_program import (
     CompiledExecutionProgram,
     ExecutionProgram,
 )
 from aec_bench.contracts.harness_instance import HarnessInstanceRef
 from aec_bench.contracts.harness_kernel import FrozenStrictModel, KernelRef, validate_sha256
-from aec_bench.contracts.legacy_content_address import LegacyContentAddressedModel
 from aec_bench.contracts.program_proposal.candidate import ProgramCandidateRef
 from aec_bench.contracts.program_proposal.freeze import ProposalFreeze
 from aec_bench.contracts.proposal_execution._canonical import canonical_unique_strings
@@ -51,7 +51,7 @@ class ProposalCompileDiagnostic(FrozenStrictModel):
         return canonical_unique_strings(value, label="diagnostic subject ids")
 
 
-class _ProfileBoundProposalCompilation(LegacyContentAddressedModel):
+class _ProfileBoundProposalCompilation(ContentAddressedModel):
     """Shared current execution-profile binding."""
 
     execution_profile: ProposalExecutionProfile

@@ -8,8 +8,8 @@ from typing import Self
 
 from pydantic import model_validator
 
+from aec_bench.contracts.content_address import ContentAddressedModel
 from aec_bench.contracts.harness_kernel import canonical_json_sha256
-from aec_bench.contracts.legacy_content_address import LegacyContentAddressedModel
 from aec_bench.contracts.validators import FrozenStrictModel, NonEmptyStr
 from aec_bench.worlds.stewardship.wastewater_pump_station.temporal_evidence.models import (
     RetrievalBudgetVector,
@@ -47,7 +47,7 @@ class TemporalEvidencePrivateReason(StrEnum):
     INVALID_REQUEST = "invalid_request"
 
 
-class TemporalAccessContext(LegacyContentAddressedModel):
+class TemporalAccessContext(ContentAddressedModel):
     """Complete host-owned context for one deterministic search or fetch."""
 
     run_id: NonEmptyStr
@@ -78,7 +78,7 @@ class TemporalAccessContext(LegacyContentAddressedModel):
         return self
 
 
-class TemporalEvidenceVisibleReference(LegacyContentAddressedModel):
+class TemporalEvidenceVisibleReference(ContentAddressedModel):
     """One actor-visible opaque reference and bounded documentary metadata."""
 
     opaque_reference: NonEmptyStr
@@ -95,7 +95,7 @@ class TemporalEvidenceVisibleReference(LegacyContentAddressedModel):
     currently_applicable: bool
 
 
-class TemporalFetchedEvidence(LegacyContentAddressedModel):
+class TemporalFetchedEvidence(ContentAddressedModel):
     """Actor-visible retained content returned only for an issued reference."""
 
     opaque_reference: NonEmptyStr
@@ -109,7 +109,7 @@ class TemporalFetchedEvidence(LegacyContentAddressedModel):
     currently_applicable: bool
 
 
-class TemporalEvidenceAccessResult(LegacyContentAddressedModel):
+class TemporalEvidenceAccessResult(ContentAddressedModel):
     """Exact actor-visible projection of one search or fetch."""
 
     request_id: NonEmptyStr
@@ -158,7 +158,7 @@ class IssuedTemporalReference(FrozenStrictModel):
     evidence_version_id: NonEmptyStr
 
 
-class TemporalRetrievalState(LegacyContentAddressedModel):
+class TemporalRetrievalState(ContentAddressedModel):
     """Durable per-tenure access state with exact remaining budget."""
 
     state_sequence: int
@@ -194,7 +194,7 @@ class TemporalRetrievalState(LegacyContentAddressedModel):
         return self
 
 
-class TemporalEvidenceAccessReceipt(LegacyContentAddressedModel):
+class TemporalEvidenceAccessReceipt(ContentAddressedModel):
     """Host-private receipt for one non-mutating evidence access."""
 
     receipt_sequence: int
@@ -284,7 +284,7 @@ class TemporalAccessDecision(FrozenStrictModel):
         return self
 
 
-class TemporalInformationSetManifest(LegacyContentAddressedModel):
+class TemporalInformationSetManifest(ContentAddressedModel):
     """Strict temporal projection of the parent-owned information-set content."""
 
     information_set_id: NonEmptyStr
@@ -311,7 +311,7 @@ class TemporalInformationSetManifest(LegacyContentAddressedModel):
         return self
 
 
-class TemporalActorVisibleEvent(LegacyContentAddressedModel):
+class TemporalActorVisibleEvent(ContentAddressedModel):
     """One parent-valid actor-visible event projection for an access result."""
 
     event_id: NonEmptyStr
@@ -382,7 +382,7 @@ class TemporalAccessPublication(FrozenStrictModel):
         )
 
 
-class TemporalRetrievalStateCarrier(LegacyContentAddressedModel):
+class TemporalRetrievalStateCarrier(ContentAddressedModel):
     """Sanitized actor-visible retrieval state carried to one fresh tenure."""
 
     carrier_policy_id: NonEmptyStr = "temporal-retrieval-carrier.v1"
@@ -417,7 +417,7 @@ class TemporalRetrievalStateCarrier(LegacyContentAddressedModel):
         return self
 
 
-class TemporalRetrievalHandoverReceipt(LegacyContentAddressedModel):
+class TemporalRetrievalHandoverReceipt(ContentAddressedModel):
     """Host-private proof of one sanitized retrieval-carrier projection."""
 
     carrier_id: NonEmptyStr
@@ -439,7 +439,7 @@ class TemporalRetrievalHandoverReceipt(LegacyContentAddressedModel):
         return self
 
 
-class TemporalRetrievalHandoverInstallReceipt(LegacyContentAddressedModel):
+class TemporalRetrievalHandoverInstallReceipt(ContentAddressedModel):
     """Host-private proof that one fresh tenure installed one exact carrier."""
 
     carrier_id: NonEmptyStr
@@ -450,7 +450,7 @@ class TemporalRetrievalHandoverInstallReceipt(LegacyContentAddressedModel):
     to_session_id: NonEmptyStr
 
 
-class TemporalEvidenceRelianceRecord(LegacyContentAddressedModel):
+class TemporalEvidenceRelianceRecord(ContentAddressedModel):
     """Explicit actor claim that one world action relied on supplied evidence."""
 
     action_request_id: NonEmptyStr
@@ -501,7 +501,7 @@ class TemporalEvidenceRelianceRecord(LegacyContentAddressedModel):
         return self
 
 
-class TemporalRetrievalSessionManifest(LegacyContentAddressedModel):
+class TemporalRetrievalSessionManifest(ContentAddressedModel):
     """Immutable identity of one tenure-scoped retrieval-state chain."""
 
     session_key: NonEmptyStr
@@ -537,7 +537,7 @@ class TemporalInformationSetPointer(FrozenStrictModel):
     information_set_content_id: NonEmptyStr
 
 
-class TemporalAccessCommit(LegacyContentAddressedModel):
+class TemporalAccessCommit(ContentAddressedModel):
     """Immutable staged access commit selected by one tenure pointer."""
 
     session_key: NonEmptyStr

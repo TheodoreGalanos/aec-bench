@@ -7,6 +7,7 @@ from typing import Literal, Self
 
 from pydantic import Field, field_validator, model_validator
 
+from aec_bench.contracts.content_address import ContentAddressedModel
 from aec_bench.contracts.evaluation_generation.cohort import (
     EvaluationCohortBinding,
     EvaluationCohortManifest,
@@ -22,14 +23,13 @@ from aec_bench.contracts.evaluation_plane import EvaluationRegimeAuthorityScope
 from aec_bench.contracts.evaluation_refs import EvaluationRegimeRef
 from aec_bench.contracts.harness_instance import HarnessBudget, HarnessInstanceRef
 from aec_bench.contracts.harness_kernel import KernelRef, validate_sha256
-from aec_bench.contracts.legacy_content_address import LegacyContentAddressedModel
 from aec_bench.contracts.program_proposal.candidate import ProgramCandidateRef
 from aec_bench.contracts.program_proposal.study import MatchedEvaluationCoordinate
 from aec_bench.contracts.program_proposal.types import ProgramCandidateKind
 from aec_bench.contracts.validators import NonEmptyStr
 
 
-class CandidateAssignmentRef(LegacyContentAddressedModel):
+class CandidateAssignmentRef(ContentAddressedModel):
     """Contract-safe identity of one candidate-coordinate assignment."""
 
     schema_version: Literal["aecbench.candidate-assignment-ref.v2"] = "aecbench.candidate-assignment-ref.v2"
@@ -43,7 +43,7 @@ class CandidateAssignmentRef(LegacyContentAddressedModel):
         return validate_sha256(value)
 
 
-class CandidateScheduleRef(LegacyContentAddressedModel):
+class CandidateScheduleRef(ContentAddressedModel):
     """Task-scoped candidate schedule whose shape is supplied by its generation spec."""
 
     schema_version: Literal["aecbench.candidate-schedule-ref.v2"] = "aecbench.candidate-schedule-ref.v2"
@@ -102,7 +102,7 @@ class CandidateScheduleRef(LegacyContentAddressedModel):
         return self
 
 
-class TaskCandidatePlan(LegacyContentAddressedModel):
+class TaskCandidatePlan(ContentAddressedModel):
     """One task-scoped candidate plan with no evaluation outcomes."""
 
     schema_version: Literal["aecbench.task-candidate-plan.v2"] = "aecbench.task-candidate-plan.v2"
@@ -168,7 +168,7 @@ class TaskCandidatePlan(LegacyContentAddressedModel):
         return self
 
 
-class EvaluationBatchPlan(LegacyContentAddressedModel):
+class EvaluationBatchPlan(ContentAddressedModel):
     """Complete outcome-blind candidate batch validated against supplied design data."""
 
     schema_version: Literal["aecbench.evaluation-batch-plan.v2"] = "aecbench.evaluation-batch-plan.v2"

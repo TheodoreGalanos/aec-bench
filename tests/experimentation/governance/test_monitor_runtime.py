@@ -21,8 +21,8 @@ from aec_bench.contracts.authority import (
     BasisKind,
     TaintLabel,
 )
+from aec_bench.contracts.content_address import ContentAddressedModel
 from aec_bench.contracts.harness_kernel import KernelRef
-from aec_bench.contracts.legacy_content_address import LegacyContentAddressedModel
 from aec_bench.experimentation.governance.authority_ledger import AuthorityLedger
 from aec_bench.experimentation.governance.monitor_runtime import (
     CanaryLogicalProjectionConfiguration,
@@ -130,7 +130,7 @@ def _clock(values: tuple[float, ...]) -> Iterator[float]:
     return iter(values)
 
 
-def _write_model(path: Path, model: LegacyContentAddressedModel) -> None:
+def _write_model(path: Path, model: ContentAddressedModel) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     payload = model.model_dump(mode="json")
     path.write_text(

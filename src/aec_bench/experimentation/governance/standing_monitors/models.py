@@ -9,13 +9,13 @@ from typing import Literal, Self
 from pydantic import Field, JsonValue, PositiveInt, field_validator, model_validator
 
 from aec_bench.contracts.authority import AuthorityPrincipal, AuthorityPrincipalKind
+from aec_bench.contracts.content_address import ContentAddressedModel
 from aec_bench.contracts.evaluation_refs import EvaluationRegimeRef
 from aec_bench.contracts.harness_kernel import (
     FrozenStrictModel,
     canonical_json_sha256,
     validate_sha256,
 )
-from aec_bench.contracts.legacy_content_address import LegacyContentAddressedModel
 from aec_bench.contracts.validators import NonEmptyStr
 
 
@@ -66,7 +66,7 @@ class CycleMonitorReportStatus(StrEnum):
     INCIDENT = "incident"
 
 
-class CanaryCommitment(LegacyContentAddressedModel):
+class CanaryCommitment(ContentAddressedModel):
     """Host-side commitment to one canary without retaining its payload in the report."""
 
     schema_version: Literal["aecbench.canary-commitment.v1"] = "aecbench.canary-commitment.v1"
@@ -106,7 +106,7 @@ class CanaryCommitment(LegacyContentAddressedModel):
         )
 
 
-class CanaryObservation(LegacyContentAddressedModel):
+class CanaryObservation(ContentAddressedModel):
     """Host-observed presence, bytes, state, and use for one committed canary."""
 
     schema_version: Literal["aecbench.canary-observation.v1"] = "aecbench.canary-observation.v1"
@@ -190,7 +190,7 @@ class ForbiddenFlowRule(FrozenStrictModel):
         )
 
 
-class RuntimeFlowObservation(LegacyContentAddressedModel):
+class RuntimeFlowObservation(ContentAddressedModel):
     """One host-observed runtime flow, including the physical evidence that exposed it."""
 
     schema_version: Literal["aecbench.runtime-flow-observation.v1"] = "aecbench.runtime-flow-observation.v1"
@@ -206,7 +206,7 @@ class RuntimeFlowObservation(LegacyContentAddressedModel):
         return validate_sha256(value)
 
 
-class BasisReplayRequirement(LegacyContentAddressedModel):
+class BasisReplayRequirement(ContentAddressedModel):
     """Accepted authority basis that must close again no later than one cycle."""
 
     schema_version: Literal["aecbench.basis-replay-requirement.v1"] = "aecbench.basis-replay-requirement.v1"
@@ -222,7 +222,7 @@ class BasisReplayRequirement(LegacyContentAddressedModel):
         return validate_sha256(value)
 
 
-class BasisReplayObservation(LegacyContentAddressedModel):
+class BasisReplayObservation(ContentAddressedModel):
     """Result of resolving one scheduled accepted basis chain through the trusted store."""
 
     schema_version: Literal["aecbench.basis-replay-observation.v1"] = "aecbench.basis-replay-observation.v1"
@@ -250,7 +250,7 @@ class BasisReplayObservation(LegacyContentAddressedModel):
         return self
 
 
-class StandingMonitorPlan(LegacyContentAddressedModel):
+class StandingMonitorPlan(ContentAddressedModel):
     """Host-side standing alarms and replay schedule for every governed cycle."""
 
     schema_version: Literal["aecbench.standing-monitor-plan.v1"] = "aecbench.standing-monitor-plan.v1"
@@ -307,7 +307,7 @@ class StandingMonitorPlan(LegacyContentAddressedModel):
         return tuple(sorted(value, key=lambda requirement: requirement.content_sha256))
 
 
-class StandingMonitorPolicy(LegacyContentAddressedModel):
+class StandingMonitorPolicy(ContentAddressedModel):
     """Static production monitor surface pinned by an evaluation regime."""
 
     schema_version: Literal["aecbench.standing-monitor-policy.v2"] = "aecbench.standing-monitor-policy.v2"
@@ -351,7 +351,7 @@ class StandingMonitorPolicy(LegacyContentAddressedModel):
         return self
 
 
-class CycleMonitorPlan(LegacyContentAddressedModel):
+class CycleMonitorPlan(ContentAddressedModel):
     """Dynamic cycle selection bound to one static monitor policy and assurance state."""
 
     schema_version: Literal["aecbench.cycle-monitor-plan.v2"] = "aecbench.cycle-monitor-plan.v2"
@@ -382,7 +382,7 @@ class CycleMonitorPlan(LegacyContentAddressedModel):
         return tuple(sorted(value, key=lambda requirement: requirement.content_sha256))
 
 
-class MonitorCoverageAttestation(LegacyContentAddressedModel):
+class MonitorCoverageAttestation(ContentAddressedModel):
     """Host attestation that every static and cycle-specific monitor was collected."""
 
     schema_version: Literal["aecbench.monitor-coverage-attestation.v2"] = "aecbench.monitor-coverage-attestation.v2"
@@ -432,7 +432,7 @@ class MonitorCoverageAttestation(LegacyContentAddressedModel):
         return self
 
 
-class MonitorFinding(LegacyContentAddressedModel):
+class MonitorFinding(ContentAddressedModel):
     """Detection-only incident over one opaque subject and its supporting evidence."""
 
     schema_version: Literal["aecbench.monitor-finding.v1"] = "aecbench.monitor-finding.v1"
@@ -451,7 +451,7 @@ class MonitorFinding(LegacyContentAddressedModel):
         return tuple(sorted(value))
 
 
-class CycleMonitorReport(LegacyContentAddressedModel):
+class CycleMonitorReport(ContentAddressedModel):
     """Current-cycle monitor evidence consumed by, but never authoritative over, promotion."""
 
     schema_version: Literal["aecbench.cycle-monitor-report.v1"] = "aecbench.cycle-monitor-report.v1"
@@ -534,7 +534,7 @@ class CycleMonitorReport(LegacyContentAddressedModel):
         return self
 
 
-class ProductionCycleMonitorEnvelope(LegacyContentAddressedModel):
+class ProductionCycleMonitorEnvelope(ContentAddressedModel):
     """Complete production monitor evidence joining static policy and cycle collection."""
 
     schema_version: Literal["aecbench.production-cycle-monitor-envelope.v2"] = (

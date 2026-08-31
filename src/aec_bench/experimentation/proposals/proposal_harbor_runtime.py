@@ -18,12 +18,12 @@ import yaml
 from pydantic import Field, field_validator, model_validator
 
 from aec_bench.contracts.authority import BasisKind, TaintLabel
+from aec_bench.contracts.content_address import ContentAddressedModel
 from aec_bench.contracts.harness_kernel import (
     FrozenStrictModel,
     canonical_json_sha256,
     validate_sha256,
 )
-from aec_bench.contracts.legacy_content_address import LegacyContentAddressedModel
 from aec_bench.contracts.trial_record import ArtifactReference
 from aec_bench.contracts.validators import NonEmptyStr
 from aec_bench.experimentation.governance.authority_ledger import AuthorityLedger, StoredBasis
@@ -84,7 +84,7 @@ ProposalHarborFailureCode = Literal[
 ]
 
 
-class ProposalHarborExecutionReceipt(LegacyContentAddressedModel):
+class ProposalHarborExecutionReceipt(ContentAddressedModel):
     """Immutable observation of one and only one authorized Harbor dispatch attempt."""
 
     schema_version: Literal["aecbench.proposal-harbor-execution-receipt.v1"] = (
@@ -197,7 +197,7 @@ class ProposalHarborExecution:
     replayed: bool
 
 
-class ProposalProviderOperationCoordinate(LegacyContentAddressedModel):
+class ProposalProviderOperationCoordinate(ContentAddressedModel):
     """Ledger-global identity of one exact authority-approved provider operation."""
 
     schema_version: Literal["aecbench.proposal-provider-operation-coordinate.v1"] = (
@@ -217,7 +217,7 @@ class ProposalProviderOperationCoordinate(LegacyContentAddressedModel):
         return validate_sha256(value)
 
 
-class ProposalProviderOperationStart(LegacyContentAddressedModel):
+class ProposalProviderOperationStart(ContentAddressedModel):
     """Durable consumed-operation evidence published before provider execution."""
 
     schema_version: Literal["aecbench.proposal-provider-operation-start.v1"] = (
@@ -280,7 +280,7 @@ class ProposalProviderOperationStart(LegacyContentAddressedModel):
         return self
 
 
-class ProposalProviderOperationTerminal(LegacyContentAddressedModel):
+class ProposalProviderOperationTerminal(ContentAddressedModel):
     """Ledger-global terminal pointer for a completed or failed provider attempt."""
 
     schema_version: Literal["aecbench.proposal-provider-operation-terminal.v1"] = (

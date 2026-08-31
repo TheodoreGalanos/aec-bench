@@ -8,12 +8,12 @@ from typing import Literal, Self
 
 from pydantic import Field, NonNegativeInt, PositiveInt, field_validator, model_validator
 
+from aec_bench.contracts.content_address import ContentAddressedModel
 from aec_bench.contracts.harness_kernel import (
     FrozenStrictModel,
     canonical_json_sha256,
     validate_sha256,
 )
-from aec_bench.contracts.legacy_content_address import LegacyContentAddressedModel
 from aec_bench.contracts.task_definition import Visibility
 from aec_bench.contracts.task_review_snapshot import TaskReviewSnapshot
 from aec_bench.contracts.task_snapshot import (
@@ -26,7 +26,7 @@ StructuralSplitName = Literal["train", "dev", "holdout"]
 DirectedEdge = tuple[str, str]
 
 
-class TopologyShapeRef(LegacyContentAddressedModel):
+class TopologyShapeRef(ContentAddressedModel):
     """Name-independent identity and descriptive metrics for one dependency DAG."""
 
     schema_version: Literal["aecbench.topology-shape.v1"] = "aecbench.topology-shape.v1"
@@ -208,7 +208,7 @@ class NearStructureDistance(FrozenStrictModel):
         return self
 
 
-class StructuralSplitManifest(LegacyContentAddressedModel):
+class StructuralSplitManifest(ContentAddressedModel):
     """Immutable structural split with exact full and reduced isomorphism exclusion."""
 
     schema_version: Literal["aecbench.structural-split.v2"] = "aecbench.structural-split.v2"

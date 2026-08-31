@@ -31,13 +31,13 @@ from aec_bench.contracts.authority import (
     TaintLabel,
     derive_origin_stamp,
 )
+from aec_bench.contracts.content_address import ContentAddressedModel
 from aec_bench.contracts.evaluation_outcome import (
     CriticEvaluationOutcome,
     EvaluationOutcome,
 )
 from aec_bench.contracts.evaluation_plane import Critic
 from aec_bench.contracts.harness_kernel import FrozenStrictModel, validate_sha256
-from aec_bench.contracts.legacy_content_address import LegacyContentAddressedModel
 from aec_bench.contracts.validators import NonEmptyStr
 from aec_bench.ledger.durability import fsync_directory, mkdir_durable
 
@@ -84,7 +84,7 @@ class StoredAuthorityEvent:
     path: Path
 
 
-class _IdentityClaim(LegacyContentAddressedModel):
+class _IdentityClaim(ContentAddressedModel):
     """Exclusive mapping from one human-readable identity to one content digest."""
 
     schema_version: Literal["aecbench.authority-identity-claim.v1"] = "aecbench.authority-identity-claim.v1"
@@ -98,7 +98,7 @@ class _IdentityClaim(LegacyContentAddressedModel):
         return validate_sha256(value)
 
 
-class _BasisClaim(LegacyContentAddressedModel):
+class _BasisClaim(ContentAddressedModel):
     """Exclusive typed registration of one basis payload and its origin stamp."""
 
     schema_version: Literal["aecbench.authority-basis-claim.v1"] = "aecbench.authority-basis-claim.v1"
@@ -540,7 +540,7 @@ class AuthorityLedger:
 
     def _persist_model(
         self,
-        model: LegacyContentAddressedModel,
+        model: ContentAddressedModel,
         *,
         namespace: str,
         logical_id: str,
@@ -595,7 +595,7 @@ class AuthorityLedger:
     def _publish_claim(
         self,
         path: Path,
-        claim: LegacyContentAddressedModel,
+        claim: ContentAddressedModel,
         *,
         label: str,
     ) -> None:

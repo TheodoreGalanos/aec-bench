@@ -9,6 +9,7 @@ from typing import Annotated, Literal, Self
 
 from pydantic import Field, field_validator, model_validator
 
+from aec_bench.contracts.content_address import ContentAddressedModel
 from aec_bench.contracts.evaluation_generation.cohort import (
     EvaluationCohortRetirement,
 )
@@ -17,7 +18,6 @@ from aec_bench.contracts.harness_kernel import (
     FrozenStrictModel,
     validate_sha256,
 )
-from aec_bench.contracts.legacy_content_address import LegacyContentAddressedModel
 from aec_bench.contracts.validators import NonEmptyStr
 
 
@@ -45,7 +45,7 @@ class EvaluationGenerationEvidenceRef(FrozenStrictModel):
         return validate_sha256(value)
 
 
-class _EvaluationGenerationClosureBase(LegacyContentAddressedModel):
+class _EvaluationGenerationClosureBase(ContentAddressedModel):
     """Fields shared by every explicit generation-terminal variant."""
 
     execution_id: NonEmptyStr
@@ -142,7 +142,7 @@ class GovernedBatchAssignmentEvidence(FrozenStrictModel):
         return validate_sha256(value)
 
 
-class GovernedBatchTerminalEvidence(LegacyContentAddressedModel):
+class GovernedBatchTerminalEvidence(ContentAddressedModel):
     """Phase-neutral execution projection for one completed batch."""
 
     schema_version: Literal["aecbench.governed-batch-terminal-evidence.v2"] = (
@@ -259,7 +259,7 @@ class EvaluationCriticRetirementRef(FrozenStrictModel):
         return self
 
 
-class EvaluationGenerationRetirementClosure(LegacyContentAddressedModel):
+class EvaluationGenerationRetirementClosure(ContentAddressedModel):
     """Final retirement and acceptance-reveal join for one generation closure."""
 
     schema_version: Literal["aecbench.evaluation-generation-retirement-closure.v2"] = (

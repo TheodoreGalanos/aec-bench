@@ -8,13 +8,13 @@ from typing import Any, Literal, Self
 
 from pydantic import Field, field_validator, model_validator
 
+from aec_bench.contracts.content_address import ContentAddressedModel
 from aec_bench.contracts.harness_instance import HarnessBudget
 from aec_bench.contracts.harness_kernel import (
     FrozenStrictModel,
     KernelRef,
     validate_sha256,
 )
-from aec_bench.contracts.legacy_content_address import LegacyContentAddressedModel
 from aec_bench.contracts.output_completion import OutputCompletionContract
 from aec_bench.contracts.program_proposal._canonical import (
     canonical_unique_models,
@@ -23,7 +23,7 @@ from aec_bench.contracts.program_proposal._canonical import (
 from aec_bench.contracts.validators import NonEmptyStr
 
 
-class PublicSourceRef(LegacyContentAddressedModel):
+class PublicSourceRef(ContentAddressedModel):
     """Path-free public source identity exposed through an opaque proposer handle."""
 
     schema_version: Literal["aecbench.public-source-ref.v1"] = "aecbench.public-source-ref.v1"
@@ -61,7 +61,7 @@ class PublicAuthorityBoundary(FrozenStrictModel):
     statement: NonEmptyStr
 
 
-class FixedHarnessCapabilityProjection(LegacyContentAddressedModel):
+class FixedHarnessCapabilityProjection(ContentAddressedModel):
     """Safe H0 projection containing identities, allowlisted capabilities, and one budget."""
 
     schema_version: Literal["aecbench.fixed-harness-capability-projection.v1"] = (
@@ -85,7 +85,7 @@ class FixedHarnessCapabilityProjection(LegacyContentAddressedModel):
         return canonical_unique_strings(value, label="capability ids")
 
 
-class DecompositionProblemView(LegacyContentAddressedModel):
+class DecompositionProblemView(ContentAddressedModel):
     """Reward-blind public task surface from which a proposer may create a program."""
 
     schema_version: Literal["aecbench.decomposition-problem-view.v2"] = "aecbench.decomposition-problem-view.v2"
@@ -147,7 +147,7 @@ class DecompositionProblemView(LegacyContentAddressedModel):
         )
 
 
-class DecompositionLeakageAudit(LegacyContentAddressedModel):
+class DecompositionLeakageAudit(ContentAddressedModel):
     """Host audit that either binds a safe view or records preconstruction rejection."""
 
     schema_version: Literal["aecbench.decomposition-leakage-audit.v1"] = "aecbench.decomposition-leakage-audit.v1"

@@ -8,16 +8,16 @@ from typing import Literal, Self
 
 from pydantic import Field, FiniteFloat, field_validator, model_validator
 
+from aec_bench.contracts.content_address import ContentAddressedModel
 from aec_bench.contracts.harness_kernel import (
     FrozenStrictModel,
     validate_sha256,
 )
-from aec_bench.contracts.legacy_content_address import LegacyContentAddressedModel
 from aec_bench.contracts.program_proposal.types import ProgramCandidateKind
 from aec_bench.contracts.validators import NonEmptyStr
 
 
-class ProposalGenerationPolicy(LegacyContentAddressedModel):
+class ProposalGenerationPolicy(ContentAddressedModel):
     """Executable proposer bytes and limits without experiment-specific literals."""
 
     schema_version: Literal["aecbench.proposal-generation-policy.v2"] = "aecbench.proposal-generation-policy.v2"
@@ -73,7 +73,7 @@ class CandidateKindRequirement(FrozenStrictModel):
     count_per_task: int = Field(ge=1)
 
 
-class EvaluationGenerationBudget(LegacyContentAddressedModel):
+class EvaluationGenerationBudget(ContentAddressedModel):
     """Whole-generation limits supplied by an experiment specification."""
 
     schema_version: Literal["aecbench.evaluation-generation-budget.v2"] = "aecbench.evaluation-generation-budget.v2"
@@ -114,7 +114,7 @@ class EvaluationGenerationBudget(LegacyContentAddressedModel):
         return self
 
 
-class EvaluationGenerationSpec(LegacyContentAddressedModel):
+class EvaluationGenerationSpec(ContentAddressedModel):
     """Phase-neutral design against which a generation is checked for completeness."""
 
     schema_version: Literal["aecbench.evaluation-generation-spec.v2"] = "aecbench.evaluation-generation-spec.v2"

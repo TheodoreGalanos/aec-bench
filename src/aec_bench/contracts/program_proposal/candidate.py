@@ -7,11 +7,11 @@ from typing import Literal, Self
 
 from pydantic import Field, field_validator, model_validator
 
+from aec_bench.contracts.content_address import ContentAddressedModel
 from aec_bench.contracts.harness_kernel import (
     FrozenStrictModel,
     validate_sha256,
 )
-from aec_bench.contracts.legacy_content_address import LegacyContentAddressedModel
 from aec_bench.contracts.program_proposal.types import ProgramCandidateKind
 from aec_bench.contracts.validators import NonEmptyStr
 
@@ -24,7 +24,7 @@ class CandidateGenerationCoordinate(FrozenStrictModel):
     seed: int = Field(ge=0)
 
 
-class CandidateGenerationManifest(LegacyContentAddressedModel):
+class CandidateGenerationManifest(ContentAddressedModel):
     """Frozen policy draws and stopping identity for one complete proposal set."""
 
     schema_version: Literal["aecbench.candidate-generation-manifest.v1"] = "aecbench.candidate-generation-manifest.v1"
@@ -72,7 +72,7 @@ class CandidateGenerationManifest(LegacyContentAddressedModel):
         return self
 
 
-class ProgramCandidateRef(LegacyContentAddressedModel):
+class ProgramCandidateRef(ContentAddressedModel):
     """Immutable identity of an incumbent or frozen proposal program."""
 
     schema_version: Literal["aecbench.program-candidate-ref.v1"] = "aecbench.program-candidate-ref.v1"

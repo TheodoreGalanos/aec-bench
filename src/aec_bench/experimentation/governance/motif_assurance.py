@@ -14,6 +14,7 @@ from aec_bench.contracts.authority import (
     BasisKind,
     MotifPromotionQualification,
 )
+from aec_bench.contracts.content_address import ContentAddressedModel
 from aec_bench.contracts.evaluation_refs import CriticRef
 from aec_bench.contracts.harness_kernel import (
     FrozenStrictModel,
@@ -21,7 +22,6 @@ from aec_bench.contracts.harness_kernel import (
     canonical_json_sha256,
     validate_sha256,
 )
-from aec_bench.contracts.legacy_content_address import LegacyContentAddressedModel
 from aec_bench.contracts.validators import NonEmptyStr
 from aec_bench.experimentation.governance.authority_ledger import AuthorityLedger, AuthorityLedgerError
 from aec_bench.experimentation.governance.motifs import (
@@ -69,7 +69,7 @@ class MotifAssuranceAuthorityError(ValueError):
     """Raised when a lifecycle transition lacks exact scoped authority."""
 
 
-class MotifLifecycleEvent(LegacyContentAddressedModel):
+class MotifLifecycleEvent(ContentAddressedModel):
     """One authorized append-only state transition for a stable motif subject."""
 
     schema_version: Literal["aecbench.motif-lifecycle-event.v1"] = "aecbench.motif-lifecycle-event.v1"
@@ -152,7 +152,7 @@ class MotifAssuranceEntry(FrozenStrictModel):
         return self
 
 
-class MotifAssuranceLedger(LegacyContentAddressedModel):
+class MotifAssuranceLedger(ContentAddressedModel):
     """Immutable append-only event chain with one independently linked head per motif subject."""
 
     schema_version: Literal["aecbench.motif-assurance-ledger.v1"] = "aecbench.motif-assurance-ledger.v1"
@@ -192,7 +192,7 @@ class MotifAssuranceLedger(LegacyContentAddressedModel):
         return MotifAssuranceLedger(events=(*self.events, normalized))
 
 
-class MotifAssuranceSnapshot(LegacyContentAddressedModel):
+class MotifAssuranceSnapshot(ContentAddressedModel):
     """Content-addressed effective-state projection derived from one exact assurance ledger."""
 
     schema_version: Literal["aecbench.motif-assurance-snapshot.v1"] = "aecbench.motif-assurance-snapshot.v1"
@@ -227,7 +227,7 @@ class MotifAssuranceSnapshot(LegacyContentAddressedModel):
         return entry
 
 
-class MotifAssurancePin(LegacyContentAddressedModel):
+class MotifAssurancePin(ContentAddressedModel):
     """Frozen selection record binding one motif to the exact active assurance snapshot."""
 
     schema_version: Literal["aecbench.motif-assurance-pin.v1"] = "aecbench.motif-assurance-pin.v1"
@@ -270,7 +270,7 @@ class MotifAssurancePin(LegacyContentAddressedModel):
         )
 
 
-class AssuredMotifSelectionRecord(LegacyContentAddressedModel):
+class AssuredMotifSelectionRecord(ContentAddressedModel):
     """Frozen selection record containing the exact decision and its active assurance pin."""
 
     schema_version: Literal["aecbench.assured-motif-selection.v1"] = "aecbench.assured-motif-selection.v1"

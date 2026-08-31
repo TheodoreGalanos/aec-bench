@@ -8,6 +8,7 @@ from typing import Literal, Self
 
 from pydantic import field_validator, model_validator
 
+from aec_bench.contracts.content_address import ContentAddressedModel
 from aec_bench.contracts.harness_kernel import (
     FrozenStrictModel,
     KernelCapabilityRef,
@@ -15,7 +16,6 @@ from aec_bench.contracts.harness_kernel import (
     canonical_json_sha256,
     validate_sha256,
 )
-from aec_bench.contracts.legacy_content_address import LegacyContentAddressedModel
 from aec_bench.contracts.task_review_snapshot import TaskReviewSnapshot
 from aec_bench.contracts.task_snapshot import TaskSnapshotRef
 from aec_bench.contracts.validators import NonEmptyStr
@@ -55,7 +55,7 @@ class TaskApplicabilityProjection(FrozenStrictModel):
         return self.review.profile_id if self.review is not None else f"unreviewed:{self.snapshot.task_id}"
 
 
-class MotifApplicabilityAttestation(LegacyContentAddressedModel):
+class MotifApplicabilityAttestation(ContentAddressedModel):
     """Kernel-derived reward-blind applicability statement frozen before execution."""
 
     schema_version: Literal["aecbench.motif-applicability-attestation.v3"] = (

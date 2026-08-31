@@ -1060,10 +1060,9 @@ one final newline. It rejects non-finite numbers.
 Kernel, Harness, execution-program, evaluation, stage, task-snapshot, and
 run-plan models do not carry a generic self-digest. They use stable domain
 references, direct embedded-value validation, named commitments, or one
-`ArtifactRef` when bytes are retained independently. A schema that still emits
-self-addressed JSON must use the explicit legacy base until its owner migrates
-the format. The legacy reader validates the old digest and returns a plain
-migrated model without that field.
+`ArtifactRef` when bytes are retained independently. Current contracts use
+`ContentAddressedModel` only when a digest is an explicit content reference;
+artifact storage validates the exact retained bytes at its boundary.
 
 `TrialRecord` uses `ArtifactRef` for retained input, output, provider,
 authority, and extension bytes. The ledger verifies every reference before it

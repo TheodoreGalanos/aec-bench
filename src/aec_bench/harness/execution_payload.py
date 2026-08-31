@@ -28,18 +28,18 @@ from aec_bench.contracts.adapter_execution import (
 )
 from aec_bench.contracts.agent_output import AgentOutput, AgentOutputStatus
 from aec_bench.contracts.artifacts import ArtifactRef
+from aec_bench.contracts.content_address import ContentAddressedModel
 from aec_bench.contracts.harness_kernel import (
     canonical_json_sha256,
     validate_sha256,
 )
-from aec_bench.contracts.legacy_content_address import LegacyContentAddressedModel
 from aec_bench.contracts.output_completion import OutputCommitAttestation
 from aec_bench.contracts.task_definition import ToolSpec
 from aec_bench.contracts.trajectory import MetaHarnessTrajectoryContext
 from aec_bench.contracts.validators import NonEmptyStr
 
 
-class RuntimeExecutionAttestation(LegacyContentAddressedModel):
+class RuntimeExecutionAttestation(ContentAddressedModel):
     """Kernel-owned evidence of the driver and request that actually executed."""
 
     schema_version: Literal[

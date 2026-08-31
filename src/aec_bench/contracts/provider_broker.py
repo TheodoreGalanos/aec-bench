@@ -15,10 +15,10 @@ from pydantic import (
     model_validator,
 )
 
+from aec_bench.contracts.content_address import ContentAddressedModel
 from aec_bench.contracts.harness_kernel import (
     validate_sha256,
 )
-from aec_bench.contracts.legacy_content_address import LegacyContentAddressedModel
 from aec_bench.contracts.validators import NonEmptyStr
 
 
@@ -37,7 +37,7 @@ class ProviderBrokerCallPlane(StrEnum):
     AUXILIARY = "auxiliary"
 
 
-class ProviderBrokerPolicy(LegacyContentAddressedModel):
+class ProviderBrokerPolicy(ContentAddressedModel):
     """Closed provider authority delegated to one uncredentialed agent process."""
 
     schema_version: Literal["aecbench.provider-broker-policy.v1"] = "aecbench.provider-broker-policy.v1"
@@ -67,7 +67,7 @@ class ProviderBrokerPolicy(LegacyContentAddressedModel):
         return self
 
 
-class ProviderBrokerCallReceipt(LegacyContentAddressedModel):
+class ProviderBrokerCallReceipt(ContentAddressedModel):
     """One broker-observed provider call and its metered response."""
 
     schema_version: Literal["aecbench.provider-broker-call-receipt.v1"] = "aecbench.provider-broker-call-receipt.v1"
@@ -104,7 +104,7 @@ class ProviderBrokerCallReceipt(LegacyContentAddressedModel):
         return self
 
 
-class ProviderBrokerEffectUnknownCallReceipt(LegacyContentAddressedModel):
+class ProviderBrokerEffectUnknownCallReceipt(ContentAddressedModel):
     """Admitted provider effect whose terminal usage evidence is unavailable."""
 
     schema_version: Literal["aecbench.provider-broker-effect-unknown-call-receipt.v1"] = (
@@ -140,7 +140,7 @@ class ProviderBrokerEffectUnknownCallReceipt(LegacyContentAddressedModel):
         return self
 
 
-class ProviderBrokerReceipt(LegacyContentAddressedModel):
+class ProviderBrokerReceipt(ContentAddressedModel):
     """Terminal metering receipt for one content-pinned broker policy."""
 
     schema_version: Literal["aecbench.provider-broker-receipt.v1"] = "aecbench.provider-broker-receipt.v1"
