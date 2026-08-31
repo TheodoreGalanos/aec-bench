@@ -7,6 +7,7 @@ import hashlib
 import json
 from pathlib import Path
 from typing import Any
+from uuid import UUID
 
 from aec_bench.contracts.evidence_lifecycle import (
     ConditionalOperationSpec,
@@ -15,6 +16,7 @@ from aec_bench.contracts.evidence_lifecycle import (
     LifecycleOperationSpec,
     LifecycleTaskMetadata,
 )
+from aec_bench.contracts.identity import EntityIdentity, EntityKey
 from aec_bench.lifecycles.stormwater_design.hydraulics.interventions import (
     build_hydraulic_intervention_source_state,
     build_hydraulic_problem_source_state,
@@ -30,6 +32,11 @@ from aec_bench.lifecycles.stormwater_design.hydraulics.package import (
 TEMPLATE_ID = "hydraulic-design-response-lifecycle-review"
 LIFECYCLE_ID = "hydraulic-design-response"
 METADATA = LifecycleTaskMetadata(
+    identity=EntityIdentity(
+        id=UUID("01a056f1-af83-730c-8202-7d9e49df1fc2"),
+        key=EntityKey("stormwater/hydraulic-design-response"),
+        version=1,
+    ),
     template_id=TEMPLATE_ID,
     name="Hydraulic Design Response Lifecycle Review",
     discipline="civil",

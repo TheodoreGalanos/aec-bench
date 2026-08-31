@@ -8,10 +8,12 @@ from pathlib import PurePosixPath
 
 from pydantic import Field, PositiveInt, field_validator, model_validator
 
+from aec_bench.contracts.identity import EntityIdentity
 from aec_bench.contracts.validators import NonEmptyStr, StrictModel
 
 
 class LifecycleTaskMetadata(StrictModel):
+    identity: EntityIdentity
     template_id: NonEmptyStr
     name: NonEmptyStr
     discipline: NonEmptyStr

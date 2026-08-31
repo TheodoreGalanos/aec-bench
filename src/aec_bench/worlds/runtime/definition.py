@@ -9,6 +9,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
+from aec_bench.contracts.identity import EntityIdentity, MemberIdentity
 from aec_bench.contracts.interactive_world import InteractiveWorldProfileRef, WorldBuildRef
 from aec_bench.contracts.task_definition import Difficulty, Lifecycle, Visibility
 
@@ -46,6 +47,7 @@ class LoadedInteractiveWorldProfile:
 class InteractiveWorldDefinition:
     """One registered executable build and its current supported profiles."""
 
+    identity: EntityIdentity
     build: WorldBuildRef
     title: str
     summary: str
@@ -53,6 +55,7 @@ class InteractiveWorldDefinition:
     tags: tuple[str, ...]
     capabilities: frozenset[str]
     profiles: tuple[InteractiveWorldProfileRef, ...]
+    profile_identities: tuple[MemberIdentity, ...]
     profile_metadata: tuple[InteractiveWorldProfileMetadata, ...]
     profile_loader: Callable[[InteractiveWorldProfileRef], LoadedInteractiveWorldProfile]
 
@@ -75,6 +78,14 @@ class InteractiveWorldDefinition:
         metadata_ids = tuple(item.profile_id for item in self.profile_metadata)
         if metadata_ids != profile_ids:
             raise ValueError("Interactive World profile metadata must match profiles in stable order")
+        if tuple(identity.registration_id for identity in self.profile_identities) != profile_ids:
+            raise ValueError("Interactive World profile identities must match profiles in stable order")
+        if len(self.profile_identities) != len({identity.id for identity in self.profile_identities}):
+            raise ValueError("Interactive World profile UUIDs must be unique")
+        if len(self.profile_identities) != len({identity.key for identity in self.profile_identities}):
+            raise ValueError("Interactive World profile keys must be unique")
+        if any(identity.parent_id != self.identity.id for identity in self.profile_identities):
+            raise ValueError("Interactive World profile identities must belong to the definition")
 
     @property
     def ref(self) -> WorldBuildRef:
@@ -89,6 +100,14 @@ class InteractiveWorldDefinition:
             if profile.profile_id == profile_id:
                 return profile
         raise KeyError(f"unknown Interactive World profile: {profile_id}")
+
+    def profile_identity(self, profile_id: str) -> MemberIdentity:
+        """Resolve one profile entity by its exact owner registration ID."""
+
+        for identity in self.profile_identities:
+            if identity.registration_id == profile_id:
+                return identity
+        raise KeyError(f"unknown Interactive World profile identity: {profile_id}")
 
     def metadata_for(self, profile_id: str) -> InteractiveWorldProfileMetadata:
         """Return discovery and selection metadata for one supported profile."""

@@ -7,7 +7,9 @@ import hashlib
 from dataclasses import dataclass
 from functools import cache
 from pathlib import Path
+from uuid import UUID
 
+from aec_bench.contracts.identity import EntityIdentity, EntityKey, MemberIdentity
 from aec_bench.contracts.interactive_world import InteractiveWorldProfileRef, WorldBuildRef
 from aec_bench.contracts.task_definition import Difficulty, Lifecycle, Visibility
 from aec_bench.worlds.monitoring.dam_seepage.variants import dam_seepage_profile_variants
@@ -26,6 +28,41 @@ from aec_bench.worlds.runtime.definition import (
 
 _BASE_SCENARIO_PATH = Path(__file__).with_name("rising-seepage.json")
 _BASE_PROFILE_ID = "synthetic-rising-seepage"
+_WORLD_IDENTITY = EntityIdentity(
+    id=UUID("01a056f1-af83-7516-90f6-ceddb36390bd"),
+    key=EntityKey("monitoring/dam-seepage"),
+    version=1,
+)
+_PROFILE_IDENTITIES = {
+    _BASE_PROFILE_ID: MemberIdentity(
+        id=UUID("01a056f1-af83-7971-a160-8974515e3464"),
+        key=EntityKey(f"{_WORLD_IDENTITY.key}/{_BASE_PROFILE_ID}"),
+        version=1,
+        parent_id=_WORLD_IDENTITY.id,
+        registration_id=_BASE_PROFILE_ID,
+    ),
+    "reliable-routine-surveillance": MemberIdentity(
+        id=UUID("01a056f1-af83-7ab8-b9e8-172a45b6a385"),
+        key=EntityKey(f"{_WORLD_IDENTITY.key}/reliable-routine-surveillance"),
+        version=1,
+        parent_id=_WORLD_IDENTITY.id,
+        registration_id="reliable-routine-surveillance",
+    ),
+    "unreliable-instrument-escalation": MemberIdentity(
+        id=UUID("01a056f1-af83-7809-a226-ef872a3d8369"),
+        key=EntityKey(f"{_WORLD_IDENTITY.key}/unreliable-instrument-escalation"),
+        version=1,
+        parent_id=_WORLD_IDENTITY.id,
+        registration_id="unreliable-instrument-escalation",
+    ),
+    "unreliable-instrument-surface-transfer": MemberIdentity(
+        id=UUID("01a056f1-af83-7f7f-9b90-754696fbe511"),
+        key=EntityKey(f"{_WORLD_IDENTITY.key}/unreliable-instrument-surface-transfer"),
+        version=1,
+        parent_id=_WORLD_IDENTITY.id,
+        registration_id="unreliable-instrument-surface-transfer",
+    ),
+}
 
 
 @dataclass(frozen=True, slots=True)
@@ -128,6 +165,7 @@ def dam_seepage_world_definition() -> InteractiveWorldDefinition:
     profile_ids = tuple(sorted(registered))
     profiles = tuple(_profile_ref(profile_id) for profile_id in profile_ids)
     return InteractiveWorldDefinition(
+        identity=_WORLD_IDENTITY,
         build=_world_build(),
         title="Dam seepage monitoring",
         summary="Monitor rising seepage conditions and take safe, timely actions.",
@@ -135,6 +173,7 @@ def dam_seepage_world_definition() -> InteractiveWorldDefinition:
         tags=("dam", "monitoring", "seepage"),
         capabilities=frozenset(),
         profiles=profiles,
+        profile_identities=tuple(_PROFILE_IDENTITIES[profile_id] for profile_id in profile_ids),
         profile_metadata=tuple(
             InteractiveWorldProfileMetadata(
                 profile_id=profile_id,

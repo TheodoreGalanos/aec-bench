@@ -142,6 +142,31 @@ class EntityIdentity(FrozenStrictModel):
         return self
 
 
+class MemberIdentity(EntityIdentity):
+    """Stable identity for a profile or variant owned by one definition."""
+
+    parent_id: UUID
+    registration_id: str
+
+    @field_validator("parent_id", mode="before")
+    @classmethod
+    def validate_parent_id(cls, value: UUID | str) -> UUID:
+        return validate_uuidv7(value)
+
+    @field_validator("registration_id")
+    @classmethod
+    def validate_registration_id(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("member registration ID must be non-empty")
+        return value
+
+    @model_validator(mode="after")
+    def validate_parent(self) -> MemberIdentity:
+        if self.parent_id == self.id:
+            raise ValueError("member identity must differ from its parent identity")
+        return self
+
+
 _WINDOWS_RESERVED_NAMES = (
     frozenset({"CON", "PRN", "AUX", "NUL"})
     | {f"COM{number}" for number in range(1, 10)}
@@ -216,6 +241,7 @@ __all__ = (
     "EntityIdentity",
     "EntityKey",
     "EntityKind",
+    "MemberIdentity",
     "PortableRelativePath",
     "format_display_ref",
     "new_entity_id",

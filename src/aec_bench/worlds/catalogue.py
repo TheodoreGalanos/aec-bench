@@ -26,6 +26,15 @@ class WorldCatalogue:
         task_world_ids = tuple(definition.build.task_world_id for definition in self.definitions)
         if len(task_world_ids) != len(set(task_world_ids)):
             raise ValueError("Interactive World catalogue task world ids must be unique")
+        identities = [
+            identity
+            for definition in self.definitions
+            for identity in (definition.identity, *definition.profile_identities)
+        ]
+        if len(identities) != len({identity.id for identity in identities}):
+            raise ValueError("Interactive World catalogue entity UUIDs must be unique")
+        if len(identities) != len({identity.key for identity in identities}):
+            raise ValueError("Interactive World catalogue entity keys must be unique")
         object.__setattr__(
             self,
             "definitions",

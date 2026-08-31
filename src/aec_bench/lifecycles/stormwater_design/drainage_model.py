@@ -8,12 +8,14 @@ import json
 import re
 from pathlib import Path
 from typing import Any
+from uuid import UUID
 
 from aec_bench.contracts.evidence_lifecycle import (
     EvidenceCheckpointSpec,
     EvidenceLifecycleSpec,
     LifecycleTaskMetadata,
 )
+from aec_bench.contracts.identity import EntityIdentity, EntityKey
 from aec_bench.evaluation.lifecycle import score_semantic_transitions
 from aec_bench.lifecycles.runtime.lifecycle import load_validated_lifecycle_submissions
 from aec_bench.lifecycles.stormwater_design.drainage_variants import (
@@ -27,6 +29,11 @@ CHECKPOINT_IDS = ("initial_review", "response_review", "closeout_review")
 TEMPLATE_ID = "drainage-model-evidence-lifecycle-review"
 LIFECYCLE_ID = "drainage-model-review"
 METADATA = LifecycleTaskMetadata(
+    identity=EntityIdentity(
+        id=UUID("01a056f1-af83-7fce-a600-86c386e9e6a9"),
+        key=EntityKey("stormwater/drainage-model-review"),
+        version=1,
+    ),
     template_id=TEMPLATE_ID,
     name="Drainage Model Evidence Lifecycle Review",
     discipline="civil",

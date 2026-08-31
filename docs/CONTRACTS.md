@@ -43,7 +43,7 @@ verification remains because it is the current artifact integrity contract.
 | Task release reference | Task generation and harness | One exact Git or detached-artifact task source retains its task UUID, readable key, and version | Current format requires the identity; no PRD2 legacy reader is retained | [`TaskSnapshotRef`](../src/aec_bench/contracts/task_snapshot.py) and [`build_task_snapshot`](../src/aec_bench/harness/compilation/task_snapshot.py) | Internal snapshot reference |
 | Task genome review | Tasks and feedback | A derived genome and its source spans become review evidence for one exact task snapshot | Internal; independently retained reviews use current-format artifacts | [`TaskGenomeReview`](../src/aec_bench/contracts/task_genome.py), `TaskSnapshotRef`, and `ArtifactRef` | Regenerable review; optional persisted artifact |
 | Generated-task handoff and replay | Task generation | Generated runnable paths pass in process to normal task loading; template sources and sampling inputs remain optional reproducibility data | `GeneratedTaskSet` is an in-process value; the schema 1 sidecar is not a runtime task contract | [`GeneratedTaskSet`](../src/aec_bench/generation/contracts.py), [`GenerationManifest`](../src/aec_bench/generation/replay.py), and the `generate replay` command | Internal handoff and optional persisted sidecar |
-| Finite lifecycle execution | Lifecycle task and host | Stage-specific task evidence and actor results become one bounded host-controlled progression | Internal package and runtime contract; persisted accepted evidence is current-format only | [`EvidenceLifecycleSpec`](../src/aec_bench/contracts/evidence_lifecycle.py) and the [staged evidence protocol](protocols/staged-evidence-and-publication.md) | Packaged task, runtime state, and persisted accepted evidence |
+| Finite lifecycle execution | Lifecycle task and host | A stable lifecycle identity, stage-specific task evidence, and actor results become one bounded host-controlled progression | Internal package and runtime contract; persisted accepted evidence is current-format only | [`LifecycleTaskMetadata` and `EvidenceLifecycleSpec`](../src/aec_bench/contracts/evidence_lifecycle.py), [`EntityIdentity`](../src/aec_bench/contracts/identity.py), and the [staged evidence protocol](protocols/staged-evidence-and-publication.md) | Packaged task, runtime state, and persisted accepted evidence |
 | Experiment manifest | Experiment orchestration | User configuration becomes an executable plan | Internal, except documented CLI/config behavior | [`ExperimentManifest`](../src/aec_bench/contracts/experiment_manifest.py) | Persisted configuration |
 | Agent condition | Experiment orchestration | One requested adapter/model condition retains a stable UUID-backed identity and explicit runtime inputs | Internal foundation; callers supply stable conditions when resolving a run | [`AgentCondition`](../src/aec_bench/contracts/experiment_manifest.py) and [`EntityIdentity`](../src/aec_bench/contracts/identity.py) | In-process resolved condition |
 | Resolved run specification | Experiment orchestration | One experiment manifest, exact task releases, stable agent conditions, and a resolved execution policy become one explicit requested run condition | Internal schema 2; strict local persistence before execution | [`ResolvedRunSpec`](../src/aec_bench/contracts/resolved_run.py) and [`resolve_run_spec`](../src/aec_bench/contracts/resolved_run.py) | Requested run condition and persisted spec |
@@ -72,7 +72,7 @@ verification remains because it is the current artifact integrity contract.
 | Prime package and evaluation integration | Prime integration | Current public task or lifecycle material becomes an independently installed package; hosted samples return as untrusted provider evidence | Public command and external package behavior; samples normalize into current records | [`exporter.py`](../src/aec_bench/prime_lab/exporter.py), [`lifecycle_exporter.py`](../src/aec_bench/prime_lab/lifecycle_exporter.py), and [`eval_import.py`](../src/aec_bench/prime_lab/eval_import.py) | External package and provider ingestion |
 | Artifact and evidence reference | Harness, ledger, and the producing domain | Filesystem or provider output becomes content-bound evidence | Protected when stored in a trial, dataset, freeze, or published record | `ArtifactRef` in [`artifacts.py`](../src/aec_bench/contracts/artifacts.py), `ArtifactReference` in [`trial_record.py`](../src/aec_bench/contracts/trial_record.py), and narrower owner-specific references | Persisted reference |
 | Visibility classification | Task ownership and evaluation policy | Material enters public, calibration, or holdout handling | Protected | `Visibility` in [`task_definition.py`](../src/aec_bench/contracts/task_definition.py) and visibility checks in persisted records | Persisted and policy-bearing |
-| Interactive-world execution | Interactive-world runtime and registered task worlds | A `WorldTask`, exact build, and profile become one complete evaluated world trial | Supported Python discovery, task, planning, and trial API; task-owned persisted records remain protected | [`worlds`](../src/aec_bench/worlds/__init__.py), [`tasks.py`](../src/aec_bench/worlds/tasks.py), [`world_trials.py`](../src/aec_bench/harness/world_trials.py), and the [runtime protocol](protocols/interactive-world-runtime.md) | Python API, persisted task package, and trial evidence |
+| Interactive-world execution | Interactive-world runtime and registered task worlds | A stable world and profile identity, `WorldTask`, exact build, and profile become one complete evaluated world trial | Supported Python discovery, task, planning, and trial API; task-owned persisted records remain protected | [`InteractiveWorldDefinition`](../src/aec_bench/worlds/runtime/definition.py), [`worlds`](../src/aec_bench/worlds/__init__.py), [`world_trials.py`](../src/aec_bench/harness/world_trials.py), and the [runtime protocol](protocols/interactive-world-runtime.md) | Python API, persisted task package, and trial evidence |
 | Installed world actor and host calls | Interactive-world runtime and concrete integration owners | An actor or host request crosses a process boundary and reaches the permitted task-owned authority | Versioned local actor protocol; pump-owned persisted run records | [`world_interface.py`](../src/aec_bench/contracts/world_interface.py), the shared [`world_actor`](../src/aec_bench/harness/world_actor/) authority, protocol, endpoint, and staged client, plus the [runtime protocol](protocols/interactive-world-runtime.md) | Internal, persisted, and installed JSON |
 
 ## Task release and agent condition
@@ -359,6 +359,15 @@ belong to execution evidence. Changing execution metadata alone must not
 change a world profile identity. Changing a causal profile input or executable
 world source must change the applicable profile or build identity.
 
+Each registered `InteractiveWorldDefinition` has one UUIDv7-backed
+`EntityIdentity`. Each registered profile has one `MemberIdentity` with its
+own UUIDv7, readable key, positive version, parent world UUID, and exact
+owner registration ID. The owner registration ID selects the current profile;
+the readable key and UUID identify the profile in catalogues and review output.
+`WorldBuildRef.artifact_sha256` and profile content checksums verify exact
+executable and scenario bytes. They remain separate from the world and profile
+entity identities.
+
 ## Task instance and revision identity
 
 `ResolvedTaskInstance` joins a validated task definition to the paths used by
@@ -404,6 +413,12 @@ contract.
 
 The current implementation uses the staged-evidence subtype described in
 [Staged evidence and publication](protocols/staged-evidence-and-publication.md).
+Each materialized `LifecycleTaskMetadata` includes one UUIDv7-backed
+`EntityIdentity` with a readable lifecycle key and positive version. Registered
+variants use `MemberIdentity` values that bind their UUIDs and readable keys to
+the parent lifecycle UUID and the exact owner registration ID. The lifecycle
+catalogue validates UUID, key, registration, and parent uniqueness before it
+resolves a definition.
 The internal application values are `CompiledLifecycle`, `LifecycleTrial`, and
 `LifecycleExecution`. They are ordinary in-memory values, not persisted
 schemas. `CompiledLifecycle` binds current package bytes to the lifecycle,

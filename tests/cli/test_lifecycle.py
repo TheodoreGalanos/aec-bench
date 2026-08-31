@@ -67,7 +67,7 @@ def test_task_lifecycle_materializes_current_metadata(tmp_path: Path) -> None:
 
     assert result.exit_code == 0
     metadata = json.loads((output / "template.json").read_text(encoding="utf-8"))
-    assert set(metadata) == {"template_id", "name", "discipline"}
+    assert set(metadata) == {"identity", "template_id", "name", "discipline"}
     assert (output / "lifecycle.json").is_file()
     assert not (output / "world.json").exists()
 

@@ -7,6 +7,7 @@ import json
 import tomllib
 from pathlib import Path
 from typing import Any, Literal
+from uuid import UUID
 
 from pydantic import Field, ValidationError, field_validator
 
@@ -15,6 +16,7 @@ from aec_bench.contracts.evidence_lifecycle import (
     EvidenceLifecycleSpec,
     LifecycleTaskMetadata,
 )
+from aec_bench.contracts.identity import EntityIdentity, EntityKey
 from aec_bench.contracts.lifecycle_evaluation import LifecycleGateResult, LifecycleVerificationResult
 from aec_bench.contracts.trial_record import TrialRecord
 from aec_bench.contracts.validators import NonEmptyStr, StrictModel
@@ -37,6 +39,11 @@ GATE_IDS = (
 )
 
 METADATA = LifecycleTaskMetadata(
+    identity=EntityIdentity(
+        id=UUID("01a056f1-af83-70b0-ab56-f0e3cd2716d4"),
+        key=EntityKey("structural/facade-submittal-review"),
+        version=1,
+    ),
     template_id=TEMPLATE_ID,
     name="Facade Submittal Review Lifecycle",
     discipline="structural",
