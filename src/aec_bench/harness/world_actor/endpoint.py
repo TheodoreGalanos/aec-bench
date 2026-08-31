@@ -20,14 +20,16 @@ from typing import Any, BinaryIO, cast
 
 from pydantic import JsonValue, ValidationError
 
-from aec_bench.contracts.world_interface import WorldActorActionResult
-from aec_bench.harness.world_actor.authority import (
+from aec_bench.contracts.world_actor import (
     ActorCorrelation,
-    ActorInvocationAuthority,
     ActorInvocationError,
-    ActorInvocationLifecycle,
     ActorInvocationOutcomeClass,
     ActorInvocationRequest,
+)
+from aec_bench.contracts.world_interface import WorldActorActionResult
+from aec_bench.harness.world_actor.authority import (
+    ActorInvocationAuthority,
+    ActorInvocationLifecycle,
     AuthorityCloseReport,
 )
 from aec_bench.harness.world_actor.protocol import (

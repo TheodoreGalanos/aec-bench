@@ -56,10 +56,6 @@ from aec_bench.execution.models import (
     WorkerOutcome,
 )
 from aec_bench.execution.operational import AttemptRecord, OperationalStore, WorkItemRecord
-from aec_bench.harness.planned_trial_reconciliation import (
-    planned_trial_binding,
-    validate_planned_trial_record,
-)
 from aec_bench.harness.prime_world_actor import WorldActorSession
 from aec_bench.harness.world_actor import ACTOR_INVOCATION_EVIDENCE_SCHEMA, WorldActorHost
 from aec_bench.ledger.evidence_run_store import EvidenceRunStore
@@ -69,7 +65,13 @@ from aec_bench.ledger.writer import (
     write_append_only_json_at,
     write_trial_record_at,
 )
-from aec_bench.trials import PlannedTrial as LegacyPlannedTrial
+from aec_bench.trials import (
+    PlannedTrial as LegacyPlannedTrial,
+)
+from aec_bench.trials import (
+    planned_trial_binding,
+    validate_planned_trial_record,
+)
 from aec_bench.worlds.tasks import WorldTask
 
 type WorldTrialRunner = Callable[[WorldTask, LegacyPlannedTrial], Awaitable[TrialRecord]]

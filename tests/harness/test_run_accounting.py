@@ -24,7 +24,7 @@ from aec_bench.contracts.trial_record import (
     ExecutionStatus,
     TrialRecord,
 )
-from aec_bench.harness.planned_trial_reconciliation import planned_trial_binding
+from aec_bench.trials import planned_trial_binding
 from tests.contracts.test_run_plan import _PLAN_CREATED_AT, _accept_combination, _resolved_run, _task_profiles
 from tests.support.trial_record_factories import make_trial_record
 

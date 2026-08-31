@@ -32,11 +32,11 @@ from aec_bench.execution import ExecutionPolicy, LocalScheduler, RetryPolicy, Tr
 from aec_bench.execution.operational import OperationalStore
 from aec_bench.harness import lifecycle_trials
 from aec_bench.harness.lifecycle_trials import LifecycleTrialAdapter, LifecycleTrialAdapterError
-from aec_bench.harness.planned_trial_reconciliation import planned_trial_binding
 from aec_bench.lifecycles.compiled import CompiledLifecycle, CompiledLifecycleEnvelope
 from aec_bench.lifecycles.runtime.episode import LifecycleExecutionMode, LifecycleVisibilityPolicy
 from aec_bench.lifecycles.values import LifecycleExecution, LifecycleTrial
 from aec_bench.trials import PlannedTrial as LegacyPlannedTrial
+from aec_bench.trials import planned_trial_binding
 from tests.harness.test_persisted_family_plans import _spec_and_plan, _store
 
 

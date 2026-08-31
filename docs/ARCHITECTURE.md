@@ -732,12 +732,17 @@ Dependencies follow ownership, not a permanent numbered hierarchy:
 - A composition root may import concrete implementations to register them. The
   registered core must remain independent of those implementations.
 
-`tests/test_package_ownership.py` enforces the small dependency rules that are
-most important to keep mechanical: expected owner roots cannot disappear,
-contracts and task domains cannot import optional execution runtimes, shared
-environment runtimes cannot import concrete implementations, concrete owners
-cannot import their composition catalogue, and owner packages cannot form a
-strongly connected component.
+[The owner dependency matrix](../scripts/owner_dependencies.toml) is the
+complete declared dependency matrix for every top-level source owner,
+including root modules such as `catalogue`.
+The AST audit loads this policy without importing the source package and
+reports undeclared or unknown owner edges. `tests/test_package_ownership.py`
+enforces the small dependency rules that are most important to keep
+mechanical: expected owner roots cannot disappear, contracts and task domains
+cannot import optional execution runtimes, shared environment runtimes cannot
+import concrete implementations, concrete owners cannot import their
+composition catalogue, and owner packages cannot form a strongly connected
+component.
 
 Pydantic models belong at untrusted, external, persisted, or cross-process
 boundaries. Normal Python values are sufficient inside one owner. The

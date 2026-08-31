@@ -11,9 +11,9 @@ from typing import Any
 from pydantic import Field, ValidationError
 
 from aec_bench.contracts.evaluation_result import EvaluationResult
+from aec_bench.contracts.learning_study_assessment import ProjectionResult
 from aec_bench.contracts.trial_record import EvaluationStatus, ExecutionStatus, TrialRecord
 from aec_bench.contracts.validators import NonEmptyStr, StrictModel
-from aec_bench.experimentation.learning_studies.assessment import ProjectionResult
 from aec_bench.lifecycles.runtime.lifecycle import load_validated_lifecycle_submissions
 from aec_bench.lifecycles.stormwater_design.drainage_model import CHECKPOINT_IDS, GATE_IDS, TEMPLATE_ID
 from aec_bench.lifecycles.stormwater_design.drainage_variants import get_drainage_model_variant

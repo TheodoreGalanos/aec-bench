@@ -11,6 +11,12 @@ from pathlib import Path
 
 import pytest
 
+from scripts.audit_package_dependencies import (
+    build_audit,
+    load_owner_dependency_policy,
+    validate_owner_dependency_policy,
+)
+
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 SOURCE_ROOT = REPOSITORY_ROOT / "src" / "aec_bench"
 CONTRACT_ROOT = SOURCE_ROOT / "contracts"
@@ -77,6 +83,35 @@ def test_expected_architecture_roots_exist_and_contain_python_sources() -> None:
     ]
 
     assert missing_or_empty == []
+
+
+def test_declared_owner_dependency_policy_covers_the_current_import_graph() -> None:
+    audit = build_audit(
+        repository_root=REPOSITORY_ROOT,
+        commit="test",
+        minimal_import_smoke="not-run",
+        minimal_import_command="",
+    )
+
+    assert audit["owner_dependency_policy_violations"] == []
+    assert audit["owner_dependency_policy"] == audit["top_level_package_graph"]
+
+
+def test_owner_dependency_policy_reports_missing_and_forbidden_edges() -> None:
+    owner_graph = {"contracts": {"ledger"}, "ledger": set()}
+    policy = {"contracts": set(), "ledger": {"contracts"}}
+
+    assert validate_owner_dependency_policy(owner_graph, policy) == (
+        "undeclared owner dependency: contracts -> ledger",
+    )
+
+
+def test_owner_dependency_policy_loader_rejects_duplicate_targets(tmp_path: Path) -> None:
+    policy_path = tmp_path / "owner_dependencies.toml"
+    policy_path.write_text('[owners.contracts]\nmay_depend_on = ["ledger", "ledger"]\n', encoding="utf-8")
+
+    with pytest.raises(ValueError, match="targets must be unique: contracts"):
+        load_owner_dependency_policy(policy_path)
 
 
 def test_neutral_contracts_and_domains_do_not_import_optional_runtimes() -> None:

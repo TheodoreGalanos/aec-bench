@@ -31,7 +31,6 @@ from aec_bench.execution.models import (
     WorkerOutcome,
 )
 from aec_bench.execution.operational import AttemptRecord, OperationalStore, WorkItemRecord
-from aec_bench.harness.planned_trial_reconciliation import planned_trial_binding, validate_planned_trial_record
 from aec_bench.ledger.evidence_run_store import EvidenceRunStore
 from aec_bench.ledger.writer import (
     DuplicateAppendOnlyFileError,
@@ -48,6 +47,7 @@ from aec_bench.lifecycles.application import (
 )
 from aec_bench.lifecycles.finalization import live_lifecycle_finalization_source
 from aec_bench.lifecycles.values import LifecycleTrial
+from aec_bench.trials import planned_trial_binding, validate_planned_trial_record
 
 
 class LifecycleTrialAdapterError(RuntimeError):

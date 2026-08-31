@@ -15,14 +15,23 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any, Protocol
 
-from pydantic import Field, JsonValue
+from pydantic import JsonValue
 
 from aec_bench.contracts.authority_evidence import (
     ACTOR_INVOCATION_EVIDENCE_PROTOCOL,
     AuthorityEvidenceKind,
     AuthorityEvidenceRef,
 )
-from aec_bench.contracts.validators import FrozenStrictModel, NonEmptyStr
+from aec_bench.contracts.world_actor import (
+    ACTOR_INVOCATION_SEMANTICS,
+    ActorCorrelation,
+    ActorInvocationError,
+    ActorInvocationOutcome,
+    ActorInvocationOutcomeClass,
+    ActorInvocationRequest,
+    ActorTurnDisposition,
+    actor_catalogue_sha256,
+)
 from aec_bench.contracts.world_interface import (
     WorldActorActionRequest,
     WorldActorActionResult,
@@ -32,7 +41,6 @@ from aec_bench.contracts.world_interface import (
 )
 from aec_bench.ledger.artifact_repository import ArtifactRepository
 
-ACTOR_INVOCATION_SEMANTICS = "aec-bench/actor-invocation/1"
 ACTOR_INVOCATION_EVIDENCE_SCHEMA = ACTOR_INVOCATION_EVIDENCE_PROTOCOL
 
 
@@ -55,45 +63,10 @@ class ActorInvocationLifecycle(StrEnum):
     CLOSED = "closed"
 
 
-class ActorInvocationOutcomeClass(StrEnum):
-    """State whether a world action was not dispatched, completed, or is unknown."""
-
-    NOT_DISPATCHED = "not-dispatched"
-    COMPLETED = "completed"
-    UNKNOWN = "unknown"
-
-
-class ActorTurnDisposition(StrEnum):
-    """Tell a provider-neutral actor loop whether the current turn can continue."""
-
-    CONTINUE = "continue"
-    CONCLUDE_TURN = "conclude-turn"
-
-
 class _RequestState(StrEnum):
     IN_FLIGHT = "in-flight"
     COMPLETED = "completed"
     UNKNOWN = "unknown"
-
-
-class ActorCorrelation(FrozenStrictModel):
-    """Token-free transport correlation that does not participate in request identity."""
-
-    transport_request_id: NonEmptyStr | None = None
-    provider_session_id: NonEmptyStr | None = None
-    provider_tool_call_id: NonEmptyStr | None = None
-    model_turn: int | None = Field(default=None, ge=1)
-
-
-class ActorInvocationRequest(FrozenStrictModel):
-    """One transport-neutral logical world action request."""
-
-    request_id: NonEmptyStr
-    decision_id: NonEmptyStr
-    action_name: NonEmptyStr
-    arguments: dict[str, JsonValue]
-    transport: NonEmptyStr
-    correlation: ActorCorrelation
 
 
 @dataclass(frozen=True)
@@ -126,16 +99,6 @@ class ActorInvocationAuthorityConfig:
 
 
 @dataclass(frozen=True)
-class ActorInvocationOutcome:
-    """One completed world action outcome returned by the shared authority."""
-
-    result: WorldActorActionResult
-    action_sequence: int
-    duplicate: bool
-    disposition: ActorTurnDisposition
-
-
-@dataclass(frozen=True)
 class AuthorityCloseReport:
     """State whether close is quiescent and suitable for complete trial evidence."""
 
@@ -146,30 +109,6 @@ class AuthorityCloseReport:
     closed_at: datetime
     lifecycle: ActorInvocationLifecycle
     evidence_ref: AuthorityEvidenceRef | None = None
-
-
-class ActorInvocationError(RuntimeError):
-    """A stable actor-boundary failure that transports can render without interpretation."""
-
-    def __init__(
-        self,
-        code: str,
-        detail: str,
-        *,
-        outcome: ActorInvocationOutcomeClass,
-        request_id: str | None = None,
-        action_sequence: int | None = None,
-        duplicate: bool = False,
-        disposition: ActorTurnDisposition = ActorTurnDisposition.CONTINUE,
-    ) -> None:
-        self.code = code
-        self.detail = detail
-        self.outcome = outcome
-        self.request_id = request_id
-        self.action_sequence = action_sequence
-        self.duplicate = duplicate
-        self.disposition = disposition
-        super().__init__(f"{code}: {detail}")
 
 
 @dataclass(frozen=True)
@@ -960,21 +899,6 @@ def _request_fingerprint(actor_principal_id: str, request: ActorInvocationReques
             "arguments": request.arguments,
         }
     )
-
-
-def canonical_actor_catalogue(catalogue: WorldActorCapabilityCatalogue) -> dict[str, Any]:
-    """Return the task catalogue with a stable action order and canonical JSON values."""
-    return {
-        "task_world_id": catalogue.task_world_id,
-        "actions": [
-            action.model_dump(mode="json") for action in sorted(catalogue.actions, key=lambda action: action.name)
-        ],
-    }
-
-
-def actor_catalogue_sha256(catalogue: WorldActorCapabilityCatalogue) -> str:
-    """Return one transport-neutral identity for a frozen actor catalogue."""
-    return _json_sha256(canonical_actor_catalogue(catalogue))
 
 
 def _json_bytes(value: Any) -> bytes:

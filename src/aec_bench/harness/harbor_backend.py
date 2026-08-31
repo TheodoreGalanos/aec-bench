@@ -47,7 +47,6 @@ from aec_bench.execution.operational import (
     WorkItemRecord,
 )
 from aec_bench.harness.harbor_reconciliation import HarborTrialTransport, reconcile_harbor_trial_records
-from aec_bench.harness.planned_trial_reconciliation import validate_planned_trial_record
 from aec_bench.ledger.evidence_run_store import EvidenceRunStore
 from aec_bench.ledger.reader import read_trial_record
 from aec_bench.ledger.writer import (
@@ -57,6 +56,7 @@ from aec_bench.ledger.writer import (
     write_append_only_json_at,
     write_trial_record_at,
 )
+from aec_bench.trials import validate_planned_trial_record
 
 
 class HarborBackendError(RuntimeError):

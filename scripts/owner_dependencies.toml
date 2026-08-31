@@ -1,0 +1,101 @@
+# The complete owner policy for the current Python source tree.
+# Keep each owner name equal to its top-level aec_bench module owner.
+
+[owners.adapters]
+may_depend_on = ["contracts", "model_routing", "prime_agent", "providers", "synthesis", "templates"]
+
+[owners.agents]
+may_depend_on = []
+
+[owners.catalogue]
+may_depend_on = ["lifecycles", "worlds"]
+
+[owners.cli]
+may_depend_on = ["adapters", "catalogue", "communication", "config", "contracts", "dataset", "evaluation", "evolution", "execution", "experimentation", "generation", "harness", "images", "init", "ledger", "lifecycles", "prime_agent", "prime_lab", "providers", "remediation", "search", "tasks", "templates", "trials", "tui", "web", "worlds"]
+
+[owners.communication]
+may_depend_on = ["contracts", "evaluation", "evolution", "ledger", "tasks"]
+
+[owners.config]
+may_depend_on = []
+
+[owners.contracts]
+may_depend_on = []
+
+[owners.dataset]
+may_depend_on = ["contracts", "ledger", "tasks", "worlds"]
+
+[owners.evaluation]
+may_depend_on = ["config", "contracts", "ledger"]
+
+[owners.evolution]
+may_depend_on = ["adapters", "contracts", "evaluation", "generation", "harness", "ledger", "providers", "tasks", "trials"]
+
+[owners.execution]
+may_depend_on = ["contracts"]
+
+[owners.experimentation]
+may_depend_on = ["adapters", "contracts", "evaluation", "evolution", "generation", "harness", "ledger", "lifecycles", "prime_agent", "providers", "tasks", "templates", "trials", "worlds"]
+
+[owners.feedback]
+may_depend_on = ["contracts", "ledger", "tasks"]
+
+[owners.generation]
+may_depend_on = ["contracts", "images", "ledger", "tasks", "templates"]
+
+[owners.harness]
+may_depend_on = ["adapters", "config", "contracts", "dataset", "evaluation", "execution", "ledger", "lifecycles", "prime_agent", "tasks", "trajectory", "trials", "worlds"]
+
+[owners.images]
+may_depend_on = []
+
+[owners.init]
+may_depend_on = []
+
+[owners.ledger]
+may_depend_on = ["contracts", "execution"]
+
+[owners.lifecycles]
+may_depend_on = ["contracts", "evaluation", "ledger", "model_routing", "templates", "trials"]
+
+[owners.model_routing]
+may_depend_on = []
+
+[owners.prime_agent]
+may_depend_on = ["contracts"]
+
+[owners.prime_lab]
+may_depend_on = ["contracts", "dataset", "harness", "ledger", "lifecycles", "providers", "tasks"]
+
+[owners.providers]
+may_depend_on = ["contracts"]
+
+[owners.remediation]
+may_depend_on = ["adapters", "contracts"]
+
+[owners.search]
+may_depend_on = ["tasks", "templates"]
+
+[owners.synthesis]
+may_depend_on = ["contracts"]
+
+[owners.tasks]
+may_depend_on = ["contracts", "ledger", "templates"]
+
+[owners.templates]
+may_depend_on = ["contracts"]
+
+[owners.trajectory]
+may_depend_on = []
+
+[owners.trials]
+may_depend_on = ["contracts", "tasks"]
+
+[owners.tui]
+may_depend_on = ["communication", "config", "contracts", "dataset", "evaluation", "execution", "feedback", "harness", "ledger", "tasks", "templates"]
+
+[owners.web]
+may_depend_on = ["adapters", "communication", "contracts", "dataset", "evaluation", "evolution", "execution", "feedback", "harness", "ledger", "search", "templates"]
+
+[owners.worlds]
+may_depend_on = ["contracts", "ledger"]

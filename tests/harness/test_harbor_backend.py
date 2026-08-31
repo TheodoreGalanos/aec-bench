@@ -25,7 +25,7 @@ from aec_bench.harness.harbor_conformance import (
     HarborBackendConformanceCase,
     run_harbor_backend_conformance,
 )
-from aec_bench.harness.planned_trial_reconciliation import planned_trial_binding
+from aec_bench.trials import planned_trial_binding
 from tests.harness.test_persisted_artifact_plan import _ready_store, _spec, _task
 from tests.support.trial_record_factories import make_trial_record
 

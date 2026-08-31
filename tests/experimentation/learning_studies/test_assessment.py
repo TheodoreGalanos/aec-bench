@@ -18,11 +18,10 @@ from aec_bench.contracts.learning_study import (
     RunExperienceStep,
     StudyArmRole,
 )
-from aec_bench.contracts.learning_study_assessment import LearningComparisonValidity
+from aec_bench.contracts.learning_study_assessment import LearningComparisonValidity, ProjectionResult
 from aec_bench.contracts.trial_record import TrialRecord
 from aec_bench.experimentation.learning_studies.assessment import (
     AssessmentArmEvidence,
-    ProjectionResult,
     assess_learning_study,
 )
 from aec_bench.experimentation.learning_studies.planning import (

@@ -12,7 +12,6 @@ from types import SimpleNamespace
 from typing import Any
 
 from aec_bench.contracts.experiment_manifest import AgentConfig, ComputeConfig
-from aec_bench.harness.lifecycle_local import run_local_lifecycle
 from aec_bench.lifecycles.application import LifecycleTrial, run_lifecycle_trial
 from aec_bench.lifecycles.catalogue import verify_lifecycle
 from aec_bench.lifecycles.compiled import compile_lifecycle
@@ -37,9 +36,11 @@ from aec_bench.lifecycles.runtime.lifecycle import (
     validate_evidence_checkpoint_submission,
     validate_lifecycle_verification,
 )
+from aec_bench.lifecycles.values import LifecycleExecution
 from aec_bench.trials import PlannedTrial
 
 type LifecycleSubmissionWriter = Callable[[Path, Path, str, str, Path], None]
+type LifecycleLocalTrialExecutor = Callable[..., LifecycleExecution]
 
 REQUIRED_GUARANTEES = frozenset(
     {
@@ -195,6 +196,7 @@ def assert_lifecycle_conformance(
     definition: LifecycleDefinition,
     *,
     write_submission: LifecycleSubmissionWriter,
+    execute_local: LifecycleLocalTrialExecutor,
     seed: int = 0,
 ) -> None:
     """Execute all lifecycle guarantees for one owner definition."""
@@ -302,7 +304,7 @@ def assert_lifecycle_conformance(
         production_trial = _production_trial(definition, first_root / "production")
         production_record = run_lifecycle_trial(
             trial=production_trial,
-            execute=lambda trial: run_local_lifecycle(
+            execute=lambda trial: execute_local(
                 trial=trial,
                 adapter_builder=_OwnerAdapterBuilder(definition, trial.package_dir, trial.run_dir),
             ),
@@ -322,7 +324,7 @@ def assert_lifecycle_conformance(
         )
         persistent_record = run_lifecycle_trial(
             trial=persistent_trial,
-            execute=lambda trial: run_local_lifecycle(
+            execute=lambda trial: execute_local(
                 trial=trial,
                 adapter_builder=_PersistentOwnerAdapterBuilder(definition, trial, write_submission),
             ),
@@ -562,10 +564,20 @@ class _OwnerAdapterBuilder:
         return _Adapter()
 
 
-def run_lifecycle_conformance(case: LifecycleConformanceCase, *, seed: int = 0) -> dict[str, Any]:
+def run_lifecycle_conformance(
+    case: LifecycleConformanceCase,
+    *,
+    execute_local: LifecycleLocalTrialExecutor,
+    seed: int = 0,
+) -> dict[str, Any]:
     """Run one owner case and return the twelve executed guarantee names."""
 
-    assert_lifecycle_conformance(case.definition, write_submission=case.write_submission, seed=seed)
+    assert_lifecycle_conformance(
+        case.definition,
+        write_submission=case.write_submission,
+        execute_local=execute_local,
+        seed=seed,
+    )
     return {"template_id": case.template_id, "proven": sorted(REQUIRED_GUARANTEES)}
 
 
