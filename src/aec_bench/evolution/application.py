@@ -802,8 +802,9 @@ def _build_harbor_candidate_evaluator(
 ) -> Callable[[WorkspaceSnapshot, CandidateEvaluationBatch], tuple[TrialRecord, ...]]:
     """Compose remote candidate evaluation from a preplanned batch."""
     from aec_bench.contracts.experiment_manifest import ComputeConfig, ExperimentManifest, TaskSelector
+    from aec_bench.contracts.run_plan import SingleAttemptRecipe
     from aec_bench.evolution.snapshot import serialise_snapshot
-    from aec_bench.harness.artifact_tasks import SingleAttemptSpec, run_experiment
+    from aec_bench.harness.artifact_tasks import run_experiment
     from aec_bench.harness.harbor_runtime import HarborExperimentRuntime
     from aec_bench.harness.harbor_workflow import SynchronousHarborWorkflow
 
@@ -844,7 +845,7 @@ def _build_harbor_candidate_evaluator(
                 runtime=runtime,
                 tasks=list(batch.tasks),
                 trials=trials,
-                recipe=SingleAttemptSpec(),
+                recipe=SingleAttemptRecipe(),
             )
         )
 

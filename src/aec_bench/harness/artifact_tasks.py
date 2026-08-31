@@ -13,9 +13,9 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Annotated, Any, Literal, Protocol, cast
+from typing import Any, Literal, Protocol, cast
 
-from pydantic import BaseModel, Field, PositiveInt
+from pydantic import BaseModel
 
 from aec_bench.adapters.base import Adapter, AdapterRequest, AdapterResult
 from aec_bench.contracts.agent_output import AgentOutputStatus
@@ -31,6 +31,7 @@ from aec_bench.contracts.identity import (
     validate_uuidv7,
 )
 from aec_bench.contracts.resolved_run import ResolvedRunSpec
+from aec_bench.contracts.run_plan import AttemptRecipe as CanonicalAttemptRecipe
 from aec_bench.contracts.run_plan import BestOfAttemptRecipe, RunPlan
 from aec_bench.contracts.run_plan import PlannedTrial as CanonicalPlannedTrial
 from aec_bench.contracts.run_plan import SingleAttemptRecipe as CanonicalSingleAttemptRecipe
@@ -42,7 +43,6 @@ from aec_bench.contracts.trial_record import (
     PlannedTrialBinding,
     TrialRecord,
 )
-from aec_bench.contracts.validators import StrictModel
 from aec_bench.evaluation.normalisation import NormalisationResult, normalise_output
 from aec_bench.evaluation.verifier_outcome import map_verifier_execution
 from aec_bench.execution.models import (
@@ -59,6 +59,15 @@ from aec_bench.execution.models import (
     WorkerOutcome,
 )
 from aec_bench.execution.operational import AttemptRecord, OperationalStore, WorkItemRecord
+from aec_bench.harness.artifact.recipes import (
+    AttemptRecipe,
+    AttemptRunner,
+    best_of,
+    build_attempt_recipe,
+    self_select,
+    single_attempt,
+)
+from aec_bench.harness.artifact.values import AttemptSelection, AttemptSelectionEvidence, TaskAttempt
 from aec_bench.harness.compilation.task_snapshot import TaskSnapshotError, assert_task_snapshot_matches_directory
 from aec_bench.harness.local_runtime import (
     cleanup_workspace,
@@ -108,146 +117,16 @@ _VERIFIER_RETRY_ARTIFACT_SUFFIXES = (
 _VERIFIER_RETRY_EXCLUDED_PREFIXES = ("expected_", "input_", "prior_", "source_")
 
 
-class AttemptRunner(Protocol):
-    def __call__(
-        self,
-        *,
-        attempt_id: str,
-        parent: TaskAttempt | None = None,
-        instruction: str | None = None,
-    ) -> TaskAttempt: ...
-
-
-class AttemptRecipe(Protocol):
-    def __call__(self, run_once: AttemptRunner) -> AttemptSelection: ...
-
-
 class ImportedExperimentRuntime(Protocol):
     def run_experiment(
         self,
         *,
         tasks: Sequence[ResolvedTaskInstance],
         trials: Sequence[PlannedTrial],
-        recipe_spec: AttemptRecipeSpec,
+        recipe_spec: CanonicalAttemptRecipe,
         reviewer: ReviewerRunConfig | None,
         verify: bool,
     ) -> list[TrialRecord]: ...
-
-
-class AttemptSelector(Protocol):
-    def __call__(self, candidates: Sequence[SelectorCandidate]) -> SelectorDecision: ...
-
-
-@dataclass(frozen=True)
-class SelectorCandidate:
-    index: int
-    attempt_id: str
-    status: AgentOutputStatus
-    primary_output: bytes | None
-    output_reference: ArtifactReference | None
-
-    @property
-    def eligible(self) -> bool:
-        return self.status is AgentOutputStatus.COMPLETED and bool(self.primary_output)
-
-
-@dataclass(frozen=True)
-class SelectorDecision:
-    selected_index: int | None
-    reason: str
-    configuration: Mapping[str, object]
-    model_calls: int = 0
-    input_tokens: int = 0
-    output_tokens: int = 0
-    cache_read_tokens: int = 0
-    cache_write_tokens: int = 0
-
-
-class CandidateAttemptEvidence(StrictModel):
-    index: int
-    attempt_id: str
-    status: AgentOutputStatus
-    elapsed_seconds: float
-    eligible: bool
-    selector_visible_output: ArtifactReference | None = None
-
-
-class SelectorEvidence(StrictModel):
-    kind: Literal["self"] = "self"
-    configuration: dict[str, object]
-    model_calls: int = 0
-    input_tokens: int = 0
-    output_tokens: int = 0
-    cache_read_tokens: int = 0
-    cache_write_tokens: int = 0
-    selected_index: int | None = None
-
-
-class AttemptSelectionEvidence(StrictModel):
-    candidates: tuple[CandidateAttemptEvidence, ...]
-    selector: SelectorEvidence
-    decision: Literal["selected", "failed"]
-    reason: str
-    selected_index: int | None = None
-
-
-class SelfSelectorSpec(StrictModel):
-    kind: Literal["self"] = "self"
-
-
-class SingleAttemptSpec(StrictModel):
-    kind: Literal["single_attempt"] = "single_attempt"
-
-
-class BestOfSpec(StrictModel):
-    kind: Literal["best_of"] = "best_of"
-    candidates: PositiveInt
-    selector: SelfSelectorSpec = Field(default_factory=SelfSelectorSpec)
-
-
-AttemptRecipeSpec = Annotated[SingleAttemptSpec | BestOfSpec, Field(discriminator="kind")]
-
-
-@dataclass(frozen=True)
-class TaskAttempt:
-    attempt_id: str
-    trial_id: str
-    parent_attempt_id: str | None
-    workspace: Path
-    request: AdapterRequest
-    result: AdapterResult
-    elapsed_seconds: float
-
-    @property
-    def status(self) -> AgentOutputStatus:
-        return self.result.agent_output.status
-
-
-@dataclass(frozen=True)
-class AttemptSelection:
-    attempt: TaskAttempt | None
-    decision: str
-    reason: str
-    evidence: AttemptSelectionEvidence | None = None
-
-    @classmethod
-    def selected(
-        cls,
-        attempt: TaskAttempt,
-        *,
-        reason: str,
-        evidence: AttemptSelectionEvidence | None = None,
-    ) -> AttemptSelection:
-        return cls(attempt=attempt, decision="selected", reason=reason, evidence=evidence)
-
-    @classmethod
-    def failed(
-        cls,
-        *,
-        reason: str,
-        evidence: AttemptSelectionEvidence | None = None,
-    ) -> AttemptSelection:
-        return cls(attempt=None, decision="failed", reason=reason, evidence=evidence)
 
 
 class LocalTaskRuntime:
@@ -405,6 +284,17 @@ class LocalTaskRuntime:
             result=result,
             output_source=output_source,
         )
+        selector_visible_output = output_path.read_bytes() if output_path.is_file() else None
+        output_reference = (
+            ArtifactReference(
+                kind="primary_output",
+                path=request.output_path,
+                sha256=hashlib.sha256(selector_visible_output).hexdigest(),
+                media_type="application/octet-stream",
+            )
+            if selector_visible_output
+            else None
+        )
         return TaskAttempt(
             attempt_id=attempt_id,
             trial_id=trial.trial_id,
@@ -413,6 +303,8 @@ class LocalTaskRuntime:
             request=request,
             result=result,
             elapsed_seconds=elapsed_seconds,
+            selector_visible_output=selector_visible_output,
+            output_reference=output_reference,
         )
 
     def _create_workspace(self, *, task: ResolvedTaskInstance, parent: TaskAttempt | None) -> Path:
@@ -420,7 +312,7 @@ class LocalTaskRuntime:
             self._work_root.mkdir(parents=True, exist_ok=True)
         if parent is None:
             capture_workspace_manifest(task.instance_dir, include_checksums=False)
-            workspace = Path(setup_workspace(str(task.instance_dir), work_root=self._work_root))
+            workspace = Path(setup_workspace(str(task.instance_dir), work_root=self._work_root)).resolve()
             self._copy_agent_files(workspace)
             patch_workspace_paths(str(workspace))
             self._workspace_manifests[workspace] = capture_workspace_manifest(workspace)
@@ -439,7 +331,7 @@ class LocalTaskRuntime:
             source_roles=parent_roles,
             default_source_role="actor_output",
         )
-        workspace = Path(tempfile.mkdtemp(prefix="aec-bench-local-", dir=self._work_root))
+        workspace = Path(tempfile.mkdtemp(prefix="aec-bench-local-", dir=self._work_root)).resolve()
         shutil.copytree(parent.workspace, workspace, dirs_exist_ok=True)
         shutil.rmtree(workspace / "tests", ignore_errors=True)
         shutil.rmtree(workspace / "logs" / "verifier", ignore_errors=True)
@@ -523,6 +415,24 @@ class LocalTaskRuntime:
             output_path=output_path,
             output_format="markdown" if Path(output_path).suffix.lower() == ".md" else "jsonl",
         )
+
+
+def resolve_workspace_path(workspace: Path, configured_path: str) -> Path:
+    """Resolve one configured artifact path below its attempt workspace."""
+
+    path = Path(configured_path)
+    if path.parts and path.parts[0] == "workspace":
+        path = Path(*path.parts[1:])
+    elif path.is_absolute() and path.parts[:2] == ("/", "workspace"):
+        path = Path(*path.parts[2:])
+    elif path.is_absolute() and path.parts[:2] == ("/", "logs"):
+        path = Path(*path.parts[1:])
+    elif path.is_absolute():
+        raise ValueError("task output path must resolve inside the attempt workspace")
+    candidate = (workspace / path).resolve()
+    if candidate != workspace.resolve() and workspace.resolve() not in candidate.parents:
+        raise ValueError("task output path must resolve inside the attempt workspace")
+    return candidate
 
 
 class ArtifactTrialAdapterError(RuntimeError):
@@ -610,14 +520,14 @@ class ArtifactTrialAdapter:
         finalization_path = self._finalization_path(trial)
         if record_path.exists() or finalization_path.exists():
             raise ArtifactTrialAdapterError(f"trial finalization already exists: {trial.trial_identity.id}")
-        legacy_trial = _legacy_trial_for_canonical(trial, stored.spec)
+        runtime_trial = _runtime_trial_for_planned_trial(trial, stored.spec)
         candidate_states: list[_CandidateState] = []
         recipe = self._bound_recipe(trial, work_item, attempt, candidate_states)
         try:
             record = run_trial(
                 runtime=self._runtime,
                 task=task,
-                trial=legacy_trial,
+                trial=runtime_trial,
                 recipe=recipe,
                 verify=self._verify,
                 keep_workspaces=self._keep_workspaces,
@@ -728,7 +638,7 @@ class ArtifactTrialAdapter:
         scheduler_attempt: AttemptRecord,
         candidate_states: list[_CandidateState],
     ) -> AttemptRecipe:
-        base_recipe = _legacy_recipe_for_canonical(trial)
+        base_recipe = _recipe_for_planned_trial(trial)
         candidate_count = (
             1 if isinstance(trial.attempt_recipe, CanonicalSingleAttemptRecipe) else trial.attempt_recipe.candidates
         )
@@ -921,22 +831,6 @@ class ArtifactTrialAdapter:
             target.publish_bytes(data=source.read_bytes(reference), media_type=reference.media_type)
 
 
-def resolve_workspace_path(workspace: Path, configured_path: str) -> Path:
-    path = Path(configured_path)
-    if path.parts and path.parts[0] == "workspace":
-        path = Path(*path.parts[1:])
-    elif path.is_absolute() and path.parts[:2] == ("/", "workspace"):
-        path = Path(*path.parts[2:])
-    elif path.is_absolute() and path.parts[:2] == ("/", "logs"):
-        path = Path(*path.parts[1:])
-    elif path.is_absolute():
-        raise ValueError("task output path must resolve inside the attempt workspace")
-    candidate = (workspace / path).resolve()
-    if candidate != workspace.resolve() and workspace.resolve() not in candidate.parents:
-        raise ValueError("task output path must resolve inside the attempt workspace")
-    return candidate
-
-
 def load_canonical_refs(task_toml_path: Path) -> CanonicalRefSet:
     if not task_toml_path.exists():
         return CanonicalRefSet()
@@ -1020,109 +914,6 @@ def _write_agent_result(
         "output_source": output_source,
     }
     (workspace / "agent_result.json").write_text(json.dumps(payload, indent=2), encoding="utf-8")
-
-
-def single_attempt() -> AttemptRecipe:
-    def recipe(run_once: AttemptRunner) -> AttemptSelection:
-        attempt = run_once(attempt_id="attempt-0")
-        return AttemptSelection.selected(attempt, reason="single attempt")
-
-    return recipe
-
-
-def self_select() -> AttemptSelector:
-    """Select the first eligible candidate with deterministic index tie-breaking."""
-
-    def selector(candidates: Sequence[SelectorCandidate]) -> SelectorDecision:
-        selected = next((candidate for candidate in candidates if candidate.eligible), None)
-        selected_index = None if selected is None else selected.index
-        return SelectorDecision(
-            selected_index=selected_index,
-            reason=("no candidate completed with a primary output" if selected is None else "first eligible candidate"),
-            configuration={"policy": "first_eligible", "tie_break": "lowest_candidate_index"},
-        )
-
-    return selector
-
-
-def best_of(*, k: int, selector: AttemptSelector) -> AttemptRecipe:
-    if k < 1:
-        raise ValueError("best-of candidate count must be positive")
-    if k == 1:
-        return single_attempt()
-
-    def recipe(run_once: AttemptRunner) -> AttemptSelection:
-        attempts = [run_once(attempt_id=f"attempt-{index}") for index in range(k)]
-        candidates = tuple(_selector_candidate(index=index, attempt=attempt) for index, attempt in enumerate(attempts))
-        decision = selector(candidates)
-        selected_index = decision.selected_index
-        if selected_index is not None and not 0 <= selected_index < len(attempts):
-            raise ValueError("selector returned an out-of-range candidate index")
-        selected: TaskAttempt | None
-        if selected_index is None:
-            selected = None
-        else:
-            selected = attempts[selected_index]
-            if not candidates[selected_index].eligible:
-                raise ValueError("selector returned an ineligible candidate")
-        evidence = AttemptSelectionEvidence(
-            candidates=tuple(
-                CandidateAttemptEvidence(
-                    index=candidate.index,
-                    attempt_id=candidate.attempt_id,
-                    status=candidate.status,
-                    elapsed_seconds=attempts[candidate.index].elapsed_seconds,
-                    eligible=candidate.eligible,
-                    selector_visible_output=candidate.output_reference,
-                )
-                for candidate in candidates
-            ),
-            selector=SelectorEvidence(
-                configuration=dict(decision.configuration),
-                model_calls=decision.model_calls,
-                input_tokens=decision.input_tokens,
-                output_tokens=decision.output_tokens,
-                cache_read_tokens=decision.cache_read_tokens,
-                cache_write_tokens=decision.cache_write_tokens,
-                selected_index=selected_index,
-            ),
-            decision="failed" if selected is None else "selected",
-            reason=decision.reason,
-            selected_index=selected_index,
-        )
-        if selected is None:
-            return AttemptSelection.failed(reason=decision.reason, evidence=evidence)
-        return AttemptSelection.selected(selected, reason=decision.reason, evidence=evidence)
-
-    return recipe
-
-
-def build_attempt_recipe(spec: AttemptRecipeSpec) -> AttemptRecipe:
-    if isinstance(spec, SingleAttemptSpec):
-        return single_attempt()
-    if isinstance(spec, BestOfSpec):
-        return best_of(k=spec.candidates, selector=self_select())
-    raise TypeError(f"unsupported attempt recipe specification: {type(spec).__name__}")
-
-
-def _selector_candidate(*, index: int, attempt: TaskAttempt) -> SelectorCandidate:
-    output_path = resolve_workspace_path(attempt.workspace, attempt.request.output_path)
-    content = output_path.read_bytes() if output_path.is_file() else None
-    reference = None
-    if content:
-        reference = ArtifactReference(
-            kind="primary_output",
-            path=attempt.request.output_path,
-            sha256=hashlib.sha256(content).hexdigest(),
-            media_type="application/octet-stream",
-        )
-    return SelectorCandidate(
-        index=index,
-        attempt_id=attempt.attempt_id,
-        status=attempt.status,
-        primary_output=content,
-        output_reference=reference,
-    )
 
 
 def run_trial(
@@ -1284,7 +1075,7 @@ def run_experiment(
     runtime: LocalTaskRuntime | ImportedExperimentRuntime,
     tasks: Sequence[ResolvedTaskInstance],
     trials: Sequence[PlannedTrial],
-    recipe: AttemptRecipe | AttemptRecipeSpec,
+    recipe: AttemptRecipe | CanonicalAttemptRecipe,
     reviewer: ReviewerRunConfig | None = None,
     verify: bool = True,
     keep_workspaces: bool = False,
@@ -1292,8 +1083,8 @@ def run_experiment(
     """Apply one attempt recipe directly to every planned artifact-task trial."""
 
     if not isinstance(runtime, LocalTaskRuntime):
-        if not isinstance(recipe, SingleAttemptSpec | BestOfSpec):
-            raise TypeError("imported experiment runtimes require an AttemptRecipeSpec")
+        if not isinstance(recipe, CanonicalSingleAttemptRecipe | BestOfAttemptRecipe):
+            raise TypeError("imported experiment runtimes require a canonical attempt recipe")
         return runtime.run_experiment(
             tasks=tasks,
             trials=trials,
@@ -1302,7 +1093,11 @@ def run_experiment(
             verify=verify,
         )
 
-    selected_recipe = build_attempt_recipe(recipe) if isinstance(recipe, SingleAttemptSpec | BestOfSpec) else recipe
+    selected_recipe = (
+        build_attempt_recipe(recipe)
+        if isinstance(recipe, CanonicalSingleAttemptRecipe | BestOfAttemptRecipe)
+        else recipe
+    )
 
     tasks_by_id: dict[str, ResolvedTaskInstance] = {}
     for task in tasks:
@@ -1369,13 +1164,13 @@ def run_persisted_artifact_plan(
     for trial in artifact_trials:
         task = tasks_by_id[trial.task_release.task_id]
         _validate_canonical_task_release(trial, task)
-        legacy_trial = _legacy_trial_for_canonical(trial, stored.spec)
+        runtime_trial = _runtime_trial_for_planned_trial(trial, stored.spec)
         records.append(
             run_trial(
                 runtime=runtime,
                 task=task,
-                trial=legacy_trial,
-                recipe=_legacy_recipe_for_canonical(trial),
+                trial=runtime_trial,
+                recipe=_recipe_for_planned_trial(trial),
                 reviewer=reviewer,
                 verify=verify,
                 keep_workspaces=keep_workspaces,
@@ -1397,7 +1192,7 @@ def _validate_canonical_task_release(trial: CanonicalPlannedTrial, task: Resolve
         raise ValueError(f"task release does not match planned snapshot: {reference.task_id}") from error
 
 
-def _legacy_trial_for_canonical(trial: CanonicalPlannedTrial, spec: ResolvedRunSpec) -> PlannedTrial:
+def _runtime_trial_for_planned_trial(trial: CanonicalPlannedTrial, spec: ResolvedRunSpec) -> PlannedTrial:
     from aec_bench.contracts.experiment_manifest import AgentConfig
 
     condition = trial.agent_condition
@@ -1419,7 +1214,7 @@ def _legacy_trial_for_canonical(trial: CanonicalPlannedTrial, spec: ResolvedRunS
     )
 
 
-def _legacy_recipe_for_canonical(trial: CanonicalPlannedTrial) -> AttemptRecipe:
+def _recipe_for_planned_trial(trial: CanonicalPlannedTrial) -> AttemptRecipe:
     if isinstance(trial.attempt_recipe, CanonicalSingleAttemptRecipe):
         return single_attempt()
     if isinstance(trial.attempt_recipe, BestOfAttemptRecipe):
@@ -2060,30 +1855,13 @@ def _aggregate_attempt_usage(
 
 
 __all__ = (
-    "AttemptRecipeSpec",
-    "AttemptRecipe",
-    "AttemptRunner",
-    "AttemptSelection",
-    "AttemptSelectionEvidence",
-    "AttemptSelector",
     "ArtifactTrialAdapter",
     "ArtifactTrialAdapterError",
     "ArtifactTrialExecution",
-    "BestOfSpec",
-    "CandidateAttemptEvidence",
     "ImportedExperimentRuntime",
     "LocalTaskRuntime",
-    "SelectorCandidate",
-    "SelectorDecision",
-    "SelfSelectorSpec",
-    "SingleAttemptSpec",
-    "TaskAttempt",
-    "best_of",
-    "build_attempt_recipe",
     "run_experiment",
     "run_persisted_artifact_plan",
     "run_trial",
     "run_trial_with_verifier_feedback",
-    "self_select",
-    "single_attempt",
 )

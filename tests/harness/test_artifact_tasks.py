@@ -9,21 +9,16 @@ import pytest
 from aec_bench.adapters.base import AdapterRequest, AdapterResult
 from aec_bench.contracts.agent_output import AgentOutput, AgentOutputStatus
 from aec_bench.contracts.experiment_manifest import AgentConfig, ComputeConfig
+from aec_bench.contracts.run_plan import BestOfAttemptRecipe
 from aec_bench.contracts.task_definition import EnvironmentSpec, VerifierSpec
 from aec_bench.contracts.trial_record import EvaluationStatus
+from aec_bench.harness.artifact.recipes import best_of, build_attempt_recipe, self_select, single_attempt
+from aec_bench.harness.artifact.values import AttemptSelection, AttemptSelectionEvidence, SelectorDecision
 from aec_bench.harness.artifact_tasks import (
-    AttemptSelection,
-    AttemptSelectionEvidence,
-    BestOfSpec,
     LocalTaskRuntime,
-    SelectorDecision,
-    best_of,
-    build_attempt_recipe,
     run_experiment,
     run_trial,
     run_trial_with_verifier_feedback,
-    self_select,
-    single_attempt,
 )
 from aec_bench.tasks.instance import resolve_instance_paths
 from aec_bench.trials import PlannedTrial
@@ -601,7 +596,7 @@ def test_best_of_returns_failed_trial_without_verification_when_all_candidates_f
         runtime=runtime,
         task=task,
         trial=_planned_trial(),
-        recipe=build_attempt_recipe(BestOfSpec(candidates=3)),
+        recipe=build_attempt_recipe(BestOfAttemptRecipe(candidates=3, selector="self")),
     )
 
     assert record.execution_status.value == "failed"

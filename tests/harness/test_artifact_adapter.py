@@ -17,10 +17,10 @@ from aec_bench.contracts.trial_record import EvaluationStatus
 from aec_bench.execution.models import RetryPolicy
 from aec_bench.execution.operational import AttemptRecord, OperationalStore, WorkItemRecord
 from aec_bench.execution.scheduler import LocalScheduler
+from aec_bench.harness.artifact.values import AttemptSelectionEvidence
 from aec_bench.harness.artifact_tasks import (
     ArtifactTrialAdapter,
     ArtifactTrialAdapterError,
-    AttemptSelectionEvidence,
     LocalTaskRuntime,
 )
 from aec_bench.ledger.artifact_repository import ArtifactRepository

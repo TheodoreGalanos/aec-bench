@@ -27,7 +27,8 @@ from aec_bench.experimentation.learning_studies.runtime import (
     LearningStudyOperations,
     ReleaseFeedbackRequest,
 )
-from aec_bench.harness.artifact_tasks import AdapterBuilder, LocalTaskRuntime, run_trial, single_attempt
+from aec_bench.harness.artifact.recipes import single_attempt
+from aec_bench.harness.artifact_tasks import AdapterBuilder, LocalTaskRuntime, run_trial
 from aec_bench.ledger.artifact_repository import ArtifactRepository
 from aec_bench.tasks.instance import ResolvedTaskInstance, resolve_instance_paths
 from aec_bench.tasks.loader import load_task_definition

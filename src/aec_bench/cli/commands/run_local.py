@@ -16,16 +16,10 @@ import typer
 from aec_bench.cli.optional_dependencies import require_optional_extra
 from aec_bench.cli.output import StructuredError, console, emit
 from aec_bench.contracts.experiment_manifest import AgentConfig, ComputeConfig
+from aec_bench.contracts.run_plan import BestOfAttemptRecipe, SingleAttemptRecipe
 from aec_bench.contracts.trial_record import TrialRecord
-from aec_bench.harness.artifact_tasks import (
-    BestOfSpec,
-    LocalTaskRuntime,
-    SelfSelectorSpec,
-    SingleAttemptSpec,
-    build_attempt_recipe,
-    run_trial,
-    run_trial_with_verifier_feedback,
-)
+from aec_bench.harness.artifact.recipes import build_attempt_recipe
+from aec_bench.harness.artifact_tasks import LocalTaskRuntime, run_trial, run_trial_with_verifier_feedback
 from aec_bench.harness.model_execution.llm_reviewer import (
     ReviewerEndpointConfig,
     ReviewerRunConfig,
@@ -274,9 +268,9 @@ def run_local(
         fail_on_error=fail_on_reviewer_error,
     )
     recipe_spec = (
-        SingleAttemptSpec()
+        SingleAttemptRecipe()
         if best_of_candidates == 1
-        else BestOfSpec(candidates=best_of_candidates, selector=SelfSelectorSpec())
+        else BestOfAttemptRecipe(candidates=best_of_candidates, selector="self")
     )
     recipe = build_attempt_recipe(recipe_spec)
 

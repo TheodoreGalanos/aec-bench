@@ -9,8 +9,9 @@ from pathlib import Path
 
 from aec_bench.contracts.execution_environment import HarborEnvironmentBinding
 from aec_bench.contracts.experiment_manifest import ExperimentManifest
+from aec_bench.contracts.run_plan import AttemptRecipe as CanonicalAttemptRecipe
+from aec_bench.contracts.run_plan import SingleAttemptRecipe
 from aec_bench.contracts.trial_record import TrialRecord
-from aec_bench.harness.artifact_tasks import AttemptRecipeSpec, SingleAttemptSpec
 from aec_bench.harness.harbor_dispatch import HarborCommandExecutor
 from aec_bench.harness.harbor_workflow import HarborWorkflowResult, SynchronousHarborWorkflow
 from aec_bench.harness.model_execution.llm_reviewer import ReviewerRunConfig
@@ -36,11 +37,11 @@ class HarborExperimentRuntime:
         *,
         tasks: Sequence[ResolvedTaskInstance],
         trials: Sequence[PlannedTrial],
-        recipe_spec: AttemptRecipeSpec,
+        recipe_spec: CanonicalAttemptRecipe,
         reviewer: ReviewerRunConfig | None,
         verify: bool,
     ) -> list[TrialRecord]:
-        if not isinstance(recipe_spec, SingleAttemptSpec):
+        if not isinstance(recipe_spec, SingleAttemptRecipe):
             raise ValueError(f"Harbor does not support attempt recipe: {recipe_spec.kind}")
         resolved_tasks = tuple(task.task for task in tasks)
         effective_manifest = self.manifest.model_copy(update={"disable_verification": not verify})

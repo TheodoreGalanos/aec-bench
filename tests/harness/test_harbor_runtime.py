@@ -7,7 +7,8 @@ from types import SimpleNamespace
 import pytest
 
 from aec_bench.contracts.experiment_manifest import AgentConfig, ComputeConfig, ExperimentManifest, TaskSelector
-from aec_bench.harness.artifact_tasks import BestOfSpec, SingleAttemptSpec, run_experiment
+from aec_bench.contracts.run_plan import BestOfAttemptRecipe, SingleAttemptRecipe
+from aec_bench.harness.artifact_tasks import run_experiment
 from aec_bench.harness.harbor_runtime import HarborExperimentRuntime
 from aec_bench.ledger.writer import write_trial_record
 from aec_bench.tasks.instance import resolve_instance_paths
@@ -75,7 +76,7 @@ def test_recorded_harbor_baseline_returns_exact_imported_trial_meaning(tmp_path:
         runtime=runtime,
         tasks=[task],
         trials=trials,
-        recipe=SingleAttemptSpec(),
+        recipe=SingleAttemptRecipe(),
     )
 
     assert [record.model_dump(mode="json") for record in records] == [expected.model_dump(mode="json")]
@@ -93,7 +94,7 @@ def test_harbor_rejects_unsupported_best_of_before_dispatch(tmp_path: Path) -> N
             runtime=runtime,
             tasks=[task],
             trials=trials,
-            recipe=BestOfSpec(candidates=2),
+            recipe=BestOfAttemptRecipe(candidates=2, selector="self"),
         )
 
     assert workflow.calls == []
@@ -102,7 +103,7 @@ def test_harbor_rejects_unsupported_best_of_before_dispatch(tmp_path: Path) -> N
 def test_imported_runtime_requires_serializable_recipe_spec(tmp_path: Path) -> None:
     task, trials, _expected, _workflow, runtime = _inputs(tmp_path)
 
-    with pytest.raises(TypeError, match="AttemptRecipeSpec"):
+    with pytest.raises(TypeError, match="canonical attempt recipe"):
         run_experiment(
             runtime=runtime,
             tasks=[task],
