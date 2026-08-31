@@ -20,6 +20,11 @@ from aec_bench.contracts.identity import EntityIdentity, EntityKey
 from aec_bench.contracts.lifecycle_evaluation import LifecycleGateResult, LifecycleVerificationResult
 from aec_bench.contracts.trial_record import TrialRecord
 from aec_bench.contracts.validators import NonEmptyStr, StrictModel
+from aec_bench.lifecycles.runtime.definition import (
+    LifecycleDefinition,
+    LifecycleOwnerDescriptor,
+    shared_executable_source_roots,
+)
 from aec_bench.lifecycles.runtime.lifecycle import load_validated_lifecycle_submissions
 from aec_bench.templates.builtin.structural.facade_submittal_source_policy_package import (
     engine as facade_submittal_engine,
@@ -589,3 +594,30 @@ accepted lifecycle evidence after progression completes.
 
 def _json_text(payload: object) -> str:
     return json.dumps(payload, indent=2, sort_keys=True) + "\n"
+
+
+LIFECYCLE_DESCRIPTOR = LifecycleOwnerDescriptor(
+    definition=LifecycleDefinition(
+        metadata=METADATA,
+        lifecycle=LIFECYCLE,
+        materializer=materialize_facade_submittal_lifecycle,
+        verifier=verify_facade_submittal_lifecycle,
+        executable_source_roots=(
+            *shared_executable_source_roots(),
+            Path(__file__).resolve().parent / "__init__.py",
+            Path(__file__).resolve(),
+            Path(__file__).resolve().parents[2]
+            / "templates"
+            / "builtin"
+            / "structural"
+            / "facade_submittal_source_policy_package"
+            / "engine.py",
+            Path(__file__).resolve().parents[2]
+            / "templates"
+            / "builtin"
+            / "structural"
+            / "facade_submittal_source_policy_package"
+            / "params.toml",
+        ),
+    )
+)

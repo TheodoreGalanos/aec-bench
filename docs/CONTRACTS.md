@@ -419,6 +419,12 @@ variants use `MemberIdentity` values that bind their UUIDs and readable keys to
 the parent lifecycle UUID and the exact owner registration ID. The lifecycle
 catalogue validates UUID, key, registration, and parent uniqueness before it
 resolves a definition.
+Each concrete lifecycle owner exposes one immutable `LifecycleOwnerDescriptor`.
+The runtime loads the committed generated lifecycle composition from the
+explicit owner list; it does not scan the filesystem, use import side effects,
+or keep a mutable registration store. Generated entries are sorted by
+`template_id`. Executable source checksums remain build-integrity metadata and
+are separate from lifecycle and variant entity identities.
 The internal application values are `CompiledLifecycle`, `LifecycleTrial`, and
 `LifecycleExecution`. They are ordinary in-memory values, not persisted
 schemas. `CompiledLifecycle` binds current package bytes to the lifecycle,

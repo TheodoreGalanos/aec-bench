@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 from uuid import UUID
 
+import aec_bench.lifecycles.stormwater_design.hydraulic_review_variants as hydraulic_review_variants
 from aec_bench.contracts.evidence_lifecycle import (
     ConditionalOperationSpec,
     EvidenceCheckpointSpec,
@@ -15,7 +16,13 @@ from aec_bench.contracts.evidence_lifecycle import (
     LifecycleOperationSpec,
     LifecycleTaskMetadata,
 )
-from aec_bench.contracts.identity import EntityIdentity, EntityKey
+from aec_bench.contracts.identity import EntityIdentity, EntityKey, MemberIdentity
+from aec_bench.lifecycles.runtime.definition import (
+    LifecycleDefinition,
+    LifecycleOwnerDescriptor,
+    shared_executable_source_roots,
+)
+from aec_bench.lifecycles.runtime.episode import LifecycleEpisodeEnvironment
 from aec_bench.lifecycles.stormwater_design.hydraulic_operations import HydraulicOperationResolver
 from aec_bench.lifecycles.stormwater_design.hydraulic_review_variants import (
     DEFAULT_VARIANT_ID,
@@ -425,3 +432,53 @@ def _read_json(path: Path) -> dict[str, Any]:
     if not isinstance(payload, dict):
         raise ValueError(f"expected JSON object: {path}")
     return payload
+
+
+def _build_smoke_environment(package_dir: Path) -> LifecycleEpisodeEnvironment:
+    from aec_bench.lifecycles.stormwater_design.hydraulic_review_smoke import (
+        build_hydraulic_review_smoke_environment,
+    )
+
+    return build_hydraulic_review_smoke_environment(package_dir)
+
+
+LIFECYCLE_DESCRIPTOR = LifecycleOwnerDescriptor(
+    definition=LifecycleDefinition(
+        metadata=METADATA,
+        lifecycle=LIFECYCLE,
+        materializer=materialize_hydraulic_review_lifecycle,
+        verifier=verify_hydraulic_review_lifecycle,
+        executable_source_roots=(
+            *shared_executable_source_roots(),
+            Path(__file__).resolve().parent / "__init__.py",
+            Path(__file__).resolve(),
+            Path(hydraulic_review_variants.__file__).resolve(),
+            Path(__file__).resolve().parent / "hydraulic_review_smoke.py",
+            Path(__file__).resolve().parent / "hydraulic_smoke.py",
+            Path(__file__).resolve().parent / "hydraulic_evidence.py",
+            Path(__file__).resolve().parent / "hydraulic_operations.py",
+            Path(__file__).resolve().parent / "hydraulic_review_verifier.py",
+            Path(__file__).resolve().parent / "hydraulics",
+        ),
+        variant_identities=tuple(
+            MemberIdentity(
+                id=UUID(identity_id),
+                key=EntityKey(f"{METADATA.identity.key}/{variant_id}"),
+                version=1,
+                parent_id=METADATA.identity.id,
+                registration_id=variant_id,
+            )
+            for variant_id, identity_id in (
+                ("administrative_no_op", "01a056f1-af83-7517-a1d6-2796e1c0f075"),
+                ("major_idf_revision", "01a056f1-af83-7f1a-8121-6d2800314a19"),
+                ("outlet_geometry_revision", "01a056f1-af83-71a1-84e7-16ed7ec1fd69"),
+                ("tailwater_revision", "01a056f1-af83-7eb1-920d-acc8734ecdd5"),
+            )
+        ),
+        variant_validator=validated_hydraulic_review_variant,
+        variant_ids=hydraulic_review_variants.list_hydraulic_review_variant_ids,
+        variant_metadata=hydraulic_review_variants.get_hydraulic_review_variant,
+        operation_resolver=build_hydraulic_operation_resolver,
+        smoke_environment=_build_smoke_environment,
+    )
+)

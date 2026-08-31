@@ -17,6 +17,12 @@ from aec_bench.contracts.evidence_lifecycle import (
     LifecycleTaskMetadata,
 )
 from aec_bench.contracts.identity import EntityIdentity, EntityKey
+from aec_bench.lifecycles.runtime.definition import (
+    LifecycleDefinition,
+    LifecycleOwnerDescriptor,
+    shared_executable_source_roots,
+)
+from aec_bench.lifecycles.runtime.episode import LifecycleEpisodeEnvironment
 from aec_bench.lifecycles.stormwater_design.hydraulics.interventions import (
     build_hydraulic_intervention_source_state,
     build_hydraulic_problem_source_state,
@@ -419,3 +425,35 @@ def _read_json(path: Path) -> dict[str, Any]:
     if not isinstance(payload, dict):
         raise ValueError(f"expected JSON object: {path}")
     return payload
+
+
+def _build_smoke_environment(package_dir: Path) -> LifecycleEpisodeEnvironment:
+    from aec_bench.lifecycles.stormwater_design.design_response_smoke import (
+        build_hydraulic_design_response_smoke_environment,
+    )
+
+    return build_hydraulic_design_response_smoke_environment(package_dir)
+
+
+LIFECYCLE_DESCRIPTOR = LifecycleOwnerDescriptor(
+    definition=LifecycleDefinition(
+        metadata=METADATA,
+        lifecycle=LIFECYCLE,
+        materializer=materialize_hydraulic_design_response_lifecycle,
+        verifier=verify_hydraulic_design_response_lifecycle,
+        executable_source_roots=(
+            *shared_executable_source_roots(),
+            Path(__file__).resolve().parent / "__init__.py",
+            Path(__file__).resolve(),
+            Path(__file__).resolve().parent / "design_response_smoke.py",
+            Path(__file__).resolve().parent / "hydraulic_smoke.py",
+            Path(__file__).resolve().parent / "design_response_operations.py",
+            Path(__file__).resolve().parent / "design_response_verifier.py",
+            Path(__file__).resolve().parent / "hydraulic_evidence.py",
+            Path(__file__).resolve().parent / "hydraulic_operations.py",
+            Path(__file__).resolve().parent / "hydraulics",
+        ),
+        operation_resolver=build_hydraulic_design_response_resolver,
+        smoke_environment=_build_smoke_environment,
+    )
+)

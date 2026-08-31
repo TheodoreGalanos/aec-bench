@@ -10,13 +10,19 @@ from pathlib import Path
 from typing import Any
 from uuid import UUID
 
+import aec_bench.lifecycles.stormwater_design.drainage_variants as drainage_variants
 from aec_bench.contracts.evidence_lifecycle import (
     EvidenceCheckpointSpec,
     EvidenceLifecycleSpec,
     LifecycleTaskMetadata,
 )
-from aec_bench.contracts.identity import EntityIdentity, EntityKey
+from aec_bench.contracts.identity import EntityIdentity, EntityKey, MemberIdentity
 from aec_bench.evaluation.lifecycle import score_semantic_transitions
+from aec_bench.lifecycles.runtime.definition import (
+    LifecycleDefinition,
+    LifecycleOwnerDescriptor,
+    shared_executable_source_roots,
+)
 from aec_bench.lifecycles.runtime.lifecycle import load_validated_lifecycle_submissions
 from aec_bench.lifecycles.stormwater_design.drainage_variants import (
     DrainageLifecycleVariantContent,
@@ -1120,6 +1126,42 @@ def _read_json(path: Path) -> dict[str, Any]:
     if not isinstance(payload, dict):
         raise ValueError(f"expected JSON object in {path}")
     return payload
+
+
+LIFECYCLE_DESCRIPTOR = LifecycleOwnerDescriptor(
+    definition=LifecycleDefinition(
+        metadata=METADATA,
+        lifecycle=LIFECYCLE,
+        materializer=materialize_drainage_model_lifecycle,
+        verifier=verify_drainage_model_lifecycle,
+        executable_source_roots=(
+            *shared_executable_source_roots(),
+            Path(__file__).resolve().parent / "__init__.py",
+            Path(__file__).resolve(),
+            Path(drainage_variants.__file__).resolve(),
+        ),
+        variant_identities=tuple(
+            MemberIdentity(
+                id=UUID(identity_id),
+                key=EntityKey(f"{METADATA.identity.key}/{variant_id}"),
+                version=1,
+                parent_id=METADATA.identity.id,
+                registration_id=variant_id,
+            )
+            for variant_id, identity_id in (
+                ("memo_closeout_missing", "01a056f3-741c-7f76-8646-d100d0b7a571"),
+                ("response_assertion_only", "01a056f3-741c-704c-8eda-aeb793452501"),
+                ("semantic_no_op_release", "01a056f3-741c-7957-81d4-7e946a88136b"),
+                ("staged_full_correction", "01a056f1-af83-7500-bf33-a94f202eacab"),
+                ("staged_full_correction_guided", "01a056f1-af83-7531-a4ec-645676de4949"),
+                ("staged_full_correction_reduced", "01a056f1-af83-7079-a7b1-24ff1e8f3d2e"),
+            )
+        ),
+        variant_validator=validated_drainage_model_variant,
+        variant_ids=drainage_variants.list_drainage_model_variant_ids,
+        variant_metadata=drainage_variants.get_drainage_model_variant,
+    )
+)
 
 
 def _write_json(path: Path, payload: dict[str, Any]) -> None:
