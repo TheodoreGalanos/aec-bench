@@ -4,10 +4,7 @@
 import json
 from pathlib import Path
 
-from aec_bench.harness.artifact_tasks import (
-    apply_normalisation,
-    load_canonical_refs,
-)
+from aec_bench.harness.artifact.execution import apply_normalisation, load_canonical_refs
 
 
 def test_load_canonical_refs_from_task_toml(tmp_path: Path) -> None:
