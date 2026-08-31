@@ -425,6 +425,13 @@ explicit owner list; it does not scan the filesystem, use import side effects,
 or keep a mutable registration store. Generated entries are sorted by
 `template_id`. Executable source checksums remain build-integrity metadata and
 are separate from lifecycle and variant entity identities.
+The installed `aec-bench catalogue` commands build both generated Python
+catalogues from the explicit owner lists, check freshness and semantic validity,
+and compare a saved semantic snapshot. Snapshot identity uses each entity's
+UUID, canonical key, and version. A snapshot is a review input for catalogue
+changes.
+Runtime catalogue maps resolve the current definition by its existing owner
+registration ID or by canonical key or UUID with an exact version.
 The internal application values are `CompiledLifecycle`, `LifecycleTrial`, and
 `LifecycleExecution`. They are ordinary in-memory values, not persisted
 schemas. `CompiledLifecycle` binds current package bytes to the lifecycle,

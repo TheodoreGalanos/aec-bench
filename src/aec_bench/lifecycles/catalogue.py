@@ -8,6 +8,7 @@ from collections.abc import Callable
 from functools import cache
 from pathlib import Path
 from typing import Any
+from uuid import UUID
 
 from aec_bench.contracts.evidence_lifecycle import EvidenceLifecycleSpec, LifecycleTaskMetadata
 from aec_bench.contracts.identity import EntityIdentity, MemberIdentity
@@ -19,6 +20,8 @@ from aec_bench.lifecycles.runtime.lifecycle import validate_lifecycle_verificati
 from aec_bench.lifecycles.runtime.operation_protocol import LifecycleOperationResolver
 
 _DEFINITIONS = {definition.metadata.template_id: definition for definition in load_lifecycle_definitions()}
+_DEFINITIONS_BY_KEY = {str(definition.identity.key): definition for definition in _DEFINITIONS.values()}
+_DEFINITIONS_BY_ID = {definition.identity.id: definition for definition in _DEFINITIONS.values()}
 
 
 def _validate_definition_identities() -> None:
@@ -46,6 +49,17 @@ def lifecycle_definition(template_id: str) -> LifecycleDefinition:
     except KeyError as exc:
         known = ", ".join(sorted(_DEFINITIONS))
         raise KeyError(f"No lifecycle task for {template_id!r}. Known: {known}") from exc
+
+
+def lifecycle_definition_by_identity(identity: UUID | str, *, version: int) -> LifecycleDefinition:
+    """Resolve one current lifecycle by UUID or canonical key and exact version."""
+
+    if version <= 0:
+        raise ValueError("lifecycle version must be positive")
+    definition = _DEFINITIONS_BY_ID.get(identity) if isinstance(identity, UUID) else _DEFINITIONS_BY_KEY.get(identity)
+    if definition is None or definition.identity.version != version:
+        raise KeyError(f"unknown lifecycle identity and version: {identity} version {version}")
+    return definition
 
 
 def lifecycle_identity(template_id: str) -> EntityIdentity:

@@ -50,6 +50,16 @@ def test_catalogue_resolves_exact_content_pinned_definition() -> None:
     assert catalogue.resolve(definition.ref) is definition
 
 
+def test_catalogue_resolves_current_world_by_key_or_uuid_and_exact_version() -> None:
+    catalogue = _catalogue()
+    definition = catalogue.get(PUMP_STATION_TASK_WORLD_ID)
+
+    assert catalogue.get_versioned(str(definition.identity.key), version=definition.identity.version) is definition
+    assert catalogue.get_versioned(definition.identity.id, version=definition.identity.version) is definition
+    with pytest.raises(KeyError, match="identity and version"):
+        catalogue.get_versioned(definition.identity.id, version=definition.identity.version + 1)
+
+
 def test_catalogue_rejects_stale_definition_reference() -> None:
     catalogue = _catalogue()
     definition = catalogue.get(PUMP_STATION_TASK_WORLD_ID)

@@ -9,7 +9,11 @@ from pathlib import Path
 
 import pytest
 
-from aec_bench.lifecycles.catalogue import lifecycle_definition, lifecycle_template_ids
+from aec_bench.lifecycles.catalogue import (
+    lifecycle_definition,
+    lifecycle_definition_by_identity,
+    lifecycle_template_ids,
+)
 from aec_bench.lifecycles.generated_catalogue import LIFECYCLE_DESCRIPTORS, load_lifecycle_definitions
 from aec_bench.lifecycles.runtime.definition import LifecycleOwnerDescriptor
 from aec_bench.lifecycles.stormwater_design.design_response import LIFECYCLE_DESCRIPTOR as DESIGN_RESPONSE_DESCRIPTOR
@@ -45,6 +49,18 @@ def test_generated_lifecycle_catalogue_has_stable_order_and_current_lookup() -> 
     assert template_ids == tuple(sorted(template_ids))
     assert set(template_ids) == lifecycle_template_ids()
     assert all(lifecycle_definition(template_id) in definitions for template_id in template_ids)
+
+
+def test_lifecycle_catalogue_resolves_key_or_uuid_and_exact_version() -> None:
+    definition = lifecycle_definition("hydraulic-interaction-lifecycle-review")
+
+    assert (
+        lifecycle_definition_by_identity(str(definition.identity.key), version=definition.identity.version)
+        is definition
+    )
+    assert lifecycle_definition_by_identity(definition.identity.id, version=definition.identity.version) is definition
+    with pytest.raises(KeyError, match="identity and version"):
+        lifecycle_definition_by_identity(definition.identity.id, version=definition.identity.version + 1)
 
 
 def test_generator_supports_another_lifecycle_owner_and_sorts_it() -> None:
