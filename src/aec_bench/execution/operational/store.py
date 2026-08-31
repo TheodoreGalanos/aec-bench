@@ -1,0 +1,831 @@
+# ABOUTME: Stores mutable execution coordination state in a small SQLite database.
+# ABOUTME: Keeps portable run plans and evidence files outside this operational store.
+
+from __future__ import annotations
+
+import sqlite3
+from collections.abc import Iterator
+from contextlib import contextmanager
+from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
+from importlib.metadata import PackageNotFoundError, version
+from pathlib import Path
+from typing import cast
+from uuid import UUID
+
+from aec_bench.contracts.identity import PortableRelativePath, validate_entity_key, validate_uuidv7
+from aec_bench.execution.operational.schema import SCHEMA_STATEMENTS, SCHEMA_VERSION
+
+
+class OperationalStoreError(RuntimeError):
+    """Base error for operational store failures."""
+
+
+class OperationalStoreConflict(OperationalStoreError):
+    """Raised when an immutable identity is written with different content."""
+
+
+class OperationalStoreNotFound(OperationalStoreError):
+    """Raised when a requested operational record does not exist."""
+
+
+class LeaseUnavailable(OperationalStoreError):
+    """Raised when another worker owns a non-expired lease."""
+
+
+@dataclass(frozen=True, slots=True)
+class RunRecord:
+    run_id: str
+    status: str
+    spec_ref: str
+    created_at: datetime
+    started_at: datetime | None
+    finished_at: datetime | None
+
+
+@dataclass(frozen=True, slots=True)
+class PlanRecord:
+    plan_id: str
+    run_id: str
+    state: str
+    plan_ref: str
+    created_at: datetime
+    updated_at: datetime
+
+
+@dataclass(frozen=True, slots=True)
+class PlannedTrialRecord:
+    trial_id: str
+    plan_id: str
+    run_id: str
+    ordinal: int
+    state: str
+    created_at: datetime
+    updated_at: datetime
+
+
+@dataclass(frozen=True, slots=True)
+class WorkItemRecord:
+    work_id: str
+    work_key: str
+    run_id: str
+    trial_id: str
+    kind: str
+    state: str
+    priority: int
+    created_at: datetime
+    updated_at: datetime
+
+
+@dataclass(frozen=True, slots=True)
+class AttemptRecord:
+    attempt_id: str
+    work_id: str
+    run_id: str
+    trial_id: str
+    attempt_number: int
+    lease_id: str | None
+    state: str
+    created_at: datetime
+    started_at: datetime | None
+    finished_at: datetime | None
+    updated_at: datetime
+
+
+@dataclass(frozen=True, slots=True)
+class BackendSubmissionRecord:
+    submission_id: str
+    attempt_id: str
+    backend: str
+    external_id: str | None
+    state: str
+    submitted_at: datetime
+    updated_at: datetime
+
+
+@dataclass(frozen=True, slots=True)
+class LeaseRecord:
+    lease_id: str
+    work_id: str
+    owner: str
+    acquired_at: datetime
+    expires_at: datetime
+    heartbeat_at: datetime
+    state: str
+    released_at: datetime | None
+
+
+class OperationalStore:
+    """Short-transaction repository for mutable execution state."""
+
+    def __init__(self, path: Path, *, application_version: str | None = None) -> None:
+        self.path = Path(path).expanduser().absolute()
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        self.application_version = _required_text(application_version or _installed_version(), "application_version")
+        self._initialize_schema()
+
+    def schema_version(self) -> int:
+        with self._connection() as connection:
+            row = connection.execute("SELECT schema_version FROM operational_schema WHERE singleton = 1").fetchone()
+        if row is None:
+            raise OperationalStoreError("operational schema metadata is missing; recreate the local database")
+        return int(row[0])
+
+    def create_run(
+        self, run_id: UUID | str, *, spec_ref: str, status: str = "created", now: datetime | None = None
+    ) -> RunRecord:
+        selected_id = _required_id(run_id, "run_id")
+        selected_status = _checked_status(status, {"created", "ready", "running", "completed", "failed", "cancelled"})
+        created_at = _aware(now or datetime.now(UTC), "now")
+        selected_ref = _required_ref(spec_ref, "spec_ref")
+        stamp = _timestamp(created_at)
+        with self._connection(immediate=True) as connection:
+            existing = connection.execute(
+                "SELECT spec_ref, status FROM operational_runs WHERE run_id = ?", (selected_id,)
+            ).fetchone()
+            if existing is not None:
+                if existing[0] != selected_ref:
+                    raise OperationalStoreConflict(f"run identity already has different content: {selected_id}")
+                return self._run_from_row(
+                    connection.execute("SELECT * FROM operational_runs WHERE run_id = ?", (selected_id,)).fetchone()
+                )
+            connection.execute(
+                "INSERT INTO operational_runs (run_id,status,spec_ref,created_at,updated_at) VALUES (?,?,?,?,?)",
+                (selected_id, selected_status, selected_ref, stamp, stamp),
+            )
+            return self._run_from_row(
+                connection.execute("SELECT * FROM operational_runs WHERE run_id = ?", (selected_id,)).fetchone()
+            )
+
+    def update_run(self, run_id: UUID | str, *, status: str, now: datetime | None = None) -> RunRecord:
+        selected_id = _required_id(run_id, "run_id")
+        selected_status = _checked_status(status, {"created", "ready", "running", "completed", "failed", "cancelled"})
+        stamp = _timestamp(_aware(now or datetime.now(UTC), "now"))
+        with self._connection(immediate=True) as connection:
+            self._require_row(connection, "operational_runs", "run_id", selected_id)
+            started_at = stamp if selected_status == "running" else None
+            finished_at = stamp if selected_status in {"completed", "failed", "cancelled"} else None
+            connection.execute(
+                "UPDATE operational_runs SET status = ?, started_at = COALESCE(started_at, ?), "
+                "finished_at = COALESCE(finished_at, ?), updated_at = ? WHERE run_id = ?",
+                (selected_status, started_at, finished_at, stamp, selected_id),
+            )
+            return self._run_from_row(
+                connection.execute("SELECT * FROM operational_runs WHERE run_id = ?", (selected_id,)).fetchone()
+            )
+
+    def get_run(self, run_id: UUID | str) -> RunRecord:
+        selected_id = _required_id(run_id, "run_id")
+        with self._connection() as connection:
+            return self._run_from_row(self._require_row(connection, "operational_runs", "run_id", selected_id))
+
+    def put_plan(
+        self,
+        plan_id: UUID | str,
+        *,
+        run_id: UUID | str,
+        plan_ref: str,
+        state: str = "draft",
+        now: datetime | None = None,
+    ) -> PlanRecord:
+        selected_plan = _required_id(plan_id, "plan_id")
+        selected_run = _required_id(run_id, "run_id")
+        selected_state = _checked_status(state, {"draft", "ready", "started", "closed"})
+        selected_ref = _required_ref(plan_ref, "plan_ref")
+        stamp = _timestamp(_aware(now or datetime.now(UTC), "now"))
+        with self._connection(immediate=True) as connection:
+            self._require_row(connection, "operational_runs", "run_id", selected_run)
+            existing = connection.execute(
+                "SELECT * FROM operational_plans WHERE plan_id = ?", (selected_plan,)
+            ).fetchone()
+            if existing is not None:
+                if existing[1] != selected_run or existing[3] != selected_ref:
+                    raise OperationalStoreConflict(f"plan identity already has different content: {selected_plan}")
+                return self._plan_from_row(existing)
+            connection.execute(
+                "INSERT INTO operational_plans "
+                "(plan_id,run_id,state,plan_ref,created_at,updated_at) VALUES (?,?,?,?,?,?)",
+                (selected_plan, selected_run, selected_state, selected_ref, stamp, stamp),
+            )
+            return self._plan_from_row(
+                connection.execute("SELECT * FROM operational_plans WHERE plan_id = ?", (selected_plan,)).fetchone()
+            )
+
+    def get_plan(self, plan_id: UUID | str) -> PlanRecord:
+        selected_id = _required_id(plan_id, "plan_id")
+        with self._connection() as connection:
+            return self._plan_from_row(self._require_row(connection, "operational_plans", "plan_id", selected_id))
+
+    def put_planned_trial(
+        self,
+        trial_id: UUID | str,
+        *,
+        plan_id: UUID | str,
+        run_id: UUID | str,
+        ordinal: int,
+        state: str = "planned",
+        now: datetime | None = None,
+    ) -> PlannedTrialRecord:
+        selected_trial = _required_id(trial_id, "trial_id")
+        selected_plan = _required_id(plan_id, "plan_id")
+        selected_run = _required_id(run_id, "run_id")
+        if ordinal <= 0:
+            raise ValueError("ordinal must be greater than zero")
+        selected_state = _checked_status(
+            state,
+            {"planned", "queued", "running", "succeeded", "failed", "cancelled", "invalid", "unknown"},
+        )
+        stamp = _timestamp(_aware(now or datetime.now(UTC), "now"))
+        with self._connection(immediate=True) as connection:
+            plan = self._require_row(connection, "operational_plans", "plan_id", selected_plan)
+            self._require_row(connection, "operational_runs", "run_id", selected_run)
+            if plan[1] != selected_run:
+                raise OperationalStoreConflict("planned trial plan belongs to a different run")
+            existing = connection.execute(
+                "SELECT * FROM operational_planned_trials WHERE trial_id = ?", (selected_trial,)
+            ).fetchone()
+            if existing is not None:
+                if existing[1:4] != (selected_plan, selected_run, ordinal):
+                    raise OperationalStoreConflict(f"trial identity already has different content: {selected_trial}")
+                return self._trial_from_row(existing)
+            ordinal_owner = connection.execute(
+                "SELECT trial_id FROM operational_planned_trials WHERE plan_id = ? AND ordinal = ?",
+                (selected_plan, ordinal),
+            ).fetchone()
+            if ordinal_owner is not None:
+                raise OperationalStoreConflict(
+                    f"plan ordinal already belongs to another trial: {selected_plan} ordinal {ordinal}"
+                )
+            connection.execute(
+                "INSERT INTO operational_planned_trials "
+                "(trial_id,plan_id,run_id,ordinal,state,created_at,updated_at) VALUES (?,?,?,?,?,?,?)",
+                (selected_trial, selected_plan, selected_run, ordinal, selected_state, stamp, stamp),
+            )
+            return self._trial_from_row(
+                connection.execute(
+                    "SELECT * FROM operational_planned_trials WHERE trial_id = ?", (selected_trial,)
+                ).fetchone()
+            )
+
+    def get_planned_trial(self, trial_id: UUID | str) -> PlannedTrialRecord:
+        selected_id = _required_id(trial_id, "trial_id")
+        with self._connection() as connection:
+            return self._trial_from_row(
+                self._require_row(connection, "operational_planned_trials", "trial_id", selected_id)
+            )
+
+    def create_work_item(
+        self,
+        work_id: UUID | str,
+        *,
+        work_key: str,
+        run_id: UUID | str,
+        trial_id: UUID | str,
+        kind: str = "trial",
+        priority: int = 0,
+        now: datetime | None = None,
+    ) -> WorkItemRecord:
+        selected_id = _required_id(work_id, "work_id")
+        selected_key = _required_key(work_key, "work_key")
+        selected_run = _required_id(run_id, "run_id")
+        selected_trial = _required_id(trial_id, "trial_id")
+        selected_kind = _required_text(kind, "kind")
+        stamp = _timestamp(_aware(now or datetime.now(UTC), "now"))
+        with self._connection(immediate=True) as connection:
+            self._require_row(connection, "operational_runs", "run_id", selected_run)
+            trial = self._require_row(connection, "operational_planned_trials", "trial_id", selected_trial)
+            if trial[2] != selected_run:
+                raise OperationalStoreConflict("work item trial belongs to a different run")
+            existing = connection.execute(
+                "SELECT * FROM operational_work_items WHERE work_id = ?", (selected_id,)
+            ).fetchone()
+            if existing is not None:
+                immutable = (existing[1], existing[2], existing[3], existing[4], existing[6])
+                if immutable != (selected_key, selected_run, selected_trial, selected_kind, priority):
+                    raise OperationalStoreConflict(f"work item identity already has different content: {selected_id}")
+                return self._work_item_from_row(existing)
+            trial_owner = connection.execute(
+                "SELECT work_id FROM operational_work_items WHERE trial_id = ?", (selected_trial,)
+            ).fetchone()
+            if trial_owner is not None:
+                raise OperationalStoreConflict(f"trial already belongs to another work item: {selected_trial}")
+            key_owner = connection.execute(
+                "SELECT work_id FROM operational_work_items WHERE run_id = ? AND work_key = ?",
+                (selected_run, selected_key),
+            ).fetchone()
+            if key_owner is not None:
+                raise OperationalStoreConflict(f"work key already belongs to another work item: {selected_key}")
+            connection.execute(
+                "INSERT INTO operational_work_items "
+                "(work_id,work_key,run_id,trial_id,kind,state,priority,created_at,updated_at) "
+                "VALUES (?,?,?,?,?,?,?,?,?)",
+                (
+                    selected_id,
+                    selected_key,
+                    selected_run,
+                    selected_trial,
+                    selected_kind,
+                    "queued",
+                    priority,
+                    stamp,
+                    stamp,
+                ),
+            )
+            return self._work_item_from_row(
+                connection.execute("SELECT * FROM operational_work_items WHERE work_id = ?", (selected_id,)).fetchone()
+            )
+
+    def update_work_item(self, work_id: UUID | str, *, state: str, now: datetime | None = None) -> WorkItemRecord:
+        selected_id = _required_id(work_id, "work_id")
+        selected_state = _checked_status(
+            state,
+            {
+                "planned",
+                "queued",
+                "leased",
+                "running",
+                "cancel_requested",
+                "succeeded",
+                "failed",
+                "cancelled",
+                "invalid",
+                "unknown",
+            },
+        )
+        stamp = _timestamp(_aware(now or datetime.now(UTC), "now"))
+        with self._connection(immediate=True) as connection:
+            self._require_row(connection, "operational_work_items", "work_id", selected_id)
+            connection.execute(
+                "UPDATE operational_work_items SET state = ?, updated_at = ? WHERE work_id = ?",
+                (selected_state, stamp, selected_id),
+            )
+            return self._work_item_from_row(
+                connection.execute("SELECT * FROM operational_work_items WHERE work_id = ?", (selected_id,)).fetchone()
+            )
+
+    def get_work_item(self, work_id: UUID | str) -> WorkItemRecord:
+        selected_id = _required_id(work_id, "work_id")
+        with self._connection() as connection:
+            return self._work_item_from_row(
+                self._require_row(connection, "operational_work_items", "work_id", selected_id)
+            )
+
+    def create_attempt(
+        self,
+        attempt_id: UUID | str,
+        *,
+        work_id: UUID | str,
+        trial_id: UUID | str,
+        attempt_number: int = 1,
+        lease_id: UUID | str | None = None,
+        state: str = "created",
+        now: datetime | None = None,
+    ) -> AttemptRecord:
+        selected_id = _required_id(attempt_id, "attempt_id")
+        selected_work_item = _required_id(work_id, "work_id")
+        selected_trial = _required_id(trial_id, "trial_id")
+        selected_lease = None if lease_id is None else _required_id(lease_id, "lease_id")
+        if attempt_number <= 0:
+            raise ValueError("attempt_number must be greater than zero")
+        selected_state = _checked_status(
+            state, {"created", "submitted", "running", "succeeded", "failed", "cancelled", "unknown"}
+        )
+        stamp = _timestamp(_aware(now or datetime.now(UTC), "now"))
+        with self._connection(immediate=True) as connection:
+            item = self._require_row(connection, "operational_work_items", "work_id", selected_work_item)
+            trial = self._require_row(connection, "operational_planned_trials", "trial_id", selected_trial)
+            if item[3] != selected_trial or trial[2] != item[2]:
+                raise OperationalStoreConflict("attempt work item and trial do not match")
+            if selected_lease is not None:
+                lease = self._require_row(connection, "operational_leases", "lease_id", selected_lease)
+                if lease[1] != selected_work_item:
+                    raise OperationalStoreConflict("attempt lease belongs to a different work item")
+                if lease[6] != "active":
+                    raise OperationalStoreConflict("attempt lease is not active")
+                if _parse_timestamp(lease[4]) <= _parse_timestamp(stamp):
+                    raise OperationalStoreConflict("attempt lease has expired")
+            existing = connection.execute(
+                "SELECT * FROM operational_attempts WHERE attempt_id = ?", (selected_id,)
+            ).fetchone()
+            if existing is not None:
+                immutable = (existing[1], existing[3], existing[4], existing[5])
+                if immutable != (selected_work_item, selected_trial, attempt_number, selected_lease):
+                    raise OperationalStoreConflict(f"attempt identity already has different content: {selected_id}")
+                return self._attempt_from_row(existing)
+            number_owner = connection.execute(
+                "SELECT attempt_id FROM operational_attempts WHERE work_id = ? AND attempt_number = ?",
+                (selected_work_item, attempt_number),
+            ).fetchone()
+            if number_owner is not None:
+                raise OperationalStoreConflict(
+                    f"attempt number already belongs to another attempt: {selected_work_item} attempt {attempt_number}"
+                )
+            connection.execute(
+                "INSERT INTO operational_attempts "
+                "(attempt_id,work_id,run_id,trial_id,attempt_number,lease_id,state,created_at,updated_at) "
+                "VALUES (?,?,?,?,?,?,?,?,?)",
+                (
+                    selected_id,
+                    selected_work_item,
+                    item[2],
+                    selected_trial,
+                    attempt_number,
+                    selected_lease,
+                    selected_state,
+                    stamp,
+                    stamp,
+                ),
+            )
+            return self._attempt_from_row(
+                connection.execute("SELECT * FROM operational_attempts WHERE attempt_id = ?", (selected_id,)).fetchone()
+            )
+
+    def get_attempt(self, attempt_id: UUID | str) -> AttemptRecord:
+        selected_id = _required_id(attempt_id, "attempt_id")
+        with self._connection() as connection:
+            return self._attempt_from_row(
+                self._require_row(connection, "operational_attempts", "attempt_id", selected_id)
+            )
+
+    def record_backend_submission(
+        self,
+        submission_id: UUID | str,
+        *,
+        attempt_id: UUID | str,
+        backend: str,
+        external_id: str | None = None,
+        state: str = "submitted",
+        now: datetime | None = None,
+    ) -> BackendSubmissionRecord:
+        selected_id = _required_id(submission_id, "submission_id")
+        selected_attempt = _required_id(attempt_id, "attempt_id")
+        selected_backend = _required_text(backend, "backend")
+        selected_state = _checked_status(state, {"submitted", "accepted", "running", "completed", "failed", "unknown"})
+        stamp = _timestamp(_aware(now or datetime.now(UTC), "now"))
+        with self._connection(immediate=True) as connection:
+            self._require_row(connection, "operational_attempts", "attempt_id", selected_attempt)
+            existing = connection.execute(
+                "SELECT * FROM operational_backend_submissions WHERE submission_id = ?", (selected_id,)
+            ).fetchone()
+            if existing is not None:
+                immutable = (existing[1], existing[2], existing[3])
+                if immutable != (selected_attempt, selected_backend, external_id):
+                    raise OperationalStoreConflict(f"submission identity already has different content: {selected_id}")
+                return self._submission_from_row(existing)
+            backend_owner = connection.execute(
+                "SELECT submission_id FROM operational_backend_submissions WHERE attempt_id = ? AND backend = ?",
+                (selected_attempt, selected_backend),
+            ).fetchone()
+            if backend_owner is not None:
+                raise OperationalStoreConflict(
+                    f"backend already has another submission for attempt: {selected_attempt} backend {selected_backend}"
+                )
+            connection.execute(
+                "INSERT INTO operational_backend_submissions "
+                "(submission_id,attempt_id,backend,external_id,state,submitted_at,updated_at) "
+                "VALUES (?,?,?,?,?,?,?)",
+                (
+                    selected_id,
+                    selected_attempt,
+                    selected_backend,
+                    external_id,
+                    selected_state,
+                    stamp,
+                    stamp,
+                ),
+            )
+            return self._submission_from_row(
+                connection.execute(
+                    "SELECT * FROM operational_backend_submissions WHERE submission_id = ?", (selected_id,)
+                ).fetchone()
+            )
+
+    def get_backend_submission(self, submission_id: UUID | str) -> BackendSubmissionRecord:
+        selected_id = _required_id(submission_id, "submission_id")
+        with self._connection() as connection:
+            return self._submission_from_row(
+                self._require_row(connection, "operational_backend_submissions", "submission_id", selected_id)
+            )
+
+    def list_planned_trials(self, plan_id: UUID | str) -> tuple[PlannedTrialRecord, ...]:
+        selected_id = _required_id(plan_id, "plan_id")
+        with self._connection() as connection:
+            rows = connection.execute(
+                "SELECT * FROM operational_planned_trials WHERE plan_id = ? ORDER BY ordinal", (selected_id,)
+            ).fetchall()
+        return tuple(self._trial_from_row(row) for row in rows)
+
+    def list_work_items(self, run_id: UUID | str) -> tuple[WorkItemRecord, ...]:
+        selected_id = _required_id(run_id, "run_id")
+        with self._connection() as connection:
+            rows = connection.execute(
+                "SELECT * FROM operational_work_items WHERE run_id = ? ORDER BY priority DESC, created_at",
+                (selected_id,),
+            ).fetchall()
+        return tuple(self._work_item_from_row(row) for row in rows)
+
+    def list_attempts(self, trial_id: UUID | str) -> tuple[AttemptRecord, ...]:
+        selected_id = _required_id(trial_id, "trial_id")
+        with self._connection() as connection:
+            rows = connection.execute(
+                "SELECT * FROM operational_attempts WHERE trial_id = ? ORDER BY attempt_number", (selected_id,)
+            ).fetchall()
+        return tuple(self._attempt_from_row(row) for row in rows)
+
+    def list_backend_submissions(self, attempt_id: UUID | str) -> tuple[BackendSubmissionRecord, ...]:
+        selected_id = _required_id(attempt_id, "attempt_id")
+        with self._connection() as connection:
+            rows = connection.execute(
+                "SELECT * FROM operational_backend_submissions WHERE attempt_id = ? ORDER BY submitted_at",
+                (selected_id,),
+            ).fetchall()
+        return tuple(self._submission_from_row(row) for row in rows)
+
+    def get_lease(self, lease_id: UUID | str) -> LeaseRecord:
+        selected_id = _required_id(lease_id, "lease_id")
+        with self._connection() as connection:
+            return self._lease_from_row(self._require_row(connection, "operational_leases", "lease_id", selected_id))
+
+    def acquire_lease(
+        self, work_id: UUID | str, *, owner: str, now: datetime, ttl: timedelta, lease_id: UUID | str | None = None
+    ) -> LeaseRecord:
+        selected_work_item = _required_id(work_id, "work_id")
+        selected_owner = _required_text(owner, "owner")
+        if ttl <= timedelta(0):
+            raise ValueError("lease ttl must be greater than zero")
+        selected_now = _aware(now, "now")
+        selected_lease_id = _required_id(lease_id or _new_id(), "lease_id")
+        acquired = _timestamp(selected_now)
+        expires = _timestamp(selected_now + ttl)
+        with self._connection(immediate=True) as connection:
+            work_item = self._require_row(connection, "operational_work_items", "work_id", selected_work_item)
+            existing = connection.execute(
+                "SELECT * FROM operational_leases WHERE work_id = ? AND state = 'active'", (selected_work_item,)
+            ).fetchone()
+            if existing is not None and _parse_timestamp(existing[4]) > selected_now:
+                raise LeaseUnavailable(f"work item lease is held by {existing[2]}")
+            if existing is None and work_item[5] != "queued":
+                raise LeaseUnavailable("work item is not queued")
+            if existing is not None:
+                connection.execute(
+                    "UPDATE operational_leases SET state = 'expired', released_at = expires_at WHERE lease_id = ?",
+                    (existing[0],),
+                )
+            connection.execute(
+                "INSERT INTO operational_leases "
+                "(lease_id,work_id,owner,acquired_at,expires_at,heartbeat_at,state) VALUES (?,?,?,?,?,?,'active')",
+                (selected_lease_id, selected_work_item, selected_owner, acquired, expires, acquired),
+            )
+            connection.execute(
+                "UPDATE operational_work_items SET state = 'leased', updated_at = ? WHERE work_id = ?",
+                (acquired, selected_work_item),
+            )
+            return self._lease_from_row(
+                connection.execute(
+                    "SELECT * FROM operational_leases WHERE lease_id = ?", (selected_lease_id,)
+                ).fetchone()
+            )
+
+    def renew_lease(self, lease_id: UUID | str, *, owner: str, now: datetime, ttl: timedelta) -> LeaseRecord:
+        selected_id = _required_id(lease_id, "lease_id")
+        selected_owner = _required_text(owner, "owner")
+        selected_now = _aware(now, "now")
+        if ttl <= timedelta(0):
+            raise ValueError("lease ttl must be greater than zero")
+        with self._connection(immediate=True) as connection:
+            lease = self._lease_from_row(self._require_row(connection, "operational_leases", "lease_id", selected_id))
+            if lease.state != "active":
+                raise LeaseUnavailable("lease is not active")
+            if lease.owner != selected_owner:
+                raise LeaseUnavailable("lease owner does not match")
+            if lease.expires_at <= selected_now:
+                raise LeaseUnavailable("lease has expired")
+            connection.execute(
+                "UPDATE operational_leases SET expires_at = ?, heartbeat_at = ? "
+                "WHERE lease_id = ? AND state = 'active'",
+                (_timestamp(selected_now + ttl), _timestamp(selected_now), selected_id),
+            )
+            return self._lease_from_row(
+                connection.execute("SELECT * FROM operational_leases WHERE lease_id = ?", (selected_id,)).fetchone()
+            )
+
+    def release_lease(self, lease_id: UUID | str, *, owner: str, now: datetime | None = None) -> LeaseRecord:
+        selected_id = _required_id(lease_id, "lease_id")
+        selected_owner = _required_text(owner, "owner")
+        released_at = _timestamp(_aware(now or datetime.now(UTC), "now"))
+        with self._connection(immediate=True) as connection:
+            lease = self._lease_from_row(self._require_row(connection, "operational_leases", "lease_id", selected_id))
+            if lease.state != "active":
+                raise LeaseUnavailable("lease is not active")
+            if lease.owner != selected_owner:
+                raise LeaseUnavailable("lease owner does not match")
+            connection.execute(
+                "UPDATE operational_leases SET state = 'released', released_at = ? WHERE lease_id = ?",
+                (released_at, selected_id),
+            )
+            connection.execute(
+                "UPDATE operational_work_items SET state = 'queued', updated_at = ? "
+                "WHERE work_id = ? AND state = 'leased'",
+                (released_at, lease.work_id),
+            )
+            return self._lease_from_row(
+                connection.execute("SELECT * FROM operational_leases WHERE lease_id = ?", (selected_id,)).fetchone()
+            )
+
+    @contextmanager
+    def _connection(self, *, immediate: bool = False) -> Iterator[sqlite3.Connection]:
+        connection = sqlite3.connect(self.path, timeout=30.0)
+        connection.row_factory = sqlite3.Row
+        connection.execute("PRAGMA foreign_keys = ON")
+        connection.execute("PRAGMA busy_timeout = 30000")
+        connection.execute("PRAGMA journal_mode = WAL")
+        connection.execute("PRAGMA synchronous = FULL")
+        try:
+            if immediate:
+                connection.execute("BEGIN IMMEDIATE")
+            yield connection
+            connection.commit()
+        except Exception:
+            connection.rollback()
+            raise
+        finally:
+            connection.close()
+
+    def _initialize_schema(self) -> None:
+        with self._connection(immediate=True) as connection:
+            connection.execute(
+                "CREATE TABLE IF NOT EXISTS operational_schema "
+                "(singleton INTEGER PRIMARY KEY CHECK (singleton = 1), schema_version INTEGER NOT NULL, "
+                "application_version TEXT NOT NULL, initialized_at TEXT NOT NULL)"
+            )
+            current = connection.execute("SELECT schema_version FROM operational_schema WHERE singleton = 1").fetchone()
+            if current is not None and int(current[0]) != SCHEMA_VERSION:
+                raise OperationalStoreError(
+                    "operational database schema is stale; delete and recreate this disposable local database"
+                )
+            for statement in SCHEMA_STATEMENTS:
+                connection.execute(statement)
+            if current is None:
+                connection.execute(
+                    "INSERT INTO operational_schema "
+                    "(singleton,schema_version,application_version,initialized_at) VALUES (1,?,?,?)",
+                    (SCHEMA_VERSION, self.application_version, _timestamp(datetime.now(UTC))),
+                )
+
+    @staticmethod
+    def _require_row(connection: sqlite3.Connection, table: str, column: str, value: str) -> sqlite3.Row:
+        row = connection.execute(f"SELECT * FROM {table} WHERE {column} = ?", (value,)).fetchone()
+        if row is None:
+            raise OperationalStoreNotFound(f"{table} record not found: {value}")
+        return cast(sqlite3.Row, row)
+
+    @staticmethod
+    def _run_from_row(row: sqlite3.Row) -> RunRecord:
+        return RunRecord(
+            row[0], row[1], row[2], _parse_timestamp(row[3]), _optional_timestamp(row[4]), _optional_timestamp(row[5])
+        )
+
+    @staticmethod
+    def _plan_from_row(row: sqlite3.Row) -> PlanRecord:
+        return PlanRecord(row[0], row[1], row[2], row[3], _parse_timestamp(row[4]), _parse_timestamp(row[5]))
+
+    @staticmethod
+    def _trial_from_row(row: sqlite3.Row) -> PlannedTrialRecord:
+        return PlannedTrialRecord(
+            row[0], row[1], row[2], row[3], row[4], _parse_timestamp(row[5]), _parse_timestamp(row[6])
+        )
+
+    @staticmethod
+    def _work_item_from_row(row: sqlite3.Row) -> WorkItemRecord:
+        return WorkItemRecord(
+            row[0],
+            row[1],
+            row[2],
+            row[3],
+            row[4],
+            row[5],
+            row[6],
+            _parse_timestamp(row[7]),
+            _parse_timestamp(row[8]),
+        )
+
+    @staticmethod
+    def _attempt_from_row(row: sqlite3.Row) -> AttemptRecord:
+        return AttemptRecord(
+            row[0],
+            row[1],
+            row[2],
+            row[3],
+            row[4],
+            row[5],
+            row[6],
+            _parse_timestamp(row[7]),
+            _optional_timestamp(row[8]),
+            _optional_timestamp(row[9]),
+            _parse_timestamp(row[10]),
+        )
+
+    @staticmethod
+    def _submission_from_row(row: sqlite3.Row) -> BackendSubmissionRecord:
+        return BackendSubmissionRecord(
+            row[0],
+            row[1],
+            row[2],
+            row[3],
+            row[4],
+            _parse_timestamp(row[5]),
+            _parse_timestamp(row[6]),
+        )
+
+    @staticmethod
+    def _lease_from_row(row: sqlite3.Row) -> LeaseRecord:
+        return LeaseRecord(
+            row[0],
+            row[1],
+            row[2],
+            _parse_timestamp(row[3]),
+            _parse_timestamp(row[4]),
+            _parse_timestamp(row[5]),
+            row[6],
+            _optional_timestamp(row[7]),
+        )
+
+
+def _required_id(value: UUID | str, label: str) -> str:
+    try:
+        return str(validate_uuidv7(value))
+    except (TypeError, ValueError) as error:
+        raise ValueError(f"{label} must be a UUIDv7") from error
+
+
+def _required_text(value: str, label: str) -> str:
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"{label} must not be blank")
+    return value
+
+
+def _required_key(value: str, label: str) -> str:
+    try:
+        return validate_entity_key(value)
+    except (TypeError, ValueError) as error:
+        raise ValueError(f"{label} must be a valid entity key") from error
+
+
+def _required_ref(value: str, label: str) -> str:
+    try:
+        return str(PortableRelativePath(_required_text(value, label)))
+    except (TypeError, ValueError) as error:
+        raise ValueError(f"{label} must be a portable relative reference") from error
+
+
+def _new_id() -> str:
+    from aec_bench.contracts.identity import EntityKind, new_entity_id
+
+    return str(new_entity_id(EntityKind.LEASE))
+
+
+def _installed_version() -> str:
+    try:
+        return version("aec-bench")
+    except PackageNotFoundError:
+        return "0.1.0"
+
+
+def _checked_status(value: str, allowed: set[str]) -> str:
+    if value not in allowed:
+        raise ValueError(f"unsupported status: {value}")
+    return value
+
+
+def _aware(value: datetime, label: str) -> datetime:
+    if value.tzinfo is None or value.utcoffset() is None:
+        raise ValueError(f"{label} must include a timezone")
+    return value.astimezone(UTC)
+
+
+def _timestamp(value: datetime) -> str:
+    return _aware(value, "timestamp").isoformat()
+
+
+def _parse_timestamp(value: str) -> datetime:
+    return datetime.fromisoformat(value).astimezone(UTC)
+
+
+def _optional_timestamp(value: str | None) -> datetime | None:
+    return None if value is None else _parse_timestamp(value)
+
+
+__all__ = (
+    "AttemptRecord",
+    "BackendSubmissionRecord",
+    "LeaseRecord",
+    "LeaseUnavailable",
+    "OperationalStore",
+    "OperationalStoreConflict",
+    "OperationalStoreError",
+    "OperationalStoreNotFound",
+    "PlanRecord",
+    "PlannedTrialRecord",
+    "RunRecord",
+    "WorkItemRecord",
+)
