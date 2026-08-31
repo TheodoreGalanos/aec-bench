@@ -1,0 +1,230 @@
+# ABOUTME: Runs the complete all-extras and optional-dependency qualification tiers overnight.
+# ABOUTME: Keeps slow replay, scale, platform, frontend, plugin, and provider checks out of pull-request latency.
+
+name: Nightly qualification
+
+on:
+  schedule:
+    - cron: "17 2 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  complete-python-suite:
+    name: Complete Python suite · shard ${{ matrix.shard_index }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        shard_index: [0, 1, 2, 3, 4, 5, 6, 7]
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Python 3.13.2
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13.2"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+        with:
+          enable-cache: true
+
+      - name: Install all optional dependencies
+        run: uv sync --frozen --all-extras
+
+      - name: Run complete all-extras test suite shard
+        run: uv run python scripts/run_test_shard.py --shard-index ${{ matrix.shard_index }} --shard-count 8
+
+  conformance-recovery-scale-query:
+    name: Conformance, recovery, scale, and query
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+      - name: Set up Python 3.13.2
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13.2"
+      - name: Install uv
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+        with:
+          enable-cache: true
+      - name: Install all optional dependencies
+        run: uv sync --frozen --all-extras
+      - name: Run conformance and recovery suites
+        run: >-
+          uv run pytest -q
+          tests/harness/test_artifact_ports.py
+          tests/harness/test_artifact_recipes.py
+          tests/harness/test_verifier_conformance.py
+          tests/harness/test_workspace_conformance.py
+          tests/worlds/
+          tests/lifecycles/runtime/
+          tests/lifecycles/test_lifecycle_conformance.py
+          tests/lifecycles/test_finalization.py
+          tests/execution/test_cancellation_retry.py
+          tests/execution/test_fault_injection_scale.py
+          tests/generation/test_replay.py
+          tests/communication/test_query.py
+          tests/ledger/test_evidence_index.py
+          tests/ledger/test_evidence_index_scale.py
+
+  frontend-and-plugin:
+    name: Frontend and plugin reproducibility
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+      - name: Set up Node.js 24
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: |
+            src/aec_bench/web/frontend/package-lock.json
+            src/aec_bench/adapters/deepseek_harness/plugin/package-lock.json
+      - name: Test and build the frontend
+        working-directory: src/aec_bench/web/frontend
+        run: |
+          npm ci
+          npm test
+          npm run build
+      - name: Test and build the DeepSeek plugin
+        working-directory: src/aec_bench/adapters/deepseek_harness/plugin
+        run: |
+          npm ci
+          npm test
+          npm run build
+      - name: Verify reproducible plugin output
+        run: git diff --exit-code -- src/aec_bench/adapters/deepseek_harness/plugin/dist/
+
+  platform-paths:
+    name: Platform path checks · ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+      - name: Set up Python 3.13.2
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13.2"
+      - name: Install uv
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+        with:
+          enable-cache: true
+      - name: Install base dependencies
+        run: uv sync --frozen
+      - name: Run portable path and storage checks
+        run: >-
+          uv run pytest -q
+          tests/contracts/test_identity.py
+          tests/harness/compilation/test_task_snapshot.py
+          tests/ledger/test_api.py
+          tests/ledger/test_durable_file_replacement.py
+          tests/ledger/test_evidence_index.py
+
+  prime-qualification:
+    name: Prime world qualification
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+      - name: Set up Python 3.13.2
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13.2"
+      - name: Install uv
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+        with:
+          enable-cache: true
+      - name: Install Prime Agent dependencies
+        run: uv sync --frozen --extra prime-agent
+      - name: Run Prime world journey tests
+        run: >-
+          uv run pytest -q --durations=25
+          tests/prime_agent/test_acp.py
+          tests/harness/world_actor/
+          tests/harness/test_world_trials.py
+          tests/harness/pump_station_prime/test_session.py
+          tests/harness/pump_station_prime/test_journey.py
+
+  deepseek-qualification:
+    name: DeepSeek protocol and plugin qualification
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+      - name: Set up Python 3.13.2
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13.2"
+      - name: Set up Node.js 24
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: src/aec_bench/adapters/deepseek_harness/plugin/package-lock.json
+      - name: Install uv
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+        with:
+          enable-cache: true
+      - name: Install all optional dependencies
+        run: uv sync --frozen --all-extras
+      - name: Check complete suite collection
+        run: uv run pytest --collect-only -q tests/
+      - name: Run keyless DeepSeek qualification gates
+        run: >-
+          uv run pytest -q
+          tests/deepseek_harness/
+          tests/harness/world_actor/test_provider_conformance.py
+          tests/harness/test_pump_station_harbor.py
+      - name: Test and build the DeepSeek plugin
+        working-directory: src/aec_bench/adapters/deepseek_harness/plugin
+        run: |
+          npm ci
+          npm test
+          npm run build
+      - name: Verify reproducible plugin output
+        run: git diff --exit-code -- src/aec_bench/adapters/deepseek_harness/plugin/dist/
+
+  nightly-gate:
+    name: Nightly qualification gate
+    if: always()
+    needs:
+      - complete-python-suite
+      - conformance-recovery-scale-query
+      - frontend-and-plugin
+      - platform-paths
+      - prime-qualification
+      - deepseek-qualification
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require all nightly jobs
+        if: >-
+          needs.complete-python-suite.result != 'success' ||
+          needs.conformance-recovery-scale-query.result != 'success' ||
+          needs.frontend-and-plugin.result != 'success' ||
+          needs.platform-paths.result != 'success' ||
+          needs.prime-qualification.result != 'success' ||
+          needs.deepseek-qualification.result != 'success'
+        run: exit 1
+      - name: Report nightly checks passed
+        run: echo "Nightly qualification checks passed."
