@@ -13,6 +13,7 @@ SKILL_ROOT = REPO_ROOT / "src" / "aec_bench" / "init" / "skill_data"
 DOMAIN_CHECK_ROOT = SKILL_ROOT / "domain-check"
 EXPECTED_REPOSITORY_DOCS = {
     "AGENTS.md",
+    "API_INVENTORY.md",
     "ARCHITECTURE.md",
     "CONTRACTS.md",
     "INVARIANTS.md",
@@ -52,6 +53,7 @@ EXPECTED_REPOSITORY_DOCS = {
 }
 MAINTAINED_INDEX_TARGETS = {
     "AGENTS.md",
+    "API_INVENTORY.md",
     "ARCHITECTURE.md",
     "CONTRACTS.md",
     "INVARIANTS.md",
