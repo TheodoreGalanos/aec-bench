@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import replace
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Literal
 
@@ -56,7 +56,14 @@ class _Client:
 
 @pytest.mark.parametrize(
     "scenario",
-    ("completed", "remote_unknown", "submit_uncertain", "missing_result", "identity_drift"),
+    (
+        "completed",
+        "remote_unknown",
+        "remote_completion_after_unknown",
+        "submit_uncertain",
+        "missing_result",
+        "identity_drift",
+    ),
 )
 def test_harbor_backend_reconciles_one_scheduler_attempt(tmp_path: Path, scenario: str) -> None:
     task = _task(tmp_path)
@@ -119,7 +126,7 @@ def test_harbor_backend_reconciles_one_scheduler_attempt(tmp_path: Path, scenari
     )
     client = _Client(
         record,
-        state="unknown" if scenario == "remote_unknown" else "completed",
+        state="unknown" if scenario in {"remote_unknown", "remote_completion_after_unknown"} else "completed",
         submit_error=scenario == "submit_uncertain",
         missing_result=scenario == "missing_result",
     )
@@ -172,7 +179,54 @@ def test_harbor_backend_reconciles_one_scheduler_attempt(tmp_path: Path, scenari
         assert not (run_directory / "finalizations" / f"{trial.trial_id}.json").exists()
     else:
         assert submissions[0].state == "unknown"
-        assert operational.get_attempt(operational.list_attempts(trial.trial_id)[0].attempt_id).state == "unknown"
+        unknown_attempt = operational.get_attempt(operational.list_attempts(trial.trial_id)[0].attempt_id)
+        assert unknown_attempt.state == "unknown"
+        assert unknown_attempt.failure_kind == "unknown_external_state"
+        assert unknown_attempt.failure_class == "unknown"
+        assert unknown_attempt.reconciliation_state == "pending"
+        assert submissions[0].reconciliation_state == "pending"
         assert len(tuple((run_directory / "receipts").glob("*.json"))) == 1
         assert not (run_directory / "trial-records" / f"{trial.trial_id}.json").exists()
         assert not (run_directory / "finalizations" / f"{trial.trial_id}.json").exists()
+        if scenario == "remote_completion_after_unknown":
+            client.state = "completed"
+
+            scheduler.reconcile_unknown(
+                plan.run_id,
+                backends={trial.compute.backend: backend},
+                now=now + timedelta(seconds=5),
+            )
+
+            assert operational.get_work_item(operational.list_work_items(plan.run_id)[0].work_id).state == "succeeded"
+            assert operational.list_attempts(trial.trial_id)[0].state == "succeeded"
+            assert (run_directory / "trial-records" / f"{trial.trial_id}.json").is_file()
+            assert len(tuple((run_directory / "finalizations").glob("*.json"))) == 1
+
+            work_item = operational.list_work_items(plan.run_id)[0]
+            attempt = operational.list_attempts(trial.trial_id)[0]
+            submission = operational.list_backend_submissions_for_run(plan.run_id)[0]
+            operational.update_work_item(work_item.work_id, state="unknown")
+            operational.update_planned_trial(trial.trial_id, state="unknown")
+            operational.transition_attempt(
+                attempt.attempt_id,
+                state="unknown",
+                reconciliation_state="pending",
+            )
+            operational.transition_backend_submission(
+                submission.submission_id,
+                state="unknown",
+                reconciliation_state="pending",
+            )
+            client.state = "unknown"
+
+            scheduler.reconcile_unknown(
+                plan.run_id,
+                backends={trial.compute.backend: backend},
+                now=now + timedelta(seconds=10),
+            )
+
+            assert operational.get_work_item(work_item.work_id).state == "succeeded"
+            assert operational.get_attempt(attempt.attempt_id).state == "succeeded"
+            assert operational.get_backend_submission(submission.submission_id).state == "completed"
+            assert len(tuple((run_directory / "trial-records").glob("*.json"))) == 1
+            assert len(tuple((run_directory / "finalizations").glob("*.json"))) == 1

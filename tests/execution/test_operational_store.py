@@ -11,6 +11,7 @@ from pathlib import Path
 import pytest
 
 from aec_bench.contracts.identity import EntityKind, new_entity_id
+from aec_bench.execution.models import RetryPolicy
 from aec_bench.execution.operational import (
     LeaseUnavailable,
     OperationalStore,
@@ -50,6 +51,7 @@ def _create_work_item(
         provider_route="default",
         model_route="default",
         resource_class="default",
+        retry_policy=RetryPolicy(),
         available_at=stamp,
         now=stamp,
         kind=kind,
@@ -82,10 +84,10 @@ def test_store_initializes_current_schema_and_keeps_operational_records_mutable(
         attempt_id, work_id=item.work_id, trial_id=trial.trial_id, candidate_index=1, retry_number=0
     )
     store.record_backend_submission(submission_id, attempt_id=attempt.attempt_id, backend="local")
-    store.bind_backend_submission_external_id(submission_id, external_id="job-1")
-    store.bind_backend_submission_external_id(submission_id, external_id="job-1")
+    store.bind_backend_submission_external_ids(submission_id, external_id="job-1", external_work_id="trial-1")
+    store.bind_backend_submission_external_ids(submission_id, external_id="job-1", external_work_id="trial-1")
 
-    assert store.schema_version() == 3
+    assert store.schema_version() == 4
     assert store.get_run(run_id).spec_ref == "runs/run-1/spec.json"
     assert store.get_plan(plan_id).run_id == run_id
     assert store.get_planned_trial(trial_id).ordinal == 1
@@ -93,8 +95,9 @@ def test_store_initializes_current_schema_and_keeps_operational_records_mutable(
     assert store.get_work_item(work_id).work_key == "0001-monitoring-dam-seepage"
     assert store.get_attempt(attempt_id).state == "created"
     assert store.get_backend_submission(submission_id).external_id == "job-1"
+    assert store.get_backend_submission(submission_id).external_work_id == "trial-1"
     with pytest.raises(OperationalStoreConflict, match="different external ID"):
-        store.bind_backend_submission_external_id(submission_id, external_id="job-2")
+        store.bind_backend_submission_external_ids(submission_id, external_id="job-2")
 
     store.update_work_item(work_id, state="running")
     assert store.get_work_item(work_id).state == "running"
@@ -102,7 +105,7 @@ def test_store_initializes_current_schema_and_keeps_operational_records_mutable(
     connection = sqlite3.connect(tmp_path / "operational.sqlite3")
     try:
         schema = connection.execute("SELECT schema_version, application_version FROM operational_schema").fetchone()
-        assert schema == (3, "test-version")
+        assert schema == (4, "test-version")
         assert connection.execute(
             "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'operational_schema_migrations'"
         ).fetchone() == (0,)
@@ -323,7 +326,7 @@ def test_concurrent_first_open_initializes_current_schema_once(tmp_path: Path) -
     with ThreadPoolExecutor(max_workers=2) as executor:
         stores = tuple(executor.map(lambda _: OperationalStore(path), range(2)))
 
-    assert tuple(store.schema_version() for store in stores) == (3, 3)
+    assert tuple(store.schema_version() for store in stores) == (4, 4)
     connection = sqlite3.connect(path)
     try:
         assert connection.execute("SELECT COUNT(*) FROM operational_schema").fetchone() == (1,)

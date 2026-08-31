@@ -14,6 +14,7 @@ from aec_bench.contracts.execution_policy import ExecutionPolicy
 from aec_bench.contracts.identity import EntityKind, new_entity_id
 from aec_bench.contracts.run_plan import BestOfAttemptRecipe
 from aec_bench.contracts.trial_record import EvaluationStatus
+from aec_bench.execution.models import RetryPolicy
 from aec_bench.execution.operational import AttemptRecord, OperationalStore, WorkItemRecord
 from aec_bench.execution.scheduler import LocalScheduler
 from aec_bench.harness.artifact_tasks import (
@@ -109,6 +110,7 @@ def _scheduled_boundary(
         provider_route="default",
         model_route="model-0",
         resource_class="default",
+        retry_policy=RetryPolicy(),
         available_at=now,
         now=now,
     )

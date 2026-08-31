@@ -3591,6 +3591,26 @@ duplication = "unique"
 event = "operational state event"
 
 [[field]]
+symbol = "aec_bench.execution.operational.store.RunRecord.cancellation_requested_at"
+surface = "dataclass"
+wire_name = "cancellation_requested_at"
+category = "event_time"
+domain_owner = "execution_operational"
+authority = "operational_store"
+authoritative = true
+exposure = "persisted"
+status = "current"
+payload_contract = "mutable operational execution row"
+canonicalization = "UTC datetime serialized with isoformat"
+consumer = "execution orchestration and coordination"
+validation_behavior = "The store validates timezone-aware event times before persistence"
+mismatch_behavior = "reject_invalid_time"
+retention = "operational_database_lifetime"
+rationale = "The record retains when cancellation was requested for the run."
+duplication = "unique"
+event = "operational state event"
+
+[[field]]
 symbol = "aec_bench.execution.operational.store.RunRecord.created_at"
 surface = "dataclass"
 wire_name = "created_at"

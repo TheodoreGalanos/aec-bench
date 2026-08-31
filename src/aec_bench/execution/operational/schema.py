@@ -1,7 +1,7 @@
 # ABOUTME: Defines the one current disposable SQLite schema for execution coordination.
 # ABOUTME: Rejects stale local databases instead of retaining migration history or compatibility code.
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 SCHEMA_STATEMENTS = (
     """
@@ -12,7 +12,8 @@ SCHEMA_STATEMENTS = (
         created_at TEXT NOT NULL,
         started_at TEXT,
         finished_at TEXT,
-        updated_at TEXT NOT NULL
+        updated_at TEXT NOT NULL,
+        cancellation_requested_at TEXT
     )
     """,
     """
@@ -63,6 +64,7 @@ SCHEMA_STATEMENTS = (
         model_route TEXT NOT NULL,
         resource_class TEXT NOT NULL,
         available_at TEXT NOT NULL,
+        retry_policy_json TEXT NOT NULL,
         UNIQUE (run_id, work_key)
     )
     """,
@@ -95,6 +97,11 @@ SCHEMA_STATEMENTS = (
         started_at TEXT,
         finished_at TEXT,
         updated_at TEXT NOT NULL,
+        failure_kind TEXT,
+        failure_class TEXT,
+        failure_message TEXT,
+        reconciliation_state TEXT NOT NULL DEFAULT 'not_required',
+        cancellation_status TEXT NOT NULL DEFAULT 'not_requested',
         UNIQUE (work_id, attempt_number),
         UNIQUE (work_id, candidate_index, retry_number)
     )
@@ -105,9 +112,14 @@ SCHEMA_STATEMENTS = (
         attempt_id TEXT NOT NULL REFERENCES operational_attempts(attempt_id),
         backend TEXT NOT NULL,
         external_id TEXT,
-        state TEXT NOT NULL CHECK (state IN ('submitted', 'accepted', 'running', 'completed', 'failed', 'unknown')),
+        external_work_id TEXT,
+        state TEXT NOT NULL CHECK (
+            state IN ('submitted', 'accepted', 'running', 'completed', 'failed', 'cancelled', 'unknown')
+        ),
         submitted_at TEXT NOT NULL,
         updated_at TEXT NOT NULL,
+        cancellation_status TEXT NOT NULL DEFAULT 'not_requested',
+        reconciliation_state TEXT NOT NULL DEFAULT 'not_required',
         UNIQUE (attempt_id, backend)
     )
     """,

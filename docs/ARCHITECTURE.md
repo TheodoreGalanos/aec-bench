@@ -99,8 +99,10 @@ those portable records, and the ledger remains authoritative for final trial
 evidence. `LocalScheduler` owns only queue selection, bounded local dispatch,
 and lease-backed work state. Its resolved `ExecutionPolicy` applies global,
 run, backend, provider-route, model-route, resource-class, and execution-family
-limits, with priority aging for fairness. It does not choose retries, cancel
-runs, interpret task-family fields, or hydrate evidence. Every dispatch creates
+limits, with priority aging for fairness. It applies only declared infrastructure
+retry policy, persists backoff through `available_at`, and exposes cancellation
+and reconciliation control without interpreting task-family fields or hydrating
+evidence. Every dispatch creates
 one lease-bound attempt, renews active leases at the resolved heartbeat
 interval, and closes the run and plan only after all planned work is terminal.
 
