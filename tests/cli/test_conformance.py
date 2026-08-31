@@ -1,5 +1,5 @@
-# ABOUTME: Tests the installed world conformance command for every maintained world.
-# ABOUTME: Protects canonical-key lookup, positive results, and clear unknown-key errors.
+# ABOUTME: Tests installed conformance commands for every maintained world and lifecycle.
+# ABOUTME: Protects canonical-key lookup, complete results, and clear unknown-key errors.
 
 from __future__ import annotations
 
@@ -9,6 +9,7 @@ import pytest
 from typer.testing import CliRunner
 
 from aec_bench.cli.main import app
+from aec_bench.lifecycles.conformance import REQUIRED_GUARANTEES as LIFECYCLE_GUARANTEES
 from aec_bench.worlds.conformance import (
     REQUIRED_GUARANTEES,
     WorldConformanceCase,
@@ -18,6 +19,13 @@ from aec_bench.worlds.conformance import (
 from aec_bench.worlds.runtime.world_logic import ActionRejected
 
 runner = CliRunner()
+
+LIFECYCLE_KEYS = (
+    "stormwater/drainage-model-review",
+    "structural/facade-submittal-review",
+    "stormwater/hydraulic-design-response",
+    "stormwater/hydraulic-interaction-review",
+)
 
 
 def test_world_conformance_command_runs_every_maintained_world() -> None:
@@ -38,6 +46,24 @@ def test_world_conformance_command_rejects_unknown_key() -> None:
 
     assert result.exit_code == 1
     assert "unknown world key" in result.stderr
+
+
+@pytest.mark.parametrize("lifecycle_key", LIFECYCLE_KEYS)
+def test_lifecycle_conformance_command_runs_maintained_owner(lifecycle_key: str) -> None:
+    result = runner.invoke(app, ["--json", "conformance", "lifecycle", lifecycle_key])
+
+    assert result.exit_code == 0, result.stdout
+    payload = json.loads(result.stdout)
+    assert payload["data"]["lifecycle_key"] == lifecycle_key
+    assert set(payload["data"]["proven"]) == LIFECYCLE_GUARANTEES
+    assert payload["data"]["identity"]["key"] == lifecycle_key
+
+
+def test_lifecycle_conformance_command_rejects_unknown_key() -> None:
+    result = runner.invoke(app, ["--json", "conformance", "lifecycle", "unknown/lifecycle"])
+
+    assert result.exit_code == 1
+    assert "unknown lifecycle key" in result.stderr
 
 
 def test_runner_rejects_a_case_without_owner_proof() -> None:

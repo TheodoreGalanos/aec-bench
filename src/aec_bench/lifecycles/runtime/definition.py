@@ -60,15 +60,29 @@ class LifecycleOwnerDescriptor:
     """One immutable owner-local lifecycle descriptor for generated composition."""
 
     definition: LifecycleDefinition
+    conformance_entry_point: str
 
     def __post_init__(self) -> None:
         if not isinstance(self.definition, LifecycleDefinition):
             raise TypeError("lifecycle owner descriptor requires a LifecycleDefinition")
+        module_name, separator, attribute_name = self.conformance_entry_point.partition(":")
+        if not separator or not module_name.strip() or not attribute_name.strip():
+            raise ValueError("lifecycle conformance entry point must use module:attribute form")
 
     def load(self) -> LifecycleDefinition:
         """Return the owner definition after descriptor validation."""
 
         return self.definition
+
+    def load_conformance_case(self) -> object:
+        """Load the owner-local lifecycle conformance case."""
+        from importlib import import_module
+
+        module_name, _, attribute_name = self.conformance_entry_point.partition(":")
+        factory = getattr(import_module(module_name), attribute_name, None)
+        if not callable(factory):
+            raise TypeError(f"lifecycle conformance entry point is not callable: {self.conformance_entry_point}")
+        return factory()
 
 
 def shared_executable_source_roots() -> tuple[Path, ...]:

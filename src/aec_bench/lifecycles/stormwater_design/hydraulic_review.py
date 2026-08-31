@@ -480,5 +480,9 @@ LIFECYCLE_DESCRIPTOR = LifecycleOwnerDescriptor(
         variant_metadata=hydraulic_review_variants.get_hydraulic_review_variant,
         operation_resolver=build_hydraulic_operation_resolver,
         smoke_environment=_build_smoke_environment,
-    )
+    ),
+    conformance_entry_point=(
+        "aec_bench.lifecycles.stormwater_design.hydraulic_review_conformance:"
+        "lifecycle_conformance_case"
+    ),
 )
