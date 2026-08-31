@@ -44,6 +44,14 @@ from aec_bench.lifecycles.runtime.operation_store import (
     _sync_lifecycle_operation_ledger,
     _write_lifecycle_operation_catalog,
 )
+from aec_bench.lifecycles.runtime.reducer import (
+    reduce_branch,
+    reduce_fail_attempt,
+    reduce_open_attempt,
+    reduce_release,
+    reduce_revisit,
+    reduce_submit,
+)
 from aec_bench.lifecycles.runtime.request_protocol import (
     EvidenceLifecycleError as EvidenceLifecycleError,
 )
@@ -54,7 +62,6 @@ from aec_bench.lifecycles.runtime.request_protocol import (
     EvidenceRequestResolutionManifest as EvidenceRequestResolutionManifest,
 )
 from aec_bench.lifecycles.runtime.request_protocol import (
-    _append_transition,
     _branch_action_state_sha256,
     _checkpoint,
     _evidence_request_catalog,
@@ -91,7 +98,6 @@ from aec_bench.lifecycles.runtime.request_store import (
 from aec_bench.lifecycles.runtime.state import (
     CheckpointAttemptRecord,
     CheckpointAttemptStatus,
-    CheckpointRevisitRecord,
     CheckpointRunRecord,
     CheckpointRunStatus,
     EvidenceLifecycleRunState,
@@ -99,7 +105,6 @@ from aec_bench.lifecycles.runtime.state import (
     EvidenceRequestRejection,
     LifecycleBranchRecord,
     LifecycleRunStatus,
-    LifecycleTransitionKind,
 )
 
 LifecycleVerifier = Callable[[Path, Path], dict[str, Any] | LifecycleVerificationResult]
@@ -231,9 +236,6 @@ def _release_checkpoint_locked(
     instruction = _preflight_checkpoint(package, checkpoint)
     released_files = _materialize_checkpoint_release(package, run, checkpoint, instruction)
 
-    checkpoint_run = state.checkpoint(checkpoint.checkpoint_id)
-    checkpoint_run.status = CheckpointRunStatus.ACTIVE
-    checkpoint_run.released_files = released_files
     previous_checkpoint_id = next(
         (
             item.checkpoint_id
@@ -242,15 +244,14 @@ def _release_checkpoint_locked(
         ),
         None,
     )
-    _append_transition(
+    state = reduce_release(
         state,
-        kind=LifecycleTransitionKind.RELEASE,
-        from_checkpoint_id=previous_checkpoint_id,
-        to_checkpoint_id=checkpoint.checkpoint_id,
+        checkpoint_id=checkpoint.checkpoint_id,
+        released_files=tuple(released_files),
+        previous_checkpoint_id=previous_checkpoint_id,
         reason="Evidence released for active review.",
-    )
-    state.status = LifecycleRunStatus.AWAITING_CHECKPOINT_SUBMISSION
-    state.active_checkpoint_id = checkpoint.checkpoint_id
+    ).state
+    checkpoint_run = state.checkpoint(checkpoint.checkpoint_id)
     _write_evidence_request_catalog(run, checkpoint, checkpoint_run)
     if state.schema_version == "7":
         assert operation_resolver is not None
@@ -525,25 +526,13 @@ def _submit_checkpoint_locked(
     submission_sha256 = _sha256(archive_path)
     _write_json(episode_dir / "result.json", copy.deepcopy(episode_result or {}))
 
-    checkpoint_run = state.checkpoint(checkpoint_id)
-    checkpoint_run.status = CheckpointRunStatus.SUBMITTED
-    checkpoint_run.submission_path = checkpoint.submission_path
-    checkpoint_run.submission_sha256 = submission_sha256
-    if checkpoint_run.active_attempt is not None:
-        checkpoint_run.active_attempt.status = CheckpointAttemptStatus.SUBMITTED
-    _append_transition(
+    state = reduce_submit(
         state,
-        kind=LifecycleTransitionKind.SUBMIT,
-        from_checkpoint_id=checkpoint_id,
-        to_checkpoint_id=None,
+        checkpoint_id=checkpoint_id,
+        submission_path=checkpoint.submission_path,
+        submission_sha256=submission_sha256,
         reason="Checkpoint submission archived.",
-    )
-    state.active_checkpoint_id = None
-    state.status = (
-        LifecycleRunStatus.COMPLETE
-        if all(item.status == CheckpointRunStatus.SUBMITTED for item in state.checkpoint_runs)
-        else LifecycleRunStatus.AWAITING_EVIDENCE_RELEASE
-    )
+    ).state
     _write_state(run, state)
     _sync_transition_ledger(run, state)
     append_ledger_entry(
@@ -655,108 +644,22 @@ def _branch_lifecycle_locked(
     ):
         raise EvidenceLifecycleError("selected checkpoint parent state changed before branching")
 
-    checkpoint_runs: list[CheckpointRunRecord] = []
-    for index, checkpoint in enumerate(spec.checkpoints):
-        if index < branch_index:
-            inherited = parent_state.checkpoint(checkpoint.checkpoint_id)
-            if inherited.status != CheckpointRunStatus.SUBMITTED:
-                raise EvidenceLifecycleError(f"parent checkpoint dependency is incomplete: {checkpoint.checkpoint_id}")
-            checkpoint_runs.append(
-                CheckpointRunRecord(
-                    checkpoint_id=checkpoint.checkpoint_id,
-                    status=CheckpointRunStatus.SUBMITTED,
-                    released_files=list(inherited.released_files),
-                    submission_path=inherited.submission_path,
-                    submission_sha256=inherited.submission_sha256,
-                    attempts=[
-                        attempt.model_copy(deep=True, update={"inherited_from_parent": True})
-                        for attempt in inherited.attempts
-                    ],
-                    evidence_request_budget=inherited.evidence_request_budget,
-                    evidence_request_budget_remaining=inherited.evidence_request_budget_remaining,
-                    evidence_request_actions=[
-                        action.model_copy(deep=True, update={"inherited_from_parent": True})
-                        for action in inherited.evidence_request_actions
-                    ],
-                    operation_budget=inherited.operation_budget,
-                    operation_budget_remaining=inherited.operation_budget_remaining,
-                    operation_actions=[
-                        action.model_copy(deep=True, update={"inherited_from_parent": True})
-                        for action in inherited.operation_actions
-                    ],
-                    inherited_from_parent=True,
-                )
-            )
-        elif index == branch_index:
-            checkpoint_runs.append(
-                CheckpointRunRecord(
-                    checkpoint_id=checkpoint.checkpoint_id,
-                    status=CheckpointRunStatus.ACTIVE,
-                    released_files=list(parent_checkpoint.released_files),
-                    attempts=[
-                        attempt.model_copy(deep=True, update={"inherited_from_parent": True})
-                        for attempt in parent_checkpoint.attempts
-                    ],
-                    evidence_request_budget=parent_checkpoint.evidence_request_budget,
-                    evidence_request_budget_remaining=parent_checkpoint.evidence_request_budget_remaining,
-                    evidence_request_actions=[
-                        action.model_copy(deep=True, update={"inherited_from_parent": True})
-                        for action in parent_checkpoint.evidence_request_actions
-                    ],
-                    operation_budget=parent_checkpoint.operation_budget,
-                    operation_budget_remaining=parent_checkpoint.operation_budget_remaining,
-                    operation_actions=[
-                        action.model_copy(deep=True, update={"inherited_from_parent": True})
-                        for action in parent_checkpoint.operation_actions
-                    ],
-                )
-            )
-        else:
-            request_budget = (
-                checkpoint.conditional_evidence.request_budget if checkpoint.conditional_evidence is not None else 0
-            )
-            checkpoint_runs.append(
-                CheckpointRunRecord(
-                    checkpoint_id=checkpoint.checkpoint_id,
-                    evidence_request_budget=request_budget,
-                    evidence_request_budget_remaining=request_budget,
-                    operation_budget=(
-                        checkpoint.conditional_operations.operation_budget
-                        if checkpoint.conditional_operations is not None
-                        else 0
-                    ),
-                    operation_budget_remaining=(
-                        checkpoint.conditional_operations.operation_budget
-                        if checkpoint.conditional_operations is not None
-                        else 0
-                    ),
-                )
-            )
-
-    state = EvidenceLifecycleRunState(
-        schema_version=parent_state.schema_version,
-        lifecycle_id=spec.lifecycle_id,
-        lifecycle_spec_sha256=parent_state.lifecycle_spec_sha256,
-        package_sha256=parent_state.package_sha256,
-        status=LifecycleRunStatus.AWAITING_CHECKPOINT_SUBMISSION,
-        active_checkpoint_id=checkpoint_id,
-        checkpoint_runs=checkpoint_runs,
-        branch=LifecycleBranchRecord(
-            branch_id=branch_id,
-            parent_run_dir=str(parent_run),
-            branched_from_checkpoint_id=checkpoint_id,
-            parent_submission_sha256=parent_checkpoint.submission_sha256,
-            parent_action_state_sha256=parent_action_state_sha256,
-            reason=reason,
-        ),
-    )
-    _append_transition(
-        state,
-        kind=LifecycleTransitionKind.BRANCH,
-        from_checkpoint_id=checkpoint_id,
-        to_checkpoint_id=checkpoint_id,
+    branch = LifecycleBranchRecord(
+        branch_id=branch_id,
+        parent_run_dir=str(parent_run),
+        branched_from_checkpoint_id=checkpoint_id,
+        parent_submission_sha256=parent_checkpoint.submission_sha256,
+        parent_action_state_sha256=parent_action_state_sha256,
         reason=reason,
     )
+    state = reduce_branch(
+        parent_state,
+        checkpoints=spec.checkpoints,
+        branch_index=branch_index,
+        branch=branch,
+        checkpoint_id=checkpoint_id,
+        reason=reason,
+    ).state
 
     branch_run.parent.mkdir(parents=True, exist_ok=True)
     staging_run = Path(tempfile.mkdtemp(prefix=f".{branch_run.name}.tmp-", dir=branch_run.parent))
@@ -865,27 +768,18 @@ def _open_checkpoint_attempt_locked(
     checkpoint_id = state.active_checkpoint_id
     if checkpoint_id is None:
         raise EvidenceLifecycleError("no checkpoint is active")
-    checkpoint_run = state.checkpoint(checkpoint_id)
-    active_attempt = checkpoint_run.active_attempt
-    if active_attempt is not None and active_attempt.session_id == session_id:
-        if episode_request_sha256 is not None and active_attempt.episode_request_sha256 != episode_request_sha256:
-            raise EvidenceLifecycleError("active checkpoint attempt request hash changed")
-        return _attempt_context(active_attempt)
-    if active_attempt is not None:
-        active_attempt.status = CheckpointAttemptStatus.INTERRUPTED
-    previous = checkpoint_run.last_attempt
-
-    sequence = len(checkpoint_run.attempts) + 1
-    attempt = CheckpointAttemptRecord(
-        attempt_id=f"{checkpoint_id}.attempt-{sequence:03d}",
+    prior_active_attempt = state.checkpoint(checkpoint_id).active_attempt
+    state = reduce_open_attempt(
+        state,
+        checkpoint_id=checkpoint_id,
         session_id=session_id,
-        sequence=sequence,
         execution_mode=execution_mode,
-        status=CheckpointAttemptStatus.ACTIVE,
-        resumed_from_attempt_id=previous.attempt_id if previous is not None else None,
         episode_request_sha256=episode_request_sha256,
-    )
-    checkpoint_run.attempts.append(attempt)
+    ).state
+    attempt = state.checkpoint(checkpoint_id).last_attempt
+    assert attempt is not None
+    if prior_active_attempt is not None and prior_active_attempt.session_id == session_id:
+        return _attempt_context(attempt)
     _write_state(run, state)
     append_ledger_entry(
         _ledger_path(run),
@@ -948,8 +842,14 @@ def _fail_checkpoint_attempt_locked(
             f"active attempt belongs to {attempt.session_id}; cannot fail it from {session_id}"
         )
 
-    attempt.status = CheckpointAttemptStatus.FAILED
-    attempt.failure_kind = failure_kind
+    state = reduce_fail_attempt(
+        state,
+        checkpoint_id=checkpoint_id,
+        session_id=session_id,
+        failure_kind=failure_kind,
+    ).state
+    attempt = state.checkpoint(checkpoint_id).last_attempt
+    assert attempt is not None
     _write_state(run, state)
     append_ledger_entry(
         _ledger_path(run),
@@ -1000,29 +900,16 @@ def _revisit_checkpoint_locked(
     spec = load_evidence_lifecycle_spec(package)
     state = _load_state(package, run, spec, operation_resolver=operation_resolver, lock_held=True)
     _assert_prior_submissions_unchanged(run, state)
-    try:
-        checkpoint_run = state.checkpoint(checkpoint_id)
-    except KeyError as exc:
-        raise EvidenceLifecycleError(f"unknown checkpoint: {checkpoint_id}") from exc
-    if checkpoint_run.status != CheckpointRunStatus.SUBMITTED:
-        raise EvidenceLifecycleError(f"checkpoint is not available for revisit: {checkpoint_id}")
-
     archive_path = run / "episodes" / checkpoint_id / "submission.json"
     instruction_path = _workspace(run) / "checkpoints" / checkpoint_id / "instruction.md"
-    revisit = CheckpointRevisitRecord(
-        revisit_id=f"revisit-{len(state.revisits) + 1:03d}",
-        checkpoint_id=checkpoint_id,
-        requested_from_checkpoint_id=state.active_checkpoint_id,
-        reason=reason,
-    )
-    state.revisits.append(revisit)
-    _append_transition(
+    reduction = reduce_revisit(
         state,
-        kind=LifecycleTransitionKind.REVISIT,
-        from_checkpoint_id=revisit.requested_from_checkpoint_id,
-        to_checkpoint_id=checkpoint_id,
+        checkpoint_id=checkpoint_id,
         reason=reason,
     )
+    state = reduction.state
+    revisit = state.revisits[-1]
+    checkpoint_run = state.checkpoint(checkpoint_id)
     _write_state(run, state)
     _sync_transition_ledger(run, state)
     append_ledger_entry(
