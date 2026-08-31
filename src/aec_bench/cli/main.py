@@ -8,6 +8,7 @@ from aec_bench.cli.commands.config import app as config_app
 from aec_bench.cli.commands.dataset import app as dataset_app
 from aec_bench.cli.commands.evaluate import evaluate_experiment
 from aec_bench.cli.commands.evaluation import app as evaluation_app
+from aec_bench.cli.commands.evidence import app as evidence_app
 from aec_bench.cli.commands.evolve import app as evolve_app
 from aec_bench.cli.commands.generate import app as generate_app
 from aec_bench.cli.commands.import_job import import_job
@@ -51,6 +52,7 @@ app.command("search", rich_help_panel="Discovery")(search_command)
 # Subcommand groups
 app.add_typer(report_app, name="report", rich_help_panel="Analysis")
 app.add_typer(evaluation_app, name="evaluation", rich_help_panel="Analysis")
+app.add_typer(evidence_app, name="evidence", rich_help_panel="Analysis")
 app.add_typer(ledger_app, name="ledger", rich_help_panel="Analysis")
 app.add_typer(config_app, name="config", rich_help_panel="Configuration")
 app.add_typer(generate_app, name="generate", rich_help_panel="Generation")

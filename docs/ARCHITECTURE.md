@@ -111,6 +111,9 @@ metadata. `EvidenceQuery` uses bounded keyset pages with cursors bound to the
 index generation and filter set. It never replaces portable records or loads
 conversation, trajectory, workspace, verifier, or provider evidence bodies;
 callers use the stored record path when they explicitly need those bytes.
+`aec-bench evidence index rebuild` reports unreadable or conflicting records;
+`aec-bench evidence verify` is the explicit operation for validating structured
+records, run metadata, receipts, finalizations, and referenced artifact bytes.
 
 `HarnessSpec` describes runtime capabilities, bindings, contracts, and
 budgets. It does not control attempt branching or selection. Interactive-world
