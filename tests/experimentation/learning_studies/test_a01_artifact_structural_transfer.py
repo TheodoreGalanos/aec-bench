@@ -29,7 +29,7 @@ from aec_bench.experimentation.learning_studies.recording import StudyRunRecorde
 from aec_bench.experimentation.learning_studies.resume import load_resumable_study
 from aec_bench.experimentation.learning_studies.runtime import ArmRunStatus, run_learning_study
 from aec_bench.tasks.loader import load_task_definition
-from tests.experimentation.learning_studies.support import HeatLoadStudyAdapter
+from tests.experimentation.learning_studies.support import HeatLoadStudyAdapter, resolve_learning_task_dir
 
 _REPOSITORY_ROOT = Path(__file__).parents[3]
 _TASKS_ROOT = _REPOSITORY_ROOT / "tasks"
@@ -40,7 +40,7 @@ _PROJECTION_ID = "heat-load-verifier-reward"
 
 
 def _resolve_task_definition(task_id: str):  # noqa: ANN202
-    return load_task_definition(_TASKS_ROOT / task_id, _TASKS_ROOT)
+    return load_task_definition(resolve_learning_task_dir(_TASKS_ROOT, task_id), _TASKS_ROOT)
 
 
 def test_a01_real_artifact_tasks_return_a_matched_structural_transfer_result(tmp_path: Path) -> None:

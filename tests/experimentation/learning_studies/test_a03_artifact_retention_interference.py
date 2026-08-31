@@ -28,7 +28,7 @@ from aec_bench.experimentation.learning_studies.protocol_collection import (
 from aec_bench.experimentation.learning_studies.recording import StudyRunRecorder
 from aec_bench.experimentation.learning_studies.runtime import ArmRunStatus, run_learning_study
 from aec_bench.tasks.loader import load_task_definition
-from tests.experimentation.learning_studies.support import RetentionInterferenceStudyAdapter
+from tests.experimentation.learning_studies.support import RetentionInterferenceStudyAdapter, resolve_learning_task_dir
 
 _REPOSITORY_ROOT = Path(__file__).parents[3]
 _TASKS_ROOT = _REPOSITORY_ROOT / "tasks"
@@ -42,7 +42,7 @@ _COMPUTE = ComputeConfig(backend="local", resource_limits={"memory_mb": 512}, ti
 
 
 def _resolve_task(task_id: str):  # noqa: ANN202
-    return load_task_definition(_TASKS_ROOT / task_id, _TASKS_ROOT)
+    return load_task_definition(resolve_learning_task_dir(_TASKS_ROOT, task_id), _TASKS_ROOT)
 
 
 def _state_files(root: Path) -> dict[str, bytes]:
@@ -63,9 +63,9 @@ def test_a03_real_artifact_tasks_measure_retention_and_explicit_interference(tmp
     assert "| Data Centres / Server Rooms | 0.0 | 0.0 | 1.0 |" in interference_instruction
     assert "| Libraries | 5.0 | 10.0 | 0.0 |" in delayed_probe.instruction
     assert experiences["drainage-review-neutral"].timeout_seconds == delayed_probe.timeout_seconds
-    neutral_output = (_TASKS_ROOT / _NEUTRAL_TASK_ID / "tests" / "fixtures" / "golden_pass.md").read_text(
-        encoding="utf-8"
-    )
+    neutral_output = (
+        resolve_learning_task_dir(_TASKS_ROOT, _NEUTRAL_TASK_ID) / "tests" / "fixtures" / "golden_pass.md"
+    ).read_text(encoding="utf-8")
     observations: list[dict[str, object]] = []
     run_root = tmp_path / "a03-stage-1"
 

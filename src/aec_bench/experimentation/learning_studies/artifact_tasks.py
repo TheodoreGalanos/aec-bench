@@ -31,7 +31,7 @@ from aec_bench.harness.artifact.recipes import single_attempt
 from aec_bench.harness.artifact_tasks import AdapterBuilder, LocalTaskRuntime, run_trial
 from aec_bench.ledger.artifact_repository import ArtifactRepository
 from aec_bench.tasks.instance import ResolvedTaskInstance, resolve_instance_paths
-from aec_bench.tasks.loader import load_task_definition
+from aec_bench.tasks.loader import load_task_definition, resolve_task_instance_dir
 
 _LEARNER_NAMESPACE = ".aec-bench-learning"
 _STATE_CHANNELS = frozenset({"history", "memory", "feedback"})
@@ -363,9 +363,10 @@ class _ArtifactLearningCoordinator:
         )
 
     def _resolve_task(self, task_id: str) -> ResolvedTaskInstance:
-        instance_dir = (self._tasks_root / task_id).resolve()
-        if instance_dir == self._tasks_root or self._tasks_root not in instance_dir.parents:
-            raise ValueError(f"learner-path-unsafe: task id escapes tasks root: {task_id}")
+        try:
+            instance_dir = resolve_task_instance_dir(task_id, self._tasks_root)
+        except ValueError as error:
+            raise ValueError(f"learner-path-unsafe: task id escapes tasks root: {task_id}") from error
         task = load_task_definition(instance_dir, self._tasks_root)
         if task.task_id != task_id:
             raise ValueError(f"resolved task identity differs from plan: {task.task_id} != {task_id}")

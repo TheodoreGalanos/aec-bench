@@ -589,6 +589,7 @@ def test_prime_export_cli_selects_task_pattern(tmp_path: Path) -> None:
             "--pattern",
             "electrical/*",
         ],
+        terminal_width=240,
     )
 
     assert result.exit_code == 0
@@ -665,6 +666,7 @@ def test_prime_export_cli_rejects_dataset_with_task_filter(tmp_path: Path) -> No
             "--task",
             "electrical/voltage-drop",
         ],
+        terminal_width=240,
     )
 
     assert result.exit_code != 0
@@ -1462,6 +1464,7 @@ def test_prime_train_config_rejects_duplicate_difficulty_ratios(tmp_path: Path) 
             "--difficulty-ratio",
             "easy=0.55",
         ],
+        terminal_width=240,
     )
 
     assert result.exit_code != 0

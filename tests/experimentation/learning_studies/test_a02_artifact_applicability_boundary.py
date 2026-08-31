@@ -31,7 +31,7 @@ from aec_bench.templates.builtin.civil.drainage_model_run_provenance_issue_revie
     has_correct_downstream_memo_boundary_decision,
     has_upstream_model_invalidation_decision,
 )
-from tests.experimentation.learning_studies.support import DrainageBoundaryStudyAdapter
+from tests.experimentation.learning_studies.support import DrainageBoundaryStudyAdapter, resolve_learning_task_dir
 
 _REPOSITORY_ROOT = Path(__file__).parents[3]
 _TASKS_ROOT = _REPOSITORY_ROOT / "tasks"
@@ -53,11 +53,13 @@ _CONSOLIDATION_OPERATION_ID = "update-applicability-memory"
 
 
 def _resolve_task_definition(task_id: str):  # noqa: ANN202
-    return load_task_definition(_TASKS_ROOT / task_id, _TASKS_ROOT)
+    return load_task_definition(resolve_learning_task_dir(_TASKS_ROOT, task_id), _TASKS_ROOT)
 
 
 def _golden_output(task_id: str) -> str:
-    return (_TASKS_ROOT / task_id / "tests" / "fixtures" / "golden_pass.md").read_text(encoding="utf-8")
+    return (resolve_learning_task_dir(_TASKS_ROOT, task_id) / "tests" / "fixtures" / "golden_pass.md").read_text(
+        encoding="utf-8"
+    )
 
 
 def _public_output_text(record: TrialRecord) -> str:

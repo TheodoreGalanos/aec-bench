@@ -194,6 +194,27 @@ def iter_task_instance_dirs(tasks_root: Path) -> list[Path]:
     )
 
 
+def resolve_task_instance_dir(task_id: str, tasks_root: Path) -> Path:
+    """Resolve a canonical task key to its source-controlled instance directory."""
+    resolved_root = tasks_root.resolve()
+    candidate = (resolved_root / task_id).resolve()
+    if candidate == resolved_root or resolved_root not in candidate.parents:
+        raise ValueError(f"task id escapes tasks root: {task_id}")
+    if candidate.exists():
+        return candidate
+
+    matches = tuple(
+        instance_dir
+        for instance_dir in iter_task_instance_dirs(resolved_root)
+        if canonical_task_key(instance_dir.relative_to(resolved_root).as_posix()) == task_id
+    )
+    if not matches:
+        raise LoadError(f"task instance not found for key: {task_id}")
+    if len(matches) > 1:
+        raise LoadError(f"multiple task instances found for key: {task_id}")
+    return matches[0]
+
+
 def load_task_catalog(tasks_root: Path) -> dict[str, TaskDefinition]:
     return {
         task.task_id: task

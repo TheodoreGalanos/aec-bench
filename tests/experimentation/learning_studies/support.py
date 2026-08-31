@@ -7,6 +7,12 @@ from pathlib import Path
 
 from aec_bench.adapters.base import AdapterRequest, AdapterResult
 from aec_bench.contracts.agent_output import AgentOutput, AgentOutputStatus
+from aec_bench.tasks.loader import resolve_task_instance_dir
+
+
+def resolve_learning_task_dir(tasks_root: Path, task_id: str) -> Path:
+    """Resolve a learning-study task key to its source-controlled instance directory."""
+    return resolve_task_instance_dir(task_id, tasks_root)
 
 
 class HeatLoadStudyAdapter:

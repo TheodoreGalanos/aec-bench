@@ -37,7 +37,7 @@ from aec_bench.templates.builtin.mechanical.stormwater_pump_station_control_back
     composition_outcome,
     integration_correct,
 )
-from tests.experimentation.learning_studies.support import CompositionStudyAdapter
+from tests.experimentation.learning_studies.support import CompositionStudyAdapter, resolve_learning_task_dir
 
 _REPOSITORY_ROOT = Path(__file__).parents[3]
 _TASKS_ROOT = _REPOSITORY_ROOT / "tasks"
@@ -53,16 +53,18 @@ _COMPUTE = ComputeConfig(backend="local", resource_limits={"memory_mb": 512}, ti
 
 
 def _resolve_task(task_id: str):  # noqa: ANN202
-    return load_task_definition(_TASKS_ROOT / task_id, _TASKS_ROOT)
+    return load_task_definition(resolve_learning_task_dir(_TASKS_ROOT, task_id), _TASKS_ROOT)
 
 
 def _resolve_task_instance(task_id: str):  # noqa: ANN202
-    instance_dir = _TASKS_ROOT / task_id
+    instance_dir = resolve_learning_task_dir(_TASKS_ROOT, task_id)
     return resolve_instance_paths(load_task_definition(instance_dir, _TASKS_ROOT), instance_dir)
 
 
 def _golden_output(task_id: str) -> str:
-    return (_TASKS_ROOT / task_id / "tests" / "fixtures" / "golden_pass.md").read_text(encoding="utf-8")
+    return (resolve_learning_task_dir(_TASKS_ROOT, task_id) / "tests" / "fixtures" / "golden_pass.md").read_text(
+        encoding="utf-8"
+    )
 
 
 def _details(record: TrialRecord) -> Mapping[str, object] | None:

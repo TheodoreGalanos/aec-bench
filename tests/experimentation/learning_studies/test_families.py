@@ -8,7 +8,8 @@ import pytest
 from aec_bench.experimentation.learning_studies.families import load_learning_family
 from aec_bench.experimentation.learning_studies.protocol_collection import BUILTIN_LEARNING_STUDY_PROTOCOLS
 from aec_bench.tasks.instance import resolve_instance_paths
-from aec_bench.tasks.loader import canonical_task_key, load_task_definition
+from aec_bench.tasks.loader import load_task_definition
+from tests.experimentation.learning_studies.support import resolve_learning_task_dir
 
 _REPOSITORY_ROOT = Path(__file__).parents[3]
 _TASKS_ROOT = _REPOSITORY_ROOT / "tasks"
@@ -16,11 +17,7 @@ _PROTOCOL_ROOT = BUILTIN_LEARNING_STUDY_PROTOCOLS
 
 
 def _resolve_task(task_id: str):  # noqa: ANN202
-    instance_dir = next(
-        task_file.parent
-        for task_file in _TASKS_ROOT.rglob("task.toml")
-        if canonical_task_key(task_file.parent.relative_to(_TASKS_ROOT).as_posix()) == task_id
-    )
+    instance_dir = resolve_learning_task_dir(_TASKS_ROOT, task_id)
     return resolve_instance_paths(load_task_definition(instance_dir, _TASKS_ROOT), instance_dir)
 
 
