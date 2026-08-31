@@ -16,7 +16,8 @@ from aec_bench.evolution.evaluation import (
     validate_trial_records,
 )
 from aec_bench.evolution.snapshot import serialise_snapshot
-from aec_bench.harness.artifact_tasks import LocalTaskRuntime, run_experiment, single_attempt
+from aec_bench.harness.artifact.recipes import single_attempt
+from aec_bench.harness.artifact_tasks import LocalTaskRuntime, run_experiment
 from aec_bench.tasks.instance import ResolvedTaskInstance, resolve_instance_paths
 from aec_bench.tasks.loader import load_task_definition
 from aec_bench.trials import build_trial_id, plan_trials

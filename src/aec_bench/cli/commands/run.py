@@ -938,7 +938,7 @@ def _execute_manifest(
     console.print(f"[bold]Running: {manifest.name}[/bold]")
     console.print(f"  {len(plan)} trials across {len(selected_tasks)} tasks")
 
-    from aec_bench.harness.artifact_tasks import SingleAttemptSpec
+    from aec_bench.contracts.run_plan import SingleAttemptRecipe
     from aec_bench.harness.artifact_tasks import run_experiment as run_task_experiment
     from aec_bench.harness.harbor_runtime import HarborExperimentRuntime
     from aec_bench.harness.harbor_workflow import SynchronousHarborWorkflow
@@ -975,7 +975,7 @@ def _execute_manifest(
                 runtime=runtime,
                 tasks=[resolve_instance_paths(task, tasks_root / task.task_id) for task in artifact_tasks],
                 trials=[trial for trial in plan if trial.task_id in artifact_ids],
-                recipe=SingleAttemptSpec(),
+                recipe=SingleAttemptRecipe(),
                 reviewer=reviewer_config,
                 verify=not manifest.disable_verification,
             )

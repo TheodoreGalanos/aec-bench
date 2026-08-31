@@ -134,7 +134,10 @@ for event in [
     task_dir.mkdir(parents=True)
     (task_dir / "instruction.md").write_text("Write /workspace/output.md", encoding="utf-8")
     (task_dir / "task.toml").write_text(
-        'version = "1.0"\n\n[metadata]\ndifficulty = "easy"\ncategory = "reasoning"\ntags = []\n'
+        'version = "1.0"\n\n[identity]\nid = "019c2c7a-5a33-7b8d-a702-8f7f3e8c21aa"\n'
+        'key = "test/public-task"\nversion = 1\n'
+        '\n[metadata]\nlifecycle = "active"\nvisibility = "public"\n'
+        'difficulty = "easy"\ncategory = "reasoning"\ntags = []\n'
         "\n[agent]\ntimeout_sec = 30.0\n\n[verifier]\ntimeout_sec = 30.0\n"
         "\n[environment]\nextensions = []\nbuild_timeout_sec = 30.0\ncpus = 1\nmemory_mb = 512\n"
         "storage_mb = 512\nallow_internet = false\n",
