@@ -12,6 +12,7 @@ from aec_bench.contracts.continual_world import (
     ContinualControlCapabilitiesRequest,
     ContinualWorldControlRequest,
 )
+from aec_bench.contracts.identity import EntityIdentity, EntityKey, MemberIdentity, new_entity_id
 from aec_bench.contracts.interactive_world import InteractiveWorldProfileRef, WorldBuildRef
 from aec_bench.contracts.task_definition import Difficulty, Lifecycle, Visibility
 from aec_bench.worlds.runtime.definition import (
@@ -43,7 +44,9 @@ def _build(*, task_world_id: str = "world-a", digest: str = "b" * 64) -> WorldBu
 
 
 def _definition(*profiles: InteractiveWorldProfileRef) -> InteractiveWorldDefinition:
+    identity = EntityIdentity(id=new_entity_id("world"), key=EntityKey("worlds/example"), version=1)
     return InteractiveWorldDefinition(
+        identity=identity,
         build=_build(),
         title="Example world",
         summary="Example world for contract tests.",
@@ -51,6 +54,16 @@ def _definition(*profiles: InteractiveWorldProfileRef) -> InteractiveWorldDefini
         tags=("test",),
         capabilities=frozenset({"actions"}),
         profiles=profiles,
+        profile_identities=tuple(
+            MemberIdentity(
+                id=new_entity_id("world_profile"),
+                key=EntityKey(f"{identity.key}/{profile.profile_id}"),
+                version=1,
+                parent_id=identity.id,
+                registration_id=profile.profile_id,
+            )
+            for profile in profiles
+        ),
         profile_metadata=tuple(
             InteractiveWorldProfileMetadata(
                 profile_id=profile.profile_id,

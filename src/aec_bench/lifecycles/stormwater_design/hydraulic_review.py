@@ -6,6 +6,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 from typing import Any
+from uuid import UUID
 
 from aec_bench.contracts.evidence_lifecycle import (
     ConditionalOperationSpec,
@@ -14,6 +15,7 @@ from aec_bench.contracts.evidence_lifecycle import (
     LifecycleOperationSpec,
     LifecycleTaskMetadata,
 )
+from aec_bench.contracts.identity import EntityIdentity, EntityKey
 from aec_bench.lifecycles.stormwater_design.hydraulic_operations import HydraulicOperationResolver
 from aec_bench.lifecycles.stormwater_design.hydraulic_review_variants import (
     DEFAULT_VARIANT_ID,
@@ -31,6 +33,11 @@ from aec_bench.lifecycles.stormwater_design.hydraulics.source import build_sourc
 TEMPLATE_ID = "hydraulic-interaction-lifecycle-review"
 LIFECYCLE_ID = "hydraulic-interaction-review"
 METADATA = LifecycleTaskMetadata(
+    identity=EntityIdentity(
+        id=UUID("01a056f1-af83-7ae7-81a4-d310477fe4f1"),
+        key=EntityKey("stormwater/hydraulic-interaction-review"),
+        version=1,
+    ),
     template_id=TEMPLATE_ID,
     name="Hydraulic Interaction Lifecycle Review",
     discipline="civil",

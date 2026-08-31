@@ -147,6 +147,7 @@ def test_compiled_hydraulic_review_package_uses_current_identity(tmp_path: Path,
     assert _package_stats(compiled.package_dir)[0] > 0
     assert not (compiled.package_dir / "world.json").exists()
     assert set(json.loads((compiled.package_dir / "template.json").read_text())) == {
+        "identity",
         "template_id",
         "name",
         "discipline",

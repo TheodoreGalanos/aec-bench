@@ -7,7 +7,9 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from functools import cache
 from pathlib import Path
+from uuid import UUID
 
+from aec_bench.contracts.identity import EntityIdentity, EntityKey, MemberIdentity
 from aec_bench.contracts.interactive_world import InteractiveWorldProfileRef, WorldBuildRef
 from aec_bench.contracts.task_definition import Difficulty, Lifecycle, Visibility
 from aec_bench.worlds.runtime.definition import (
@@ -33,6 +35,8 @@ from aec_bench.worlds.stewardship.wastewater_pump_station.reference_package_mode
     ReferencePackage,
 )
 from aec_bench.worlds.stewardship.wastewater_pump_station.reference_system import (
+    PUMP_STATION_REFERENCE_SYSTEM_ID,
+    PUMP_STATION_REFERENCE_SYSTEM_RS2_ID,
     PumpStationReferenceSystem,
     list_reference_system_ids,
     load_reference_system,
@@ -50,6 +54,29 @@ class PumpStationContinualProfile:
     station_package: ReferencePackage
     model: PumpStationCoupledModel
     opening_state: PumpStationStewardshipState
+
+
+_WORLD_IDENTITY = EntityIdentity(
+    id=UUID("01a056f1-af83-7b07-8764-4e92fea81070"),
+    key=EntityKey("stewardship/wastewater-pump-station"),
+    version=1,
+)
+_PROFILE_IDENTITIES = {
+    PUMP_STATION_REFERENCE_SYSTEM_ID: MemberIdentity(
+        id=UUID("01a056f1-af83-760b-baf8-525a9b37e150"),
+        key=EntityKey(f"{_WORLD_IDENTITY.key}/pump-station-reference-system-asw-8-rs1-v1"),
+        version=1,
+        parent_id=_WORLD_IDENTITY.id,
+        registration_id=PUMP_STATION_REFERENCE_SYSTEM_ID,
+    ),
+    PUMP_STATION_REFERENCE_SYSTEM_RS2_ID: MemberIdentity(
+        id=UUID("01a056f1-af83-7e24-b17a-1c5d1327447a"),
+        key=EntityKey(f"{_WORLD_IDENTITY.key}/pump-station-reference-system-asw-8-rs2-v1"),
+        version=1,
+        parent_id=_WORLD_IDENTITY.id,
+        registration_id=PUMP_STATION_REFERENCE_SYSTEM_RS2_ID,
+    ),
+}
 
 
 def pump_station_profile_ref(profile: LoadedInteractiveWorldProfile) -> InteractiveWorldProfileRef:
@@ -134,6 +161,7 @@ def pump_station_continual_world_definition() -> InteractiveWorldDefinition:
 
     profiles = tuple(_profile_ref(reference_system_id) for reference_system_id in list_reference_system_ids())
     return InteractiveWorldDefinition(
+        identity=_WORLD_IDENTITY,
         build=_pump_station_world_build(),
         title="Wastewater pump-station stewardship",
         summary="Operate a persistent pump station safely across changing conditions.",
@@ -141,6 +169,7 @@ def pump_station_continual_world_definition() -> InteractiveWorldDefinition:
         tags=("operations", "pump-station", "stewardship", "wastewater"),
         capabilities=frozenset({"branching", "host-controls", "persistence"}),
         profiles=profiles,
+        profile_identities=tuple(_PROFILE_IDENTITIES[profile.profile_id] for profile in profiles),
         profile_metadata=tuple(
             InteractiveWorldProfileMetadata(
                 profile_id=profile.profile_id,
