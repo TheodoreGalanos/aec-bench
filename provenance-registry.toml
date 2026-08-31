@@ -1479,7 +1479,10 @@ compatibility_kind = "package_distribution"
 
 [[field]]
 symbol = "aec_bench.contracts.identity.EntityIdentity.version"
-aliases = ["mapping:aec_bench.cli.commands.run_review._condition_view.experiment.version"]
+aliases = [
+    "mapping:aec_bench.catalogue._identity_payload.version",
+    "mapping:aec_bench.cli.commands.run_review._condition_view.experiment.version",
+]
 surface = "pydantic_model"
 wire_name = "version"
 category = "compatibility"
