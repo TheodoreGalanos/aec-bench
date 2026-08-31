@@ -6,6 +6,7 @@ import typer
 from aec_bench import __version__
 from aec_bench.cli.commands.catalogue import app as catalogue_app
 from aec_bench.cli.commands.config import app as config_app
+from aec_bench.cli.commands.conformance import app as conformance_app
 from aec_bench.cli.commands.dataset import app as dataset_app
 from aec_bench.cli.commands.evaluate import evaluate_experiment
 from aec_bench.cli.commands.evaluation import app as evaluation_app
@@ -57,6 +58,7 @@ app.add_typer(evidence_app, name="evidence", rich_help_panel="Analysis")
 app.add_typer(ledger_app, name="ledger", rich_help_panel="Analysis")
 app.add_typer(config_app, name="config", rich_help_panel="Configuration")
 app.add_typer(catalogue_app, name="catalogue", rich_help_panel="Generation")
+app.add_typer(conformance_app, name="conformance", rich_help_panel="Validation")
 app.add_typer(generate_app, name="generate", rich_help_panel="Generation")
 app.add_typer(dataset_app, name="dataset", rich_help_panel="Datasets")
 app.add_typer(evolve_app, name="evolve", rich_help_panel="Evolution")

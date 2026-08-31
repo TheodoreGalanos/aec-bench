@@ -41,4 +41,5 @@ WORLD_DESCRIPTOR = InteractiveWorldOwnerDescriptor(
         "aec_bench.worlds.stewardship.wastewater_pump_station.continual_definition:"
         "pump_station_continual_world_definition"
     ),
+    conformance_entry_point=("aec_bench.worlds.stewardship.wastewater_pump_station.conformance:world_conformance_case"),
 )

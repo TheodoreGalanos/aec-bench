@@ -134,6 +134,14 @@ stable order. To save a semantic snapshot for review, pass
 `uv run aec-bench catalogue diff --against path/to/catalogue.json`.
 Snapshots compare entities through their IDs, keys, and explicit versions.
 
+Run the maintained Interactive World conformance checks with the canonical
+world key:
+
+```bash
+uv run aec-bench conformance world monitoring/dam-seepage
+uv run aec-bench conformance world stewardship/wastewater-pump-station
+```
+
 ### Run Experiments
 
 Install `aec-bench[execution]` before using Harbor. Add the `morph` extra for a
