@@ -7,11 +7,41 @@ import hashlib
 import json
 from collections.abc import Callable
 from dataclasses import dataclass
+from importlib import import_module
 from pathlib import Path
 
 from aec_bench.contracts.identity import EntityIdentity, MemberIdentity
 from aec_bench.contracts.interactive_world import InteractiveWorldProfileRef, WorldBuildRef
 from aec_bench.contracts.task_definition import Difficulty, Lifecycle, Visibility
+
+
+@dataclass(frozen=True, slots=True)
+class InteractiveWorldOwnerDescriptor:
+    """Describe one explicit owner entry in the generated world catalogue."""
+
+    task_world_id: str
+    entry_point: str
+
+    def __post_init__(self) -> None:
+        if not self.task_world_id.strip():
+            raise ValueError("Interactive World owner task-world ID must be non-empty")
+        module_name, separator, attribute_name = self.entry_point.partition(":")
+        if not separator or not module_name.strip() or not attribute_name.strip():
+            raise ValueError("Interactive World owner entry point must use module:attribute form")
+
+    def load(self) -> InteractiveWorldDefinition:
+        """Load and validate the concrete definition owned by this descriptor."""
+
+        module_name, _, attribute_name = self.entry_point.partition(":")
+        factory = getattr(import_module(module_name), attribute_name, None)
+        if not callable(factory):
+            raise TypeError(f"Interactive World owner entry point is not callable: {self.entry_point}")
+        definition = factory()
+        if not isinstance(definition, InteractiveWorldDefinition):
+            raise TypeError(f"Interactive World owner returned another definition type: {self.entry_point}")
+        if definition.build.task_world_id != self.task_world_id:
+            raise ValueError(f"Interactive World owner ID differs from definition: {self.task_world_id}")
+        return definition
 
 
 @dataclass(frozen=True, slots=True)
