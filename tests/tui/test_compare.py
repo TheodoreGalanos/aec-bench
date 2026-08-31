@@ -11,6 +11,7 @@ from textual.widgets import DataTable, Static
 
 from aec_bench.contracts.evaluation_result import EvaluationResult, ValidityCheck
 from aec_bench.contracts.trial_record import AgentReference, CostRecord, TaskReference
+from aec_bench.ledger.writer import write_trial_record
 from aec_bench.tui.screens.compare import (
     CompareScreen,
     build_comparison_matrix,
@@ -133,9 +134,7 @@ def test_find_paired_trials_matches_same_task_across_models() -> None:
 
 def _write_trial(ledger: Path, record) -> None:
     """Write a trial record to the ledger directory."""
-    trial_dir = ledger / record.experiment_id / record.trial_id
-    trial_dir.mkdir(parents=True, exist_ok=True)
-    (trial_dir / "trial_record.json").write_text(record.model_dump_json(indent=2), encoding="utf-8")
+    write_trial_record(ledger_root=ledger, record=record)
 
 
 class CompareTestApp(App[None]):

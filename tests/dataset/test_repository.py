@@ -35,7 +35,12 @@ def _repository(tmp_path: Path) -> tuple[Path, DatasetManifest, Path]:
     _git(root, "config", "user.email", "dataset@example.invalid")
     task = root / "tasks" / "civil" / "task-a"
     task.mkdir(parents=True)
-    (task / "task.toml").write_text('[metadata]\ndifficulty = "medium"\n', encoding="utf-8")
+    (task / "task.toml").write_text(
+        '[identity]\nid = "019c2c7a-5a33-7b8d-a702-8f7f3e8c21aa"\n'
+        'key = "civil/task-a"\nversion = 1\n\n'
+        '[metadata]\ndifficulty = "medium"\nlifecycle = "active"\nvisibility = "public"\n',
+        encoding="utf-8",
+    )
     (task / "instruction.md").write_text("Solve it\n", encoding="utf-8")
     manifest = DatasetManifest(
         dataset_id="core",

@@ -294,6 +294,9 @@ def test_lowering_rejects_non_uniform_typed_task_tool_surfaces(tmp_path: Path) -
     first_task_toml = (first_task_dir / "task.toml").read_text(encoding="utf-8")
     (second_task_dir / "task.toml").write_text(
         first_task_toml.replace(
+            f'key = "{task_ids[0]}"',
+            f'key = "{task_ids[1]}"',
+        ).replace(
             "Run task-declared shell commands inside the isolated workspace.",
             "Run a task-specific shell surface with different semantics.",
         ),

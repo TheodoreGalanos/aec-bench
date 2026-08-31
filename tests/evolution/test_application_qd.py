@@ -47,7 +47,9 @@ def _setup(tmp_path: Path, task_count: int = 1) -> tuple[Workspace, CandidateEva
     (root / "prompts").mkdir(parents=True)
     (root / "prompts" / "system.md").write_text("canonical", encoding="utf-8")
     (root / "manifest.yaml").write_text(
-        yaml.safe_dump({"name": "qd-test", "agent_adapter": "direct", "evolvable_layers": ["prompts"]}),
+        yaml.safe_dump(
+            {"schema_version": 1, "name": "qd-test", "agent_adapter": "direct", "evolvable_layers": ["prompts"]}
+        ),
         encoding="utf-8",
     )
     workspace = Workspace(root)

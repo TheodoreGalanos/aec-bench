@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import tempfile
 import threading
 from collections.abc import Sequence
 from datetime import UTC, datetime
@@ -75,7 +76,7 @@ class FakeEvolverFactory:
         state_dir: Path | None = None,
         evaluation_cost: float | None = 0.0,
     ) -> None:
-        self._state_dir = state_dir or Path("/private/tmp/aec-bench-swarm-test")
+        self._state_dir = state_dir or Path(tempfile.mkdtemp(prefix="aec-bench-swarm-test-"))
         self._scores = scores_per_agent
         self._evaluation_cost = evaluation_cost
         self._scores_by_candidate: dict[str, float] = {}

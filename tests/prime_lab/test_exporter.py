@@ -13,6 +13,7 @@ import tomllib
 from pathlib import Path
 
 import pytest
+from click import unstyle
 from typer.testing import CliRunner
 
 from aec_bench.cli.main import app
@@ -69,9 +70,13 @@ def _make_task(
     task_dir.mkdir(parents=True)
     (task_dir / "task.toml").write_text(
         'version = "1.0"\n\n'
+        '[identity]\nid = "019c2c7a-5a33-7b8d-a702-8f7f3e8c21aa"\n'
+        f'key = "{task_id.lower()}"\nversion = 1\n\n'
         "[metadata]\n"
         f'difficulty = "{difficulty}"\n'
         'category = "reasoning"\n'
+        'lifecycle = "active"\n'
+        'visibility = "public"\n'
         'tags = ["electrical", "deterministic"]\n\n'
         "[agent]\ntimeout_sec = 600\n\n"
         "[verifier]\ntimeout_sec = 120\n\n"
@@ -143,9 +148,12 @@ def test_prime_harness_classifier_marks_bash_task_stateful(tmp_path: Path) -> No
     task_dir = _make_task(tasks_root)
     (task_dir / "task.toml").write_text(
         'version = "1.0"\n\n'
+        '[identity]\nid = "019c2c7a-5a33-7b8d-a702-8f7f3e8c21aa"\nkey = "electrical/voltage-drop"\nversion = 1\n\n'
         "[metadata]\n"
         'difficulty = "easy"\n'
         'category = "reasoning"\n\n'
+        'lifecycle = "active"\n'
+        'visibility = "public"\n\n'
         "[agent]\ntimeout_sec = 600\n\n"
         "[verifier]\ntimeout_sec = 120\n\n"
         "[environment]\nextensions = []\n\n"
@@ -201,8 +209,8 @@ def test_export_rejects_holdout_task(tmp_path: Path) -> None:
     task_toml = task_dir / "task.toml"
     task_toml.write_text(
         task_toml.read_text(encoding="utf-8").replace(
-            "[metadata]\n",
-            '[metadata]\nvisibility = "holdout"\n',
+            'visibility = "public"',
+            'visibility = "holdout"',
         ),
         encoding="utf-8",
     )
@@ -273,9 +281,12 @@ def test_export_creates_stateful_workspace_environment_for_bash_task(tmp_path: P
     task_dir = _make_task(tasks_root)
     (task_dir / "task.toml").write_text(
         'version = "1.0"\n\n'
+        '[identity]\nid = "019c2c7a-5a33-7b8d-a702-8f7f3e8c21aa"\nkey = "electrical/voltage-drop"\nversion = 1\n\n'
         "[metadata]\n"
         'difficulty = "easy"\n'
         'category = "reasoning"\n\n'
+        'lifecycle = "active"\n'
+        'visibility = "public"\n\n'
         "[agent]\ntimeout_sec = 600\n\n"
         "[verifier]\ntimeout_sec = 120\n\n"
         "[environment]\nextensions = []\n\n"
@@ -308,9 +319,12 @@ def test_export_rejects_forced_single_turn_for_workspace_task(tmp_path: Path) ->
     task_dir = _make_task(tasks_root)
     (task_dir / "task.toml").write_text(
         'version = "1.0"\n\n'
+        '[identity]\nid = "019c2c7a-5a33-7b8d-a702-8f7f3e8c21aa"\nkey = "electrical/voltage-drop"\nversion = 1\n\n'
         "[metadata]\n"
         'difficulty = "easy"\n'
         'category = "reasoning"\n\n'
+        'lifecycle = "active"\n'
+        'visibility = "public"\n\n'
         "[agent]\ntimeout_sec = 600\n\n"
         "[verifier]\ntimeout_sec = 120\n\n"
         "[environment]\nextensions = []\n\n"
@@ -367,9 +381,12 @@ def test_generated_stateful_package_loads_outside_repo_root(tmp_path: Path) -> N
     task_dir = _make_task(tasks_root)
     (task_dir / "task.toml").write_text(
         'version = "1.0"\n\n'
+        '[identity]\nid = "019c2c7a-5a33-7b8d-a702-8f7f3e8c21aa"\nkey = "electrical/voltage-drop"\nversion = 1\n\n'
         "[metadata]\n"
         'difficulty = "easy"\n'
         'category = "reasoning"\n\n'
+        'lifecycle = "active"\n'
+        'visibility = "public"\n\n'
         "[agent]\ntimeout_sec = 600\n\n"
         "[verifier]\ntimeout_sec = 120\n\n"
         "[environment]\nextensions = []\n\n"
@@ -414,9 +431,12 @@ def test_generated_stateful_workspace_tools_score_with_verifier(tmp_path: Path) 
     task_dir = _make_task(tasks_root)
     (task_dir / "task.toml").write_text(
         'version = "1.0"\n\n'
+        '[identity]\nid = "019c2c7a-5a33-7b8d-a702-8f7f3e8c21aa"\nkey = "electrical/voltage-drop"\nversion = 1\n\n'
         "[metadata]\n"
         'difficulty = "easy"\n'
         'category = "reasoning"\n\n'
+        'lifecycle = "active"\n'
+        'visibility = "public"\n\n'
         "[agent]\ntimeout_sec = 600\n\n"
         "[verifier]\ntimeout_sec = 120\n\n"
         "[environment]\nextensions = []\n\n"
@@ -487,9 +507,12 @@ def test_generated_stateful_write_file_keeps_rollout_open_for_workspace_alias(
     task_dir = _make_task(tasks_root)
     (task_dir / "task.toml").write_text(
         'version = "1.0"\n\n'
+        '[identity]\nid = "019c2c7a-5a33-7b8d-a702-8f7f3e8c21aa"\nkey = "electrical/voltage-drop"\nversion = 1\n\n'
         "[metadata]\n"
         'difficulty = "easy"\n'
         'category = "reasoning"\n\n'
+        'lifecycle = "active"\n'
+        'visibility = "public"\n\n'
         "[agent]\ntimeout_sec = 600\n\n"
         "[verifier]\ntimeout_sec = 120\n\n"
         "[environment]\nextensions = []\n\n"
@@ -567,6 +590,7 @@ def test_prime_export_cli_selects_task_pattern(tmp_path: Path) -> None:
             "--pattern",
             "electrical/*",
         ],
+        env={"COLUMNS": "240"},
     )
 
     assert result.exit_code == 0
@@ -643,10 +667,11 @@ def test_prime_export_cli_rejects_dataset_with_task_filter(tmp_path: Path) -> No
             "--task",
             "electrical/voltage-drop",
         ],
+        env={"COLUMNS": "240"},
     )
 
     assert result.exit_code != 0
-    assert "--dataset cannot be combined" in result.output
+    assert "--dataset cannot be combined" in unstyle(result.output)
 
 
 def test_prime_export_cli_defaults_to_repo_prime_rl_directory(tmp_path: Path) -> None:
@@ -1440,10 +1465,11 @@ def test_prime_train_config_rejects_duplicate_difficulty_ratios(tmp_path: Path) 
             "--difficulty-ratio",
             "easy=0.55",
         ],
+        env={"COLUMNS": "240"},
     )
 
     assert result.exit_code != 0
-    assert "duplicate --difficulty-ratio difficulty" in result.output
+    assert "duplicate --difficulty-ratio difficulty" in unstyle(result.output)
 
 
 def test_prime_train_runs_hosted_training_config(monkeypatch, tmp_path: Path) -> None:

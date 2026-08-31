@@ -149,7 +149,16 @@ def _candidate_task_dirs(tasks_root: Path) -> list[Path]:
         return []
     candidates = {path.parent for path in tasks_root.rglob("task.toml")}
     candidates.update(path.parent for path in tasks_root.rglob("instruction.md"))
-    return sorted(candidates)
+    task_roots = {
+        candidate
+        for candidate in candidates
+        if (candidate / "task.toml").is_file() and (candidate / "instruction.md").is_file()
+    }
+    return sorted(
+        candidate
+        for candidate in candidates
+        if not any(parent in task_roots for parent in candidate.parents if parent != candidate)
+    )
 
 
 def _diagnostic(instance_dir: Path, message: str) -> TaskDiagnostic:

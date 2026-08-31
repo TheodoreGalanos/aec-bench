@@ -42,6 +42,7 @@ from aec_bench.contracts.evaluation_plane import (
 )
 from aec_bench.contracts.harness_instance import CompiledHarnessInstance
 from aec_bench.contracts.harness_kernel import KernelRef, canonical_json_sha256
+from aec_bench.contracts.identity import EntityIdentity, EntityKind, new_entity_id
 from aec_bench.contracts.output_completion import OutputCompletionContract
 from aec_bench.contracts.program_proposal.candidate import (
     CandidateGenerationCoordinate,
@@ -1221,6 +1222,7 @@ def _task_snapshot(task_id: str, label: str) -> TaskSnapshotRef:
     digest = _sha(label)
     return TaskSnapshotRef(
         task_id=task_id,
+        task_identity=EntityIdentity(id=new_entity_id(EntityKind.TASK), key=task_id, version=1),
         artifact=ArtifactRef(
             artifact_id=f"artifacts/sha256/{digest}",
             sha256=digest,

@@ -28,7 +28,9 @@ def _write_task_instance(tasks_root: Path, task_id: str, visibility: Visibility 
     (task_dir / "instruction.md").write_text("Write findings to /workspace/output.jsonl.\n", encoding="utf-8")
     (task_dir / "tests" / "test.sh").write_text("#!/bin/bash\n", encoding="utf-8")
     (task_dir / "task.toml").write_text(
-        f'[agent]\ntimeout_sec = 600\n\n[metadata]\nvisibility = "{visibility.value}"\n',
+        '[identity]\nid = "019c2c7a-5a33-7b8d-a702-8f7f3e8c21aa"\n'
+        f'key = "{task_id.lower()}"\nversion = 1\n\n'
+        f'[agent]\ntimeout_sec = 600\n\n[metadata]\nlifecycle = "active"\nvisibility = "{visibility.value}"\n',
         encoding="utf-8",
     )
 

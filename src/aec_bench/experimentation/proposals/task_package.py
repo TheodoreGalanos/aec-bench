@@ -9,11 +9,13 @@ import re
 import shutil
 import stat
 import tempfile
+import tomllib
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Literal
 
 from aec_bench.contracts.harness_kernel import canonical_json_sha256
+from aec_bench.contracts.identity import EntityIdentity
 from aec_bench.contracts.output_completion import OutputCompletionContract
 from aec_bench.experimentation.proposals.task_packaging.build_context import (
     verify_proposal_task_build_context as _verify_proposal_task_build_context,
@@ -383,6 +385,7 @@ def verify_proposal_task_build_context(
 
 @dataclass(frozen=True)
 class _SourceTaskConfig:
+    task_identity: EntityIdentity
     agent_timeout_sec: float
     verifier_timeout_sec: float
     build_timeout_sec: float
@@ -398,8 +401,11 @@ def _read_source_task_config(task_dir: Path) -> _SourceTaskConfig:
     try:
         from harbor.models.task.config import TaskConfig  # type: ignore[import-untyped]
 
-        config = TaskConfig.model_validate_toml((task_dir / "task.toml").read_text(encoding="utf-8"))
-    except (OSError, ValueError) as error:
+        task_toml = (task_dir / "task.toml").read_text(encoding="utf-8")
+        config = TaskConfig.model_validate_toml(task_toml)
+        raw_toml = tomllib.loads(task_toml)
+        task_identity = EntityIdentity.model_validate(raw_toml["identity"])
+    except (KeyError, OSError, ValueError) as error:
         raise ProposalTaskPackageError("source task.toml is missing or invalid") from error
     numeric_values = {
         "agent timeout": config.agent.timeout_sec,
@@ -424,6 +430,7 @@ def _read_source_task_config(task_dir: Path) -> _SourceTaskConfig:
     if gpus is not None and (isinstance(gpus, bool) or not isinstance(gpus, int) or gpus < 0):
         raise ProposalTaskPackageError("source task environment resources are invalid")
     return _SourceTaskConfig(
+        task_identity=task_identity,
         agent_timeout_sec=float(config.agent.timeout_sec),
         verifier_timeout_sec=float(config.verifier.timeout_sec),
         build_timeout_sec=float(config.environment.build_timeout_sec),
@@ -557,9 +564,14 @@ def _sanitized_task_toml(
     )
     return (
         'version = "1.0"\n\n'
+        "[identity]\n"
+        f"id = {json.dumps(str(source_config.task_identity.id))}\n"
+        f"key = {json.dumps(identity.task_id)}\n"
+        f"version = {source_config.task_identity.version}\n\n"
         "[metadata]\n"
         'difficulty = "medium"\n'
         'category = "proposal-session"\n'
+        'lifecycle = "active"\n'
         f"visibility = {visibility}\n"
         'tags = ["proposal-session", "source-free"]\n\n'
         "[agent]\n"

@@ -24,7 +24,7 @@ description = "Room use, floor area, climate, and internal-load values"
 
 [[members]]
 member_id = "brisbane-office-acquisition"
-task_id = "mechanical/heat-load/single-room-office-L3/brisbane-office-85m2"
+task_id = "mechanical/heat-load/single-room-office-l3/brisbane-office-85m2"
 description = "An occupied Brisbane office calculation used for acquisition"
 probe_only = false
 
@@ -36,7 +36,7 @@ room_and_climate = "Brisbane office, 85 square metres"
 
 [[members]]
 member_id = "sydney-classroom-immediate-probe"
-task_id = "mechanical/heat-load/single-room-office-L3/sydney-classroom-120m2"
+task_id = "mechanical/heat-load/single-room-office-l3/sydney-classroom-120m2"
 description = "An occupied Sydney classroom calculation used as the immediate probe"
 probe_only = true
 
@@ -48,7 +48,7 @@ room_and_climate = "Sydney classroom, 120 square metres"
 
 [[members]]
 member_id = "adelaide-library-delayed-probe"
-task_id = "mechanical/heat-load/single-room-office-L3/adelaide-library-150m2"
+task_id = "mechanical/heat-load/single-room-office-l3/adelaide-library-150m2"
 description = "An occupied Adelaide library calculation used as the delayed probe"
 probe_only = true
 
@@ -60,7 +60,7 @@ room_and_climate = "Adelaide library, 150 square metres"
 
 [[members]]
 member_id = "cairns-server-interference"
-task_id = "mechanical/heat-load/single-room-office-L3/cairns-server-60m2"
+task_id = "mechanical/heat-load/single-room-office-l3/cairns-server-60m2"
 description = "An unoccupied Cairns server-room calculation that uses minimum outside air per floor area"
 probe_only = false
 

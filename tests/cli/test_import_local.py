@@ -22,7 +22,12 @@ def _create_task_dir(tmp_path: Path) -> Path:
     task_dir = tmp_path / "tasks" / "test-domain" / "test-task"
     task_dir.mkdir(parents=True)
     (task_dir / "instruction.md").write_text("Calculate the thing and write to /workspace/output.md")
-    (task_dir / "task.toml").write_text('[metadata]\ndifficulty = "easy"\n\n[agent]\ntimeout_sec = 600\n')
+    (task_dir / "task.toml").write_text(
+        '[identity]\nid = "019c2c7a-5a33-7b8d-a702-8f7f3e8c21aa"\n'
+        'key = "test-domain/test-task"\nversion = 1\n\n'
+        '[metadata]\ndifficulty = "easy"\nlifecycle = "active"\nvisibility = "public"\n\n'
+        "[agent]\ntimeout_sec = 600\n"
+    )
     tests_dir = task_dir / "tests"
     tests_dir.mkdir()
     (tests_dir / "verify.py").write_text('print("ok")')

@@ -24,7 +24,11 @@ def _make_task(project_root: Path, task_id: str, difficulty: str) -> None:
     task_dir = project_root / "tasks" / task_id
     task_dir.mkdir(parents=True)
     (task_dir / "task.toml").write_text(
+        '[identity]\nid = "019c2c7a-5a33-7b8d-a702-8f7f3e8c21aa"\n'
+        f'key = "{task_id.lower()}"\nversion = 1\n\n'
         "[metadata]\n"
+        'lifecycle = "active"\n'
+        'visibility = "public"\n'
         f'difficulty = "{difficulty}"\n'
         'category = "reasoning"\n'
         'tags = ["dataset-test"]\n\n'
@@ -70,7 +74,9 @@ def _write_suite_output(project_root: Path) -> Path:
                         "instance_index": 0,
                         "difficulty": "easy",
                         "tool_mode": "with-tool",
+                        "task_lifecycle": "active",
                         "task_visibility": "public",
+                        "task_identity_id": "019c2c7a-5a33-7b8d-a702-8f7f3e8c21aa",
                     },
                     {
                         "task_id": "mechanical/example/hard",
@@ -80,7 +86,9 @@ def _write_suite_output(project_root: Path) -> Path:
                         "instance_index": 1,
                         "difficulty": "hard",
                         "tool_mode": "with-tool",
+                        "task_lifecycle": "active",
                         "task_visibility": "public",
+                        "task_identity_id": "019c2c7a-5a33-7b8d-a702-8f7f3e8c21ab",
                     },
                 ],
             }

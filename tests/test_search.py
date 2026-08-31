@@ -80,7 +80,6 @@ def _make_template(
         path=Path("/tmp/test"),
         engine=engine,
         engine_source="def compute(**kwargs): ...",
-        source_sha256="0" * 64,
     )
 
 

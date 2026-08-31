@@ -172,7 +172,7 @@ def test_raw_snapshot_and_trial_record_preserve_distinct_identity_schemes(
                 ),
             },
         ).model_dump(mode="python"),
-    )
+    ).bind_run_manifest(record.run_manifest)
     with pytest.raises(
         ProposalTrialImportError,
         match="differs from the resumed import",

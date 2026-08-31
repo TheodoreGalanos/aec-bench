@@ -522,7 +522,9 @@ def test_import_harbor_trial_derives_custom_backend_from_environment_metadata(tm
         encoding="utf-8",
     )
     (task_dir / "task.toml").write_text(
-        '[metadata]\nvisibility = "public"\n\n[agent]\ntimeout_sec = 60\n',
+        '[identity]\nid = "019c2c7a-5a33-7b8d-a702-8f7f3e8c21aa"\n'
+        'key = "mechanical/heat-load/alpha"\nversion = 1\n\n'
+        '[metadata]\nlifecycle = "active"\nvisibility = "public"\n\n[agent]\ntimeout_sec = 60\n',
         encoding="utf-8",
     )
     (task_dir / "tests" / "test.sh").write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
@@ -570,7 +572,9 @@ def test_import_harbor_trial_includes_reviewer_summary_in_breakdown(tmp_path: Pa
         encoding="utf-8",
     )
     (task_dir / "task.toml").write_text(
-        '[metadata]\nvisibility = "public"\n\n[agent]\ntimeout_sec = 60\n',
+        '[identity]\nid = "019c2c7a-5a33-7b8d-a702-8f7f3e8c21aa"\n'
+        'key = "mechanical/heat-load/alpha"\nversion = 1\n\n'
+        '[metadata]\nlifecycle = "active"\nvisibility = "public"\n\n[agent]\ntimeout_sec = 60\n',
         encoding="utf-8",
     )
     (task_dir / "tests" / "test.sh").write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
@@ -1006,7 +1010,9 @@ def _write_task_and_trial_roots(
     (trial_dir / "artifacts" / "agent").mkdir(parents=True)
     (trial_dir / "verifier").mkdir(parents=True)
     (task_dir / "task.toml").write_text(
-        '[metadata]\nvisibility = "public"\n\n[agent]\ntimeout_sec = 60\n',
+        '[identity]\nid = "019c2c7a-5a33-7b8d-a702-8f7f3e8c21aa"\n'
+        'key = "civil/calculation/entrypoint-import"\nversion = 1\n\n'
+        '[metadata]\nlifecycle = "active"\nvisibility = "public"\n\n[agent]\ntimeout_sec = 60\n',
         encoding="utf-8",
     )
     (task_dir / "tests" / "test.sh").write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")

@@ -109,6 +109,7 @@ def _setup_workspace(tmp_path: Path) -> Path:
     (ws / "manifest.yaml").write_text(
         yaml.dump(
             {
+                "schema_version": 1,
                 "name": "test-swarm",
                 "agent_adapter": "rlm",
                 "evolvable_layers": ["prompts", "skills"],

@@ -867,8 +867,14 @@ def _write_task(tasks_root: Path, task_id: str) -> None:
     (task_dir / "tests").mkdir()
     (task_dir / "task.toml").write_text(
         """
+[identity]
+id = "019c2c7a-5a33-7b8d-a702-8f7f3e8c21aa"
+key = "__TASK_ID__"
+version = 1
+
 [metadata]
 difficulty = "easy"
+lifecycle = "active"
 visibility = "public"
 tags = ["repair"]
 
@@ -880,7 +886,7 @@ name = "bash"
 source = "environment/tools/bash.sh"
 description = "Run task-declared shell commands inside the isolated workspace."
 returns_image = false
-""".strip()
+        """.replace("__TASK_ID__", task_id.lower()).strip()
         + "\n",
         encoding="utf-8",
     )

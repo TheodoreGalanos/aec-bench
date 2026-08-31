@@ -15,6 +15,7 @@ from aec_bench.experimentation.learning_studies.protocol_collection import (
     load_learning_study_protocol,
 )
 from aec_bench.tasks.loader import load_task_definition
+from tests.experimentation.learning_studies.support import resolve_learning_task_dir
 
 _REPOSITORY_ROOT = Path(__file__).parents[3]
 _TASKS_ROOT = _REPOSITORY_ROOT / "tasks"
@@ -23,7 +24,7 @@ _COMPUTE = ComputeConfig(backend="local", resource_limits={"memory_mb": 512}, ti
 
 
 def _resolve_task(task_id: str):  # noqa: ANN202
-    return load_task_definition(_TASKS_ROOT / task_id, _TASKS_ROOT)
+    return load_task_definition(resolve_learning_task_dir(_TASKS_ROOT, task_id), _TASKS_ROOT)
 
 
 @pytest.mark.parametrize(

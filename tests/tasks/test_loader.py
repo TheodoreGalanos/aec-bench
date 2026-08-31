@@ -8,7 +8,13 @@ from uuid import UUID
 import pytest
 
 from aec_bench.contracts.identity import EntityKind, new_entity_id, validate_uuidv7
-from aec_bench.tasks.loader import LoadError, _load_tools, derive_task_id, load_task_definition
+from aec_bench.tasks.loader import (
+    LoadError,
+    _load_tools,
+    derive_task_id,
+    load_task_definition,
+    resolve_task_instance_dir,
+)
 
 TASKS_ROOT = Path(__file__).resolve().parents[2] / "tasks"
 
@@ -30,6 +36,31 @@ def test_loader_reads_real_mechanical_instance() -> None:
     assert task.domain == "mechanical"
     assert task.category == "reasoning"
     assert task.timeout_seconds == 600
+
+
+def test_resolve_task_instance_dir_matches_key_when_physical_path_spelling_differs(tmp_path: Path) -> None:
+    instance_dir = tmp_path / "mechanical" / "heat-load" / "single room office L3" / "brisbane-office-85m2"
+    instance_dir.mkdir(parents=True)
+    (instance_dir / "instruction.md").write_text("Solve the task.\n", encoding="utf-8")
+    (instance_dir / "task.toml").write_text(
+        _identity_block("mechanical/heat-load/single-room-office-l3/brisbane-office-85m2"),
+        encoding="utf-8",
+    )
+
+    resolved = resolve_task_instance_dir(
+        "mechanical/heat-load/single-room-office-l3/brisbane-office-85m2",
+        tmp_path,
+    )
+
+    assert resolved.samefile(instance_dir)
+
+
+def test_resolve_task_instance_dir_rejects_escape_and_missing_key(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="task id escapes tasks root"):
+        resolve_task_instance_dir("../outside", tmp_path)
+
+    with pytest.raises(LoadError, match="task instance not found for key"):
+        resolve_task_instance_dir("mechanical/missing-task", tmp_path)
 
 
 def test_maintained_catalogue_uses_strict_identity_and_policy_metadata() -> None:

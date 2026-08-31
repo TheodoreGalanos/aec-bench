@@ -29,7 +29,7 @@ from aec_bench.experimentation.learning_studies.runtime import (
 )
 from aec_bench.tasks.loader import load_task_definition
 
-from .support import HeatLoadStudyAdapter
+from .support import HeatLoadStudyAdapter, resolve_learning_task_dir
 
 _REPOSITORY_ROOT = Path(__file__).parents[3]
 _TASKS_ROOT = _REPOSITORY_ROOT / "tasks"
@@ -41,7 +41,7 @@ _CONSOLIDATION_OPERATION_ID = "update-structured-memory"
 
 
 def _resolve_task(task_id: str):  # noqa: ANN202
-    return load_task_definition(_TASKS_ROOT / task_id, _TASKS_ROOT)
+    return load_task_definition(resolve_learning_task_dir(_TASKS_ROOT, task_id), _TASKS_ROOT)
 
 
 def _plan():  # noqa: ANN202

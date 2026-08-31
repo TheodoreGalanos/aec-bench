@@ -32,6 +32,7 @@ _ALLOWED_FILE_PATHS = (
     PurePosixPath("providers/__init__.py"),
     PurePosixPath("providers/behavioral_llm.py"),
     PurePosixPath("providers/morph_cloud.py"),
+    PurePosixPath("model_routing.py"),
     PurePosixPath("templates/__init__.py"),
     PurePosixPath("templates/contracts.py"),
 )

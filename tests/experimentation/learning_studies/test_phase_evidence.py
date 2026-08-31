@@ -27,7 +27,7 @@ from aec_bench.experimentation.learning_studies.planning import CompiledExperien
 from aec_bench.experimentation.learning_studies.runtime import ExecuteExperienceRequest
 from aec_bench.ledger.artifact_repository import ArtifactRepository
 from aec_bench.ledger.reader import read_trial_record
-from aec_bench.ledger.writer import write_trial_record_at
+from aec_bench.ledger.writer import write_trial_record
 from aec_bench.lifecycles.runtime.episode import LifecycleExecutionMode, LifecycleVisibilityPolicy
 from aec_bench.lifecycles.stormwater_design.drainage_learning import (
     DrainageLearningEvidence,
@@ -251,10 +251,10 @@ def test_coordinator_attaches_evidence_and_ledger_round_trips_it(
     assert record is not None
     assert record.pending_extensions["lifecycle_learning_evidence"] == evidence
 
-    path = write_trial_record_at(path=tmp_path / "ledger" / "experiment" / "trial.json", record=record)
+    path = write_trial_record(ledger_root=tmp_path / "ledger", record=record)
     restored = read_trial_record(path, ledger_root=tmp_path / "ledger")
     extension = next(item for item in restored.extension_refs if item.extension_kind == "lifecycle_learning_evidence")
-    raw = ArtifactRepository(tmp_path / "ledger" / "experiment" / "_artifacts").read_bytes(extension.artifact)
+    raw = ArtifactRepository(tmp_path / "ledger" / "_artifacts").read_bytes(extension.artifact)
     assert DrainageLearningEvidence.model_validate_json(raw) == evidence
 
 
@@ -286,10 +286,10 @@ def test_facade_evidence_round_trips_through_the_ledger(tmp_path: Path) -> None:
     assert evidence is not None
     record.attach_extension("lifecycle_learning_evidence", evidence)
 
-    path = write_trial_record_at(path=tmp_path / "ledger" / "experiment" / "facade.json", record=record)
+    path = write_trial_record(ledger_root=tmp_path / "ledger", record=record)
     restored = read_trial_record(path, ledger_root=tmp_path / "ledger")
     extension = next(item for item in restored.extension_refs if item.extension_kind == "lifecycle_learning_evidence")
-    raw = ArtifactRepository(tmp_path / "ledger" / "experiment" / "_artifacts").read_bytes(extension.artifact)
+    raw = ArtifactRepository(tmp_path / "ledger" / "_artifacts").read_bytes(extension.artifact)
 
     assert FacadeLearningEvidence.model_validate_json(raw) == evidence
 

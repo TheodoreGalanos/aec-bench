@@ -5,7 +5,7 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
-from aec_bench.contracts.dataset import DatasetManifest, DatasetTaskEntry, dataset_reference_key
+from aec_bench.contracts.dataset import DatasetManifest, DatasetTaskEntry
 from aec_bench.dataset.publication import publish_dataset
 from aec_bench.dataset.storage import save_dataset
 from aec_bench.ledger.writer import write_trial_record
@@ -54,7 +54,7 @@ def _setup_env(
     datasets = tmp_path / "datasets"
     datasets.mkdir()
 
-    exact_references: dict[str, str] = {}
+    exact_references: dict[str, object] = {}
     if manifests:
         for manifest in manifests:
             for task in manifest.tasks:
@@ -68,16 +68,18 @@ def _setup_env(
                 project_root=tmp_path,
                 label="1.0.0",
             )
-            exact_references[f"{manifest.dataset_id}@1.0.0"] = dataset_reference_key(publication.dataset_ref)
+            exact_references[f"{manifest.dataset_id}@1.0.0"] = publication.dataset_ref
 
     if trial_kwargs_list:
         for kwargs in trial_kwargs_list:
+            record_kwargs = dict(kwargs)
+            requested_dataset_id = record_kwargs.pop("dataset_id", None)
             write_trial_record(
                 ledger_root=ledger,
                 record=make_trial_record(
                     **{
-                        **kwargs,
-                        "dataset_id": exact_references.get(kwargs.get("dataset_id"), kwargs.get("dataset_id")),
+                        **record_kwargs,
+                        "dataset": exact_references.get(requested_dataset_id),
                     }
                 ),
             )

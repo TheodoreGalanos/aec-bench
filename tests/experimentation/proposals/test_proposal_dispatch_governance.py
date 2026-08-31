@@ -491,7 +491,7 @@ def _materialize_dispatch_fixture(
     derived = build_proposal_task_package(
         source_task_dir=source_task_dir,
         destination_task_dir=(
-            tmp_path / "derived-task"
+            tmp_path / compiled.task_snapshot.task_id
             if repo_root is None
             else Path(repo_root) / "tasks" / compiled.task_snapshot.task_id
         ),
@@ -553,7 +553,7 @@ def _materialize_dispatch_fixture(
     )
     observed_task = load_task_definition(
         derived.path,
-        derived.path.parent.parent,
+        tmp_path if repo_root is None else Path(repo_root) / "tasks",
     )
     derived_task = observed_task.model_copy(
         update={"task_id": manifest.task_id},

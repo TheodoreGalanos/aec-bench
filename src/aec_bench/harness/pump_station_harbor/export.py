@@ -62,6 +62,7 @@ PUMP_STATION_CONTROLLER_MODES = (
     "deterministic_reference",
     "model_tool_loop",
 )
+PUMP_STATION_TASK_IDENTITY_ID = "019c2c7a-5a33-7b8d-a702-8f7f3e8c21aa"
 
 _MANIFEST_NAME = "world-session-export.json"
 _PACKAGE_PATH = "tests/reference-package"
@@ -597,10 +598,15 @@ def _task_toml_text(
         "# ABOUTME: Declares one provider-neutral wastewater pump-station Harbor task.\n"
         "# ABOUTME: Binds task metadata while Harbor retains independent reward ownership.\n"
         'version = "1.0"\n\n'
+        "[identity]\n"
+        f'id = "{PUMP_STATION_TASK_IDENTITY_ID}"\n'
+        'key = "stewardship/wastewater-pump-station"\n'
+        "version = 1\n\n"
         "[metadata]\n"
         'difficulty = "hard"\n'
         'category = "asset-stewardship"\n'
         'domain = "mechanical"\n'
+        'lifecycle = "active"\n'
         'visibility = "public"\n'
         f"tags = {tags}\n"
         f"task_world_id = {json.dumps(task_world_id)}\n"

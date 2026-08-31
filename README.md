@@ -1117,6 +1117,7 @@ or another agent environment.
 | **Hardening Pass** | `/hardening-pass <path>` | `$hardening-pass <path>` | Quality-gate a template or task instance before benchmarking |
 | **Domain Check** | `/domain-check` | `$domain-check` | Verify architectural invariants before publishing or committing |
 | **Meta-Harness** | `/meta-harness` | `$meta-harness` | Design or compare a harness candidate from task prose and run evidence |
+| **Lifecycle** | `/lifecycle` | `$lifecycle` | Run, inspect, branch, verify, or study a finite AEC-Bench evidence lifecycle |
 
 `aec-bench init` installs the packaged skills into `.claude/skills/` for Claude
 Code and `.agents/skills/` for Codex. Run `aec-bench init --update-skills` in an

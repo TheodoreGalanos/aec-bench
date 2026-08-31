@@ -241,6 +241,7 @@ def scaffold_workspace(workspace_path: Path, *, name: str) -> Path:
     (workspace_path / "prompts").mkdir(parents=True, exist_ok=True)
     (workspace_path / "skills").mkdir(parents=True, exist_ok=True)
     manifest = {
+        "schema_version": 1,
         "name": name,
         "agent_adapter": "tool_loop",
         "evolvable_layers": ["prompts", "skills"],

@@ -24,7 +24,13 @@ from aec_bench.ledger.immutable_byte_store import ImmutableArtifactIntegrityErro
 def _task(project_root: Path, relative: str, *, instruction: str = "Solve it") -> None:
     root = project_root / relative
     (root / "tests").mkdir(parents=True)
-    (root / "task.toml").write_text('[metadata]\ndifficulty = "medium"\n', encoding="utf-8")
+    task_key = relative.removeprefix("tasks/").lower()
+    (root / "task.toml").write_text(
+        '[identity]\nid = "019c2c7a-5a33-7b8d-a702-8f7f3e8c21aa"\n'
+        f'key = "{task_key}"\nversion = 1\n\n'
+        '[metadata]\ndifficulty = "medium"\nlifecycle = "active"\nvisibility = "public"\n',
+        encoding="utf-8",
+    )
     (root / "instruction.md").write_text(instruction, encoding="utf-8")
     script = root / "tests" / "test.sh"
     script.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")

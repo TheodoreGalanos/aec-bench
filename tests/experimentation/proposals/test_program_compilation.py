@@ -328,7 +328,7 @@ def test_session_bundle_rejects_reconstructed_harness_or_task_identity(
         )
 
     wrong_task = result.task_snapshot.model_copy(update={"task_id": "task.reconstructed"})
-    with pytest.raises(ValueError, match="task snapshot"):
+    with pytest.raises(ValueError, match="task identity key"):
         ProposalRunSessionBundle(
             bundle_id=result.bundle_id,
             compilation=result.compilation,

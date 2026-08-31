@@ -24,7 +24,7 @@ description = "The climate, floor area, and internal-load parameter values"
 
 [[members]]
 member_id = "brisbane-office-acquisition"
-task_id = "mechanical/heat-load/single-room-office-L3/brisbane-office-85m2"
+task_id = "mechanical/heat-load/single-room-office-l3/brisbane-office-85m2"
 description = "An 85 square metre Brisbane office calculation"
 probe_only = false
 
@@ -36,7 +36,7 @@ climate_and_loads = "Brisbane, 85 square metres, office internal loads"
 
 [[members]]
 member_id = "sydney-classroom-probe"
-task_id = "mechanical/heat-load/single-room-office-L3/sydney-classroom-120m2"
+task_id = "mechanical/heat-load/single-room-office-l3/sydney-classroom-120m2"
 description = "A 120 square metre Sydney classroom calculation"
 probe_only = true
 

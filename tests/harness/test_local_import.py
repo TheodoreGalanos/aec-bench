@@ -100,8 +100,12 @@ def _scaffold_task_dir(tasks_dir: Path, task_slug: str) -> Path:
     task_dir.mkdir(parents=True)
 
     task_toml = """\
+[identity]
+id = "019c2c7a-5a33-7b8d-a702-8f7f3e8c21aa"
+key = "__TASK_KEY__"
+version = 1
+
 [metadata]
-task_id = "electrical/voltage-drop/test-instance"
 domain = "electrical"
 category = "reasoning"
 difficulty = "easy"
@@ -112,7 +116,7 @@ timeout_seconds = 300
 [agent]
 timeout_sec = 300
 """
-    (task_dir / "task.toml").write_text(task_toml)
+    (task_dir / "task.toml").write_text(task_toml.replace("__TASK_KEY__", task_slug.lower()))
     (task_dir / "instruction.md").write_text("Calculate the voltage drop.\n")
 
     # Verifier script required by loader

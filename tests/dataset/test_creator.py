@@ -18,7 +18,12 @@ from tests.support.task_factories import make_task_definition
 def _create_task_on_disk(tasks_root: Path, task_id: str) -> None:
     task_dir = tasks_root / task_id
     task_dir.mkdir(parents=True, exist_ok=True)
-    (task_dir / "task.toml").write_text('[metadata]\ndifficulty = "medium"\n', encoding="utf-8")
+    (task_dir / "task.toml").write_text(
+        '[identity]\nid = "019c2c7a-5a33-7b8d-a702-8f7f3e8c21aa"\n'
+        f'key = "{task_id.lower()}"\nversion = 1\n\n'
+        '[metadata]\ndifficulty = "medium"\nlifecycle = "active"\nvisibility = "public"\n',
+        encoding="utf-8",
+    )
     (task_dir / "instruction.md").write_text(f"# Task {task_id}\n", encoding="utf-8")
 
 
