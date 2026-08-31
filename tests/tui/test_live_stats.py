@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 
+from aec_bench.ledger.writer import write_trial_record
 from tests.support.trial_record_factories import make_trial_record
 
 # ---------------------------------------------------------------------------
@@ -154,9 +155,7 @@ def _write_trial(ledger: Path, experiment_id: str, trial_id: str, *, reward: flo
             },
         },
     )
-    trial_dir = ledger / experiment_id / trial_id
-    trial_dir.mkdir(parents=True, exist_ok=True)
-    (trial_dir / "trial_record.json").write_text(record.model_dump_json(indent=2), encoding="utf-8")
+    write_trial_record(ledger_root=ledger, record=record)
 
 
 def _write_seed(tasks_root: Path, discipline: str, task_id: str) -> None:

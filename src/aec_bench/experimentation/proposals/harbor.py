@@ -29,7 +29,7 @@ from aec_bench.harness.harbor_dispatch import (
     HarborDispatchError,
     validate_harbor_job_config,
 )
-from aec_bench.tasks.loader import LoadError, load_task_definition
+from aec_bench.tasks.loader import LoadError, canonical_task_key, load_task_definition
 
 
 @dataclass(frozen=True)
@@ -195,9 +195,19 @@ def _validate_exact_proposal_task(
             "derived proposal task identity does not match the compiled session",
         )
     try:
+        task_root = next(
+            (
+                ancestor
+                for ancestor in task_path.parents
+                if str(canonical_task_key(task_path.relative_to(ancestor).as_posix())) == expected_task_id
+            ),
+            None,
+        )
+        if task_root is None:
+            raise LoadError("derived proposal task path does not contain its canonical task identity")
         observed = load_task_definition(
             task_path,
-            task_path.parent.parent,
+            task_root,
         )
     except (LoadError, OSError, ValueError) as error:
         raise HarborDispatchError(

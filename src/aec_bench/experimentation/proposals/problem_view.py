@@ -550,7 +550,6 @@ def fixed_harness_policy_sha256(harness: CompiledHarnessInstance) -> str:
             "recursion_policy": harness.recursion_policy.model_dump(mode="json"),
             "bindings": normalized_bindings,
             "program_surface": {
-                "surface_id": harness.program_surface.surface_id,
                 "operations": normalized_operations,
             },
             "compatibility_notes": list(harness.compatibility_notes),

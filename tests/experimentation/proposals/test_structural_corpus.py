@@ -9,6 +9,7 @@ import pytest
 from pydantic import ValidationError
 
 from aec_bench.contracts.artifacts import ArtifactRef
+from aec_bench.contracts.identity import EntityIdentity, EntityKind, new_entity_id
 from aec_bench.contracts.task_definition import Visibility
 from aec_bench.contracts.task_review_snapshot import TaskReviewSnapshot as TaskReviewSnapshotRef
 from aec_bench.contracts.task_snapshot import ArtifactTaskSnapshotRef as TaskSnapshotRef
@@ -353,7 +354,12 @@ def test_item_rejects_snapshot_lineage_and_visibility_mismatches() -> None:
         StructuralCorpusItem.model_validate(
             {
                 **valid.model_dump(mode="python"),
-                "public_snapshot": valid.public_snapshot.model_copy(update={"task_id": "other-task"}),
+                "public_snapshot": valid.public_snapshot.model_copy(
+                    update={
+                        "task_id": "other-task",
+                        "task_identity": valid.public_snapshot.task_identity.model_copy(update={"key": "other-task"}),
+                    }
+                ),
             }
         )
 
@@ -361,7 +367,12 @@ def test_item_rejects_snapshot_lineage_and_visibility_mismatches() -> None:
         StructuralCorpusItem.model_validate(
             {
                 **valid.model_dump(mode="python"),
-                "snapshot": valid.snapshot.model_copy(update={"task_id": "other-task"}),
+                "snapshot": valid.snapshot.model_copy(
+                    update={
+                        "task_id": "other-task",
+                        "task_identity": valid.snapshot.task_identity.model_copy(update={"key": "other-task"}),
+                    }
+                ),
             }
         )
 
@@ -489,7 +500,11 @@ def _artifact_ref(label: str) -> ArtifactRef:
 
 
 def _task_snapshot(task_id: str, label: str) -> TaskSnapshotRef:
-    return TaskSnapshotRef(task_id=task_id, artifact=_artifact_ref(label))
+    return TaskSnapshotRef(
+        task_id=task_id,
+        task_identity=EntityIdentity(id=new_entity_id(EntityKind.TASK), key=task_id, version=1),
+        artifact=_artifact_ref(label),
+    )
 
 
 def _chain_item(

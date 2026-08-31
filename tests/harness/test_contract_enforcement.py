@@ -81,3 +81,16 @@ def test_verified_trial_contract_rejects_incomplete_verifier_evidence() -> None:
         )
 
     assert captured.value.code == "verified_trial_contract_failed"
+
+
+def test_verified_trial_contract_rejects_missing_evaluation_evidence() -> None:
+    contract = _contract("aecbench://verified-trial-record/v1", contract_id="verified")
+    invalid = make_trial_record(evaluation=None)
+
+    with pytest.raises(HarnessContractError) as captured:
+        enforce_runtime_harness_contracts(
+            contracts=(contract,),
+            record=invalid,
+        )
+
+    assert captured.value.code == "verified_trial_contract_failed"

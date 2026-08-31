@@ -13,6 +13,7 @@ dependencies = [
     "PyYAML>=6.0,<7",
     "rich>=14.1,<15",
     "typer>=0.25.1,<0.26",
+    "tzdata>=2025.3; sys_platform == 'win32'",
     "zstandard>=0.25,<0.26",
 ]
 

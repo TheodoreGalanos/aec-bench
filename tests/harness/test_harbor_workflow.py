@@ -197,6 +197,7 @@ def test_synchronous_workflow_forwards_record_transform_before_import(tmp_path: 
         config_path=tmp_path / "adaptive.yaml",
         executor=EmptyJobExecutor(jobs_root),
         record_transform=transform,
+        resolved_tasks=(make_task_definition(task_id="electrical/voltage-drop"),),
     )
 
     assert captured == [transform]
@@ -419,6 +420,7 @@ def test_synchronous_workflow_rejects_missing_new_job_dir(tmp_path: Path) -> Non
             manifest=manifest,
             config_path=tmp_path / "generated-job.yaml",
             executor=NoopExecutor(),
+            resolved_tasks=(make_task_definition(task_id="mechanical/heat-load/demo-instance"),),
         )
 
 

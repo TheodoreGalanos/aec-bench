@@ -95,8 +95,11 @@ def _write_instance(base: Path, discipline: str, category: str, task: str, insta
     """Helper to create a minimal task instance."""
     inst_dir = base / discipline / category / task / instance
     inst_dir.mkdir(parents=True, exist_ok=True)
+    task_key = inst_dir.relative_to(base).as_posix().lower()
     (inst_dir / "task.toml").write_text(
-        '[metadata]\ndifficulty = "medium"\ntags = ["test"]\n',
+        '[identity]\nid = "019c2c7a-5a33-7b8d-a702-8f7f3e8c21aa"\n'
+        f'key = "{task_key}"\nversion = 1\n\n'
+        '[metadata]\ndifficulty = "medium"\nlifecycle = "active"\nvisibility = "public"\ntags = ["test"]\n',
         encoding="utf-8",
     )
     (inst_dir / "instruction.md").write_text("Do the task.", encoding="utf-8")
@@ -200,7 +203,12 @@ def test_load_library_instances_handles_flat_two_level_paths(tmp_path: Path) -> 
     tasks_root = tmp_path / "tasks"
     inst_dir = tasks_root / "electrical" / "voltage-drop"
     inst_dir.mkdir(parents=True)
-    (inst_dir / "task.toml").write_text('[metadata]\ndifficulty = "easy"\n', encoding="utf-8")
+    (inst_dir / "task.toml").write_text(
+        '[identity]\nid = "019c2c7a-5a33-7b8d-a702-8f7f3e8c21aa"\n'
+        'key = "electrical/voltage-drop"\nversion = 1\n\n'
+        '[metadata]\ndifficulty = "easy"\nlifecycle = "active"\nvisibility = "public"\n',
+        encoding="utf-8",
+    )
     (inst_dir / "instruction.md").write_text("Calculate voltage drop.", encoding="utf-8")
     (inst_dir / "tests").mkdir()
     (inst_dir / "tests" / "test.sh").write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
@@ -234,7 +242,12 @@ def test_scan_finds_both_seed_and_instance_in_colocated_dir(tmp_path: Path) -> N
     }
     (colocated / "source_task.json").write_text(json.dumps(seed), encoding="utf-8")
     # Instance
-    (colocated / "task.toml").write_text('[metadata]\ndifficulty = "easy"\n', encoding="utf-8")
+    (colocated / "task.toml").write_text(
+        '[identity]\nid = "019c2c7a-5a33-7b8d-a702-8f7f3e8c21aa"\n'
+        'key = "ground/foundations/terzaghi"\nversion = 1\n\n'
+        '[metadata]\ndifficulty = "easy"\nlifecycle = "active"\nvisibility = "public"\n',
+        encoding="utf-8",
+    )
     (colocated / "instruction.md").write_text("Do it.", encoding="utf-8")
     (colocated / "tests").mkdir()
     (colocated / "tests" / "test.sh").write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")

@@ -7,6 +7,7 @@ from collections import Counter
 from dataclasses import asdict, dataclass
 from typing import Protocol
 
+from aec_bench.contracts.evaluation_result import EvaluationResult
 from aec_bench.contracts.trial_record import TrialRecord
 from aec_bench.evaluation.behavioral import (
     BehavioralTrace,
@@ -47,6 +48,7 @@ class BehavioralTrialSummary:
 @dataclass(frozen=True)
 class _ClassifiedRecord:
     record: TrialRecord
+    evaluation: EvaluationResult
     trace: ClassifiedTrace
 
 
@@ -156,11 +158,16 @@ def _classify_records(
 ) -> list[_ClassifiedRecord]:
     classified_records: list[_ClassifiedRecord] = []
     for record in records:
+        evaluation = record.evaluation
+        if evaluation is None:
+            continue
         try:
             trace = load_behavioral_trace(record)
         except BehavioralTraceError:
             continue
-        classified_records.append(_ClassifiedRecord(record=record, trace=classifier.classify_trace(trace)))
+        classified_records.append(
+            _ClassifiedRecord(record=record, evaluation=evaluation, trace=classifier.classify_trace(trace))
+        )
     return classified_records
 
 
@@ -170,9 +177,7 @@ def _reference_traces(
     min_reward: float,
 ) -> list[ClassifiedTrace]:
     return [
-        item.trace
-        for item in classified_records
-        if item.record.evaluation.reward >= min_reward and item.trace.classifications
+        item.trace for item in classified_records if item.evaluation.reward >= min_reward and item.trace.classifications
     ]
 
 
@@ -196,7 +201,7 @@ def _trial_summary(
             item.trace,
             ideal_matrix=ideal_matrix,
             ideal_sequence=ideal_sequence,
-            reward=item.record.evaluation.reward,
+            reward=item.evaluation.reward,
         )
         cosine_similarity = structural_score.cosine_similarity
         edit_distance = structural_score.edit_distance
@@ -205,7 +210,7 @@ def _trial_summary(
     return BehavioralTrialSummary(
         trial_id=item.record.trial_id,
         task_id=item.record.task.task_id,
-        reward=item.record.evaluation.reward,
+        reward=item.evaluation.reward,
         classified_turns=len(item.trace.classifications),
         mean_turn_confidence=_mean(classification.confidence for classification in item.trace.classifications)
         if item.trace.classifications

@@ -249,7 +249,7 @@ def _host_fixture(
     )
     derived = build_proposal_task_package(
         source_task_dir=source_task_dir,
-        destination_task_dir=tmp_path / "derived-task",
+        destination_task_dir=tmp_path / compiled.task_snapshot.task_id,
         identity=ProposalTaskPackageIdentity(
             task_id=compiled.task_snapshot.task_id,
             task_revision=compiled.task_snapshot.commitment_sha256,

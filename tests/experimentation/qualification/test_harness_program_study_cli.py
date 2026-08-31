@@ -126,7 +126,7 @@ def test_checked_in_harness_program_study_example_uses_the_current_kernel_identi
 
     current_ref = default_kernel_registry().manifest.ref
 
-    assert spec.content_sha256 == "d95aac321e7d151dd31e3f93df0be39ba55e796fdc72c097116b1b86cce7c1bd"
+    assert spec.content_sha256 == "e4a34b53a065a47f171a3c7d65417f4ec5a9d321ddbb0ec208d2dd95c43dfd41"
     assert {request.kernel_ref for request in spec.candidate_requests} == {current_ref}
 
 

@@ -156,7 +156,10 @@ def test_a02_real_artifact_tasks_identify_upstream_invalidation_from_public_outp
     assert [len(arm.trial_records) for arm in execution.arm_runs] == [1, 2, 2, 2]
     records = [record for arm in execution.arm_runs for record in arm.trial_records]
     assert all(isinstance(record, TrialRecord) for record in records)
-    assert all(not record.extension_refs for record in records)
+    assert all(
+        {extension.extension_kind for extension in record.extension_refs} == {"verifier_execution"}
+        for record in records
+    )
     raw_probe = execution.arm_runs[2].trial_records[-1]
     assert raw_probe.evaluation is not None and raw_probe.evaluation.reward == 0.82
     assert all(

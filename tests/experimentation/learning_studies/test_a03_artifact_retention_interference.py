@@ -127,7 +127,11 @@ def test_a03_real_artifact_tasks_measure_retention_and_explicit_interference(tmp
     assert all(arm.status is ArmRunStatus.COMPLETED for arm in execution.arm_runs), execution
     assert [len(arm.trial_records) for arm in execution.arm_runs] == [1, 2, 2, 2, 4, 4]
     assert all(isinstance(record, TrialRecord) for arm in execution.arm_runs for record in arm.trial_records)
-    assert all(not record.extension_refs for arm in execution.arm_runs for record in arm.trial_records)
+    assert all(
+        {extension.extension_kind for extension in record.extension_refs} == {"verifier_execution"}
+        for arm in execution.arm_runs
+        for record in arm.trial_records
+    )
     runs = {planned.arm_id: actual for planned, actual in zip(plan.arm_runs, execution.arm_runs, strict=True)}
 
     def reward(arm_id: str, index: int) -> float:

@@ -118,7 +118,10 @@ def test_a01_real_artifact_tasks_return_a_matched_structural_transfer_result(tmp
     assert [len(arm.trial_records) for arm in execution.arm_runs] == [1, 2]
     records = [record for arm in execution.arm_runs for record in arm.trial_records]
     assert all(isinstance(record, TrialRecord) for record in records)
-    assert all(not record.extension_refs for record in records)
+    assert all(
+        {extension.extension_kind for extension in record.extension_refs} == {"verifier_execution"}
+        for record in records
+    )
     rewards = [record.evaluation.reward for record in records if record.evaluation is not None]
     assert rewards == [0.0, 1.0, 1.0]
 

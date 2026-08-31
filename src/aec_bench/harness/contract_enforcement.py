@@ -127,6 +127,12 @@ def enforce_runtime_harness_contracts(
         if rule.validator == "trial_record":
             continue
         if rule.validator == "verified_trial_record":
+            if record.evaluation is None:
+                raise HarnessContractError(
+                    "verified_trial_contract_failed",
+                    f"trial {record.trial_id!r} does not contain evaluation evidence",
+                    subject_ids=(contract.contract_id, record.trial_id),
+                )
             validity = record.evaluation.validity
             if not (validity.verifier_completed and validity.output_parseable and validity.schema_valid):
                 raise HarnessContractError(

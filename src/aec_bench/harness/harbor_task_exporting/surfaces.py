@@ -73,9 +73,15 @@ def task_toml_text(*, metadata: LifecycleTaskMetadata, envelope: CompiledLifecyc
         "# ABOUTME: Harbor task metadata for one content-pinned compiled lifecycle.\n"
         "# ABOUTME: Declares a host-owned bridge and Harbor-owned independent reward.\n"
         'version = "1.0"\n\n'
+        "[identity]\n"
+        f"id = {json.dumps(str(metadata.identity.id))}\n"
+        f"key = {json.dumps(str(metadata.identity.key))}\n"
+        f"version = {metadata.identity.version}\n\n"
         "[metadata]\n"
         'difficulty = "hard"\n'
         'category = "evidence-lifecycle"\n'
+        'lifecycle = "active"\n'
+        'visibility = "public"\n'
         f"tags = {json.dumps(tags)}\n"
         f"domain = {json.dumps(domain)}\n"
         f"source_template_id = {json.dumps(envelope.template_id)}\n"

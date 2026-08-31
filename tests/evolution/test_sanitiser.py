@@ -20,6 +20,7 @@ def _scaffold_workspace(root: Path, skill_budget: int = 10) -> Workspace:
     """Create minimal workspace directory structure and return a Workspace."""
     root.mkdir(parents=True, exist_ok=True)
     manifest = {
+        "schema_version": 1,
         "name": "test-workspace",
         "agent_adapter": "tool_loop",
         "evolvable_layers": ["prompts", "skills"],

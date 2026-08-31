@@ -29,7 +29,14 @@ def read_trial_record(path: Path, *, ledger_root: Path | None = None) -> TrialRe
     if payload.get("schema_version") != 2:
         raise ValueError(f"unsupported TrialRecord schema_version: {payload.get('schema_version')!r}")
     record = TrialRecord.model_validate(payload)
-    experiment_id = path.parent.name
+    relative_record_path = path.relative_to(selected_ledger_root)
+    trial_parts = Path(record.trial_id).parts
+    if len(relative_record_path.parts) <= len(trial_parts):
+        raise ValueError("trial record path does not contain its experiment scope")
+    expected_trial_parts = (*trial_parts[:-1], f"{trial_parts[-1]}.json")
+    if relative_record_path.parts[-len(trial_parts) :] != expected_trial_parts:
+        raise ValueError("trial record path does not match its trial_id")
+    experiment_id = Path(*relative_record_path.parts[: -len(trial_parts)]).as_posix()
     standard_manifest_path = run_manifest_path(
         ledger_root=selected_ledger_root,
         experiment_id=experiment_id,

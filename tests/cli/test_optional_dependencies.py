@@ -53,6 +53,7 @@ def test_dependency_groups_have_one_named_feature_owner() -> None:
         "python-dotenv",
         "pyyaml",
         "rich",
+        "tzdata",
         "typer",
         "zstandard",
     }
@@ -132,7 +133,8 @@ def test_run_dry_run_reports_missing_execution_extra_before_importing_harbor(
     (task_dir / "tests").mkdir(parents=True)
     (task_dir / "instruction.md").write_text("Write the answer.\n", encoding="utf-8")
     (task_dir / "task.toml").write_text(
-        '[metadata]\nvisibility = "public"\n\n[agent]\ntimeout_sec = 60\n',
+        '[identity]\nid = "019c2c7a-5a33-7b8d-a702-8f7f3e8c21aa"\nkey = "electrical/demo"\nversion = 1\n\n'
+        '[metadata]\nlifecycle = "active"\nvisibility = "public"\n\n[agent]\ntimeout_sec = 60\n',
         encoding="utf-8",
     )
     (task_dir / "tests" / "test.sh").write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")

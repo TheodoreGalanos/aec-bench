@@ -12,6 +12,7 @@ from aec_bench.contracts.artifacts import ArtifactRef
 from aec_bench.contracts.evaluation_refs import EvaluationRegimeRef
 from aec_bench.contracts.harness_instance import HarnessBudget
 from aec_bench.contracts.harness_kernel import canonical_json_sha256
+from aec_bench.contracts.identity import EntityIdentity
 from aec_bench.contracts.program_proposal.candidate import ProgramCandidateRef
 from aec_bench.contracts.program_proposal.study import MatchedCandidateEvidenceRef, MatchedEvaluationCoordinate
 from aec_bench.contracts.program_proposal.types import CandidateEvidenceKind, OptimizationSplit, ProgramCandidateKind
@@ -43,6 +44,33 @@ from aec_bench.experimentation.qualification.program_necessity import (
     evaluate_program_necessity_study,
 )
 from tests.support.evaluation_regimes import fake_regime_ref
+
+_TASK_IDENTITY_IDS = (
+    "01a058e0-e9d5-7270-8605-3886c7662e85",
+    "01a058e0-e9d5-7293-9530-7c56f9a32dac",
+    "01a058e0-e9d5-7658-a832-1b85e44ed386",
+    "01a058e0-e9d5-7d66-be59-be54182e3de9",
+    "01a058e0-e9d5-7ecf-aaf6-65965cb2e702",
+    "01a058e0-e9d5-78b1-b194-d65ba881782e",
+    "01a058e0-e9d5-746a-be81-8f23d12f8d20",
+    "01a058e0-e9d5-7ced-8abf-3f8ff37df4c0",
+    "01a058e0-e9d5-7ee1-b7a6-4de737877a29",
+    "01a058e0-e9d5-7693-b9fd-9b177f1900a3",
+    "01a058e0-e9d5-76f8-8449-9b3a38319b8a",
+    "01a058e0-e9d5-7f24-9528-c543dfea4389",
+    "01a058e0-e9d5-7320-949c-5d62990adea3",
+    "01a058e0-e9d5-715b-8c8b-0c6447c4212e",
+    "01a058e0-e9d5-7fc4-ab03-b2a4207349bc",
+    "01a058e0-e9d5-7021-8106-771d2d5474c9",
+    "01a058e0-e9d5-73e7-b2f6-d28055349af0",
+    "01a058e0-e9d5-7e13-866f-1660539fed00",
+    "01a058e0-e9d5-7bab-bb18-800c47a31148",
+    "01a058e0-e9d5-77ba-beb5-7aef31a719c4",
+    "01a058e0-e9d5-711b-84d0-a374faeff40d",
+    "01a058e0-e9d5-784d-9023-231ddb05bf1f",
+    "01a058e0-e9d5-7413-9f3e-cbd40712734f",
+    "01a058e0-e9d5-777f-a0d7-a26afa0b3430",
+)
 
 
 def _sha(label: str) -> str:
@@ -151,8 +179,15 @@ def _lineage(
     review_lineage_id = _sha(f"{family_id}.review.{lineage_index}")
     package_label = f"{family_id}.package.{lineage_index}"
     package_sha256 = _sha(package_label)
+    family_index = int(family_id.removeprefix("family."))
+    task_id = f"qualification/program-necessity/family-{family_index}/lineage-{lineage_index}"
     snapshot = TaskSnapshotRef(
-        task_id=f"{family_id}.task.{lineage_index}",
+        task_id=task_id,
+        task_identity=EntityIdentity(
+            id=_TASK_IDENTITY_IDS[family_index * 4 + lineage_index],
+            key=task_id,
+            version=1,
+        ),
         artifact=ArtifactRef(
             artifact_id=f"artifacts/sha256/{package_sha256}",
             sha256=package_sha256,
@@ -597,9 +632,9 @@ def test_program_necessity_commitments_remain_stable() -> None:
         family_results=results,
     )
 
-    assert preregistration.content_sha256 == ("dcbfc6b469c365bab714af5890dde3e20a79cf2a144d31ae98d7013ec590d297")
-    assert results[0].content_sha256 == ("1b0eebdd49c9c50d37019da9d753b30459435cfae9d5b47f9f2df871c7558e31")
-    assert gate.content_sha256 == ("90ffcd18cebdf6608ddcc4ec50f12e1891ea5dae6d08ff17ec89c162e90e89ca")
+    assert preregistration.content_sha256 == ("af3244dee723e4f81bb18091fe9fba06aec73f7372cffae6a335d3c0348ea94d")
+    assert results[0].content_sha256 == ("8de38447e9ac8531d172e1f9aebb09d7acee08d7cd77c6a6ed68f0dce49364db")
+    assert gate.content_sha256 == ("0c97b11625f6c1cf33b86e903ac0f9ec88f11aa0cec1adeae0520275cca0498f")
 
 
 def test_program_necessity_design_owns_cardinality_and_gate_thresholds() -> None:

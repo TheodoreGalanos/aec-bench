@@ -21,6 +21,7 @@ from aec_bench.evolution.workspace import Workspace
 def _scaffold_workspace(root: Path) -> Path:
     root.mkdir(parents=True, exist_ok=True)
     manifest = {
+        "schema_version": 1,
         "name": "test-workspace",
         "agent_adapter": "tool_loop",
         "evolvable_layers": ["prompts", "skills"],

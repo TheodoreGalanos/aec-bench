@@ -30,6 +30,7 @@ from aec_bench.harness.pump_station_harbor.export import (
     load_pump_station_harbor_bridge,
 )
 from aec_bench.harness.pump_station_harbor.importing import load_pump_station_import_evidence
+from aec_bench.ledger.writer import materialize_trial_record
 from aec_bench.worlds.runtime.rollout_control import ContinualRolloutControl
 from aec_bench.worlds.runtime.rollout_repository import ContinualRolloutRepository
 from aec_bench.worlds.stewardship.wastewater_pump_station.continual_definition import (
@@ -331,18 +332,26 @@ def test_local_harbor_trial_resumes_one_rollout_child_for_one_bounded_actor_acti
     assert _tree_bytes(sibling_root) == sibling_before
     assert sibling_ref.initial_snapshot.sequence == selected_ref.initial_snapshot.sequence
 
-    record = import_harbor_trial(
-        trial_dir=trial_dir,
-        repo_root=repo_root,
-        evidence_loader=load_pump_station_import_evidence,
+    record = materialize_trial_record(
+        artifact_root=tmp_path / "imported-artifacts",
+        record=import_harbor_trial(
+            trial_dir=trial_dir,
+            repo_root=repo_root,
+            evidence_loader=load_pump_station_import_evidence,
+        ),
     )
     assert record.evaluation.stewardship is not None
     assert record.evaluation.stewardship.evaluation_scope == "bounded_continuation"
     assert record.evaluation.stewardship.valid is True
     assert record.evaluation.reward == 1.0
     assert record.episode_artifact is not None
-    assert record.episode_artifact.path.endswith("world-session/artifact-inventory.json")
-    imported_hashes = tuple(sorted({artifact.sha256 for artifact in record.outputs.artifacts or ()}))
+    assert record.episode_artifact.artifact_id.startswith("artifacts/sha256/")
+    assert record.episode_artifact.media_type == "application/json"
+    imported_hashes = record.evaluation.stewardship.evidence.imported_artifact_sha256
+    retained_hashes = {artifact.artifact.sha256 for artifact in record.outputs.artifacts or ()} | {
+        authority.artifact.sha256 for authority in record.authority_evidence
+    }
+    assert set(imported_hashes) <= retained_hashes
     direct_evaluation = evaluate_pump_station_reference_run(
         completed,
         imported_artifact_sha256=imported_hashes,

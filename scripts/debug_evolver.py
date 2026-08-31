@@ -1,13 +1,11 @@
 # ABOUTME: Debug script to inspect raw evolver LLM responses.
 # ABOUTME: Loads .env credentials via dotenv and calls the evolver with a sample prompt.
 
+import json
+import os
 from pathlib import Path
 
 from dotenv import load_dotenv
-
-load_dotenv(Path(__file__).resolve().parents[1] / ".env")
-
-import os
 
 from aec_bench.contracts.evolution import WorkspaceManifest
 from aec_bench.evolution.analysis import GraduatedScope
@@ -18,13 +16,13 @@ from aec_bench.evolution.prompts import (
 )
 from aec_bench.providers.behavioral_llm import build_behavioral_llm_client
 
+load_dotenv(Path(__file__).resolve().parents[1] / ".env")
+
 model = os.environ["AWS_SONNET_MODEL_ID"]
 print(f"Evolver model: {model}")
 
 evolver = build_behavioral_llm_client(model=model)
-manifest = WorkspaceManifest(
-    name="test", agent_adapter="rlm", evolvable_layers=["prompts", "skills"]
-)
+manifest = WorkspaceManifest(schema_version=1, name="test", agent_adapter="rlm", evolvable_layers=["prompts", "skills"])
 system_prompt = build_evolver_system_prompt(manifest)
 analysis = build_evolution_analysis_prompt(
     batch_score=0.25,
@@ -61,8 +59,6 @@ print("=== END ===")
 print()
 
 # Try repair
-import json
-
 try:
     json.loads(json_str)
     print("JSON parses OK without repair")
@@ -81,4 +77,4 @@ except json.JSONDecodeError as e:
         # Show the area around the error
         pos = e2.pos or 0
         print(f"\nContext around error (pos {pos}):")
-        print(repr(repaired[max(0, pos - 100):pos + 100]))
+        print(repr(repaired[max(0, pos - 100) : pos + 100]))

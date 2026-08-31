@@ -21,7 +21,9 @@ def _write_task_instance(tasks_root: Path, task_id: str) -> None:
     )
     (instance_dir / "tests" / "test.sh").write_text("#!/bin/bash\n", encoding="utf-8")
     (instance_dir / "task.toml").write_text(
-        '[agent]\ntimeout_sec = 600\n\n[metadata]\nvisibility = "public"\n',
+        '[identity]\nid = "019c2c7a-5a33-7b8d-a702-8f7f3e8c21aa"\n'
+        f'key = "{task_id.lower()}"\nversion = 1\n\n'
+        '[agent]\ntimeout_sec = 600\n\n[metadata]\nlifecycle = "active"\nvisibility = "public"\n',
         encoding="utf-8",
     )
 

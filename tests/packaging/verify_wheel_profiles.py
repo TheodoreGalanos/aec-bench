@@ -191,8 +191,9 @@ def _verify_profile(
                 "-c",
                 (
                     "from aec_bench.adapters.deepseek_harness.qualification import "
-                    "load_deepseek_qualification_matrix; "
-                    "matrix=load_deepseek_qualification_matrix(); assert len(matrix.rows) == 2"
+                    "DEEPSEEK_QUALIFICATION_FEATURES, load_deepseek_qualification_matrix; "
+                    "matrix=load_deepseek_qualification_matrix(); "
+                    "assert len(matrix.cells) == 2 * len(DEEPSEEK_QUALIFICATION_FEATURES)"
                 ),
             ],
             cwd=work,

@@ -14,6 +14,7 @@ from aec_bench.contracts.harness_kernel import (
     canonical_json_sha256,
     validate_sha256,
 )
+from aec_bench.contracts.stage_execution import DeclaredStageGraph
 from aec_bench.contracts.task_definition import Visibility
 from aec_bench.contracts.validators import NonEmptyStr
 from aec_bench.experimentation.governance.applicability import (
@@ -125,7 +126,7 @@ class AdaptiveCycleCorpusManifest(ContentAddressedModel):
         if len(package_hashes) != len(set(package_hashes)):
             raise ValueError("corpus task package snapshots must be unique")
         declared_surfaces = {
-            canonical_json_sha256(projection.review.stage_graph.model_dump(mode="json"))
+            _declared_surface_sha256(projection.review.stage_graph)
             for projection in projections
             if projection.review is not None and projection.review.stage_graph is not None
         }
@@ -230,7 +231,7 @@ def _single_declared_surface(
     ],
 ) -> str:
     surfaces = {
-        canonical_json_sha256(projection.review.stage_graph.model_dump(mode="json"))
+        _declared_surface_sha256(projection.review.stage_graph)
         for split in splits
         for projection in split.applicability.projections
         if projection.review is not None and projection.review.stage_graph is not None
@@ -238,3 +239,8 @@ def _single_declared_surface(
     if len(surfaces) != 1:
         raise ValueError("adaptive corpus must use exactly one declared surface")
     return next(iter(surfaces))
+
+
+def _declared_surface_sha256(stage_graph: DeclaredStageGraph) -> str:
+    """Hash the declared graph structure without task-specific identity fields."""
+    return canonical_json_sha256(stage_graph.model_dump(mode="json", exclude={"task_id", "review_profile_id"}))

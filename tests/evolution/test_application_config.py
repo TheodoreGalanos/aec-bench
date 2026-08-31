@@ -32,6 +32,7 @@ from tests.support.trial_record_factories import make_trial_record
 def _scaffold_workspace(root: Path) -> Path:
     root.mkdir(parents=True, exist_ok=True)
     manifest = {
+        "schema_version": 1,
         "name": "runner-test",
         "agent_adapter": "tool_loop",
         "evolvable_layers": ["prompts", "skills"],
@@ -108,7 +109,12 @@ class TestRunEvolutionFromConfig:
         tasks_root = tmp_path / "tasks"
         task_dir = tasks_root / "electrical" / "voltage-drop" / "test-instance"
         (task_dir / "tests").mkdir(parents=True)
-        (task_dir / "task.toml").write_text("[metadata]\n", encoding="utf-8")
+        (task_dir / "task.toml").write_text(
+            '[identity]\nid = "019c2c7a-5a33-7b8d-a702-8f7f3e8c21aa"\n'
+            'key = "electrical/voltage-drop/test-instance"\nversion = 1\n\n'
+            '[metadata]\nlifecycle = "active"\nvisibility = "public"\n',
+            encoding="utf-8",
+        )
         (task_dir / "instruction.md").write_text("Calculate voltage drop.")
         (task_dir / "tests" / "test.sh").write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
 
@@ -242,7 +248,12 @@ class TestBuildEvolutionRunnerRemoteExecution:
         task_dir = tmp_path / "tasks" / "electrical" / "voltage-drop" / "demo"
         (task_dir / "environment").mkdir(parents=True)
         (task_dir / "tests").mkdir()
-        (task_dir / "task.toml").write_text('[metadata]\ndifficulty = "easy"\n', encoding="utf-8")
+        (task_dir / "task.toml").write_text(
+            '[identity]\nid = "019c2c7a-5a33-7b8d-a702-8f7f3e8c21aa"\n'
+            'key = "electrical/voltage-drop/demo"\nversion = 1\n\n'
+            '[metadata]\ndifficulty = "easy"\nlifecycle = "active"\nvisibility = "public"\n',
+            encoding="utf-8",
+        )
         (task_dir / "instruction.md").write_text(
             "Calculate voltage drop and write /workspace/output.md.",
             encoding="utf-8",
@@ -337,7 +348,7 @@ class TestRunnerStrategyWiring:
         (ws_path / "prompts").mkdir()
         (ws_path / "prompts" / "system.md").write_text("agent")
         (ws_path / "manifest.yaml").write_text(
-            yaml.dump({"name": "test", "agent_adapter": "rlm", "evolvable_layers": ["prompts"]})
+            yaml.dump({"schema_version": 1, "name": "test", "agent_adapter": "rlm", "evolvable_layers": ["prompts"]})
         )
 
         config = EvolutionConfig(
@@ -362,7 +373,7 @@ class TestRunnerStrategyWiring:
         (ws_path / "prompts").mkdir()
         (ws_path / "prompts" / "system.md").write_text("agent")
         (ws_path / "manifest.yaml").write_text(
-            yaml.dump({"name": "test", "agent_adapter": "rlm", "evolvable_layers": ["prompts"]})
+            yaml.dump({"schema_version": 1, "name": "test", "agent_adapter": "rlm", "evolvable_layers": ["prompts"]})
         )
 
         config = EvolutionConfig(

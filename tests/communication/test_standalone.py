@@ -10,7 +10,7 @@ from aec_bench.communication.standalone import (
     build_public_leaderboard_artifact,
 )
 from aec_bench.contracts.task_definition import Visibility
-from aec_bench.contracts.trial_record import AgentReference, ArtifactReference, OutputRecord
+from aec_bench.contracts.trial_record import AgentReference, OutputRecord
 from aec_bench.ledger.writer import write_trial_record
 from tests.support.trial_record_factories import make_trial_record
 
@@ -107,29 +107,31 @@ def test_public_experiment_artifact_excludes_runtime_and_episode_private_data(tm
         relative_path="mechanical/heat-load/public-task",
         visibility=Visibility.PUBLIC,
     )
-    episode_artifact = ArtifactReference(
-        kind="episode-inventory",
-        path="private/run/state/inventory.json",
-        sha256="a" * 64,
+    episode_path = tmp_path / "private" / "run" / "state" / "inventory.json"
+    episode_path.parent.mkdir(parents=True)
+    episode_path.write_text("{}\n", encoding="utf-8")
+    record = make_trial_record(
+        task={"task_id": "mechanical/heat-load/public-task", "task_revision": "git"},
+        agent=AgentReference(
+            adapter="tool_loop",
+            model="test-model",
+            adapter_revision="test-revision",
+            configuration={"provider_api_key": "secret-provider-key", "recovery_path": "private/run/state"},
+        ),
+        outputs=OutputRecord(
+            agent_result={"verifier_path": "private/verifier/details.json", "sealed_id": "sealed-target-1"},
+            terminated=True,
+        ),
+    )
+    record.attach_artifact(
+        "output:episode-inventory:0",
+        episode_path,
         media_type="application/json",
+        logical_path="private/run/state/inventory.json",
     )
     write_trial_record(
         ledger_root=tmp_path / "ledger",
-        record=make_trial_record(
-            task={"task_id": "mechanical/heat-load/public-task", "task_revision": "git"},
-            agent=AgentReference(
-                adapter="tool_loop",
-                model="test-model",
-                adapter_revision="test-revision",
-                configuration={"provider_api_key": "secret-provider-key", "recovery_path": "private/run/state"},
-            ),
-            outputs=OutputRecord(
-                agent_result={"verifier_path": "private/verifier/details.json", "sealed_id": "sealed-target-1"},
-                artifacts=[episode_artifact],
-                terminated=True,
-            ),
-            episode_artifact=episode_artifact,
-        ),
+        record=record,
     )
 
     payload = build_public_experiment_artifact(
@@ -155,6 +157,7 @@ def _write_task_instance(*, tasks_root: Path, relative_path: str, visibility: Vi
     )
     (instance_dir / "tests" / "test.sh").write_text("#!/bin/bash\n", encoding="utf-8")
     (instance_dir / "task.toml").write_text(
-        f'[agent]\ntimeout_sec = 600\n\n[metadata]\nvisibility = "{visibility.value}"\n',
+        f'[identity]\nid = "019c2c7a-5a33-7b8d-a702-8f7f3e8c21aa"\nkey = "{relative_path}"\nversion = 1\n\n'
+        f'[agent]\ntimeout_sec = 600\n\n[metadata]\nlifecycle = "active"\nvisibility = "{visibility.value}"\n',
         encoding="utf-8",
     )

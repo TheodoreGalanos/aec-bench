@@ -18,6 +18,7 @@ from aec_bench.contracts.evolution import (
     WorkspaceSnapshot,
 )
 from aec_bench.contracts.experiment_manifest import AgentConfig, ComputeConfig, TaskSelector
+from aec_bench.contracts.identity import EntityKind, new_entity_id
 from aec_bench.evolution import application
 from aec_bench.evolution import proposer as proposer_module
 from aec_bench.evolution.application import run_evolution, run_evolution_from_config
@@ -45,7 +46,14 @@ def _setup(tmp_path: Path) -> tuple[Workspace, CandidateEvaluationBatch]:
     (root / "prompts").mkdir(parents=True)
     (root / "prompts" / "system.md").write_text("canonical", encoding="utf-8")
     (root / "manifest.yaml").write_text(
-        yaml.safe_dump({"name": "functional-test", "agent_adapter": "direct", "evolvable_layers": ["prompts"]}),
+        yaml.safe_dump(
+            {
+                "schema_version": 1,
+                "name": "functional-test",
+                "agent_adapter": "direct",
+                "evolvable_layers": ["prompts"],
+            }
+        ),
         encoding="utf-8",
     )
     workspace = Workspace(root)
@@ -72,7 +80,9 @@ def _write_evolution_task(root: Path, task_id: str, *, visibility: str = "public
     task_dir = root / task_id
     (task_dir / "tests").mkdir(parents=True)
     (task_dir / "task.toml").write_text(
-        f'[metadata]\ndifficulty = "easy"\nvisibility = "{visibility}"\n',
+        f'[identity]\nid = "{new_entity_id(EntityKind.TASK)}"\n'
+        f'key = "{task_id.lower()}"\nversion = 1\n\n'
+        f'[metadata]\ndifficulty = "easy"\nlifecycle = "active"\nvisibility = "{visibility}"\n',
         encoding="utf-8",
     )
     (task_dir / "instruction.md").write_text("Calculate the requested engineering result.\n", encoding="utf-8")
@@ -187,7 +197,14 @@ def test_config_rejects_holdout_before_model_or_evolution_composition(
     (workspace_root / "prompts").mkdir(parents=True)
     (workspace_root / "prompts" / "system.md").write_text("canonical", encoding="utf-8")
     (workspace_root / "manifest.yaml").write_text(
-        yaml.safe_dump({"name": "visibility-test", "agent_adapter": "direct", "evolvable_layers": ["prompts"]}),
+        yaml.safe_dump(
+            {
+                "schema_version": 1,
+                "name": "visibility-test",
+                "agent_adapter": "direct",
+                "evolvable_layers": ["prompts"],
+            }
+        ),
         encoding="utf-8",
     )
     tasks_root = tmp_path / "tasks"

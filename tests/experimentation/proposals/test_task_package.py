@@ -117,6 +117,7 @@ def test_builds_deterministic_source_free_harbor_task_package(tmp_path: Path) ->
     assert task_config.metadata == {
         "category": "proposal-session",
         "difficulty": "medium",
+        "lifecycle": "active",
         "tags": ["proposal-session", "source-free"],
         "visibility": "public",
     }
@@ -430,6 +431,28 @@ def test_excluded_source_mutation_changes_only_the_governed_package_identity(tmp
     assert first.manifest.content_sha256 != second.manifest.content_sha256
 
 
+def test_missing_source_task_identity_is_reported_as_invalid_task_toml(tmp_path: Path) -> None:
+    source_task = _source_task(tmp_path / "source-task")
+    task_toml = source_task / "task.toml"
+    task_toml.write_text(
+        task_toml.read_text(encoding="utf-8").replace(
+            '[identity]\nid = "019c2c7a-5a33-7b8d-a702-8f7f3e8c21aa"\n'
+            'key = "civil/proposal-session/source-free"\nversion = 1\n\n',
+            "",
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ProposalTaskPackageError, match="source task.toml is missing or invalid"):
+        build_proposal_task_package(
+            source_task_dir=source_task,
+            destination_task_dir=tmp_path / "derived",
+            identity=_identity(source_task, _output_contract()),
+            output_contract=_output_contract(),
+            verifier_asset_paths=("tests/test.sh",),
+        )
+
+
 @pytest.mark.parametrize(
     "unsafe_input",
     (
@@ -488,6 +511,11 @@ def _source_task(task_dir: Path) -> Path:
     (task_dir / "task.toml").write_text(
         """
 version = "1.0"
+
+[identity]
+id = "019c2c7a-5a33-7b8d-a702-8f7f3e8c21aa"
+key = "civil/proposal-session/source-free"
+version = 1
 
 [metadata]
 difficulty = "hard"

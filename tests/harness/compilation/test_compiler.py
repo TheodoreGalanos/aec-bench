@@ -44,6 +44,7 @@ from aec_bench.contracts.harness_instance import (
     VerificationBindingConfig,
 )
 from aec_bench.contracts.harness_kernel import KernelCapabilityRef
+from aec_bench.contracts.identity import EntityKind, new_entity_id
 from aec_bench.contracts.task_review_snapshot import ReviewSnapshot
 from aec_bench.harness.compilation import (
     CompilationError,
@@ -1464,8 +1465,14 @@ def _write_task(tasks_root: Path, task_id: str, *, tool_id: str = "bash") -> Pat
     (task_dir / "tests").mkdir()
     (task_dir / "task.toml").write_text(
         f"""
+[identity]
+id = "{new_entity_id(EntityKind.TASK)}"
+key = "{task_id}"
+version = 1
+
 [metadata]
 difficulty = "easy"
+lifecycle = "active"
 visibility = "public"
 tags = ["adaptive"]
 

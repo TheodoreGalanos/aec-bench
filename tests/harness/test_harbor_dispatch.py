@@ -700,7 +700,7 @@ def _proposal_dispatch_input(
     )
     observed_task = load_task_definition(
         derived_task_path,
-        derived_task_path.parent.parent,
+        tmp_path,
     )
     derived_task = observed_task.model_copy(
         update={"task_id": manifest.task_id},

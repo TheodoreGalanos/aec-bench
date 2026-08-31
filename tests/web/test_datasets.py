@@ -17,7 +17,12 @@ def _make_client_with_dataset(tmp_path: Path) -> TestClient:
     tasks = tmp_path / "tasks"
     task = tasks / "electrical/voltage-drop/inst-0"
     task.mkdir(parents=True)
-    (task / "task.toml").write_text("[metadata]\n", encoding="utf-8")
+    (task / "task.toml").write_text(
+        '[identity]\nid = "019c2c7a-5a33-7b8d-a702-8f7f3e8c21aa"\n'
+        'key = "electrical/voltage-drop/inst-0"\nversion = 1\n\n'
+        '[metadata]\nlifecycle = "active"\nvisibility = "public"\n',
+        encoding="utf-8",
+    )
     datasets = tmp_path / "datasets"
     manifest = DatasetManifest(
         dataset_id="test-ds",

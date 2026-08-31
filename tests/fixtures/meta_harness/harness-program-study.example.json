@@ -1,6 +1,6 @@
 {
   "applicability": {
-    "content_sha256": "c3128ebc6987a2b8b525cf0a0c5add7976304aac106104d8fcb1216d7c4c9b1d",
+    "content_sha256": "431306f83928bb47904ab6e2dab3c3ffad3cc49158ad066add6609768d9b9cc2",
     "descriptor": {
       "branching_characteristic": "none",
       "evidence_surfaces": [
@@ -30,6 +30,11 @@
           "kind": "repository",
           "source_revision": "4bb4073db1bc364bd7c4219c0abec4e903c5e9db",
           "task_id": "electrical/rlm-test",
+          "task_identity": {
+            "id": "019c2c7a-5a33-7b8d-a702-8f7f3e8c21aa",
+            "key": "electrical/rlm-test",
+            "version": 1
+          },
           "task_path": "tasks/electrical/rlm-test"
         },
         "surface": {
@@ -53,7 +58,7 @@
       "unreviewed:electrical/rlm-test"
     ],
     "schema_version": "aecbench.motif-applicability-attestation.v3",
-    "source_snapshot_sha256": "f211765257c232c0e08deb0bdf1d8e20b5971b44f78c3a63ec567de0816ff5fc",
+    "source_snapshot_sha256": "175aedd830448067272baa30b6e52e76b54927f57263246aa5e9d11ed575b711",
     "topology_bases": [
       "opaque_atomic"
     ]
@@ -402,7 +407,7 @@
   ],
   "conclusion": "candidate_search",
   "confidence_level": 0.95,
-  "content_sha256": "d95aac321e7d151dd31e3f93df0be39ba55e796fdc72c097116b1b86cce7c1bd",
+  "content_sha256": "e4a34b53a065a47f171a3c7d65417f4ec5a9d321ddbb0ec208d2dd95c43dfd41",
   "harness_generator_sha256": "37a10b5ca1e11a3a61d8f8975fec15584a43e390733a164cd932f7cba46ab632",
   "policy_id": "policy.harness-program-study.fixed-k.v1",
   "program_generator_sha256": "4adf6f4db840cf7d4b4a981bb36b9ec6e859763374b0628f1475180c0a17ad86",

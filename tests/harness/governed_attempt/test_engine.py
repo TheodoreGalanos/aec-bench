@@ -93,7 +93,6 @@ class LocalBudgetPort:
         self.reserve_calls += 1
         return GovernedAttemptBudgetReservation(
             attempt_id=preflight.attempt_id,
-            preflight_sha256=preflight.content_sha256,
             reservation_id=f"local-budget:{preflight.attempt_id}",
             maximum_usage=preflight.maximum_usage,
         )
@@ -109,9 +108,9 @@ class LocalBudgetPort:
         self.close_calls += 1
         return GovernedAttemptBudgetClosure(
             attempt_id=reservation.attempt_id,
-            reservation_sha256=reservation.content_sha256,
-            dispatch_receipt_sha256=dispatch_receipt.content_sha256,
-            import_receipt_sha256=import_receipt.content_sha256,
+            reservation_id=reservation.reservation_id,
+            backend_receipt_id=dispatch_receipt.backend_receipt_id,
+            import_id=import_receipt.import_id,
             observed_usage=dispatch_receipt.observed_usage,
             effect_evidence_sha256s=dispatch_receipt.effect_evidence_sha256s,
         )
@@ -133,8 +132,7 @@ class LocalMonitorPort:
         self.authorize_calls += 1
         return GovernedAttemptMonitorPermit(
             attempt_id=preflight.attempt_id,
-            preflight_sha256=preflight.content_sha256,
-            reservation_sha256=reservation.content_sha256,
+            reservation_id=reservation.reservation_id,
             permit_id=f"local-monitor:{preflight.attempt_id}",
         )
 
@@ -150,10 +148,9 @@ class LocalMonitorPort:
         self.close_calls += 1
         return GovernedAttemptMonitorClosure(
             attempt_id=permit.attempt_id,
-            permit_sha256=permit.content_sha256,
-            dispatch_receipt_sha256=dispatch_receipt.content_sha256,
-            import_receipt_sha256=import_receipt.content_sha256,
-            budget_closure_sha256=budget_closure.content_sha256,
+            permit_id=permit.permit_id,
+            backend_receipt_id=dispatch_receipt.backend_receipt_id,
+            import_id=import_receipt.import_id,
             observed_usage=dispatch_receipt.observed_usage,
             effect_evidence_sha256s=dispatch_receipt.effect_evidence_sha256s,
             closure_permitted=True,
@@ -183,7 +180,6 @@ class LocalBackendPort:
         self.dispatch_calls += 1
         receipt = GovernedAttemptBackendReceipt(
             attempt_id=intent.attempt_id,
-            dispatch_intent_sha256=intent.content_sha256,
             dispatch_key_sha256=intent.dispatch_key_sha256,
             backend_receipt_id=f"local-backend:{intent.dispatch_key_sha256}",
             observed_usage=self.observed_usage,
@@ -226,7 +222,7 @@ class LocalImportExtension:
             raise RuntimeError("local import extension failed before publication")
         return GovernedAttemptImportReceipt(
             attempt_id=preflight.attempt_id,
-            dispatch_receipt_sha256=dispatch_receipt.content_sha256,
+            backend_receipt_id=dispatch_receipt.backend_receipt_id,
             import_id=f"local-import:{dispatch_receipt.backend_receipt_id}",
             observed_usage=dispatch_receipt.observed_usage,
             source_effect_evidence_sha256s=(
@@ -280,7 +276,7 @@ def _assert_complete_replay(
 ) -> None:
     assert replay.preflight == preflight
     assert replay.terminal.attempt_id == preflight.attempt_id
-    assert replay.terminal.monitor_closure_sha256 == replay.monitor_closure.content_sha256
+    assert replay.terminal.permit_id == replay.monitor_closure.permit_id
 
 
 def test_happy_path_persists_the_exact_governed_attempt_lifecycle(
@@ -301,8 +297,8 @@ def test_happy_path_persists_the_exact_governed_attempt_lifecycle(
         "budget.close",
         "monitor.close",
     ]
-    assert len(tuple(root.glob("governed-attempt/objects/dispatch_intent/*/record.json"))) == 1
-    assert len(tuple(root.glob("governed-attempt/claims/terminal/*/claim.json"))) == 1
+    assert len(tuple(root.glob("governed-attempt/records/dispatch_intent/*/record.json"))) == 1
+    assert len(tuple(root.glob("governed-attempt/records/terminal/*/record.json"))) == 1
 
 
 def test_restart_replays_terminal_evidence_without_reinvoking_ports(
@@ -363,7 +359,7 @@ def test_uncertain_dispatch_requires_reconciliation_and_never_redispatches(
         len(
             tuple(
                 runtime.root.glob(
-                    "governed-attempt/claims/dispatch_intent/*/claim.json",
+                    "governed-attempt/records/dispatch_intent/*/record.json",
                 )
             )
         )
@@ -475,7 +471,7 @@ def test_total_token_limit_counts_cache_usage(
     preflight = GovernedAttemptPreflight(
         **baseline.model_dump(
             mode="python",
-            exclude={"content_sha256", "maximum_usage"},
+            exclude={"maximum_usage"},
         ),
         maximum_usage=GovernedAttemptUsageLimits(
             model_calls=1,

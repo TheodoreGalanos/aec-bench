@@ -12,6 +12,7 @@ from textual.widgets import DataTable
 
 from aec_bench.contracts.evaluation_result import EvaluationResult, ValidityCheck
 from aec_bench.contracts.trial_record import TrialRecord
+from aec_bench.ledger.writer import write_trial_record
 from aec_bench.tui.screens.triage import (
     FilterState,
     TriageAnnotation,
@@ -185,15 +186,13 @@ class TriageTestApp(App[None]):
 def _populate_ledger(tmp_path: Path) -> Path:
     """Create a minimal ledger with 3 trial records for testing."""
     ledger_root = tmp_path / "ledger"
-    exp_dir = ledger_root / "experiment-001"
-    exp_dir.mkdir(parents=True)
     for trial_id, reward in [("t1", 0.0), ("t2", 0.5), ("t3", 1.0)]:
         record = make_trial_record(
             trial_id=trial_id,
             experiment_id="experiment-001",
             evaluation=EvaluationResult(reward=reward, validity=_VALID),
         )
-        (exp_dir / f"{trial_id}.json").write_text(record.model_dump_json(indent=2), encoding="utf-8")
+        write_trial_record(ledger_root=ledger_root, record=record)
     return ledger_root
 
 

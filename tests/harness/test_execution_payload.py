@@ -89,7 +89,9 @@ def test_entrypoint_execution_bundle_canonically_materializes_harbor_inputs() ->
     assert bundle.request.instruction == "Solve the exact task.\n"
     assert bundle.request.system_prompt == "Inspect the evidence.\n"
     assert bundle.request.tools == harbor_kwargs["tools"]
-    assert bundle.request.configuration == harbor_kwargs
+    assert bundle.request.configuration == {
+        key: value for key, value in harbor_kwargs.items() if key != "system_prompt"
+    }
     assert bundle.request.output_path == "/workspace/output.md"
     assert bundle.request.output_format == "markdown"
     assert execution_request_sha256(bundle) == execution_request_sha256(repeated)

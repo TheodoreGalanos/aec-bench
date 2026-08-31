@@ -15,6 +15,7 @@ from aec_bench.contracts.execution_program import (
     BranchNode,
     BranchOperator,
     CompiledExecutionProgram,
+    ExecutionProgramRef,
     FanoutNode,
     JoinNode,
     JoinStrategy,
@@ -46,19 +47,18 @@ from aec_bench.harness.program_execution import (
 )
 
 
-def _ref(operation_id: str, character: str) -> ProgramOperationRef:
-    return ProgramOperationRef(operation_id=operation_id, content_sha256=character * 64)
+def _ref(operation_id: str) -> ProgramOperationRef:
+    return ProgramOperationRef(operation_id=operation_id)
 
 
 def _registration(
     operation_id: str,
-    character: str,
     handler: OperationHandler,
     *,
     max_parallelism: int = 1,
 ) -> OperationRegistration:
     return OperationRegistration(
-        reference=_ref(operation_id, character),
+        reference=_ref(operation_id),
         binding_ids=(f"binding.{operation_id}",),
         handler=handler,
         max_parallelism=max_parallelism,
@@ -74,9 +74,9 @@ def _program(
     return CompiledExecutionProgram(
         program_id="px-runtime-test",
         version="1.0.0",
-        harness_ref=HarnessInstanceRef(instance_id="hx-runtime-test", content_sha256="a" * 64),
-        source_program_sha256="b" * 64,
-        surface_sha256="c" * 64,
+        harness_ref=HarnessInstanceRef(instance_id="hx-runtime-test"),
+        source_program_ref=ExecutionProgramRef(program_id="source-px-runtime-test", version="1.0.0"),
+        surface_id="surface-runtime-test",
         nodes=nodes,
         limits=limits or ProgramLimits(max_total_attempts=64, max_parallelism=8),
         topological_order=tuple(node.node_id for node in nodes),
@@ -114,9 +114,9 @@ def test_executes_actions_verify_and_stop_with_port_and_binding_lineage() -> Non
         return OperationResult.succeeded({"verified_total": subject})
 
     registrations = (
-        _registration("load.v1", "1", load),
-        _registration("total.v1", "2", total),
-        _registration("verify.v1", "3", verify),
+        _registration("load.v1", load),
+        _registration("total.v1", total),
+        _registration("verify.v1", verify),
     )
     nodes: tuple[ProgramNode, ...] = (
         ActionNode(
@@ -183,8 +183,8 @@ def test_branch_executes_only_the_selected_successor() -> None:
         return OperationResult.succeeded({"result": "unexpected"})
 
     registrations = (
-        _registration("decide.v1", "1", decide),
-        _registration("true-path.v1", "2", true_path),
+        _registration("decide.v1", decide),
+        _registration("true-path.v1", true_path),
     )
     nodes: tuple[ProgramNode, ...] = (
         ActionNode(node_id="decide", operation_id="decide.v1"),
@@ -253,8 +253,8 @@ def test_fanout_and_each_join_strategy(
         return OperationResult.succeeded({"value": number * number})
 
     registrations = (
-        _registration("source.v1", "1", source),
-        _registration("square.v1", "2", square, max_parallelism=2),
+        _registration("source.v1", source),
+        _registration("square.v1", square, max_parallelism=2),
     )
     nodes: tuple[ProgramNode, ...] = (
         ActionNode(node_id="source", operation_id="source.v1"),
@@ -311,7 +311,7 @@ def test_retries_declared_failures_then_succeeds() -> None:
             return OperationResult.succeeded({"result": "recovered"})
 
     handler = FlakyHandler()
-    registration = _registration("flaky.v1", "1", handler)
+    registration = _registration("flaky.v1", handler)
     nodes: tuple[ProgramNode, ...] = (
         ActionNode(
             node_id="flaky",
@@ -352,7 +352,7 @@ def test_does_not_retry_an_unknown_failure_code() -> None:
             return OperationResult.failed("unknown_provider_failure", "No retry contract exists.")
         return OperationResult.succeeded({"result": "must-not-run"})
 
-    registration = _registration("fail-closed.v1", "1", fail_unknown)
+    registration = _registration("fail-closed.v1", fail_unknown)
     nodes: tuple[ProgramNode, ...] = (
         ActionNode(
             node_id="fail-closed",
@@ -386,7 +386,7 @@ def test_handler_receives_and_cannot_exceed_bounded_recursion_context() -> None:
         context.recursion.claim(depth=2)
         return OperationResult.succeeded({"result": "bounded"})
 
-    registration = _registration("recursive.v1", "1", recursive)
+    registration = _registration("recursive.v1", recursive)
     nodes: tuple[ProgramNode, ...] = (
         ActionNode(
             node_id="recursive",
@@ -429,7 +429,7 @@ def test_recursion_claims_fail_at_the_declared_node_call_limit() -> None:
         context.recursion.claim(depth=1)
         return OperationResult.succeeded({"result": "unreachable"})
 
-    registration = _registration("recursive.v1", "1", recursive)
+    registration = _registration("recursive.v1", recursive)
     nodes: tuple[ProgramNode, ...] = (
         ActionNode(
             node_id="recursive",
@@ -469,8 +469,8 @@ def test_global_attempt_budget_fails_closed_during_fanout() -> None:
         return OperationResult.succeeded({"result": arguments["item"]})
 
     registrations = (
-        _registration("source.v1", "1", source),
-        _registration("identity.v1", "2", identity),
+        _registration("source.v1", source),
+        _registration("identity.v1", identity),
     )
     nodes: tuple[ProgramNode, ...] = (
         ActionNode(node_id="source", operation_id="source.v1"),
@@ -501,7 +501,7 @@ def test_global_attempt_budget_fails_closed_during_fanout() -> None:
 
 
 def test_missing_handler_fails_closed_before_any_operation_attempt() -> None:
-    operation_ref = _ref("missing.v1", "1")
+    operation_ref = _ref("missing.v1")
     nodes: tuple[ProgramNode, ...] = (
         ActionNode(node_id="missing", operation_id="missing.v1"),
         StopNode(node_id="stop", depends_on=("missing",), outcome=StopOutcome.SUCCEEDED),
@@ -524,7 +524,6 @@ def test_invalid_handler_result_becomes_typed_failure_evidence() -> None:
 
     registration = _registration(
         "invalid.v1",
-        "1",
         cast(OperationHandler, invalid_handler),
     )
     nodes: tuple[ProgramNode, ...] = (
@@ -555,8 +554,8 @@ def test_missing_declared_output_port_fails_closed_without_calling_consumer() ->
         return OperationResult.succeeded({"result": 2})
 
     registrations = (
-        _registration("source.v1", "1", source),
-        _registration("consumer.v1", "2", consumer),
+        _registration("source.v1", source),
+        _registration("consumer.v1", consumer),
     )
     nodes: tuple[ProgramNode, ...] = (
         ActionNode(node_id="source", operation_id="source.v1"),
@@ -589,7 +588,7 @@ def test_failed_active_node_dominates_disconnected_success_stop() -> None:
         del arguments, context
         return OperationResult.failed("provider_failed", "The provider rejected the operation.")
 
-    registration = _registration("fail.v1", "1", fail)
+    registration = _registration("fail.v1", fail)
     nodes: tuple[ProgramNode, ...] = (
         ActionNode(node_id="failed-action", operation_id="fail.v1"),
         StopNode(
@@ -618,7 +617,7 @@ def test_failed_active_node_dominates_disconnected_stopped_terminal() -> None:
         del arguments, context
         return OperationResult.failed("provider_failed", "The provider rejected the operation.")
 
-    registration = _registration("fail.v1", "1", fail)
+    registration = _registration("fail.v1", fail)
     nodes: tuple[ProgramNode, ...] = (
         ActionNode(node_id="failed-action", operation_id="fail.v1"),
         StopNode(node_id="failed-stop", depends_on=("failed-action",), outcome=StopOutcome.FAILED),
@@ -655,7 +654,7 @@ def test_failed_stop_remains_a_typed_terminal_failure_without_an_earlier_failure
 def test_program_execution_result_rejects_success_with_failed_node_evidence() -> None:
     with pytest.raises(ValidationError, match="cannot contain failed node evidence"):
         ProgramExecutionResult(
-            program_sha256="a" * 64,
+            program_ref=ExecutionProgramRef(program_id="px-runtime-test", version="1.0.0"),
             status=ProgramExecutionStatus.SUCCEEDED,
             stop_node_id="success-stop",
             total_attempts=1,
@@ -687,7 +686,7 @@ def test_program_execution_result_requires_reached_stop_for_nonfailure(
 ) -> None:
     with pytest.raises(ValidationError, match="require a reached stop node"):
         ProgramExecutionResult(
-            program_sha256="a" * 64,
+            program_ref=ExecutionProgramRef(program_id="px-runtime-test", version="1.0.0"),
             status=status,
             total_attempts=0,
             maximum_parallelism_observed=0,
@@ -700,7 +699,7 @@ def test_program_execution_result_requires_reached_stop_for_nonfailure(
 def test_program_execution_result_rejects_error_fields_on_success() -> None:
     with pytest.raises(ValidationError, match="cannot contain error fields"):
         ProgramExecutionResult(
-            program_sha256="a" * 64,
+            program_ref=ExecutionProgramRef(program_id="px-runtime-test", version="1.0.0"),
             status=ProgramExecutionStatus.SUCCEEDED,
             stop_node_id="success-stop",
             error_code="forged_error",
@@ -722,7 +721,7 @@ def test_program_execution_result_rejects_error_fields_on_success() -> None:
 def test_program_execution_result_requires_error_code_for_failure() -> None:
     with pytest.raises(ValidationError, match="failed program results require an error code"):
         ProgramExecutionResult(
-            program_sha256="a" * 64,
+            program_ref=ExecutionProgramRef(program_id="px-runtime-test", version="1.0.0"),
             status=ProgramExecutionStatus.FAILED,
             total_attempts=0,
             maximum_parallelism_observed=0,
@@ -735,7 +734,7 @@ def test_program_execution_result_requires_error_code_for_failure() -> None:
 def test_program_execution_result_rejects_success_data_without_a_failed_stop() -> None:
     with pytest.raises(ValidationError, match="cannot contain terminal success data"):
         ProgramExecutionResult(
-            program_sha256="a" * 64,
+            program_ref=ExecutionProgramRef(program_id="px-runtime-test", version="1.0.0"),
             status=ProgramExecutionStatus.FAILED,
             result="forged-success",
             error_code="provider_failed",

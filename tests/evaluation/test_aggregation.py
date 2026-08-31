@@ -131,6 +131,21 @@ def test_summarize_behavioral_records_aggregates_structural_metrics(tmp_path: Pa
     assert trials[1]["mean_turn_confidence"] == pytest.approx((0.6 + 0.6 + 0.9) / 3.0)
 
 
+def test_summarize_behavioral_records_excludes_unevaluated_trace(tmp_path: Path) -> None:
+    unevaluated = _record_with_transcript(
+        tmp_path,
+        trial_id="trial-unevaluated",
+        reward=0.0,
+        assistant_messages=["Run the calculation."],
+    ).model_copy(update={"evaluation": None})
+
+    summary = summarize_behavioral_records([unevaluated], classifier=StubClassifier())
+
+    assert summary["n_trials"] == 1
+    assert summary["trials_with_behavioral_trace"] == 0
+    assert summary["trials"] == []
+
+
 def _record_with_transcript(
     tmp_path: Path,
     *,

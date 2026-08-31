@@ -615,7 +615,7 @@ def _parse_trajectory_to_turns(path: Path) -> list[Turn]:
 def _trace_metadata(record: TrialRecord) -> dict[str, object]:
     agent_result = record.outputs.agent_result or {}
     return {
-        "reward": record.evaluation.reward,
+        "reward": record.evaluation.reward if record.evaluation is not None else None,
         "experiment_id": record.experiment_id,
         "task_id": record.task.task_id,
         "adapter": record.agent.adapter,

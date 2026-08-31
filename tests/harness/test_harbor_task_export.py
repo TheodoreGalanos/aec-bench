@@ -69,7 +69,7 @@ def _export_stormwater(tmp_path: Path) -> tuple[CompiledLifecycle, ExportedHarbo
         variant_id="administrative_no_op",
     )
     tasks_root = tmp_path / "tasks"
-    task_dir = tasks_root / "civil" / "stormwater-hydraulic-interaction"
+    task_dir = tasks_root / "stormwater" / "hydraulic-interaction-review"
     exported = export_compiled_lifecycle_harbor_task(
         compiled,
         task_dir,
@@ -102,7 +102,7 @@ def test_stormwater_export_is_loadable_staged_and_verifier_isolated(tmp_path: Pa
     registry = TaskRegistry(tasks_root)
     registry.reload()
     assert registry.load_errors == []
-    task = registry.get("civil/stormwater-hydraulic-interaction")
+    task = registry.get("stormwater/hydraulic-interaction-review")
     assert task is not None
     assert task.environment.dockerfile == "environment/Dockerfile"
     assert task.verifier.script == "tests/test.sh"
@@ -508,7 +508,7 @@ def test_verifier_rejects_hidden_package_or_runtime_drift(tmp_path: Path) -> Non
     package = exported.task_dir / "tests" / "compiled-world"
     (package / "README.md").write_text("tampered\n", encoding="utf-8")
 
-    with pytest.raises(ValueError, match="compiled world envelope does not match"):
+    with pytest.raises(ValueError, match="exported lifecycle package does not match"):
         verify_exported_lifecycle_run(
             package_dir=package,
             run_dir=tmp_path / "not-reached",
