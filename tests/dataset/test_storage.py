@@ -68,6 +68,20 @@ def test_manifest_storage_uses_one_dataset_id_path_and_canonical_bytes(tmp_path:
     assert read_manifest(stored) == _manifest()
 
 
+@pytest.mark.parametrize("schema_version", [None, 1])
+def test_manifest_reader_rejects_non_current_schema(tmp_path: Path, schema_version: int | None) -> None:
+    path = tmp_path / "manifest.json"
+    payload = _manifest().model_dump(mode="json")
+    if schema_version is None:
+        payload.pop("schema_version")
+    else:
+        payload["schema_version"] = schema_version
+    path.write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="schema_version 2"):
+        read_manifest(path)
+
+
 def test_manifest_publication_is_immutable(tmp_path: Path) -> None:
     save_dataset(tmp_path, _manifest())
 

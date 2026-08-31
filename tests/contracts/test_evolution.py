@@ -29,8 +29,6 @@ from aec_bench.contracts.evolution import (
     TraceSliceTurn,
     WorkspaceCandidateVersion,
     WorkspaceManifest,
-    WorkspaceMigrationCandidate,
-    WorkspaceMigrationPlan,
     WorkspaceReadRequest,
     WorkspaceSnapshot,
     WorkspaceWriteRequest,
@@ -54,6 +52,7 @@ class TestEvolvableLayer:
 class TestWorkspaceManifest:
     def _valid_manifest(self) -> WorkspaceManifest:
         return WorkspaceManifest(
+            schema_version=1,
             name="structural-workspace",
             agent_adapter="anthropic",
             evolvable_layers=[EvolvableLayer.PROMPTS, EvolvableLayer.SKILLS],
@@ -67,9 +66,18 @@ class TestWorkspaceManifest:
         assert EvolvableLayer.PROMPTS in manifest.evolvable_layers
         assert manifest.skill_budget == 10
 
+    def test_schema_version_is_required(self) -> None:
+        with pytest.raises(ValidationError, match="schema_version"):
+            WorkspaceManifest(
+                name="unversioned",
+                agent_adapter="anthropic",
+                evolvable_layers=[],
+            )
+
     def test_blank_name_rejected(self) -> None:
         with pytest.raises(ValidationError):
             WorkspaceManifest(
+                schema_version=1,
                 name="   ",
                 agent_adapter="anthropic",
                 evolvable_layers=[],
@@ -78,6 +86,7 @@ class TestWorkspaceManifest:
     def test_blank_adapter_rejected(self) -> None:
         with pytest.raises(ValidationError):
             WorkspaceManifest(
+                schema_version=1,
                 name="my-workspace",
                 agent_adapter="",
                 evolvable_layers=[],
@@ -85,6 +94,7 @@ class TestWorkspaceManifest:
 
     def test_empty_layers_allowed(self) -> None:
         manifest = WorkspaceManifest(
+            schema_version=1,
             name="minimal",
             agent_adapter="openai",
             evolvable_layers=[],
@@ -93,6 +103,7 @@ class TestWorkspaceManifest:
 
     def test_custom_skill_budget(self) -> None:
         manifest = WorkspaceManifest(
+            schema_version=1,
             name="big-workspace",
             agent_adapter="anthropic",
             evolvable_layers=[EvolvableLayer.SKILLS],
@@ -103,6 +114,7 @@ class TestWorkspaceManifest:
     def test_zero_budget_rejected(self) -> None:
         with pytest.raises(ValidationError):
             WorkspaceManifest(
+                schema_version=1,
                 name="my-workspace",
                 agent_adapter="anthropic",
                 evolvable_layers=[],
@@ -113,6 +125,7 @@ class TestWorkspaceManifest:
         """Users can write 'agent_harness' instead of 'agent_adapter' in manifest YAML."""
         manifest = WorkspaceManifest.model_validate(
             {
+                "schema_version": 1,
                 "name": "harness-workspace",
                 "agent_harness": "rlm",
                 "evolvable_layers": ["prompts"],
@@ -125,6 +138,7 @@ class TestWorkspaceManifest:
         with pytest.raises(ValidationError, match="[Aa]dapter.*[Hh]arness|[Hh]arness.*[Aa]dapter"):
             WorkspaceManifest.model_validate(
                 {
+                    "schema_version": 1,
                     "name": "ambiguous",
                     "agent_adapter": "rlm",
                     "agent_harness": "tool_loop",
@@ -232,33 +246,6 @@ class TestWorkspaceCandidateVersion:
                 source_revision="d" * 40,
                 summary="",
             )
-
-
-class TestWorkspaceMigrationPlan:
-    def test_explicit_source_and_lineage(self) -> None:
-        plan = WorkspaceMigrationPlan(
-            candidates=(
-                WorkspaceMigrationCandidate(
-                    candidate_id="run:2",
-                    label="evo-2",
-                    parent_candidate_id="run:1",
-                    expected_source_revision="e" * 40,
-                ),
-            )
-        )
-        assert plan.schema_version == 1
-        assert plan.candidates[0].parent_candidate_id == "run:1"
-
-    def test_duplicate_candidate_ids_rejected(self) -> None:
-        item = WorkspaceMigrationCandidate(candidate_id="duplicate", label="evo-1")
-        with pytest.raises(ValidationError, match="candidate_id values must be unique"):
-            WorkspaceMigrationPlan(
-                candidates=(item, item.model_copy(update={"label": "evo-2"})),
-            )
-
-    def test_unknown_schema_version_rejected(self) -> None:
-        with pytest.raises(ValidationError):
-            WorkspaceMigrationPlan(schema_version=2, candidates=())
 
 
 class TestWorkspaceSnapshot:

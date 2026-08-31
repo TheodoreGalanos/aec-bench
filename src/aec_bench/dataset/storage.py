@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import re
 from pathlib import Path
@@ -73,11 +74,14 @@ def save_dataset(datasets_root: Path, manifest: DatasetManifest) -> Path:
 
 
 def read_manifest(path: Path) -> DatasetManifest:
-    """Read one schema-2 manifest. Legacy documents require the named migration reader."""
+    """Read one current schema-2 manifest."""
 
     if not path.is_file():
         raise FileNotFoundError(f"manifest file not found: {path}")
-    return DatasetManifest.model_validate_json(path.read_bytes())
+    payload = json.loads(path.read_bytes())
+    if not isinstance(payload, dict) or payload.get("schema_version") != 2:
+        raise ValueError("dataset manifest must declare schema_version 2")
+    return DatasetManifest.model_validate(payload)
 
 
 def read_manifest_by_id(datasets_root: Path, dataset_id: str) -> DatasetManifest | None:

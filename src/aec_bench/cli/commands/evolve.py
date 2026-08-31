@@ -3,7 +3,6 @@
 
 from __future__ import annotations
 
-import json
 import time
 from pathlib import Path
 
@@ -291,39 +290,3 @@ def evolve_rollback(
         {"workspace": str(ws_path), "candidate_id": resolved.candidate_id},
         start_time=start,
     )
-
-
-@app.command("migrate-workspace")
-def evolve_migrate_workspace(
-    workspace_path: str = typer.Argument(help="Path to the legacy evolution workspace"),
-    plan_path: Path = typer.Option(..., "--plan", help="Path to the explicit migration plan JSON"),
-) -> None:
-    """Register legacy labels as candidates with explicit source and lineage."""
-    start = time.monotonic()
-    ws_path = Path(workspace_path)
-
-    from aec_bench.contracts.evolution import WorkspaceMigrationPlan
-    from aec_bench.evolution.workspace import Workspace, WorkspaceError
-
-    try:
-        plan = WorkspaceMigrationPlan.model_validate_json(plan_path.read_text(encoding="utf-8"))
-        report = Workspace(ws_path).migrate_legacy_versions(plan)
-    except (OSError, ValueError, WorkspaceError) as exc:
-        emit("evolve migrate-workspace", data=None, errors=[str(exc)], start_time=start)
-        raise typer.Exit(1) from exc
-
-    data = report.model_dump(mode="json")
-    if not report.complete:
-        for issue in report.issues:
-            console.print(f"[red]{issue.code}[/red] {issue.label}: {issue.message}")
-        emit(
-            "evolve migrate-workspace",
-            data=data,
-            errors=["Legacy workspace migration needs an unambiguous plan."],
-            start_time=start,
-        )
-        raise typer.Exit(1)
-
-    console.print(f"[bold green]Migrated {len(report.migrated_candidate_ids)} candidate(s).[/bold green]")
-    console.print(json.dumps(data, indent=2))
-    emit("evolve migrate-workspace", data=data, start_time=start)

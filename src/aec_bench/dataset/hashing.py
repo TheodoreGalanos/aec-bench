@@ -1,5 +1,5 @@
-# ABOUTME: Computes retained task-tree digests for Prime packages and v1 migration.
-# ABOUTME: Schema-2 dataset identity uses Git commits or enclosing ArtifactRef values instead.
+# ABOUTME: Computes retained task-tree digests for packaged AEC-Bench tasks.
+# ABOUTME: Dataset identity uses Git commits or enclosing ArtifactRef values.
 
 from __future__ import annotations
 

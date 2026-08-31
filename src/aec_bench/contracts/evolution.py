@@ -109,7 +109,7 @@ class EvolvableLayer(StrEnum):
 class WorkspaceManifest(StrictModel):
     """Top-level descriptor for an evolution workspace. Stored as manifest.toml."""
 
-    schema_version: Literal[1] = 1
+    schema_version: Literal[1]
     name: NonEmptyStr
     agent_adapter: NonEmptyStr
     evolvable_layers: list[EvolvableLayer]
@@ -160,64 +160,6 @@ class WorkspaceCandidateVersion(StrictModel):
     @classmethod
     def validate_source_revision(cls, value: str) -> str:
         return _validate_full_git_sha(value)
-
-
-class WorkspaceMigrationCandidate(StrictModel):
-    """Explicit legacy label conversion supplied by the workspace owner."""
-
-    candidate_id: NonEmptyStr
-    label: NonEmptyStr
-    parent_candidate_id: NonEmptyStr | None = None
-    expected_source_revision: NonEmptyStr | None = None
-
-    @field_validator("expected_source_revision")
-    @classmethod
-    def validate_expected_source_revision(cls, value: str | None) -> str | None:
-        if value is None:
-            return None
-        return _validate_full_git_sha(value)
-
-    @model_validator(mode="after")
-    def validate_parent(self) -> WorkspaceMigrationCandidate:
-        if self.parent_candidate_id == self.candidate_id:
-            raise ValueError("legacy workspace candidate cannot be its own parent")
-        return self
-
-
-class WorkspaceMigrationPlan(StrictModel):
-    """Owner-supplied conversion of legacy labels to candidate lineage."""
-
-    schema_version: Literal[1] = 1
-    candidates: tuple[WorkspaceMigrationCandidate, ...]
-
-    @model_validator(mode="after")
-    def validate_candidates(self) -> WorkspaceMigrationPlan:
-        candidate_ids = [item.candidate_id for item in self.candidates]
-        labels = [item.label for item in self.candidates]
-        if len(candidate_ids) != len(set(candidate_ids)):
-            raise ValueError("workspace migration candidate_id values must be unique")
-        if len(labels) != len(set(labels)):
-            raise ValueError("workspace migration labels must be unique")
-        return self
-
-
-class WorkspaceMigrationIssue(StrictModel):
-    """One legacy condition that blocks safe candidate registration."""
-
-    label: NonEmptyStr
-    code: Literal["candidate_conflict", "label_missing", "label_moved", "lineage_missing", "source_ambiguous"]
-    message: NonEmptyStr
-
-
-class WorkspaceMigrationReport(StrictModel):
-    """Result of an explicit legacy workspace migration attempt."""
-
-    migrated_candidate_ids: tuple[NonEmptyStr, ...] = ()
-    issues: tuple[WorkspaceMigrationIssue, ...] = ()
-
-    @property
-    def complete(self) -> bool:
-        return not self.issues
 
 
 class WorkspaceSnapshot(StrictModel):

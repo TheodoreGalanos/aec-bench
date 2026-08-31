@@ -387,30 +387,6 @@ def validate_dataset(reference: str = typer.Argument(help="Dataset ID or ID@labe
     )
 
 
-@app.command("migrate-v1")
-def migrate_v1_dataset_cmd(
-    manifest: Path = typer.Argument(help="Schema-1 manifest.json"),
-    label: str = typer.Option(..., "--label", help="Label for the new immutable publication"),
-) -> None:
-    """Verify and republish one schema-1 dataset as a schema-2 bundle."""
-
-    from aec_bench.config import load_config
-    from aec_bench.dataset.legacy import migrate_v1_dataset
-
-    config = load_config()
-    try:
-        publication = migrate_v1_dataset(
-            manifest,
-            project_root=config.project_root,
-            datasets_root=config.datasets_root,
-            label=label,
-        )
-    except (FileExistsError, ValueError) as error:
-        print_error(str(error))
-        raise typer.Exit(1) from error
-    print_success(f"Migrated {publication.dataset_ref.dataset_id}@{publication.label} as a verified immutable bundle")
-
-
 @app.command("results")
 def dataset_results_cmd(reference: str = typer.Argument(help="Dataset ID or ID@label")) -> None:
     """Show trial results pinned to the resolved immutable dataset reference."""

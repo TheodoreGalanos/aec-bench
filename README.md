@@ -1061,14 +1061,7 @@ uv run aec-bench evolve run --config ./my-workspace/evolution.yaml
 uv run aec-bench evolve history ./my-workspace
 uv run aec-bench evolve rollback ./my-workspace <candidate-id-or-label>
 
-# Convert old evo-* labels with an owner-supplied source and lineage plan
-uv run aec-bench evolve migrate-workspace ./my-workspace --plan migration.json
 ```
-
-Migration plans use schema `1`. Each item supplies `candidate_id`, `label`,
-`expected_source_revision` as a full Git SHA, and an optional
-`parent_candidate_id`. The command rejects moved labels and reports missing or
-ambiguous source and lineage.
 
 ### Configuration
 

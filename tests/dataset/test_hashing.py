@@ -1,4 +1,4 @@
-# ABOUTME: Tests retained task-tree hashing used by Prime packages and v1 migration.
+# ABOUTME: Tests retained task-tree hashing used by Prime packages.
 # ABOUTME: Schema-2 datasets use enclosing artifact or Git identity instead.
 
 import shutil

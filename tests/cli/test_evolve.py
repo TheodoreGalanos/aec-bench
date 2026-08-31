@@ -3,7 +3,6 @@
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 import yaml
@@ -159,36 +158,3 @@ class TestEvolveHistory:
         # Workspace name and run summary line should appear
         assert "Test" in result.output
         assert "cycle(s)" in result.output
-
-
-class TestEvolveWorkspaceMigration:
-    def test_reports_ambiguous_legacy_source(self, tmp_path: Path) -> None:
-        ws = tmp_path / "ws"
-        runner.invoke(app, ["evolve", "init", str(ws), "--name", "Test"])
-
-        from aec_bench.evolution.workspace import Workspace
-
-        workspace = Workspace(ws)
-        workspace._git("init")
-        workspace._git("config", "user.email", "test@example.com")
-        workspace._git("config", "user.name", "test")
-        workspace._git("add", "-A")
-        workspace._git("commit", "-m", "legacy baseline")
-        workspace._git("tag", "evo-0")
-        plan_path = tmp_path / "migration.json"
-        plan_path.write_text(
-            json.dumps(
-                {
-                    "schema_version": 1,
-                    "candidates": [{"candidate_id": "baseline", "label": "evo-0"}],
-                }
-            )
-        )
-
-        result = runner.invoke(
-            app,
-            ["evolve", "migrate-workspace", str(ws), "--plan", str(plan_path)],
-        )
-
-        assert result.exit_code == 2, result.output
-        assert "source_ambiguous" in result.output
