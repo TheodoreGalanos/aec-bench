@@ -73,6 +73,12 @@ from aec_bench.harness.verifier_execution import (
     execute_verifier,
     localise_staged_verifier_paths,
 )
+from aec_bench.harness.workspace_evidence import (
+    WorkspaceDelta,
+    WorkspaceManifest,
+    capture_workspace_manifest,
+    compare_workspace_manifests,
+)
 from aec_bench.ledger.artifact_repository import ArtifactRepository
 from aec_bench.ledger.evidence_run_store import EvidenceRunStore
 from aec_bench.ledger.writer import (
@@ -269,6 +275,8 @@ class LocalTaskRuntime:
         self._artifact_root.parent.mkdir(parents=True, exist_ok=True)
         self._attempt_workspaces: list[Path] = []
         self._task_revisions: dict[Path, str] = {}
+        self._workspace_manifests: dict[Path, WorkspaceManifest] = {}
+        self._workspace_inherited_paths: dict[Path, set[str]] = {}
 
     @property
     def artifact_root(self) -> Path:
@@ -286,6 +294,25 @@ class LocalTaskRuntime:
             revision = hashlib.sha256(build_task_snapshot_archive(source)).hexdigest()
             self._task_revisions[source] = revision
         return revision
+
+    def base_workspace_manifest(self, workspace: Path) -> WorkspaceManifest:
+        """Return the actor-visible manifest captured before execution."""
+
+        try:
+            return self._workspace_manifests[workspace]
+        except KeyError as error:
+            raise RuntimeError(f"workspace has no captured base manifest: {workspace}") from error
+
+    def inherited_workspace_paths(self, workspace: Path) -> frozenset[str]:
+        """Return actor files inherited from a parent attempt that must remain retained."""
+
+        return frozenset(self._workspace_inherited_paths.get(workspace, set()))
+
+    def release_workspace(self, workspace: Path) -> None:
+        """Release manifest bookkeeping after an attempt workspace is removed."""
+
+        self._workspace_manifests.pop(workspace, None)
+        self._workspace_inherited_paths.pop(workspace, None)
 
     def run_once(
         self,
@@ -391,23 +418,58 @@ class LocalTaskRuntime:
         if self._work_root is not None:
             self._work_root.mkdir(parents=True, exist_ok=True)
         if parent is None:
+            capture_workspace_manifest(task.instance_dir, include_checksums=False)
             workspace = Path(setup_workspace(str(task.instance_dir), work_root=self._work_root))
             self._copy_agent_files(workspace)
             patch_workspace_paths(str(workspace))
+            self._workspace_manifests[workspace] = capture_workspace_manifest(workspace)
+            self._workspace_inherited_paths[workspace] = set()
             return workspace
 
+        parent_base = self.base_workspace_manifest(parent.workspace)
+        parent_snapshot = capture_workspace_manifest(parent.workspace)
+        parent_delta = compare_workspace_manifests(parent_base, parent_snapshot)
+        parent_roles: dict[str, Literal["task_input", "primary_output", "actor_output"]] = {
+            str(item.relative_path): item.source_role for item in parent_base.files
+        }
+        parent_roles.update({str(item.relative_path): "actor_output" for item in parent_delta.changed_files})
+        parent_manifest = capture_workspace_manifest(
+            parent.workspace,
+            source_roles=parent_roles,
+            default_source_role="actor_output",
+        )
         workspace = Path(tempfile.mkdtemp(prefix="aec-bench-local-", dir=self._work_root))
         shutil.copytree(parent.workspace, workspace, dirs_exist_ok=True)
         shutil.rmtree(workspace / "tests", ignore_errors=True)
         shutil.rmtree(workspace / "logs" / "verifier", ignore_errors=True)
         patch_workspace_paths(str(workspace), source_workspace=str(parent.workspace))
+        child_manifest = capture_workspace_manifest(
+            workspace,
+            source_roles=parent_roles,
+            default_source_role="actor_output",
+        )
+        self._workspace_manifests[workspace] = child_manifest
+        inherited_paths = self.inherited_workspace_paths(parent.workspace) | {
+            str(item.relative_path) for item in parent_delta.changed_files
+        }
+        self._workspace_inherited_paths[workspace] = {
+            str(item.relative_path)
+            for item in child_manifest.files
+            if item.source_role in {"actor_output", "primary_output"}
+            and any(parent_item.relative_path == item.relative_path for parent_item in parent_manifest.files)
+            and str(item.relative_path) in inherited_paths
+        }
         return workspace
 
     def _copy_agent_files(self, workspace: Path) -> None:
         for logical_path, source in self._agent_files.items():
             destination = resolve_workspace_path(workspace, logical_path)
+            if source.is_symlink():
+                raise ValueError(f"agent configuration file must not be a symbolic link: {source}")
             if not source.is_file():
                 raise FileNotFoundError(f"agent configuration file is missing: {source}")
+            if source.stat().st_nlink != 1:
+                raise ValueError(f"agent configuration file must not have shared inode state: {source}")
             destination.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(source, destination)
 
@@ -1115,6 +1177,16 @@ def run_trial(
         if selected is None:
             if not attempts:
                 raise ValueError(f"attempt recipe did not create or select an attempt: {selection.reason}")
+            representative = attempts[0]
+            output_relative_path = (
+                resolve_workspace_path(representative.workspace, task.task.verifier.expected_output_path)
+                .relative_to(representative.workspace)
+                .as_posix()
+            )
+            base_manifest = runtime.base_workspace_manifest(representative.workspace)
+            final_manifest = _capture_final_workspace_manifest(
+                representative.workspace, base_manifest, output_relative_path
+            )
             return _build_failed_materialized_record(
                 runtime=runtime,
                 task=task,
@@ -1124,10 +1196,22 @@ def run_trial(
                 started=started,
                 planned_trial_binding=planned_trial_binding,
                 planned_run_spec=planned_run_spec,
+                base_workspace_manifest=base_manifest,
+                final_workspace_manifest=final_manifest,
+                workspace_delta=compare_workspace_manifests(base_manifest, final_manifest),
+                inherited_paths=runtime.inherited_workspace_paths(representative.workspace),
             )
         if all(selected is not item for item in attempts):
             raise ValueError("attempt recipe selected an untracked attempt")
 
+        output_relative_path = (
+            resolve_workspace_path(selected.workspace, task.task.verifier.expected_output_path)
+            .relative_to(selected.workspace)
+            .as_posix()
+        )
+        base_manifest = runtime.base_workspace_manifest(selected.workspace)
+        final_manifest = _capture_final_workspace_manifest(selected.workspace, base_manifest, output_relative_path)
+        workspace_delta = compare_workspace_manifests(base_manifest, final_manifest)
         snapshot_dir = Path(tempfile.mkdtemp(prefix="aec-bench-selected-", dir=runtime.artifact_root.parent))
         shutil.copytree(selected.workspace, snapshot_dir, dirs_exist_ok=True)
         if selected_workspace_export is not None:
@@ -1163,6 +1247,10 @@ def run_trial(
             evaluation_status=evaluation_status,
             planned_trial_binding=planned_trial_binding,
             planned_run_spec=planned_run_spec,
+            base_workspace_manifest=base_manifest,
+            final_workspace_manifest=final_manifest,
+            workspace_delta=workspace_delta,
+            inherited_paths=runtime.inherited_workspace_paths(selected.workspace),
         )
     finally:
         if snapshot_dir is not None:
@@ -1170,6 +1258,7 @@ def run_trial(
         if not keep_workspaces:
             for workspace in runtime.attempt_workspaces[first_workspace_index:]:
                 shutil.rmtree(workspace, ignore_errors=True)
+                runtime.release_workspace(workspace)
 
 
 def _export_selected_workspace(snapshot: Path, destination: Path) -> None:
@@ -1389,6 +1478,13 @@ def run_trial_with_verifier_feedback(
     try:
         first = runtime.run_once(task, trial, attempt_id="attempt-0")
         attempts.append(first)
+        output_relative_path = (
+            resolve_workspace_path(first.workspace, task.task.verifier.expected_output_path)
+            .relative_to(first.workspace)
+            .as_posix()
+        )
+        base_manifest = runtime.base_workspace_manifest(first.workspace)
+        final_manifest = _capture_final_workspace_manifest(first.workspace, base_manifest, output_relative_path)
         (
             initial_evaluation,
             first_verification_seconds,
@@ -1437,6 +1533,7 @@ def run_trial_with_verifier_feedback(
                 instruction=retry_instruction,
             )
             attempts.append(selected)
+            final_manifest = _capture_final_workspace_manifest(selected.workspace, base_manifest, output_relative_path)
             snapshot_dir = Path(tempfile.mkdtemp(prefix="aec-bench-selected-", dir=runtime.artifact_root.parent))
             shutil.copytree(selected.workspace, snapshot_dir, dirs_exist_ok=True)
             evaluation, second_verification_seconds, verifier_receipt, evaluation_status = _evaluate_selected_attempt(
@@ -1484,6 +1581,10 @@ def run_trial_with_verifier_feedback(
             evidence_workspace=selected.workspace,
             verifier_receipt=verifier_receipt,
             evaluation_status=evaluation_status,
+            base_workspace_manifest=base_manifest,
+            final_workspace_manifest=final_manifest,
+            workspace_delta=compare_workspace_manifests(base_manifest, final_manifest),
+            inherited_paths=runtime.inherited_workspace_paths(selected.workspace),
         )
     finally:
         if snapshot_dir is not None:
@@ -1491,6 +1592,7 @@ def run_trial_with_verifier_feedback(
         if not keep_workspace:
             for workspace in runtime.attempt_workspaces[first_workspace_index:]:
                 shutil.rmtree(workspace, ignore_errors=True)
+                runtime.release_workspace(workspace)
 
 
 def _build_materialized_record(
@@ -1510,6 +1612,10 @@ def _build_materialized_record(
     evaluation_status: EvaluationStatus | None = None,
     planned_trial_binding: PlannedTrialBinding | None = None,
     planned_run_spec: ResolvedRunSpec | None = None,
+    base_workspace_manifest: WorkspaceManifest | None = None,
+    final_workspace_manifest: WorkspaceManifest | None = None,
+    workspace_delta: WorkspaceDelta | None = None,
+    inherited_paths: frozenset[str] = frozenset(),
 ) -> TrialRecord:
     output_path = resolve_workspace_path(actor_snapshot, task.task.verifier.expected_output_path)
     record = build_trial_record(
@@ -1543,7 +1649,17 @@ def _build_materialized_record(
         expected_authorities=() if planned_run_spec is None else planned_run_spec.expected_authorities,
         evaluation_regime=None if planned_run_spec is None else planned_run_spec.evaluation_regime,
     )
-    _attach_workspace_files(record=record, workspace=actor_snapshot)
+    if base_workspace_manifest is None or final_workspace_manifest is None or workspace_delta is None:
+        raise ValueError("artifact record requires workspace manifests")
+    _attach_workspace_delta(
+        record=record,
+        workspace=actor_snapshot,
+        base_manifest=base_workspace_manifest,
+        final_manifest=final_workspace_manifest,
+        delta=workspace_delta,
+        primary_output_path=task.task.verifier.expected_output_path,
+        inherited_paths=inherited_paths,
+    )
     _attach_post_execution_files(record=record, workspace=evidence_workspace)
     return materialize_trial_record(artifact_root=runtime.artifact_root, record=record)
 
@@ -1558,6 +1674,10 @@ def _build_failed_materialized_record(
     started: float,
     planned_trial_binding: PlannedTrialBinding | None = None,
     planned_run_spec: ResolvedRunSpec | None = None,
+    base_workspace_manifest: WorkspaceManifest | None = None,
+    final_workspace_manifest: WorkspaceManifest | None = None,
+    workspace_delta: WorkspaceDelta | None = None,
+    inherited_paths: frozenset[str] = frozenset(),
 ) -> TrialRecord:
     representative = attempts[0]
     record = build_trial_record(
@@ -1582,14 +1702,32 @@ def _build_failed_materialized_record(
         attempt=1 if planned_trial_binding is not None else trial.repetition,
         extensions=_trial_extensions(trial, selection.evidence),
         execution_status_override=ExecutionStatus.FAILED,
-        include_output=False,
+        # A failed execution can still contain useful actor files and workspace
+        # manifests. Keep a TrialOutput so those artifacts remain referenced.
+        include_output=True,
         planned_trial_binding=planned_trial_binding,
         run_id=None if planned_run_spec is None else str(planned_run_spec.run_identity.id),
         dataset=None if planned_run_spec is None else planned_run_spec.dataset,
         expected_authorities=() if planned_run_spec is None else planned_run_spec.expected_authorities,
         evaluation_regime=None if planned_run_spec is None else planned_run_spec.evaluation_regime,
     )
-    return materialize_trial_record(artifact_root=runtime.artifact_root, record=record)
+    if base_workspace_manifest is None or final_workspace_manifest is None or workspace_delta is None:
+        raise ValueError("failed artifact record requires workspace manifests")
+    snapshot_dir = Path(tempfile.mkdtemp(prefix="aec-bench-failed-selected-", dir=runtime.artifact_root.parent))
+    try:
+        shutil.copytree(representative.workspace, snapshot_dir, dirs_exist_ok=True)
+        _attach_workspace_delta(
+            record=record,
+            workspace=snapshot_dir,
+            base_manifest=base_workspace_manifest,
+            final_manifest=final_workspace_manifest,
+            delta=workspace_delta,
+            primary_output_path=task.task.verifier.expected_output_path,
+            inherited_paths=inherited_paths,
+        )
+        return materialize_trial_record(artifact_root=runtime.artifact_root, record=record)
+    finally:
+        shutil.rmtree(snapshot_dir, ignore_errors=True)
 
 
 def _trial_extensions(
@@ -1784,19 +1922,80 @@ def _with_reviewer_summary(evaluation: EvaluationResult, workspace: Path) -> Eva
     return evaluation.model_copy(update={"breakdown": breakdown})
 
 
-def _attach_workspace_files(*, record: TrialRecord, workspace: Path) -> None:
+def _capture_final_workspace_manifest(
+    workspace: Path,
+    base_manifest: WorkspaceManifest,
+    primary_output_path: str,
+) -> WorkspaceManifest:
+    """Keep original source roles while marking new actor files explicitly."""
+
+    roles: dict[str, Literal["task_input", "primary_output", "actor_output"]] = {
+        str(item.relative_path): item.source_role for item in base_manifest.files
+    }
+    primary_relative = resolve_workspace_path(workspace, primary_output_path).relative_to(workspace).as_posix()
+    roles[str(primary_relative)] = "primary_output"
+    return capture_workspace_manifest(
+        workspace,
+        source_roles=roles,
+        default_source_role="actor_output",
+        bytes_copied=0,
+    )
+
+
+def _attach_workspace_delta(
+    *,
+    record: TrialRecord,
+    workspace: Path,
+    base_manifest: WorkspaceManifest,
+    final_manifest: WorkspaceManifest,
+    delta: WorkspaceDelta,
+    primary_output_path: str,
+    inherited_paths: frozenset[str] = frozenset(),
+) -> None:
+    """Retain declared outputs and meaningful actor changes, not unchanged inputs."""
+
     named_paths = {
         Path(value).resolve() for value, _media, _logical in record.pending_artifacts.values() if Path(value).is_file()
     }
-    for path in sorted(candidate for candidate in workspace.rglob("*") if candidate.is_file()):
-        if path.resolve() in named_paths or path.stat().st_size == 0:
+    primary_relative = resolve_workspace_path(workspace, primary_output_path).relative_to(workspace).as_posix()
+    retained_paths = {str(item.relative_path) for item in delta.changed_files}
+    retained_paths.add(primary_relative)
+    retained_paths.update(inherited_paths)
+    for item in final_manifest.files:
+        if item.file_type != "file" or str(item.relative_path) not in retained_paths:
             continue
-        relative = path.relative_to(workspace).as_posix()
+        path = workspace / item.relative_path
+        if path.resolve() in named_paths or item.size_bytes == 0:
+            continue
         record.attach_artifact(
-            f"output:workspace:{relative}",
+            f"output:workspace:{item.relative_path}",
             path,
             media_type="application/octet-stream",
-            logical_path=relative,
+            logical_path=item.relative_path,
+            expected_sha256=item.sha256,
+        )
+
+    attached_bytes = sum(
+        item.size_bytes
+        for item in final_manifest.files
+        if item.file_type == "file" and str(item.relative_path) in retained_paths and item.size_bytes > 0
+    )
+    final_manifest = final_manifest.model_copy(update={"bytes_attached": attached_bytes})
+    manifest_dir = workspace / ".workspace-manifests"
+    manifest_dir.mkdir(parents=True, exist_ok=True)
+    files: tuple[tuple[str, BaseModel], ...] = (
+        ("base.json", base_manifest),
+        ("final.json", final_manifest),
+        ("delta.json", delta),
+    )
+    for name, value in files:
+        path = manifest_dir / name
+        path.write_text(value.model_dump_json(indent=2) + "\n", encoding="utf-8")
+        record.attach_artifact(
+            f"output:workspace-manifest:{name.removesuffix('.json')}",
+            path,
+            media_type="application/json",
+            logical_path=f"workspace/{name}",
         )
 
 

@@ -268,6 +268,22 @@ receipt and bounded logs are retained as trial evidence; private verifier files
 are not copied to the actor-facing snapshot. During the compatibility window,
 the existing evaluation fields remain alongside this receipt.
 
+## Artifact workspace evidence
+
+The local artifact runtime captures a current-format base and final
+`WorkspaceManifest` before private verifier files are staged. Each manifest
+records safe relative paths, file type, size, execution-relevant mode, an
+optional SHA-256, source role, the `full_copy` strategy, and traversal/copy/
+attachment counts. `WorkspaceDelta` classifies paths as `added`, `modified`,
+`deleted`, or `unchanged`.
+
+Default trial retention includes the declared primary output and added or
+modified actor files. It excludes unchanged task inputs and retains the delta
+manifest, including deleted paths. A complete actor snapshot remains an
+explicit opt-in through the existing selected-workspace export. Workspace
+manifests are operational evidence. They do not change task identity or task
+evaluation semantics. Symbolic links and shared file inodes are rejected.
+
 ## Task genome reviews
 
 `TaskGenomeReview` is derived review evidence, not a task definition or a task

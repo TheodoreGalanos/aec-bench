@@ -66,8 +66,10 @@ The current path is:
    trial. `LocalTaskRuntime.run_once()` performs one adapter execution in one
    isolated workspace.
 4. Let an `AttemptRecipe` create and select attempts without verifier access.
-   `run_trial()` verifies only the selected workspace, builds one
-   `TrialRecord`, materializes its artifacts, and removes attempt workspaces.
+   `run_trial()` captures a base/final workspace manifest and delta before
+   private verifier staging, verifies only the selected workspace, retains the
+   primary output and meaningful changes, builds one `TrialRecord`,
+   materializes its artifacts, and removes attempt workspaces.
 5. For Harbor, use the separate dispatch-and-import runtime through the same
    `run_experiment()` boundary. Harbor accepts only recipe specifications that
    its transport supports.

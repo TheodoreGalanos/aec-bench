@@ -183,6 +183,12 @@ bytes; import verifies every member, size, and SHA-256 digest before it writes
 them to the destination ledger. Use `--ledger-root <path>` when the package is
 not in the configured ledger.
 
+Local artifact trials retain the declared primary output, files added or
+changed by the actor, and base, final, and deletion manifests. They do not
+duplicate unchanged task inputs as output artifacts. The selected-workspace
+export remains the explicit option when a protocol requires the complete actor
+snapshot. See [Artifact workspace evidence](docs/CONTRACTS.md#artifact-workspace-evidence).
+
 #### DeepSeek Harness adapter (experimental)
 
 The DeepSeek Harness adapter uses the shared Harbor entrypoint and its provider
