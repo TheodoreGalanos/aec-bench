@@ -299,9 +299,7 @@ class _WorldLearningCoordinator:
         initialise_learner_state(
             state_root,
             memory_seed_root=(
-                self._initial_memory_root
-                if treatment_kind is WorldLearningTreatmentKind.STRUCTURED_MEMORY
-                else None
+                self._initial_memory_root if treatment_kind is WorldLearningTreatmentKind.STRUCTURED_MEMORY else None
             ),
         )
         return self._handle(arm_run.arm_run_id, arm_run.treatment_id, "initial", state_root)
@@ -536,7 +534,7 @@ class _WorldLearningCoordinator:
         handle: LearnerStateHandle[WorldLearnerState],
         arm_run: PlannedArmRun,
     ) -> WorldLearnerState:
-        state = handle.value
+        state: WorldLearnerState = handle.value
         if state.arm_run_id != arm_run.arm_run_id:
             raise ValueError(
                 f"cross-arm-path-detected: state belongs to {state.arm_run_id}, requested by {arm_run.arm_run_id}"

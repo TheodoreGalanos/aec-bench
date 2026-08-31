@@ -1,0 +1,217 @@
+# ABOUTME: Runs the fast, provider-free checks required for every pull request.
+# ABOUTME: Keeps the aggregate branch-protection target stable while qualification jobs remain in ci.yml.
+
+name: Required PR checks
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  architecture-contracts:
+    name: Required · architecture and contracts
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python 3.13.2
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13.2"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+        with:
+          enable-cache: true
+
+      - name: Install locked dependencies
+        run: uv sync --frozen --all-extras
+
+      - name: Check package dependency direction
+        run: uv run python scripts/audit_package_dependencies.py --check
+
+      - name: Check ownership and contracts
+        run: >-
+          uv run pytest -q
+          tests/test_package_ownership.py
+          tests/contracts/
+          tests/test_provenance_policy.py
+          tests/test_provenance_manifest_discovery.py
+
+      - name: Check identity, paths, catalogue, and visibility
+        run: >-
+          uv run pytest -q
+          tests/contracts/test_identity.py
+          tests/harness/compilation/test_task_snapshot.py
+          tests/cli/test_catalogue_commands.py
+          tests/tasks/
+          tests/docs/test_documentation_ownership.py
+          tests/feedback/test_assignment.py
+          tests/feedback/test_review_service.py
+          tests/communication/test_query.py
+
+      - name: Check generated catalogues
+        run: uv run aec-bench catalogue check
+
+  core-behavior:
+    name: Required · core behavior
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Python 3.13.2
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13.2"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+        with:
+          enable-cache: true
+
+      - name: Install locked dependencies
+        run: uv sync --frozen
+
+      - name: Check artifact application and evidence
+        run: >-
+          uv run pytest -q
+          tests/harness/test_artifact_adapter.py
+          tests/harness/test_artifact_ports.py
+          tests/harness/test_artifact_recipes.py
+          tests/harness/test_artifact_tasks.py
+          tests/harness/test_verifier_conformance.py
+          tests/harness/test_workspace_conformance.py
+          tests/harness/test_workspace_evidence.py
+          tests/ledger/test_evidence_index.py
+          tests/ledger/test_evidence_run_store.py
+
+      - name: Check world runtime and lifecycle conformance
+        run: >-
+          uv run pytest -q
+          tests/worlds/runtime/
+          tests/worlds/monitoring/
+          tests/worlds/test_pump_station_world_conformance.py
+          tests/lifecycles/runtime/
+          tests/lifecycles/test_lifecycle_conformance.py
+          tests/lifecycles/test_finalization.py
+
+      - name: Check scheduler and query behavior
+        run: >-
+          uv run pytest -q
+          tests/harness/test_scheduler.py
+          tests/execution/test_scheduler.py
+          tests/communication/test_query.py
+
+  quality:
+    name: Required · quality and package
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Python 3.13.2
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13.2"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+        with:
+          enable-cache: true
+
+      - name: Install locked dependencies
+        run: uv sync --frozen --all-extras
+
+      - name: Check maintained Python lint
+        run: uv run ruff check src/ tests/ scripts/audit_package_dependencies.py scripts/run_changed_owner_tests.py
+
+      - name: Check maintained Python formatting
+        run: uv run ruff format --check src/ tests/ scripts/audit_package_dependencies.py scripts/run_changed_owner_tests.py
+
+      - name: Check authority, contracts, application, and owner types
+        run: >-
+          uv run mypy
+          src/aec_bench/contracts/
+          src/aec_bench/evolution/application.py
+          src/aec_bench/execution/
+          src/aec_bench/worlds/
+          src/aec_bench/lifecycles/
+          scripts/audit_package_dependencies.py
+          scripts/run_changed_owner_tests.py
+
+      - name: Build provider-free wheel
+        run: uv build --wheel
+
+      - name: Verify isolated base installation
+        run: >-
+          python tests/packaging/verify_wheel_profiles.py
+          --wheel dist/aec_bench-0.1.0-py3-none-any.whl
+          --profile base
+
+      - name: Check public CLI help and startup
+        run: >-
+          uv run aec-bench --help
+          && uv run aec-bench catalogue --help
+
+  changed-owner-tests:
+    name: Required · changed-owner representatives
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python 3.13.2
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13.2"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+        with:
+          enable-cache: true
+
+      - name: Install locked dependencies
+        run: uv sync --frozen --all-extras
+
+      - name: Run representatives for changed owners
+        env:
+          AEC_BENCH_BASE_REVISION: ${{ github.event.pull_request.base.sha }}
+        run: uv run python scripts/run_changed_owner_tests.py --base-revision "$AEC_BENCH_BASE_REVISION"
+
+  required-pr-gate:
+    name: Required PR gate
+    if: always()
+    needs:
+      - architecture-contracts
+      - core-behavior
+      - quality
+      - changed-owner-tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require all mandatory checks
+        if: >-
+          needs['architecture-contracts'].result != 'success' ||
+          needs['core-behavior'].result != 'success' ||
+          needs.quality.result != 'success' ||
+          needs['changed-owner-tests'].result != 'success'
+        run: exit 1
+
+      - name: Report required checks passed
+        run: echo "Required pull-request checks passed."

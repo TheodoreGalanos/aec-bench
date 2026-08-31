@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 from aec_bench.contracts.evaluation_result import Judgment
+from aec_bench.contracts.identity import EntityKind, new_entity_id
 from aec_bench.contracts.task_definition import Visibility
 from aec_bench.feedback.annotation_consumer import write_reviewer_profile
 from aec_bench.feedback.models import CalibrationReference, CalibrationStatus
@@ -248,6 +249,7 @@ def _write_task_instance(*, tasks_root: Path, relative_path: str, visibility: Vi
     )
     (instance_dir / "tests" / "test.sh").write_text("#!/bin/bash\n", encoding="utf-8")
     (instance_dir / "task.toml").write_text(
-        f'[agent]\ntimeout_sec = 600\n\n[metadata]\nvisibility = "{visibility.value}"\n',
+        f'[identity]\nid = "{new_entity_id(EntityKind.TASK)}"\nkey = "{relative_path}"\nversion = 1\n\n'
+        f'[agent]\ntimeout_sec = 600\n\n[metadata]\nlifecycle = "active"\nvisibility = "{visibility.value}"\n',
         encoding="utf-8",
     )

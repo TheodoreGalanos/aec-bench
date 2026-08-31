@@ -413,9 +413,7 @@ def test_acquisition_fidelity_fails_closed_on_missing_or_ambiguous_records() -> 
     plan = compile_w01_dam_study(study_run_id="w01-fidelity-inputs", agent=agent, compute=_COMPUTE)
     arm_run = next(item for item in plan.arm_runs if item.arm_id == "structured-memory")
     acquisition_step = next(
-        item
-        for item in arm_run.steps
-        if isinstance(item, CompiledExperienceStep) and item.role.value == "acquisition"
+        item for item in arm_run.steps if isinstance(item, CompiledExperienceStep) and item.role.value == "acquisition"
     )
 
     def arm_result(records: tuple[TrialRecord, ...]) -> ArmRunExecutionResult[object]:
