@@ -1,0 +1,156 @@
+# ABOUTME: Validates source and binary release artifacts on version tags or manual dispatch.
+# ABOUTME: Keeps package scope, feature profiles, evidence integrity, and platform checks visible before publication.
+
+name: Release qualification
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  release-artifacts:
+    name: Release artifacts and profiles
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+      - name: Set up Python 3.13.2
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13.2"
+      - name: Set up Node.js 24
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: |
+            src/aec_bench/web/frontend/package-lock.json
+            src/aec_bench/adapters/deepseek_harness/plugin/package-lock.json
+      - name: Build packaged frontend
+        working-directory: src/aec_bench/web/frontend
+        run: |
+          npm ci
+          npm test
+          npm run build
+      - name: Verify plugin build
+        working-directory: src/aec_bench/adapters/deepseek_harness/plugin
+        run: |
+          npm ci
+          npm test
+          npm run build
+      - name: Install uv
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+        with:
+          enable-cache: true
+      - name: Install all optional dependencies
+        run: uv sync --frozen --all-extras
+      - name: Build wheel and source package
+        run: uv build
+      - name: Check release archive scope
+        run: uv run python scripts/verify_release_artifacts.py --dist dist
+      - name: Verify every wheel feature profile
+        run: >-
+          uv run python tests/packaging/verify_wheel_profiles.py
+          --wheel "$(find dist -maxdepth 1 -type f -name '*.whl' -print -quit)"
+          --profile base
+          --profile execution
+          --profile deepseek-harness
+          --profile morph
+          --profile local-agents
+          --profile prime
+          --profile prime-agent
+          --profile webui
+          --profile tui
+          --profile evolution
+          --profile combined
+      - name: Install and smoke-test the source package
+        run: |
+          python -m venv "$RUNNER_TEMP/sdist-venv"
+          sdist="$(find dist -maxdepth 1 -type f -name '*.tar.gz' -print -quit)"
+          "$RUNNER_TEMP/sdist-venv/bin/pip" install "$sdist"
+          "$RUNNER_TEMP/sdist-venv/bin/pip" check
+          "$RUNNER_TEMP/sdist-venv/bin/python" -c "import aec_bench; print(aec_bench.__version__)"
+      - name: Run release evidence and leakage checks
+        run: >-
+          uv run pytest -q
+          tests/test_release_manifest.py
+          tests/test_public_repo_surface.py
+          tests/test_provenance_policy.py
+          tests/test_provenance_manifest_discovery.py
+          tests/communication/test_query.py
+          tests/dataset/test_porter.py
+          tests/harness/test_workspace_conformance.py
+          tests/harness/test_harbor_import.py
+          tests/ledger/test_api.py
+          tests/ledger/test_durable_file_replacement.py
+          tests/ledger/test_evidence_index.py
+          tests/ledger/test_immutable_artifact_store.py
+          tests/ledger/test_immutable_byte_store.py
+          tests/ledger/test_run_package.py
+          tests/lifecycles/test_evidence_files.py
+          tests/lifecycles/test_finalization.py
+          tests/lifecycles/runtime/test_operation_recovery.py
+          tests/lifecycles/runtime/test_operation_resolver_replay.py
+          tests/prime_lab/test_eval_import.py
+          tests/prime_lab/test_exporter.py
+          tests/prime_lab/test_lifecycle_exporter.py
+          tests/deepseek_harness/test_qualification.py
+      - name: Verify reproducible plugin output
+        run: git diff --exit-code -- src/aec_bench/adapters/deepseek_harness/plugin/dist/
+
+  release-platform:
+    name: Release platform checks · ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+      - name: Set up Python 3.13.2
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13.2"
+      - name: Install uv
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+        with:
+          enable-cache: true
+      - name: Install base dependencies
+        run: uv sync --frozen
+      - name: Run portable release boundary checks
+        run: >-
+          uv run pytest -q
+          tests/contracts/test_identity.py
+          tests/harness/compilation/test_task_snapshot.py
+          tests/ledger/test_api.py
+          tests/ledger/test_durable_file_replacement.py
+          tests/ledger/test_evidence_index.py
+          tests/test_release_manifest.py
+
+  release-gate:
+    name: Release qualification gate
+    if: always()
+    needs:
+      - release-artifacts
+      - release-platform
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require all release jobs
+        if: >-
+          needs.release-artifacts.result != 'success' ||
+          needs.release-platform.result != 'success'
+        run: exit 1
+      - name: Report release checks passed
+        run: echo "Release qualification checks passed."
