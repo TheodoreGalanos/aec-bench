@@ -23,10 +23,9 @@ from aec_bench.adapters.deepseek_harness.tool_gateway import (
     NativeToolResponse,
     native_tool_manifest,
 )
-from aec_bench.contracts.world_interface import WorldActorCapabilityCatalogue, WorldActorObservation
-from aec_bench.harness.world_actor import (
+from aec_bench.contracts.world_actor import (
     ActorCorrelation,
-    ActorInvocationAuthority,
+    ActorInvocationAuthorityPort,
     ActorInvocationError,
     ActorInvocationOutcomeClass,
     ActorInvocationRequest,
@@ -34,6 +33,7 @@ from aec_bench.harness.world_actor import (
     actor_catalogue_sha256,
     canonical_actor_catalogue,
 )
+from aec_bench.contracts.world_interface import WorldActorCapabilityCatalogue, WorldActorObservation
 
 NATIVE_WORLD_TRANSPORT = "deepseek-native-world"
 NATIVE_WORLD_TOOL_SURFACE_SCHEMA = "aec-bench/native-world-tool-surface/1"
@@ -115,7 +115,7 @@ class DeepSeekNativeWorldEvidence:
 class NativeWorldToolTransport:
     """Own one DeepSeek actor session's private model-visible decision cursor."""
 
-    def __init__(self, authority: ActorInvocationAuthority) -> None:
+    def __init__(self, authority: ActorInvocationAuthorityPort) -> None:
         self._authority = authority
         self._lock = threading.Lock()
         self._cursor: str | None = None
@@ -277,7 +277,7 @@ class NativeWorldToolTransport:
 
 def compile_world_native_tools(
     *,
-    authority: ActorInvocationAuthority,
+    authority: ActorInvocationAuthorityPort,
     catalogue: WorldActorCapabilityCatalogue,
 ) -> tuple[NativeToolDefinition, ...]:
     """Compile one frozen task catalogue into the complete DeepSeek world surface."""

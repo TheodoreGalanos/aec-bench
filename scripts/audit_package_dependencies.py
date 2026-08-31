@@ -11,6 +11,7 @@ import importlib.util
 import json
 import subprocess
 import sys
+import tomllib
 from collections.abc import Iterable
 from pathlib import Path
 
@@ -40,6 +41,44 @@ COMPOSITION_ROOTS = {
     ),
 }
 IGNORED_SOURCE_PARTS = {"__pycache__", "node_modules"}
+DEFAULT_OWNER_POLICY_PATH = Path(__file__).with_name("owner_dependencies.toml")
+
+
+def load_owner_dependency_policy(path: Path = DEFAULT_OWNER_POLICY_PATH) -> dict[str, set[str]]:
+    """Load the complete owner dependency policy without importing source modules."""
+    with path.open("rb") as policy_file:
+        document = tomllib.load(policy_file)
+    raw_owners = document.get("owners")
+    if not isinstance(raw_owners, dict):
+        raise ValueError("owner dependency policy must contain an owners table")
+    policy: dict[str, set[str]] = {}
+    for owner, raw_policy in sorted(raw_owners.items()):
+        if not isinstance(owner, str) or not owner:
+            raise ValueError("owner dependency policy owner names must be non-empty strings")
+        if not isinstance(raw_policy, dict) or set(raw_policy) != {"may_depend_on"}:
+            raise ValueError(f"owner dependency policy entry is invalid: {owner}")
+        targets = raw_policy["may_depend_on"]
+        if not isinstance(targets, list) or any(not isinstance(target, str) or not target for target in targets):
+            raise ValueError(f"owner dependency policy targets are invalid: {owner}")
+        if len(targets) != len(set(targets)):
+            raise ValueError(f"owner dependency policy targets must be unique: {owner}")
+        policy[owner] = set(targets)
+    return policy
+
+
+def validate_owner_dependency_policy(owner_graph: dict[str, set[str]], policy: dict[str, set[str]]) -> tuple[str, ...]:
+    """Return deterministic violations between the declared and observed owner graph."""
+    actual_owners = set(owner_graph)
+    policy_owners = set(policy)
+    violations = [f"missing policy for owner: {owner}" for owner in sorted(actual_owners - policy_owners)]
+    violations.extend(f"policy declares unknown owner: {owner}" for owner in sorted(policy_owners - actual_owners))
+    for source in sorted(policy_owners):
+        for target in sorted(policy[source] - actual_owners):
+            violations.append(f"policy declares unknown dependency: {source} -> {target}")
+    for source in sorted(actual_owners):
+        for target in sorted(owner_graph[source] - policy.get(source, set())):
+            violations.append(f"undeclared owner dependency: {source} -> {target}")
+    return tuple(violations)
 
 
 def _module_name(path: Path, package_root: Path) -> str:
@@ -222,6 +261,8 @@ def build_audit(
         for module in known_modules
         if _owner(module) in NEUTRAL_OWNERS and external_roots[module] & OPTIONAL_RUNTIME_ROOTS
     )
+    owner_policy = load_owner_dependency_policy(repository_root / "scripts" / DEFAULT_OWNER_POLICY_PATH.name)
+    owner_policy_violations = validate_owner_dependency_policy(owner_graph, owner_policy)
 
     return {
         "schema_version": "1",
@@ -229,6 +270,8 @@ def build_audit(
         "source_tree_sha256": _source_tree_sha256(source_paths, repository_root),
         "module_count": len(known_modules),
         "top_level_package_graph": {owner: sorted(owner_graph[owner]) for owner in owners},
+        "owner_dependency_policy": {owner: sorted(owner_policy[owner]) for owner in sorted(owner_policy)},
+        "owner_dependency_policy_violations": list(owner_policy_violations),
         "top_level_strongly_connected_components": owner_sccs,
         "module_cycles_within_top_level_components": module_sccs_by_owner_cycle,
         "composition_root_back_imports": composition_back_imports,
@@ -277,6 +320,7 @@ def main() -> int:
         args.output.write_text(output, encoding="utf-8")
 
     failures = {
+        "owner dependency policy": audit["owner_dependency_policy_violations"],
         "top-level owner cycles": audit["top_level_strongly_connected_components"],
         "composition back-imports": audit["composition_root_back_imports"],
         "optional dependency leakage": audit["optional_dependency_leakage"],

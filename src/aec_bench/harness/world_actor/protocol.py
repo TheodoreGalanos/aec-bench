@@ -8,7 +8,7 @@ from typing import Annotated, Literal
 from pydantic import Field, JsonValue
 
 from aec_bench.contracts.validators import FrozenStrictModel, NonEmptyStr
-from aec_bench.harness.world_actor.authority import ActorInvocationOutcomeClass
+from aec_bench.contracts.world_actor import ActorInvocationOutcomeClass
 
 WORLD_ACTOR_PROTOCOL = "aec-bench/world-actor/1"
 WORLD_ACTOR_TRANSPORT_EVIDENCE_SCHEMA = "aec-bench/world-actor-transport-evidence/1"

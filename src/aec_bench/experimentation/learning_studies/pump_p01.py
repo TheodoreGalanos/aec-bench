@@ -13,6 +13,7 @@ from typing import Any
 from aec_bench.contracts.agent_output import AgentOutput, AgentOutputStatus
 from aec_bench.contracts.authority_evidence import AuthorityEvidenceKind, AuthorityEvidenceRef
 from aec_bench.contracts.evaluation_result import EvaluationResult, ValidityCheck
+from aec_bench.contracts.learning_study_assessment import ProjectionResult
 from aec_bench.contracts.trial_record import (
     AgentConfiguration,
     AuthorityExpectation,
@@ -29,7 +30,7 @@ from aec_bench.contracts.trial_record import (
     TrialRecord,
     UnresolvedSourceRef,
 )
-from aec_bench.experimentation.learning_studies.assessment import OutcomeProjection, ProjectionResult
+from aec_bench.experimentation.learning_studies.assessment import OutcomeProjection
 from aec_bench.experimentation.learning_studies.worlds import (
     WorldConsolidationOperation,
     WorldLearningBinding,

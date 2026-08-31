@@ -9,6 +9,7 @@ from typing import Any
 import typer
 
 from aec_bench.cli.output import emit, print_error, print_success
+from aec_bench.harness.lifecycle_local import run_local_lifecycle
 from aec_bench.lifecycles.catalogue import lifecycle_definition_by_key
 from aec_bench.lifecycles.conformance import (
     lifecycle_conformance_case,
@@ -80,7 +81,7 @@ def lifecycle_cmd(
     try:
         definition = lifecycle_definition_by_key(lifecycle_key)
         case = lifecycle_conformance_case(definition.metadata.template_id)
-        result = run_lifecycle_conformance(case, seed=seed)
+        result = run_lifecycle_conformance(case, execute_local=run_local_lifecycle, seed=seed)
         if definition.identity.version <= 0 or any(item.version <= 0 for item in definition.variant_identities):
             raise ValueError("lifecycle and variant versions must be positive")
         result["lifecycle_key"] = lifecycle_key

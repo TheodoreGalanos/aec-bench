@@ -29,10 +29,10 @@ from aec_bench.contracts.trial_record import (
 )
 from aec_bench.execution import ExecutionPolicy, LocalScheduler, RetryPolicy, TrialWorkItem, WorkItemState
 from aec_bench.execution.operational import OperationalStore
-from aec_bench.harness.planned_trial_reconciliation import planned_trial_binding
 from aec_bench.harness.world_trials import WorldTrialAdapter, WorldTrialAdapterError
 from aec_bench.ledger.evidence_run_store import EvidenceRunStore
 from aec_bench.trials import PlannedTrial as LegacyPlannedTrial
+from aec_bench.trials import planned_trial_binding
 from aec_bench.worlds.tasks import WorldTask
 from tests.harness.test_persisted_family_plans import _spec_and_plan, _store, _world_task
 

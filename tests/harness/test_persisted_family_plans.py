@@ -41,13 +41,13 @@ from aec_bench.contracts.trial_record import (
     TrialTaskKind,
     UnresolvedSourceRef,
 )
-from aec_bench.harness.planned_trial_reconciliation import planned_trial_binding
 from aec_bench.harness.world_trials import run_persisted_world_plan
 from aec_bench.ledger.evidence_run_store import EvidenceRunStore
 from aec_bench.lifecycles.application import LifecycleTrial, run_persisted_lifecycle_plan
 from aec_bench.lifecycles.compiled import CompiledLifecycle, CompiledLifecycleEnvelope
 from aec_bench.lifecycles.runtime.episode import LifecycleExecutionMode, LifecycleVisibilityPolicy
 from aec_bench.trials import PlannedTrial as LegacyPlannedTrial
+from aec_bench.trials import planned_trial_binding
 from aec_bench.worlds.tasks import WorldTask, build_world_task
 
 _EXECUTION_POLICY = ExecutionPolicy(max_concurrency=1)

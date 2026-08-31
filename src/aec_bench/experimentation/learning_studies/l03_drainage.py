@@ -14,7 +14,7 @@ from pydantic import BaseModel
 
 from aec_bench.contracts.experiment_manifest import AgentConfig, ComputeConfig
 from aec_bench.contracts.learning_study import ExperienceRole, LearningStudySpec
-from aec_bench.contracts.learning_study_assessment import LearningStudyAssessment
+from aec_bench.contracts.learning_study_assessment import LearningStudyAssessment, ProjectionResult
 from aec_bench.contracts.learning_study_evidence import (
     FeedbackReleaseRecord,
     LearnerStateRef,
@@ -27,7 +27,6 @@ from aec_bench.contracts.trial_record import EvaluationStatus, TrialRecord
 from aec_bench.experimentation.learning_studies.assessment import (
     AssessmentArmEvidence,
     OutcomeProjection,
-    ProjectionResult,
     assess_learning_study,
 )
 from aec_bench.experimentation.learning_studies.learner_state import (

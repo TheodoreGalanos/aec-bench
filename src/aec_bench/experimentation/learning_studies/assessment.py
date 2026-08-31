@@ -3,7 +3,6 @@
 
 from __future__ import annotations
 
-import math
 import statistics
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
@@ -20,6 +19,7 @@ from aec_bench.contracts.learning_study_assessment import (
     LearningMeasurementResult,
     LearningStudyAssessment,
     PairedMeasurementValue,
+    ProjectionResult,
 )
 from aec_bench.contracts.trial_record import TrialRecord
 from aec_bench.experimentation.learning_studies.planning import (
@@ -32,30 +32,6 @@ from aec_bench.experimentation.learning_studies.runtime import (
     LearningStudyExecution,
     StepExecutionStatus,
 )
-
-
-@dataclass(frozen=True)
-class ProjectionResult:
-    eligible: bool
-    value: float | None
-    reason: str | None = None
-    lower_bound: float | None = None
-    upper_bound: float | None = None
-
-    def __post_init__(self) -> None:
-        if self.eligible:
-            if self.value is None or not math.isfinite(self.value):
-                raise ValueError("eligible outcome projection requires one finite value")
-            if self.reason is not None:
-                raise ValueError("eligible outcome projection cannot contain an exclusion reason")
-        elif self.value is not None or not self.reason:
-            raise ValueError("ineligible outcome projection requires one reason and no value")
-        for bound in (self.lower_bound, self.upper_bound):
-            if bound is not None and not math.isfinite(bound):
-                raise ValueError("outcome projection bounds must be finite")
-        if self.lower_bound is not None and self.upper_bound is not None and self.lower_bound > self.upper_bound:
-            raise ValueError("outcome projection lower bound cannot exceed its upper bound")
-
 
 type OutcomeProjection = Callable[[TrialRecord], ProjectionResult]
 

@@ -13,7 +13,7 @@ from pydantic import BaseModel
 
 from aec_bench.contracts.experiment_manifest import AgentConfig, ComputeConfig
 from aec_bench.contracts.learning_study import ExperienceRole, LearningStudySpec
-from aec_bench.contracts.learning_study_assessment import LearningStudyAssessment
+from aec_bench.contracts.learning_study_assessment import LearningStudyAssessment, ProjectionResult
 from aec_bench.contracts.learning_study_evidence import (
     FeedbackReleaseRecord,
     LearnerStateRef,
@@ -26,7 +26,6 @@ from aec_bench.contracts.trial_record import EvaluationStatus, ExecutionStatus, 
 from aec_bench.experimentation.learning_studies.assessment import (
     AssessmentArmEvidence,
     OutcomeProjection,
-    ProjectionResult,
     assess_learning_study,
 )
 from aec_bench.experimentation.learning_studies.learner_state import validate_learner_state
@@ -199,9 +198,7 @@ def w01_dam_outcome_projections() -> dict[str, OutcomeProjection]:
     """Return the explicit W01 projection mapping without global registration."""
 
     projections: dict[str, OutcomeProjection] = {"world.canonical-reward": _project_probe_reward}
-    projections.update(
-        {projection_id: _dam_projection(reader) for projection_id, reader in _DAM_PROJECTORS.items()}
-    )
+    projections.update({projection_id: _dam_projection(reader) for projection_id, reader in _DAM_PROJECTORS.items()})
     return projections
 
 

@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 
 from aec_bench.contracts.experiment_manifest import AgentConfig, ComputeConfig
-from aec_bench.contracts.learning_study_assessment import LearningComparisonValidity
+from aec_bench.contracts.learning_study_assessment import LearningComparisonValidity, ProjectionResult
 from aec_bench.contracts.trial_record import TrialRecord
 from aec_bench.experimentation.learning_studies.artifact_tasks import (
     ArtifactConsolidationContext,
@@ -16,7 +16,6 @@ from aec_bench.experimentation.learning_studies.artifact_tasks import (
 )
 from aec_bench.experimentation.learning_studies.assessment import (
     AssessmentArmEvidence,
-    ProjectionResult,
     assess_learning_study,
 )
 from aec_bench.experimentation.learning_studies.families import load_learning_family

@@ -12,10 +12,6 @@ from aec_bench.contracts.identity import EntityIdentity
 from aec_bench.contracts.resolved_run import ResolvedRunSpec
 from aec_bench.contracts.run_plan import PlannedTrial
 from aec_bench.contracts.trial_record import PlannedTrialBinding, TrialRecord
-from aec_bench.harness.planned_trial_reconciliation import (
-    planned_trial_binding,
-    validate_planned_trial_record,
-)
 from aec_bench.ledger.evidence_run_store import EvidenceRunStore
 from aec_bench.lifecycles.compiled import load_compiled_lifecycle
 from aec_bench.lifecycles.finalization import (
@@ -40,6 +36,7 @@ from aec_bench.lifecycles.runtime.lifecycle import (
     validate_lifecycle_verification,
 )
 from aec_bench.lifecycles.values import LifecycleExecution, LifecycleTrial
+from aec_bench.trials import planned_trial_binding, validate_planned_trial_record
 
 type LifecycleTrialExecutor = Callable[[LifecycleTrial], LifecycleExecution]
 type LifecycleVerifier = Callable[[Path, Path], dict[str, object]]

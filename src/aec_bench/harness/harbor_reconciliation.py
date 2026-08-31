@@ -18,7 +18,7 @@ from aec_bench.contracts.run_plan import PlannedTrial, RunPlan
 from aec_bench.contracts.task_snapshot import ArtifactTaskSnapshotRef, RepositoryTaskSnapshotRef
 from aec_bench.contracts.trial_record import TrialRecord
 from aec_bench.contracts.validators import FrozenStrictModel, NonEmptyStr
-from aec_bench.harness.planned_trial_reconciliation import planned_trial_binding
+from aec_bench.trials import planned_trial_binding
 
 
 class HarborTrialTransport(FrozenStrictModel):
