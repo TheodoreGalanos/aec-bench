@@ -126,6 +126,15 @@ planned trial UUID. The adapter writes one portable receipt per candidate, one
 stable final `TrialRecord`, and one `TrialFinalization`. A second finalization for the same planned
 trial fails before another adapter call.
 
+`WorldTrialAdapter` is the scheduler-facing Interactive World boundary. It
+accepts one exact `RunPlan` and one running lease-bound operational attempt,
+validates the world build, profile, release, and work identity, and delegates
+the complete episode to the existing canonical world runner. World actions and
+host controls remain task-owned runtime effects, not scheduler attempts. The
+adapter writes one receipt, one stable final `TrialRecord`, and one
+`TrialFinalization`; a completed execution with a failed evaluation remains a
+successful execution result.
+
 Canonical Harbor dispatch validates the persisted ready plan and writes all
 one-trial job configurations and transport sidecars before the first Harbor
 effect. Each job contains one task, one agent, and one attempt.
