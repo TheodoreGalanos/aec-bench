@@ -1,6 +1,8 @@
 # ABOUTME: CLI command that launches the unified aec-bench TUI application.
 # ABOUTME: Entry point for interactive browsing, trace viewing, and review workflows.
 
+from pathlib import Path
+
 import typer
 
 from aec_bench.cli.commands.config import resolve_path
@@ -24,6 +26,17 @@ def launch_tui(
     tasks_root: str | None = typer.Option(None, "--tasks-root", help="Tasks directory"),
     feedback_root: str | None = typer.Option(None, "--feedback-root", help="Feedback directory"),
     datasets_root: str | None = typer.Option(None, "--datasets-root", help="Datasets directory"),
+    run_id: str | None = typer.Option(None, "--run-id", help="Open read-only progress for one run"),
+    operational_store_path: Path | None = typer.Option(
+        None,
+        "--operational-store",
+        help="Explicit SQLite operational store for --run-id",
+    ),
+    plan_root: Path | None = typer.Option(
+        None,
+        "--plan-root",
+        help="Explicit portable run-plan root for --run-id",
+    ),
 ) -> None:
     """Launch the interactive terminal UI for browsing, viewing, and reviewing trials."""
     require_optional_extra("Terminal UI support", "tui", ("textual", "rich_pixels", "PIL"))
@@ -31,6 +44,10 @@ def launch_tui(
     resolved_tasks = resolve_path("tasks_root", cli_override=tasks_root)
     resolved_feedback = resolve_path("feedback_root", cli_override=feedback_root)
     resolved_datasets = resolve_path("datasets_root", cli_override=datasets_root)
+    if (run_id is not None and (operational_store_path is None or plan_root is None)) or (
+        run_id is None and (operational_store_path is not None or plan_root is not None)
+    ):
+        raise typer.BadParameter("--run-id requires both --operational-store and --plan-root")
 
     from aec_bench.config import load_config
     from aec_bench.tui.app import AecBenchTUI
@@ -45,5 +62,8 @@ def launch_tui(
         reviewer_id=reviewer_id,
         datasets_root=resolved_datasets,
         project_root=project_root,
+        progress_run_id=run_id,
+        operational_store_path=operational_store_path,
+        plan_root=plan_root,
     )
     app.run()

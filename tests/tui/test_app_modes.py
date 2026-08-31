@@ -27,6 +27,45 @@ async def test_app_starts_in_dashboard_mode(tmp_path: Path) -> None:
 
 
 @pytest.mark.anyio
+async def test_app_opens_requested_run_progress_screen(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from aec_bench.tui.progress import RunProgressViewModel
+    from aec_bench.tui.screens.progress import RunProgressScreen
+
+    monkeypatch.setattr(
+        "aec_bench.tui.screens.progress.load_run_progress_view_model",
+        lambda *args, **kwargs: RunProgressViewModel(
+            run_id="run-id",
+            plan_id="plan-id",
+            status="running",
+            planned=2,
+            succeeded=1,
+            failed=0,
+            running=1,
+            queued=0,
+            unknown=0,
+            cancelled=0,
+            retries=0,
+            completion_blocked=True,
+        ),
+    )
+    ledger = tmp_path / "ledger"
+    ledger.mkdir()
+    tasks = tmp_path / "tasks"
+    tasks.mkdir()
+    app = AecBenchTUI(
+        ledger_root=ledger,
+        tasks_root=tasks,
+        progress_run_id="run-id",
+        operational_store_path=tmp_path / "operational.sqlite3",
+        plan_root=tmp_path / "runs",
+    )
+
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        assert isinstance(app.screen, RunProgressScreen)
+
+
+@pytest.mark.anyio
 async def test_app_has_four_modes(tmp_path: Path) -> None:
     app = _make_app(tmp_path)
     async with app.run_test() as pilot:

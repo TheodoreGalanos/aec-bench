@@ -83,17 +83,25 @@ class EvidenceRunStore:
     _PLAN_FILE = "run-plan.json"
     _STATE_FILE = "state.json"
 
-    def __init__(self, root: Path) -> None:
+    def __init__(self, root: Path, *, read_only: bool = False) -> None:
         selected = Path(root).expanduser().absolute()
+        self.read_only = read_only
         if selected.exists() and selected.is_symlink():
             raise EvidenceRunStoreError("evidence run store root must not be a symbolic link")
-        try:
-            mkdir_durable(selected, created_mode=0o700)
-        except OSError as cause:
-            raise EvidenceRunStoreError(f"evidence run store root cannot be created: {cause}") from cause
+        if not read_only:
+            try:
+                mkdir_durable(selected, created_mode=0o700)
+            except OSError as cause:
+                raise EvidenceRunStoreError(f"evidence run store root cannot be created: {cause}") from cause
         if selected.is_symlink() or not selected.is_dir():
             raise EvidenceRunStoreError("evidence run store root must be a regular directory")
         self.root = selected
+
+    @classmethod
+    def open_read_only(cls, root: Path) -> EvidenceRunStore:
+        """Open an existing run store without creating roots or lock files."""
+
+        return cls(root, read_only=True)
 
     def run_directory(self, identity: EntityIdentity) -> Path:
         """Return the safe key-plus-full-UUID directory for one run identity."""
@@ -107,6 +115,7 @@ class EvidenceRunStore:
     def create_run(self, spec: ResolvedRunSpec) -> StoredEvidenceRun:
         """Durably publish a resolved specification before a plan is written."""
 
+        self._require_writable()
         directory = self.run_directory(spec.run_identity)
         with self._lock(spec.run_identity):
             self._ensure_run_directory(directory)
@@ -129,6 +138,7 @@ class EvidenceRunStore:
     def write_draft_plan(self, run_identity: EntityIdentity, plan: RunPlan) -> RunPlan:
         """Publish a draft plan, replacing it only with a higher plan identity version."""
 
+        self._require_writable()
         self._validate_plan_identity(run_identity, plan)
         if plan.state != "draft":
             raise EvidenceRunStoreStateError("draft plan writes require plan state 'draft'")
@@ -153,6 +163,7 @@ class EvidenceRunStore:
     def promote_ready_plan(self, run_identity: EntityIdentity, plan: RunPlan) -> RunPlan:
         """Publish one validated ready plan and move the operational state to ready."""
 
+        self._require_writable()
         self._validate_plan_identity(run_identity, plan)
         if plan.state != "ready":
             raise EvidenceRunStoreStateError("ready promotion requires plan state 'ready'")
@@ -188,6 +199,7 @@ class EvidenceRunStore:
 
         _require_aware(started_at, "started_at")
         directory = self.run_directory(run_identity)
+        self._require_writable()
         with self._lock(run_identity):
             spec, state = self._require_spec_and_state(directory, run_identity)
             plan = self._read_optional_model(directory / self._PLAN_FILE, RunPlan)
@@ -220,6 +232,7 @@ class EvidenceRunStore:
 
         _require_aware(closed_at, "closed_at")
         directory = self.run_directory(run_identity)
+        self._require_writable()
         with self._lock(run_identity):
             spec, state = self._require_spec_and_state(directory, run_identity)
             if state.state == "closed":
@@ -278,8 +291,15 @@ class EvidenceRunStore:
 
     @contextmanager
     def _lock(self, run_identity: EntityIdentity) -> Iterator[None]:
+        if self.read_only:
+            yield
+            return
         with exclusive_local_file_lock(self.root, f"_locks/{self._locator(run_identity)}.lock"):
             yield
+
+    def _require_writable(self) -> None:
+        if self.read_only:
+            raise EvidenceRunStoreError("read-only evidence run store rejects write operations")
 
     def _read_run_unlocked(self, run_identity: EntityIdentity) -> StoredEvidenceRun:
         directory = self.run_directory(run_identity)

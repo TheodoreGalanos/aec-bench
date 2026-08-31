@@ -120,6 +120,16 @@ def run_experiment(
         "--cancellation-requested",
         help="Account reconciled cancellations as a cancelled run",
     ),
+    operational_store_path: Path | None = typer.Option(
+        None,
+        "--operational-store",
+        help="Explicit SQLite operational store for `run status`",
+    ),
+    plan_root: Path | None = typer.Option(
+        None,
+        "--plan-root",
+        help="Explicit portable run-plan root for `run status`",
+    ),
 ) -> None:
     """Run an experiment.
 
@@ -140,6 +150,16 @@ def run_experiment(
       aec-bench run import run-package.tar.zst
       aec-bench --json run --config experiment.yaml | jq '.data.experiment_id'
     """
+    if tasks_path == "status":
+        _status_run(
+            selector=package_value,
+            operational_store_path=operational_store_path,
+            plan_root=plan_root,
+        )
+        return
+    if tasks_path == "cancel":
+        _cancel_run(selector=package_value, operational_store_path=operational_store_path)
+        return
     if tasks_path in {"plan", "inspect", "diff", "reconcile"}:
         _review_run(
             operation=tasks_path,
@@ -203,6 +223,122 @@ def run_experiment(
             start_time=start,
         )
         return
+
+
+def _status_run(
+    *,
+    selector: str | None,
+    operational_store_path: Path | None,
+    plan_root: Path | None,
+) -> None:
+    """Emit one read-only operational projection for an explicit run."""
+
+    start = time.monotonic()
+    if selector is None:
+        emit("run status", data=None, errors=["run status requires <run-id>"], start_time=start)
+        return
+    if operational_store_path is None or plan_root is None:
+        emit(
+            "run status",
+            data=None,
+            errors=["run status requires --operational-store and --plan-root"],
+            start_time=start,
+        )
+        return
+    from aec_bench.execution.operational.store import OperationalStoreError
+    from aec_bench.harness.run_progress import load_run_progress, present_run_progress
+    from aec_bench.ledger.evidence_run_store import EvidenceRunStoreError
+
+    try:
+        progress = load_run_progress(
+            selector,
+            operational_store_path=operational_store_path,
+            plan_root=plan_root,
+        )
+    except (EvidenceRunStoreError, OperationalStoreError, ValueError) as error:
+        emit("run status", data=None, errors=[str(error)], start_time=start)
+        return
+    data = present_run_progress(progress).model_dump(mode="json")
+    emit("run status", data=data, start_time=start, human_renderer=_render_status_human)
+
+
+def _render_status_human(data: object) -> None:
+    """Render the flat status fields in terminal-friendly form."""
+
+    if not isinstance(data, dict):
+        return
+    for field in (
+        "run_id",
+        "plan_id",
+        "status",
+        "planned",
+        "succeeded",
+        "failed",
+        "running",
+        "queued",
+        "unknown",
+        "cancelled",
+        "retries",
+    ):
+        if field in data:
+            console.print(f"{field}: {data[field]}")
+
+
+def _cancel_run(*, selector: str | None, operational_store_path: Path | None) -> None:
+    """Request cancellation of queued and active work in one operational run."""
+
+    start = time.monotonic()
+    if selector is None:
+        emit("run cancel", data=None, errors=["run cancel requires <run-id>"], start_time=start)
+        return
+    if operational_store_path is None:
+        emit("run cancel", data=None, errors=["run cancel requires --operational-store"], start_time=start)
+        return
+    from aec_bench.execution.operational.store import OperationalStoreError
+
+    try:
+        from aec_bench.execution.operational.store import OperationalStore
+
+        store = OperationalStore.open_existing(operational_store_path)
+        before = store.list_work_items(selector)
+        queued_before = {item.work_id for item in before if item.state == "queued"}
+        run = store.request_cancellation(selector)
+        after = store.list_work_items(selector)
+        attempts = {attempt.attempt_id: attempt for attempt in store.list_attempts_for_run(selector)}
+        submission_attempts = {item.attempt_id for item in store.list_backend_submissions_for_run(selector)}
+        submitted_work_ids = {
+            attempt.work_id for attempt_id, attempt in attempts.items() if attempt_id in submission_attempts
+        }
+        pending = sum(item.state == "cancel_requested" and item.work_id in submitted_work_ids for item in after)
+        data = {
+            "run_id": selector,
+            "status": run.status,
+            "queued_cancelled": sum(item.work_id in queued_before and item.state == "cancelled" for item in after),
+            "active_work_cancel_requested": sum(item.state == "cancel_requested" for item in after),
+            "backend_cancellation_pending": pending,
+            "unknown_reconciliation": sum(attempt.state == "unknown" for attempt in attempts.values()),
+        }
+    except (OperationalStoreError, ValueError) as error:
+        emit("run cancel", data=None, errors=[str(error)], start_time=start)
+        return
+    emit("run cancel", data=data, start_time=start, human_renderer=_render_cancel_human)
+
+
+def _render_cancel_human(data: object) -> None:
+    """Render cancellation state without implying backend cancellation completed."""
+
+    if not isinstance(data, dict):
+        return
+    for field in (
+        "run_id",
+        "status",
+        "queued_cancelled",
+        "active_work_cancel_requested",
+        "backend_cancellation_pending",
+        "unknown_reconciliation",
+    ):
+        if field in data:
+            console.print(f"{field}: {data[field]}")
 
 
 def _review_run(

@@ -1,6 +1,7 @@
 # ABOUTME: CLI command that launches the aec-bench web UI server.
 # ABOUTME: Starts a uvicorn server serving the FastAPI web application, with optional Vite dev mode.
 
+import os
 import signal
 import subprocess
 import sys
@@ -24,7 +25,19 @@ def _resolve_internal_token(host: str, internal_token: str | None) -> str | None
     return None
 
 
-def _start_dev_servers(host: str, port: int) -> None:
+def _start_dev_servers(
+    host: str,
+    port: int,
+    *,
+    ledger_root: Path,
+    tasks_root: Path,
+    feedback_root: Path,
+    datasets_root: Path,
+    internal_token: str | None = None,
+    workspaces_root: Path | None = None,
+    operational_store_path: Path | None = None,
+    plan_root: Path | None = None,
+) -> None:
     """Start Vite dev server and FastAPI in parallel for development."""
     require_optional_extra("Web UI support", "webui", ("fastapi", "uvicorn"))
     frontend_dir = Path(__file__).resolve().parents[2] / "web" / "frontend"
@@ -41,12 +54,25 @@ def _start_dev_servers(host: str, port: int) -> None:
         stderr=sys.stderr,
     )
 
+    server_environment = os.environ.copy()
+    server_environment["AEC_BENCH_WEB_LEDGER_ROOT"] = str(ledger_root)
+    server_environment["AEC_BENCH_WEB_TASKS_ROOT"] = str(tasks_root)
+    server_environment["AEC_BENCH_WEB_FEEDBACK_ROOT"] = str(feedback_root)
+    server_environment["AEC_BENCH_WEB_DATASETS_ROOT"] = str(datasets_root)
+    if internal_token is not None:
+        server_environment["AEC_BENCH_WEB_INTERNAL_TOKEN"] = internal_token
+    if workspaces_root is not None:
+        server_environment["AEC_BENCH_WEB_WORKSPACES_ROOT"] = str(workspaces_root)
+    if operational_store_path is not None:
+        server_environment["AEC_BENCH_OPERATIONAL_STORE"] = str(operational_store_path)
+    if plan_root is not None:
+        server_environment["AEC_BENCH_PLAN_ROOT"] = str(plan_root)
     uvicorn_proc = subprocess.Popen(
         [
             sys.executable,
             "-m",
             "uvicorn",
-            "aec_bench.web.app:create_app",
+            "aec_bench.web.app:create_dev_app",
             "--factory",
             "--host",
             host,
@@ -56,6 +82,7 @@ def _start_dev_servers(host: str, port: int) -> None:
         ],
         stdout=sys.stdout,
         stderr=sys.stderr,
+        env=server_environment,
     )
 
     def shutdown(signum: int, frame: object) -> None:
@@ -91,20 +118,22 @@ def launch_web(
         help="Token for internal routes (or set AEC_BENCH_INTERNAL_TOKEN)",
     ),
     workspaces_root: str | None = typer.Option(None, "--workspaces-root", help="Evolution workspaces directory"),
+    operational_store_path: Path | None = typer.Option(
+        None,
+        "--operational-store",
+        help="Explicit SQLite operational store for run progress",
+    ),
+    plan_root: Path | None = typer.Option(
+        None,
+        "--plan-root",
+        help="Explicit portable run-plan root for run progress",
+    ),
     no_open: bool = typer.Option(False, "--no-open", help="Don't open browser automatically"),
     reload: bool = typer.Option(False, "--reload", help="Enable auto-reload for development"),
     dev: bool = typer.Option(False, "--dev", help="Run Vite dev server + FastAPI for HMR development"),
 ) -> None:
     """Launch the web UI for browsing experiments, triaging trials, and viewing results."""
     require_optional_extra("Web UI support", "webui", ("fastapi", "uvicorn"))
-    if dev:
-        _start_dev_servers(host=host, port=port)
-        return
-
-    import uvicorn
-
-    from aec_bench.web.app import create_app
-
     resolved_ledger = resolve_path("ledger_root", cli_override=ledger_root)
     resolved_tasks = resolve_path("tasks_root", cli_override=tasks_root)
     resolved_feedback = resolve_path("feedback_root", cli_override=feedback_root)
@@ -121,6 +150,25 @@ def launch_web(
 
     resolved_internal_token = _resolve_internal_token(host=host, internal_token=internal_token)
 
+    if dev:
+        _start_dev_servers(
+            host=host,
+            port=port,
+            ledger_root=resolved_ledger,
+            tasks_root=resolved_tasks,
+            feedback_root=resolved_feedback,
+            datasets_root=resolved_datasets,
+            internal_token=resolved_internal_token,
+            workspaces_root=resolved_workspaces,
+            operational_store_path=operational_store_path,
+            plan_root=plan_root,
+        )
+        return
+
+    import uvicorn
+
+    from aec_bench.web.app import create_app
+
     app = create_app(
         ledger_root=resolved_ledger,
         tasks_root=resolved_tasks,
@@ -128,6 +176,8 @@ def launch_web(
         datasets_root=resolved_datasets,
         internal_token=resolved_internal_token,
         workspaces_root=resolved_workspaces,
+        operational_store_path=operational_store_path,
+        plan_root=plan_root,
     )
 
     url = f"http://{host}:{port}"
@@ -139,6 +189,10 @@ def launch_web(
         typer.echo(f"  Workspaces: {resolved_workspaces}")
     if resolved_internal_token and internal_token is None:
         typer.echo("  Internal review routes: enabled for this local browser session")
+    if operational_store_path:
+        typer.echo(f"  Operational store: {operational_store_path}")
+    if plan_root:
+        typer.echo(f"  Plan root: {plan_root}")
 
     if not no_open:
         webbrowser.open(url)

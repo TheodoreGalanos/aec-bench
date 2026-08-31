@@ -24,6 +24,8 @@ class WebSettings:
     benchmark_templates_root: Path  # benchmark template catalogue (not Jinja2 templates)
     internal_token: str | None = None
     workspaces_root: Path | None = None
+    operational_store_path: Path | None = None
+    plan_root: Path | None = None
 
 
 def get_web_settings(request: Request) -> WebSettings:

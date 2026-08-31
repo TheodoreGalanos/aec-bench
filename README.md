@@ -166,6 +166,12 @@ uv run aec-bench run diff <left-run-key-or-uuid> <right-run-key-or-uuid> --store
 
 # Reconcile explicit typed trial outcomes against a persisted plan
 uv run aec-bench run reconcile <run-key-or-uuid> --observations outcomes.json --store-root artefacts/runs
+
+# Show read-only operational progress (both roots are required; no attachments are loaded)
+uv run aec-bench run status <run-id> --operational-store artefacts/operational.sqlite3 --plan-root artefacts/runs
+
+# Request idempotent cancellation of queued work and mark active work for reconciliation
+uv run aec-bench run cancel <run-id> --operational-store artefacts/operational.sqlite3
 ```
 
 `run plan --config` currently accepts identity-bearing artifact tasks. It rejects Interactive World and lifecycle

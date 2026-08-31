@@ -110,6 +110,9 @@ class AecBenchTUI(App[None]):
         datasets_root: Path | None = None,
         project_root: Path | None = None,
         initial_mode: str = "dashboard",
+        progress_run_id: str | None = None,
+        operational_store_path: Path | None = None,
+        plan_root: Path | None = None,
     ) -> None:
         super().__init__()
         self.ledger_root = ledger_root
@@ -120,6 +123,9 @@ class AecBenchTUI(App[None]):
         self.datasets_root = datasets_root
         self.project_root = project_root
         self.initial_mode = initial_mode
+        self.progress_run_id = progress_run_id
+        self.operational_store_path = operational_store_path
+        self.plan_root = plan_root
 
         # Replace the placeholder MODES callables with real screen factories.
         # Textual calls each callable with no arguments, so we use lambdas
@@ -182,3 +188,13 @@ class AecBenchTUI(App[None]):
         self.register_theme(AEC_BENCH_LIGHT)
         self.theme = "aec-bench-dark"
         self.switch_mode(self.initial_mode)
+        if self.progress_run_id and self.operational_store_path and self.plan_root:
+            from aec_bench.tui.screens.progress import RunProgressScreen
+
+            self.push_screen(
+                RunProgressScreen(
+                    run_id=self.progress_run_id,
+                    operational_store_path=self.operational_store_path,
+                    plan_root=self.plan_root,
+                )
+            )
