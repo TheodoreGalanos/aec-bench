@@ -12,6 +12,7 @@ import pytest
 from aec_bench.lifecycles.catalogue import (
     lifecycle_definition,
     lifecycle_definition_by_identity,
+    lifecycle_definition_by_key,
     lifecycle_template_ids,
 )
 from aec_bench.lifecycles.generated_catalogue import LIFECYCLE_DESCRIPTORS, load_lifecycle_definitions
@@ -59,6 +60,7 @@ def test_lifecycle_catalogue_resolves_key_or_uuid_and_exact_version() -> None:
         is definition
     )
     assert lifecycle_definition_by_identity(definition.identity.id, version=definition.identity.version) is definition
+    assert lifecycle_definition_by_key(str(definition.identity.key)) is definition
     with pytest.raises(KeyError, match="identity and version"):
         lifecycle_definition_by_identity(definition.identity.id, version=definition.identity.version + 1)
 
@@ -79,7 +81,10 @@ def test_generator_supports_another_lifecycle_owner_and_sorts_it() -> None:
 
 def test_lifecycle_owner_descriptor_rejects_invalid_definition() -> None:
     with pytest.raises(TypeError, match="requires a LifecycleDefinition"):
-        LifecycleOwnerDescriptor(definition=object())  # type: ignore[arg-type]
+        LifecycleOwnerDescriptor(  # type: ignore[arg-type]
+            definition=object(),
+            conformance_entry_point="test.module:case",
+        )
 
 
 def test_generated_lifecycle_catalogue_rejects_duplicate_template_identity(monkeypatch: pytest.MonkeyPatch) -> None:

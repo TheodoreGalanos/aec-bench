@@ -51,6 +51,16 @@ def lifecycle_definition(template_id: str) -> LifecycleDefinition:
         raise KeyError(f"No lifecycle task for {template_id!r}. Known: {known}") from exc
 
 
+def lifecycle_definition_by_key(lifecycle_key: str) -> LifecycleDefinition:
+    """Resolve the current lifecycle definition by its canonical readable key."""
+
+    try:
+        return _DEFINITIONS_BY_KEY[lifecycle_key]
+    except KeyError as exc:
+        known = ", ".join(sorted(_DEFINITIONS_BY_KEY))
+        raise KeyError(f"unknown lifecycle key: {lifecycle_key}. Known: {known}") from exc
+
+
 def lifecycle_definition_by_identity(identity: UUID | str, *, version: int) -> LifecycleDefinition:
     """Resolve one current lifecycle by UUID or canonical key and exact version."""
 

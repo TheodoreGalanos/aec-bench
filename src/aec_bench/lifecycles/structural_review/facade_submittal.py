@@ -619,5 +619,8 @@ LIFECYCLE_DESCRIPTOR = LifecycleOwnerDescriptor(
             / "facade_submittal_source_policy_package"
             / "params.toml",
         ),
-    )
+    ),
+    conformance_entry_point=(
+        "aec_bench.lifecycles.structural_review.facade_submittal_conformance:lifecycle_conformance_case"
+    ),
 )

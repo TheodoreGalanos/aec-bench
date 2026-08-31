@@ -370,7 +370,8 @@ def _validate_source_activation_projection(
         raise ValueError("source activation contains multiple canonical source identities")
     if identity_paths:
         identity = _read_object(read_artifact, identity_paths[0])
-        if identity != current_source.model_dump(mode="json"):
+        expected_identity = current_source.model_dump(mode="json")
+        if any(identity.get(key) != value for key, value in expected_identity.items()):
             raise ValueError("source activation identity does not match the snapshotted current source")
     source_state_paths = [
         artifact.path for artifact in activation.artifacts if artifact.path.endswith("/source-state.json")

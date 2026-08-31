@@ -1160,7 +1160,10 @@ LIFECYCLE_DESCRIPTOR = LifecycleOwnerDescriptor(
         variant_validator=validated_drainage_model_variant,
         variant_ids=drainage_variants.list_drainage_model_variant_ids,
         variant_metadata=drainage_variants.get_drainage_model_variant,
-    )
+    ),
+    conformance_entry_point=(
+        "aec_bench.lifecycles.stormwater_design.drainage_model_conformance:lifecycle_conformance_case"
+    ),
 )
 
 
