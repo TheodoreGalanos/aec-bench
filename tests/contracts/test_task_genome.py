@@ -5,6 +5,7 @@ import pytest
 from pydantic import ValidationError
 
 from aec_bench.contracts.artifacts import ArtifactRef
+from aec_bench.contracts.identity import EntityIdentity, EntityKind, new_entity_id
 from aec_bench.contracts.task_genome import (
     DomainFrame,
     ExtractionSummary,
@@ -127,6 +128,11 @@ def test_reviewed_task_genome_requires_a_reviewer() -> None:
 def _snapshot() -> TaskSnapshotRef:
     return TaskSnapshotRef(
         task_id="electrical/voltage-drop",
+        task_identity=EntityIdentity(
+            id=new_entity_id(EntityKind.TASK),
+            key="electrical/voltage-drop",
+            version=1,
+        ),
         artifact=ArtifactRef(
             artifact_id=f"artifacts/sha256/{'2' * 64}",
             sha256="2" * 64,

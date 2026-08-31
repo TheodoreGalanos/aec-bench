@@ -13,6 +13,7 @@ import pytest
 from pydantic import ValidationError
 
 from aec_bench.contracts.harness_kernel import KernelManifest
+from aec_bench.contracts.task_snapshot import ArtifactTaskSnapshotRef
 from aec_bench.contracts.trial_record import ArtifactReference
 from aec_bench.evolution.repair_lifecycle import (
     CompiledRepairCandidate,
@@ -541,9 +542,7 @@ def test_new_attempt_repeats_complete_pair_after_interrupted_parent_under_same_r
 
     claim_paths = tuple(sorted((artifacts_root / "repair-attempt-claims").glob("*/claim.json")))
     completion_paths = tuple(path.with_name("completion.json") for path in claim_paths)
-    records = tuple(
-        read_trial_record(path) for path in sorted(fixture.workflow.ledger_root.rglob("trial-*.json"))
-    )
+    records = tuple(read_trial_record(path) for path in sorted(fixture.workflow.ledger_root.rglob("trial-*.json")))
     assert second_result.result.status is RepairLoopStatus.ACCEPTED
     assert second_executor.calls == [(17, 1), (29, 1), (17, 2), (29, 2)]
     assert len(claim_paths) == 2
@@ -713,8 +712,8 @@ def test_prepare_repair_run_spec_pins_exact_task_and_world_snapshots(tmp_path: P
     spec = _spec(fixture)
 
     assert tuple(snapshot.task_id for snapshot in spec.task_snapshots) == fixture.request.pairing.task_ids
-    assert spec.task_snapshots[0].task_review is not None
-    assert spec.task_snapshots[0].task_review.profile_id == "aec.task-review.civil.repair"
+    assert isinstance(spec.task_snapshots[0], ArtifactTaskSnapshotRef)
+    assert spec.task_snapshots[0].task_identity.key == fixture.request.pairing.task_ids[0]
 
 
 @pytest.mark.parametrize("drift_kind", ("task", "task_review"))

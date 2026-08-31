@@ -14,9 +14,17 @@ from aec_bench.contracts.evaluation_generation.lifecycle import (
 )
 
 
+def _module_exists(module_name: str) -> bool:
+    """Return whether an optional module exists, including when its parent is absent."""
+    try:
+        return importlib.util.find_spec(module_name) is not None
+    except ModuleNotFoundError:
+        return False
+
+
 def test_historical_pilot_contract_paths_are_owned_by_the_experiment() -> None:
-    assert importlib.util.find_spec("aec_bench.contracts.phase_nine_calibration") is None
-    assert importlib.util.find_spec("aec_bench.contracts.compatibility.phase91a_v1") is None
+    assert not _module_exists("aec_bench.contracts.phase_nine_calibration")
+    assert not _module_exists("aec_bench.contracts.compatibility.phase91a_v1")
 
 
 def test_importing_one_contract_does_not_load_historical_experiment_contracts() -> None:
@@ -43,7 +51,7 @@ def test_importing_one_contract_does_not_load_historical_experiment_contracts() 
     assert result.returncode == 0, result.stderr
 
 
-def test_trajectory_contract_does_not_import_trial_record_contracts() -> None:
+def test_trajectory_contract_does_not_import_run_accounting_contract() -> None:
     result = subprocess.run(
         [
             sys.executable,
@@ -51,7 +59,7 @@ def test_trajectory_contract_does_not_import_trial_record_contracts() -> None:
             (
                 "import sys; "
                 "import aec_bench.contracts.trajectory; "
-                "assert 'aec_bench.contracts.trial_record' not in sys.modules"
+                "assert 'aec_bench.contracts.run_accounting' not in sys.modules"
             ),
         ],
         check=False,
@@ -66,18 +74,8 @@ def test_completed_batch_has_one_execution_accounting_surface() -> None:
     assert "accounting_evidence" not in GovernedBatchExecutionClosure.model_fields
     assert "accounting_evidence" not in GovernedBatchTerminalEvidence.model_fields
     assert "accounting_assignments" not in GovernedBatchTerminalEvidence.model_fields
-    assert (
-        importlib.util.find_spec(
-            "aec_bench.meta_harness.compatibility.phase91a_accounting_v1",
-        )
-        is None
-    )
-    assert (
-        importlib.util.find_spec(
-            "aec_bench.meta_harness.phase_nine_calibration_accounting",
-        )
-        is None
-    )
+    assert not _module_exists("aec_bench.meta_harness.compatibility.phase91a_accounting_v1")
+    assert not _module_exists("aec_bench.meta_harness.phase_nine_calibration_accounting")
 
 
 def test_governed_batch_has_no_unreleased_phase_specific_execution_surface() -> None:
@@ -86,7 +84,7 @@ def test_governed_batch_has_no_unreleased_phase_specific_execution_surface() -> 
         "aec_bench.meta_harness.phase91a_governed_pilot_adapter",
         "aec_bench.meta_harness.governed_pilot_execution",
     ):
-        assert importlib.util.find_spec(module_name) is None
+        assert not _module_exists(module_name)
 
     source_root = Path(__file__).parents[2] / "src" / "aec_bench"
     governed_pilot_schemas = tuple(
@@ -100,7 +98,7 @@ def test_execution_preflight_has_no_unreleased_phase_specific_surface() -> None:
         "aec_bench.meta_harness.phase91a_preflight",
         "aec_bench.meta_harness.phase_nine_calibration_controller",
     ):
-        assert importlib.util.find_spec(module_name) is None
+        assert not _module_exists(module_name)
 
     source_root = Path(__file__).parents[2] / "src" / "aec_bench"
     obsolete_schemas = {
