@@ -3,14 +3,13 @@
 
 from __future__ import annotations
 
-import shutil
 import subprocess
 import sys
 from pathlib import Path
 from typing import cast
 
 from aec_bench.adapters.base import AdapterRequest, AdapterResult
-from aec_bench.harness.local_runtime import patch_workspace_paths, setup_workspace
+from aec_bench.harness.local_runtime import cleanup_workspace, patch_workspace_paths, setup_workspace
 
 
 class HostEnvironment:
@@ -72,5 +71,5 @@ class HostEnvironment:
     def teardown(self, *, keep: bool = False) -> None:
         """Remove the workspace directory unless keep=True."""
         if not keep and self._workspace is not None:
-            shutil.rmtree(self._workspace, ignore_errors=True)
+            cleanup_workspace(self._workspace)
             self._workspace = None

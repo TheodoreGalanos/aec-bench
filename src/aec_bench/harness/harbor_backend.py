@@ -116,6 +116,8 @@ class HarborBackendClient(Protocol):
 class HarborBackend:
     """Run and reconcile one exact scheduler-owned Harbor attempt."""
 
+    capabilities = frozenset({"submit", "inspect", "collect", "cancel", "reconcile"})
+
     def __init__(
         self,
         *,

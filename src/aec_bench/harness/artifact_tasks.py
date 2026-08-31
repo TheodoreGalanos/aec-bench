@@ -61,6 +61,7 @@ from aec_bench.execution.models import (
 from aec_bench.execution.operational import AttemptRecord, OperationalStore, WorkItemRecord
 from aec_bench.harness.compilation.task_snapshot import TaskSnapshotError, assert_task_snapshot_matches_directory
 from aec_bench.harness.local_runtime import (
+    cleanup_workspace,
     patch_workspace_paths,
     read_instruction,
     setup_workspace,
@@ -1257,7 +1258,7 @@ def run_trial(
             shutil.rmtree(snapshot_dir, ignore_errors=True)
         if not keep_workspaces:
             for workspace in runtime.attempt_workspaces[first_workspace_index:]:
-                shutil.rmtree(workspace, ignore_errors=True)
+                cleanup_workspace(workspace)
                 runtime.release_workspace(workspace)
 
 
@@ -1591,7 +1592,7 @@ def run_trial_with_verifier_feedback(
             shutil.rmtree(snapshot_dir, ignore_errors=True)
         if not keep_workspace:
             for workspace in runtime.attempt_workspaces[first_workspace_index:]:
-                shutil.rmtree(workspace, ignore_errors=True)
+                cleanup_workspace(workspace)
                 runtime.release_workspace(workspace)
 
 

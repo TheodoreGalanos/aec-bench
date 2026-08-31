@@ -19,12 +19,15 @@ def setup_workspace(task_dir: str, *, work_root: str | Path | None = None) -> st
 
     Returns the workspace path. The caller is responsible for cleanup.
     """
-    workspace = tempfile.mkdtemp(prefix="aec-bench-local-", dir=work_root)
     task_path = Path(task_dir)
+    _validate_copy_source(task_path)
+    if work_root is not None:
+        Path(work_root).mkdir(parents=True, exist_ok=True)
+    workspace = tempfile.mkdtemp(prefix="aec-bench-local-", dir=work_root)
 
     for item in task_path.iterdir():
         if item.is_file():
-            shutil.copy2(item, workspace)
+            _copy_regular_file(item, Path(workspace) / item.name)
         elif item.name == "environment":
             # Flatten environment/workspace/ into workspace root (like Dockerfile COPY workspace/ /workspace/)
             ws_subdir = item / "workspace"
@@ -34,23 +37,24 @@ def setup_workspace(task_dir: str, *, work_root: str | Path | None = None) -> st
                         rel = ws_item.relative_to(ws_subdir)
                         dest = Path(workspace) / rel
                         dest.parent.mkdir(parents=True, exist_ok=True)
-                        shutil.copy2(ws_item, dest)
+                        _copy_regular_file(ws_item, dest)
             # Mirror environment assets at workspace root, matching Docker COPY destinations.
             for env_item in item.iterdir():
                 if env_item.name == "workspace":
                     continue
                 if env_item.is_file():
-                    shutil.copy2(env_item, workspace)
+                    _copy_regular_file(env_item, Path(workspace) / env_item.name)
                 elif env_item.is_dir():
                     shutil.copytree(
                         env_item,
                         Path(workspace) / env_item.name,
                         dirs_exist_ok=True,
+                        symlinks=False,
                     )
             # Keep the full directory because task-relative imports can use it.
             shutil.copytree(item, os.path.join(workspace, item.name))
         elif item.is_dir() and item.name not in {"__pycache__", "tests"}:
-            shutil.copytree(item, os.path.join(workspace, item.name), dirs_exist_ok=True)
+            shutil.copytree(item, os.path.join(workspace, item.name), dirs_exist_ok=True, symlinks=False)
 
     return workspace
 
@@ -60,12 +64,59 @@ def stage_verifier_assets(task_dir: str | Path, workspace: str | Path) -> None:
     source = Path(task_dir) / "tests"
     if not source.is_dir():
         return
-    shutil.copytree(source, Path(workspace) / "tests", dirs_exist_ok=True)
+    workspace_path = Path(workspace)
+    if workspace_path.is_symlink() or not workspace_path.is_dir():
+        raise ValueError("verifier staging workspace must be a regular directory")
+    _validate_copy_source(source)
+    destination = workspace_path / "tests"
+    if destination.is_symlink():
+        raise ValueError("verifier staging destination must not be a symbolic link")
+    if destination.exists():
+        raise ValueError("verifier staging destination must not already exist")
+    shutil.copytree(source, destination, symlinks=False)
 
 
 def unstage_verifier_assets(workspace: str | Path) -> None:
     """Remove private verifier assets before another agent turn."""
-    shutil.rmtree(Path(workspace) / "tests", ignore_errors=True)
+    destination = Path(workspace) / "tests"
+    if destination.is_symlink():
+        raise ValueError("verifier staging destination must not be a symbolic link")
+    shutil.rmtree(destination, ignore_errors=True)
+
+
+def cleanup_workspace(workspace: str | Path) -> None:
+    """Remove one local workspace created by :func:`setup_workspace`."""
+
+    path = Path(workspace)
+    if path.is_symlink():
+        raise ValueError("workspace cleanup target must not be a symbolic link")
+    if path.exists() and not path.is_dir():
+        raise ValueError("workspace cleanup target must be a directory")
+    shutil.rmtree(path, ignore_errors=True)
+
+
+def _validate_copy_source(source: Path) -> None:
+    """Reject source links and shared inodes before any full-copy effect."""
+
+    if source.is_symlink() or not source.is_dir():
+        raise ValueError("workspace copy source must be a regular directory")
+    resolved_source = source.resolve()
+    for candidate in sorted(source.rglob("*")):
+        information = candidate.lstat()
+        if information.st_mode & 0o170000 == 0o120000:
+            raise ValueError(f"workspace copy source must not contain a symbolic link: {candidate}")
+        if not candidate.resolve().is_relative_to(resolved_source):
+            raise ValueError(f"workspace copy source escapes its root: {candidate}")
+
+
+def _copy_regular_file(source: Path, destination: Path) -> None:
+    """Copy one validated regular file without following source links."""
+
+    information = source.lstat()
+    if information.st_mode & 0o170000 != 0o100000:
+        raise ValueError(f"workspace copy source must be a regular file: {source}")
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(source, destination)
 
 
 def patch_workspace_paths(workspace: str, *, source_workspace: str | None = None) -> None:
