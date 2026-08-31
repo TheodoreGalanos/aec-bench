@@ -6,13 +6,16 @@ from __future__ import annotations
 import ast
 import multiprocessing
 import stat
+import sys
 from contextlib import chdir
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Protocol
 
 import pytest
 
 import aec_bench.ledger.durability as lower_durability
+import aec_bench.ledger.local_lock as local_lock
 import aec_bench.lifecycles.runtime.operation_store as lifecycle_operation_store
 import aec_bench.lifecycles.runtime.request_store as lifecycle_store
 import aec_bench.worlds.runtime.rollout_repository as rollout_repository
@@ -160,6 +163,27 @@ def test_exclusive_local_file_lock_allows_concurrent_first_acquisition(tmp_path:
             if process.is_alive():
                 process.kill()
             process.join()
+
+
+def test_exclusive_local_file_lock_uses_windows_backend(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[tuple[int, int]] = []
+    windows_backend = SimpleNamespace(
+        LK_LOCK=1,
+        LK_UNLCK=2,
+        locking=lambda descriptor, operation, length: calls.append(
+            (operation, length),
+        ),
+    )
+    monkeypatch.setattr(local_lock, "_PLATFORM_NAME", "nt")
+    monkeypatch.setitem(sys.modules, "msvcrt", windows_backend)
+
+    with exclusive_local_file_lock(tmp_path / "run", "locks/world.lock"):
+        assert (tmp_path / "run" / "locks" / "world.lock").read_bytes() == b"\0"
+
+    assert calls == [(1, 1), (2, 1)]
 
 
 @pytest.mark.parametrize("unsafe_kind", ("symbolic-link", "directory"))

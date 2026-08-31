@@ -956,7 +956,7 @@ def test_schema_one_validation_rejects_every_mutated_record_semantic(tmp_path: P
         with pytest.raises(ValueError, match="historical TrialRecord does not match"):
             retention_runtime.validate_lifecycle_ablation_record(forged, manifest, trial)
     manifest_mutations: tuple[Callable[[dict[str, Any]], None], ...] = (
-        lambda payload: payload["source"].__setitem__("reason", "forged source"),
+        lambda payload: payload.__setitem__("source", {"kind": "git", "revision": "f" * 40}),
         lambda payload: payload["agent"]["configuration"].__setitem__("requested_model", "forged-model"),
     )
     for mutate_manifest in manifest_mutations:
