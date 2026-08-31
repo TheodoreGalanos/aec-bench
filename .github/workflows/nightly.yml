@@ -130,7 +130,8 @@ jobs:
           enable-cache: true
       - name: Install base dependencies
         run: uv sync --frozen
-      - name: Run portable path and storage checks
+      - name: Run POSIX path and storage checks
+        if: runner.os == 'Linux'
         run: >-
           uv run pytest -q
           tests/contracts/test_identity.py
@@ -138,6 +139,14 @@ jobs:
           tests/ledger/test_api.py
           tests/ledger/test_durable_file_replacement.py
           tests/ledger/test_evidence_index.py
+      - name: Run Windows path and package checks
+        if: runner.os == 'Windows'
+        run: >-
+          uv run pytest -q
+          tests/contracts/test_identity.py
+          tests/tasks/test_loader.py::test_resolve_task_instance_dir_matches_key_when_physical_path_spelling_differs
+          tests/tasks/test_loader.py::test_resolve_task_instance_dir_rejects_escape_and_missing_key
+          tests/test_release_manifest.py
 
   prime-qualification:
     name: Prime world qualification
