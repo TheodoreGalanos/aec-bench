@@ -11,6 +11,7 @@ import pytest
 from aec_bench.adapters.base import AdapterRequest, AdapterResult
 from aec_bench.contracts.agent_output import AgentOutput, AgentOutputStatus
 from aec_bench.contracts.artifacts import ArtifactRef
+from aec_bench.contracts.execution_policy import ExecutionPolicy
 from aec_bench.contracts.experiment_manifest import (
     AgentCondition,
     AgentConfig,
@@ -30,6 +31,7 @@ from aec_bench.tasks.snapshot import TASK_SNAPSHOT_MEDIA_TYPE, build_task_snapsh
 from tests.support.task_factories import make_task_definition
 
 _CREATED_AT = datetime(2026, 8, 30, 12, 0, tzinfo=UTC)
+_EXECUTION_POLICY = ExecutionPolicy(max_concurrency=1)
 
 
 def _identity(kind: EntityKind, key: str, version: int = 1) -> EntityIdentity:
@@ -108,6 +110,7 @@ def _spec(task: ResolvedTaskInstance, *, condition_count: int = 1) -> ResolvedRu
         run_identity=_identity(EntityKind.RUN, "artifact-plan-run"),
         created_at=_CREATED_AT,
         created_by="test",
+        execution_policy=_EXECUTION_POLICY,
     )
 
 

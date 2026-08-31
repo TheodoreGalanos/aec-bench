@@ -8,6 +8,7 @@ import pytest
 from pydantic import ValidationError
 
 from aec_bench.contracts.artifacts import ArtifactRef
+from aec_bench.contracts.execution_policy import ExecutionPolicy
 from aec_bench.contracts.execution_release import WorldExecutionRelease
 from aec_bench.contracts.experiment_manifest import (
     AgentCondition,
@@ -32,6 +33,7 @@ from aec_bench.contracts.trial_extensions import AdaptationProvenance
 from aec_bench.contracts.trial_record import TrialTaskKind
 
 _PLAN_CREATED_AT = datetime(2026, 8, 30, 12, 1, tzinfo=UTC)
+_EXECUTION_POLICY = ExecutionPolicy(max_concurrency=1)
 
 
 def _identity(kind: EntityKind, key: str, version: int = 1) -> EntityIdentity:
@@ -83,6 +85,7 @@ def _resolved_run(*, repetitions: int = 2) -> ResolvedRunSpec:
         run_identity=_identity(EntityKind.RUN, "pump-study-run"),
         created_at=datetime(2026, 8, 30, 12, 0, tzinfo=UTC),
         created_by="theo",
+        execution_policy=_EXECUTION_POLICY,
         randomization_seed=42,
     )
 

@@ -196,6 +196,8 @@ class TrialWorkItem(FrozenStrictModel):
     ordinal: PositiveInt
     execution_family: TrialTaskKind
     backend: NonEmptyStr
+    provider_route: NonEmptyStr
+    model_route: NonEmptyStr
     resource_class: NonEmptyStr
     priority: Annotated[int, Field(strict=True)] = 0
     retry_policy: RetryPolicy

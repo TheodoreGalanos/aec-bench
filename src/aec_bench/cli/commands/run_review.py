@@ -141,7 +141,7 @@ def _condition_view(stored: StoredEvidenceRun) -> dict[str, Any]:
         "verification_enabled": spec.verification_enabled,
         "reviewer": None if spec.reviewer is None else spec.reviewer.model_dump(mode="json"),
         "randomization_seed": spec.randomization_seed,
-        "execution_policy_version": spec.execution_policy_version,
+        "execution_policy": spec.execution_policy.model_dump(mode="json"),
         "visibility": list(spec.visibility),
         "expected_authorities": [item.model_dump(mode="json") for item in spec.expected_authorities],
         "evaluation_profile": None

@@ -1,7 +1,7 @@
 # ABOUTME: Defines the one current disposable SQLite schema for execution coordination.
 # ABOUTME: Rejects stale local databases instead of retaining migration history or compatibility code.
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 SCHEMA_STATEMENTS = (
     """
@@ -55,6 +55,14 @@ SCHEMA_STATEMENTS = (
         priority INTEGER NOT NULL DEFAULT 0,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL,
+        plan_id TEXT NOT NULL REFERENCES operational_plans(plan_id),
+        ordinal INTEGER NOT NULL CHECK (ordinal > 0),
+        execution_family TEXT NOT NULL,
+        backend TEXT NOT NULL,
+        provider_route TEXT NOT NULL,
+        model_route TEXT NOT NULL,
+        resource_class TEXT NOT NULL,
+        available_at TEXT NOT NULL,
         UNIQUE (run_id, work_key)
     )
     """,
@@ -106,7 +114,7 @@ SCHEMA_STATEMENTS = (
     """,
     """
     CREATE INDEX IF NOT EXISTS operational_work_items_ready_idx
-        ON operational_work_items (state, priority DESC, created_at)
+        ON operational_work_items (state, available_at, priority DESC, created_at, ordinal)
     """,
     """
     CREATE INDEX IF NOT EXISTS operational_attempts_trial_idx

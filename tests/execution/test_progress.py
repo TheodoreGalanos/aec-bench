@@ -60,6 +60,14 @@ def _store_for_plan(tmp_path: Path, plan: RunPlan) -> OperationalStore:
             work_key=f"work-{trial.ordinal}",
             run_id=plan.run_id,
             trial_id=trial.trial_id,
+            plan_id=plan.plan_id,
+            ordinal=trial.ordinal,
+            execution_family="artifact",
+            backend="local",
+            provider_route="default",
+            model_route="default",
+            resource_class="default",
+            available_at=created_at,
             now=created_at,
         )
     return store
@@ -145,7 +153,21 @@ def test_progress_is_scoped_to_the_authoritative_plan(tmp_path: Path) -> None:
         now=created_at,
     )
     work_id = new_entity_id(EntityKind.WORK_ITEM)
-    store.create_work_item(work_id, work_key="other-work", run_id=plan.run_id, trial_id=trial.trial_id, now=created_at)
+    store.create_work_item(
+        work_id,
+        work_key="other-work",
+        run_id=plan.run_id,
+        trial_id=trial.trial_id,
+        plan_id=other_plan.plan_id,
+        ordinal=trial.ordinal,
+        execution_family="artifact",
+        backend="local",
+        provider_route="default",
+        model_route="default",
+        resource_class="default",
+        available_at=created_at,
+        now=created_at,
+    )
     lease = store.acquire_lease(work_id, owner="other-worker", now=created_at, ttl=timedelta(minutes=5))
     attempt = store.create_attempt(
         new_entity_id(EntityKind.ATTEMPT),
@@ -279,6 +301,14 @@ def test_progress_marks_missing_and_unknown_planned_trials_as_blocking(tmp_path:
         work_key="work-2",
         run_id=plan.run_id,
         trial_id=trial.trial_id,
+        plan_id=plan.plan_id,
+        ordinal=trial.ordinal,
+        execution_family="artifact",
+        backend="local",
+        provider_route="default",
+        model_route="default",
+        resource_class="default",
+        available_at=created_at,
         now=created_at,
     )
     store.update_work_item(work_id, state="unknown", now=created_at)

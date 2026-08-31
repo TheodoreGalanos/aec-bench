@@ -278,6 +278,7 @@ def _persist_plan_from_config(
     from aec_bench.cli.commands.run_review import plan_data
 
     manifest, resolved_tasks = _load_manifest_config(config_path, tasks_root=tasks_root, no_verify=no_verify)
+    from aec_bench.contracts.execution_policy import ExecutionPolicy
     from aec_bench.contracts.identity import EntityIdentity, EntityKey, EntityKind, new_entity_id
     from aec_bench.contracts.resolved_run import resolve_run_spec
     from aec_bench.contracts.run_plan import TaskPlanningProfile, plan_run
@@ -350,6 +351,7 @@ def _persist_plan_from_config(
         run_identity=run_identity,
         created_at=created_at,
         created_by=getuser() or "unknown",
+        execution_policy=ExecutionPolicy(max_concurrency=1),
     )
     profiles = {}
     for task in task_definitions:

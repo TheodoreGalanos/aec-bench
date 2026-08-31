@@ -3,6 +3,7 @@
 
 """Execution composition boundaries."""
 
+from aec_bench.contracts.execution_policy import ExecutionPolicy
 from aec_bench.execution.models import (
     Attempt,
     AttemptProcessStatus,
@@ -32,6 +33,7 @@ from aec_bench.execution.progress import (
     WorkItemProgressCounts,
     project_run_progress,
 )
+from aec_bench.execution.scheduler import LocalScheduler, SchedulerRunReport
 
 __all__ = (
     "Attempt",
@@ -59,4 +61,7 @@ __all__ = (
     "TrialProgressCounts",
     "WorkItemProgressCounts",
     "project_run_progress",
+    "LocalScheduler",
+    "ExecutionPolicy",
+    "SchedulerRunReport",
 )

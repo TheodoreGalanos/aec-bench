@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 import sqlite3
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -13,7 +13,13 @@ from pathlib import Path
 from typing import cast
 from uuid import UUID
 
-from aec_bench.contracts.identity import PortableRelativePath, validate_entity_key, validate_uuidv7
+from aec_bench.contracts.identity import (
+    EntityKind,
+    PortableRelativePath,
+    new_entity_id,
+    validate_entity_key,
+    validate_uuidv7,
+)
 from aec_bench.execution.operational.schema import SCHEMA_STATEMENTS, SCHEMA_VERSION
 
 
@@ -76,6 +82,24 @@ class WorkItemRecord:
     priority: int
     created_at: datetime
     updated_at: datetime
+    plan_id: str
+    ordinal: int
+    execution_family: str
+    backend: str
+    provider_route: str
+    model_route: str
+    resource_class: str
+    available_at: datetime
+
+
+@dataclass(frozen=True, slots=True)
+class QueueCount:
+    """One queue count grouped by run, backend, and work state."""
+
+    run_id: str
+    backend: str
+    state: str
+    count: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -217,6 +241,22 @@ class OperationalStore:
         with self._connection() as connection:
             return self._plan_from_row(self._require_row(connection, "operational_plans", "plan_id", selected_id))
 
+    def update_plan(self, plan_id: UUID | str, *, state: str, now: datetime | None = None) -> PlanRecord:
+        """Transition one mutable operational plan state."""
+
+        selected_id = _required_id(plan_id, "plan_id")
+        selected_state = _checked_status(state, {"draft", "ready", "started", "closed"})
+        stamp = _timestamp(_aware(now or datetime.now(UTC), "now"))
+        with self._connection(immediate=True) as connection:
+            self._require_row(connection, "operational_plans", "plan_id", selected_id)
+            connection.execute(
+                "UPDATE operational_plans SET state = ?, updated_at = ? WHERE plan_id = ?",
+                (selected_state, stamp, selected_id),
+            )
+            return self._plan_from_row(
+                connection.execute("SELECT * FROM operational_plans WHERE plan_id = ?", (selected_id,)).fetchone()
+            )
+
     def put_planned_trial(
         self,
         trial_id: UUID | str,
@@ -275,6 +315,92 @@ class OperationalStore:
                 self._require_row(connection, "operational_planned_trials", "trial_id", selected_id)
             )
 
+    def update_planned_trial(
+        self, trial_id: UUID | str, *, state: str, now: datetime | None = None
+    ) -> PlannedTrialRecord:
+        """Transition one mutable operational planned-trial state."""
+
+        selected_id = _required_id(trial_id, "trial_id")
+        selected_state = _checked_status(
+            state, {"planned", "queued", "running", "succeeded", "failed", "cancelled", "invalid", "unknown"}
+        )
+        stamp = _timestamp(_aware(now or datetime.now(UTC), "now"))
+        with self._connection(immediate=True) as connection:
+            self._require_row(connection, "operational_planned_trials", "trial_id", selected_id)
+            connection.execute(
+                "UPDATE operational_planned_trials SET state = ?, updated_at = ? WHERE trial_id = ?",
+                (selected_state, stamp, selected_id),
+            )
+            return self._trial_from_row(
+                connection.execute(
+                    "SELECT * FROM operational_planned_trials WHERE trial_id = ?", (selected_id,)
+                ).fetchone()
+            )
+
+    def complete_plan_if_terminal(
+        self, plan_id: UUID | str, *, run_id: UUID | str, now: datetime | None = None
+    ) -> tuple[PlanRecord, RunRecord] | None:
+        """Close the selected plan when terminal, and the run when all plans are terminal."""
+
+        selected_plan = _required_id(plan_id, "plan_id")
+        selected_run = _required_id(run_id, "run_id")
+        stamp = _timestamp(_aware(now or datetime.now(UTC), "now"))
+        terminal_states = ("succeeded", "failed", "cancelled", "invalid")
+        with self._connection(immediate=True) as connection:
+            plan = self._require_row(connection, "operational_plans", "plan_id", selected_plan)
+            if plan[1] != selected_run:
+                raise OperationalStoreConflict("plan belongs to a different run")
+            planned_count, non_terminal_trial_count = connection.execute(
+                "SELECT COUNT(*), SUM(CASE WHEN state NOT IN (?,?,?,?) THEN 1 ELSE 0 END) "
+                "FROM operational_planned_trials WHERE plan_id = ?",
+                (*terminal_states, selected_plan),
+            ).fetchone()
+            work_count, non_terminal_count = connection.execute(
+                "SELECT COUNT(*), SUM(CASE WHEN state NOT IN (?,?,?,?) THEN 1 ELSE 0 END) "
+                "FROM operational_work_items WHERE plan_id = ?",
+                (*terminal_states, selected_plan),
+            ).fetchone()
+            if (
+                planned_count == 0
+                or work_count != planned_count
+                or (non_terminal_trial_count or 0) != 0
+                or (non_terminal_count or 0) != 0
+            ):
+                return None
+            connection.execute(
+                "UPDATE operational_plans SET state = 'closed', updated_at = ? WHERE plan_id = ?",
+                (stamp, selected_plan),
+            )
+            run_planned_count, run_non_terminal_trial_count = connection.execute(
+                "SELECT COUNT(*), SUM(CASE WHEN state NOT IN (?,?,?,?) THEN 1 ELSE 0 END) "
+                "FROM operational_planned_trials WHERE run_id = ?",
+                (*terminal_states, selected_run),
+            ).fetchone()
+            run_work_count, run_non_terminal_count = connection.execute(
+                "SELECT COUNT(*), SUM(CASE WHEN state NOT IN (?,?,?,?) THEN 1 ELSE 0 END) "
+                "FROM operational_work_items WHERE run_id = ?",
+                (*terminal_states, selected_run),
+            ).fetchone()
+            if (
+                run_planned_count > 0
+                and run_work_count == run_planned_count
+                and (run_non_terminal_trial_count or 0) == 0
+                and (run_non_terminal_count or 0) == 0
+            ):
+                connection.execute(
+                    "UPDATE operational_runs SET status = 'completed', finished_at = COALESCE(finished_at, ?), "
+                    "updated_at = ? WHERE run_id = ?",
+                    (stamp, stamp, selected_run),
+                )
+            return (
+                self._plan_from_row(
+                    connection.execute("SELECT * FROM operational_plans WHERE plan_id = ?", (selected_plan,)).fetchone()
+                ),
+                self._run_from_row(
+                    connection.execute("SELECT * FROM operational_runs WHERE run_id = ?", (selected_run,)).fetchone()
+                ),
+            )
+
     def create_work_item(
         self,
         work_id: UUID | str,
@@ -282,6 +408,14 @@ class OperationalStore:
         work_key: str,
         run_id: UUID | str,
         trial_id: UUID | str,
+        plan_id: UUID | str,
+        ordinal: int,
+        execution_family: str,
+        backend: str,
+        provider_route: str,
+        model_route: str,
+        resource_class: str,
+        available_at: datetime,
         kind: str = "trial",
         priority: int = 0,
         now: datetime | None = None,
@@ -291,18 +425,63 @@ class OperationalStore:
         selected_run = _required_id(run_id, "run_id")
         selected_trial = _required_id(trial_id, "trial_id")
         selected_kind = _required_text(kind, "kind")
-        stamp = _timestamp(_aware(now or datetime.now(UTC), "now"))
+        selected_plan = _required_id(plan_id, "plan_id")
+        if ordinal <= 0:
+            raise ValueError("ordinal must be greater than zero")
+        selected_family = _required_text(execution_family, "execution_family")
+        selected_backend = _required_key(backend, "backend")
+        selected_provider_route = _required_key(provider_route, "provider_route")
+        selected_model_route = _required_key(model_route, "model_route")
+        selected_resource_class = _required_key(resource_class, "resource_class")
+        created_at = _aware(now or datetime.now(UTC), "now")
+        available_at_value = _aware(available_at, "available_at")
+        if available_at_value < created_at:
+            raise ValueError("work item available_at must not precede created_at")
+        stamp = _timestamp(created_at)
+        available_stamp = _timestamp(available_at_value)
         with self._connection(immediate=True) as connection:
             self._require_row(connection, "operational_runs", "run_id", selected_run)
             trial = self._require_row(connection, "operational_planned_trials", "trial_id", selected_trial)
-            if trial[2] != selected_run:
+            plan = self._require_row(connection, "operational_plans", "plan_id", selected_plan)
+            if plan[1] != selected_run or trial[1] != selected_plan or trial[2] != selected_run:
                 raise OperationalStoreConflict("work item trial belongs to a different run")
+            if int(trial[3]) != ordinal:
+                raise OperationalStoreConflict("work item ordinal does not match planned trial")
             existing = connection.execute(
                 "SELECT * FROM operational_work_items WHERE work_id = ?", (selected_id,)
             ).fetchone()
             if existing is not None:
-                immutable = (existing[1], existing[2], existing[3], existing[4], existing[6])
-                if immutable != (selected_key, selected_run, selected_trial, selected_kind, priority):
+                immutable = (
+                    existing[1],
+                    existing[2],
+                    existing[3],
+                    existing[4],
+                    existing[6],
+                    existing[9],
+                    existing[10],
+                    existing[11],
+                    existing[12],
+                    existing[13],
+                    existing[14],
+                    existing[15],
+                    existing[16],
+                )
+                requested = (
+                    selected_key,
+                    selected_run,
+                    selected_trial,
+                    selected_kind,
+                    priority,
+                    selected_plan,
+                    ordinal,
+                    selected_family,
+                    selected_backend,
+                    selected_provider_route,
+                    selected_model_route,
+                    selected_resource_class,
+                    available_stamp,
+                )
+                if immutable != requested:
                     raise OperationalStoreConflict(f"work item identity already has different content: {selected_id}")
                 return self._work_item_from_row(existing)
             trial_owner = connection.execute(
@@ -318,8 +497,9 @@ class OperationalStore:
                 raise OperationalStoreConflict(f"work key already belongs to another work item: {selected_key}")
             connection.execute(
                 "INSERT INTO operational_work_items "
-                "(work_id,work_key,run_id,trial_id,kind,state,priority,created_at,updated_at) "
-                "VALUES (?,?,?,?,?,?,?,?,?)",
+                "(work_id,work_key,run_id,trial_id,kind,state,priority,created_at,updated_at,plan_id,ordinal,"
+                "execution_family,backend,provider_route,model_route,resource_class,available_at) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (
                     selected_id,
                     selected_key,
@@ -330,13 +510,28 @@ class OperationalStore:
                     priority,
                     stamp,
                     stamp,
+                    selected_plan,
+                    ordinal,
+                    selected_family,
+                    selected_backend,
+                    selected_provider_route,
+                    selected_model_route,
+                    selected_resource_class,
+                    available_stamp,
                 ),
             )
             return self._work_item_from_row(
                 connection.execute("SELECT * FROM operational_work_items WHERE work_id = ?", (selected_id,)).fetchone()
             )
 
-    def update_work_item(self, work_id: UUID | str, *, state: str, now: datetime | None = None) -> WorkItemRecord:
+    def update_work_item(
+        self,
+        work_id: UUID | str,
+        *,
+        state: str,
+        available_at: datetime | None = None,
+        now: datetime | None = None,
+    ) -> WorkItemRecord:
         selected_id = _required_id(work_id, "work_id")
         selected_state = _checked_status(
             state,
@@ -353,12 +548,20 @@ class OperationalStore:
                 "unknown",
             },
         )
-        stamp = _timestamp(_aware(now or datetime.now(UTC), "now"))
+        now_value = _aware(now or datetime.now(UTC), "now")
+        stamp = _timestamp(now_value)
         with self._connection(immediate=True) as connection:
-            self._require_row(connection, "operational_work_items", "work_id", selected_id)
+            work_item = self._require_row(connection, "operational_work_items", "work_id", selected_id)
+            selected_available_at = None
+            if available_at is not None:
+                available_at_value = _aware(available_at, "available_at")
+                if available_at_value < _parse_timestamp(work_item[7]):
+                    raise ValueError("work item available_at must not precede created_at")
+                selected_available_at = _timestamp(available_at_value)
             connection.execute(
-                "UPDATE operational_work_items SET state = ?, updated_at = ? WHERE work_id = ?",
-                (selected_state, stamp, selected_id),
+                "UPDATE operational_work_items SET state = ?, updated_at = ?, available_at = "
+                "COALESCE(?, available_at) WHERE work_id = ?",
+                (selected_state, stamp, selected_available_at, selected_id),
             )
             return self._work_item_from_row(
                 connection.execute("SELECT * FROM operational_work_items WHERE work_id = ?", (selected_id,)).fetchone()
@@ -448,6 +651,79 @@ class OperationalStore:
                 self._require_row(connection, "operational_attempts", "attempt_id", selected_id)
             )
 
+    def create_attempt_for_lease(
+        self,
+        work_id: UUID | str,
+        *,
+        trial_id: UUID | str,
+        lease_id: UUID | str,
+        now: datetime | None = None,
+    ) -> AttemptRecord:
+        """Create the next attempt for an active lease in one transaction."""
+
+        selected_work_item = _required_id(work_id, "work_id")
+        selected_trial = _required_id(trial_id, "trial_id")
+        selected_lease = _required_id(lease_id, "lease_id")
+        selected_now = _aware(now or datetime.now(UTC), "now")
+        stamp = _timestamp(selected_now)
+        with self._connection(immediate=True) as connection:
+            item = self._require_row(connection, "operational_work_items", "work_id", selected_work_item)
+            trial = self._require_row(connection, "operational_planned_trials", "trial_id", selected_trial)
+            if item[3] != selected_trial or trial[2] != item[2]:
+                raise OperationalStoreConflict("attempt work item and trial do not match")
+            lease = self._require_row(connection, "operational_leases", "lease_id", selected_lease)
+            if lease[1] != selected_work_item:
+                raise OperationalStoreConflict("attempt lease belongs to a different work item")
+            if lease[6] != "active" or _parse_timestamp(lease[4]) <= selected_now:
+                raise OperationalStoreConflict("attempt lease is not active")
+            row = connection.execute(
+                "SELECT COALESCE(MAX(attempt_number), 0) + 1 FROM operational_attempts WHERE work_id = ?",
+                (selected_work_item,),
+            ).fetchone()
+            attempt_number = int(row[0])
+            attempt_id = str(new_entity_id(EntityKind.ATTEMPT))
+            connection.execute(
+                "INSERT INTO operational_attempts "
+                "(attempt_id,work_id,run_id,trial_id,attempt_number,lease_id,state,created_at,updated_at) "
+                "VALUES (?,?,?,?,?,?,?,?,?)",
+                (
+                    attempt_id,
+                    selected_work_item,
+                    item[2],
+                    selected_trial,
+                    attempt_number,
+                    selected_lease,
+                    "created",
+                    stamp,
+                    stamp,
+                ),
+            )
+            return self._attempt_from_row(
+                connection.execute("SELECT * FROM operational_attempts WHERE attempt_id = ?", (attempt_id,)).fetchone()
+            )
+
+    def transition_attempt(self, attempt_id: UUID | str, *, state: str, now: datetime | None = None) -> AttemptRecord:
+        """Set an attempt state and record truthful running or terminal timestamps."""
+
+        selected_id = _required_id(attempt_id, "attempt_id")
+        selected_state = _checked_status(
+            state, {"created", "submitted", "running", "succeeded", "failed", "cancelled", "unknown"}
+        )
+        selected_now = _aware(now or datetime.now(UTC), "now")
+        stamp = _timestamp(selected_now)
+        with self._connection(immediate=True) as connection:
+            current = self._require_row(connection, "operational_attempts", "attempt_id", selected_id)
+            started_at = stamp if selected_state == "running" else current[8]
+            finished_at = stamp if selected_state in {"succeeded", "failed", "cancelled", "unknown"} else current[9]
+            connection.execute(
+                "UPDATE operational_attempts SET state = ?, started_at = ?, finished_at = ?, updated_at = ? "
+                "WHERE attempt_id = ?",
+                (selected_state, started_at, finished_at, stamp, selected_id),
+            )
+            return self._attempt_from_row(
+                connection.execute("SELECT * FROM operational_attempts WHERE attempt_id = ?", (selected_id,)).fetchone()
+            )
+
     def record_backend_submission(
         self,
         submission_id: UUID | str,
@@ -520,10 +796,48 @@ class OperationalStore:
         selected_id = _required_id(run_id, "run_id")
         with self._connection() as connection:
             rows = connection.execute(
-                "SELECT * FROM operational_work_items WHERE run_id = ? ORDER BY priority DESC, created_at, work_id",
+                "SELECT * FROM operational_work_items "
+                "WHERE run_id = ? ORDER BY priority DESC, created_at, ordinal, work_id",
                 (selected_id,),
             ).fetchall()
         return tuple(self._work_item_from_row(row) for row in rows)
+
+    def list_queue_counts(self, run_id: UUID | str | None = None) -> tuple[QueueCount, ...]:
+        """Return queue counts grouped by run, backend, and state."""
+
+        selected_id = None if run_id is None else _required_id(run_id, "run_id")
+        with self._connection() as connection:
+            if selected_id is None:
+                rows = connection.execute(
+                    "SELECT run_id, backend, state, COUNT(*) FROM operational_work_items "
+                    "GROUP BY run_id, backend, state ORDER BY run_id, backend, state"
+                ).fetchall()
+            else:
+                rows = connection.execute(
+                    "SELECT run_id, backend, state, COUNT(*) FROM operational_work_items "
+                    "WHERE run_id = ? GROUP BY run_id, backend, state ORDER BY run_id, backend, state",
+                    (selected_id,),
+                ).fetchall()
+        return tuple(QueueCount(row[0], row[1], row[2], int(row[3])) for row in rows)
+
+    def next_available_at(self, *, now: datetime, run_id: UUID | str | None = None) -> datetime | None:
+        """Return the next future queue time without waiting or mutating state."""
+
+        selected_now = _timestamp(_aware(now, "now"))
+        selected_id = None if run_id is None else _required_id(run_id, "run_id")
+        with self._connection() as connection:
+            if selected_id is None:
+                row = connection.execute(
+                    "SELECT MIN(available_at) FROM operational_work_items WHERE state = 'queued' AND available_at > ?",
+                    (selected_now,),
+                ).fetchone()
+            else:
+                row = connection.execute(
+                    "SELECT MIN(available_at) FROM operational_work_items "
+                    "WHERE run_id = ? AND state = 'queued' AND available_at > ?",
+                    (selected_id, selected_now),
+                ).fetchone()
+        return None if row is None or row[0] is None else _parse_timestamp(row[0])
 
     def list_attempts(self, trial_id: UUID | str) -> tuple[AttemptRecord, ...]:
         selected_id = _required_id(trial_id, "trial_id")
@@ -586,6 +900,115 @@ class OperationalStore:
             ).fetchall()
         return tuple(self._lease_from_row(row) for row in rows)
 
+    def lease_next_work_item(
+        self,
+        *,
+        owner: str,
+        now: datetime,
+        ttl: timedelta,
+        global_limit: int | None = None,
+        run_limits: Mapping[str, int] | None = None,
+        backend_limits: Mapping[str, int] | None = None,
+        provider_route_limits: Mapping[str, int] | None = None,
+        model_route_limits: Mapping[str, int] | None = None,
+        resource_class_limits: Mapping[str, int] | None = None,
+        execution_family_limits: Mapping[str, int] | None = None,
+        priority_aging_seconds: int = 300,
+        lease_id: UUID | str | None = None,
+    ) -> tuple[WorkItemRecord, LeaseRecord] | None:
+        """Lease one eligible work item while enforcing all active concurrency caps."""
+
+        selected_owner = _required_text(owner, "owner")
+        selected_now = _aware(now, "now")
+        if ttl <= timedelta(0):
+            raise ValueError("lease ttl must be greater than zero")
+        if global_limit is not None and global_limit <= 0:
+            raise ValueError("global_limit must be positive")
+        if priority_aging_seconds <= 0:
+            raise ValueError("priority_aging_seconds must be positive")
+        selected_limits = {
+            "run_limits": _checked_limits(run_limits),
+            "backend_limits": _checked_limits(backend_limits),
+            "provider_route_limits": _checked_limits(provider_route_limits),
+            "model_route_limits": _checked_limits(model_route_limits),
+            "resource_class_limits": _checked_limits(resource_class_limits),
+            "execution_family_limits": _checked_limits(execution_family_limits),
+        }
+        selected_lease_id = _required_id(lease_id or _new_id(EntityKind.LEASE), "lease_id")
+        acquired = _timestamp(selected_now)
+        expires = _timestamp(selected_now + ttl)
+        with self._connection(immediate=True) as connection:
+            connection.execute(
+                "UPDATE operational_leases SET state = 'expired', released_at = expires_at "
+                "WHERE state = 'active' AND expires_at <= ?",
+                (acquired,),
+            )
+            active_rows = connection.execute(
+                "SELECT work_items.* FROM operational_work_items AS work_items "
+                "JOIN operational_leases AS leases ON leases.work_id = work_items.work_id "
+                "WHERE leases.state = 'active'"
+            ).fetchall()
+            candidates = connection.execute(
+                "SELECT * FROM operational_work_items "
+                "WHERE state = 'queued' AND available_at <= ? "
+                "ORDER BY available_at, created_at, ordinal, work_id",
+                (acquired,),
+            ).fetchall()
+            candidates = sorted(
+                candidates,
+                key=lambda row: _work_item_priority_key(row, selected_now, priority_aging_seconds),
+            )
+            active_global_count = len(active_rows)
+            active_counts = {
+                "run": _count_values(active_rows, 2),
+                "backend": _count_values(active_rows, 12),
+                "provider_route": _count_values(active_rows, 13),
+                "model_route": _count_values(active_rows, 14),
+                "resource_class": _count_values(active_rows, 15),
+                "execution_family": _count_values(active_rows, 11),
+            }
+            for candidate in candidates:
+                if global_limit is not None and active_global_count >= global_limit:
+                    break
+                if not _under_limit(candidate[2], selected_limits["run_limits"], active_counts["run"]):
+                    continue
+                if not _under_limit(candidate[12], selected_limits["backend_limits"], active_counts["backend"]):
+                    continue
+                if not _under_limit(
+                    candidate[13], selected_limits["provider_route_limits"], active_counts["provider_route"]
+                ):
+                    continue
+                if not _under_limit(candidate[14], selected_limits["model_route_limits"], active_counts["model_route"]):
+                    continue
+                if not _under_limit(
+                    candidate[15], selected_limits["resource_class_limits"], active_counts["resource_class"]
+                ):
+                    continue
+                if not _under_limit(
+                    candidate[11], selected_limits["execution_family_limits"], active_counts["execution_family"]
+                ):
+                    continue
+                connection.execute(
+                    "INSERT INTO operational_leases "
+                    "(lease_id,work_id,owner,acquired_at,expires_at,heartbeat_at,state) "
+                    "VALUES (?,?,?,?,?,?,'active')",
+                    (selected_lease_id, candidate[0], selected_owner, acquired, expires, acquired),
+                )
+                connection.execute(
+                    "UPDATE operational_work_items SET state = 'leased', updated_at = ? WHERE work_id = ?",
+                    (acquired, candidate[0]),
+                )
+                work_row = connection.execute(
+                    "SELECT * FROM operational_work_items WHERE work_id = ?", (candidate[0],)
+                ).fetchone()
+                lease_row = connection.execute(
+                    "SELECT * FROM operational_leases WHERE lease_id = ?", (selected_lease_id,)
+                ).fetchone()
+                if work_row is None or lease_row is None:
+                    raise OperationalStoreError("leased work item disappeared before repository read")
+                return self._work_item_from_row(work_row), self._lease_from_row(lease_row)
+        return None
+
     def acquire_lease(
         self, work_id: UUID | str, *, owner: str, now: datetime, ttl: timedelta, lease_id: UUID | str | None = None
     ) -> LeaseRecord:
@@ -594,7 +1017,7 @@ class OperationalStore:
         if ttl <= timedelta(0):
             raise ValueError("lease ttl must be greater than zero")
         selected_now = _aware(now, "now")
-        selected_lease_id = _required_id(lease_id or _new_id(), "lease_id")
+        selected_lease_id = _required_id(lease_id or _new_id(EntityKind.LEASE), "lease_id")
         acquired = _timestamp(selected_now)
         expires = _timestamp(selected_now + ttl)
         with self._connection(immediate=True) as connection:
@@ -753,6 +1176,14 @@ class OperationalStore:
             row[6],
             _parse_timestamp(row[7]),
             _parse_timestamp(row[8]),
+            row[9],
+            row[10],
+            row[11],
+            row[12],
+            row[13],
+            row[14],
+            row[15],
+            _parse_timestamp(row[16]),
         )
 
     @staticmethod
@@ -824,10 +1255,8 @@ def _required_ref(value: str, label: str) -> str:
         raise ValueError(f"{label} must be a portable relative reference") from error
 
 
-def _new_id() -> str:
-    from aec_bench.contracts.identity import EntityKind, new_entity_id
-
-    return str(new_entity_id(EntityKind.LEASE))
+def _new_id(kind: EntityKind) -> str:
+    return str(new_entity_id(kind))
 
 
 def _installed_version() -> str:
@@ -841,6 +1270,40 @@ def _checked_status(value: str, allowed: set[str]) -> str:
     if value not in allowed:
         raise ValueError(f"unsupported status: {value}")
     return value
+
+
+def _checked_limits(limits: Mapping[str, int] | None) -> dict[str, int]:
+    if limits is None:
+        return {}
+    checked: dict[str, int] = {}
+    for key, value in limits.items():
+        if not isinstance(key, str) or not key:
+            raise ValueError("concurrency limit keys must not be blank")
+        if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
+            raise ValueError("concurrency limits must be positive integers")
+        checked[key] = value
+    return checked
+
+
+def _count_values(rows: list[sqlite3.Row], index: int) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for row in rows:
+        value = str(row[index])
+        counts[value] = counts.get(value, 0) + 1
+    return counts
+
+
+def _under_limit(value: str, limits: Mapping[str, int], counts: Mapping[str, int]) -> bool:
+    limit = limits.get(value)
+    return limit is None or counts.get(value, 0) < limit
+
+
+def _work_item_priority_key(row: sqlite3.Row, now: datetime, starvation_after_seconds: int) -> tuple[object, ...]:
+    created_at = _parse_timestamp(row[7])
+    aged = now - created_at >= timedelta(seconds=starvation_after_seconds)
+    if aged:
+        return (0, created_at, int(row[10]), row[0])
+    return (1, -int(row[6]), created_at, int(row[10]), row[0])
 
 
 def _aware(value: datetime, label: str) -> datetime:
@@ -872,6 +1335,7 @@ __all__ = (
     "OperationalStoreNotFound",
     "PlanRecord",
     "PlannedTrialRecord",
+    "QueueCount",
     "RunRecord",
     "WorkItemRecord",
 )

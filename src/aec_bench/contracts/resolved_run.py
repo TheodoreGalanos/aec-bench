@@ -12,6 +12,7 @@ from pydantic import Field, PositiveInt, field_validator, model_validator
 
 from aec_bench.contracts.dataset import DatasetRef
 from aec_bench.contracts.evaluation_refs import EvaluationRegimeRef
+from aec_bench.contracts.execution_policy import ExecutionPolicy
 from aec_bench.contracts.experiment_manifest import (
     AgentCondition,
     ComputeConfig,
@@ -28,7 +29,7 @@ from aec_bench.contracts.validators import FrozenStrictModel, NonEmptyStr
 class ResolvedRunSpec(FrozenStrictModel):
     """One complete requested run condition before execution begins."""
 
-    schema_version: Literal[1] = 1
+    schema_version: Literal[2] = 2
     experiment_identity: EntityIdentity
     run_identity: EntityIdentity
     run_name: NonEmptyStr
@@ -42,7 +43,7 @@ class ResolvedRunSpec(FrozenStrictModel):
     verification_enabled: bool
     reviewer: ReviewerConfig | None = None
     randomization_seed: Annotated[int, Field(strict=True, ge=0)] | None = None
-    execution_policy_version: PositiveInt = 1
+    execution_policy: ExecutionPolicy
     visibility: tuple[Visibility, ...]
     expected_authorities: tuple[AuthorityExpectation, ...] = ()
     evaluation_regime: EvaluationRegimeRef | None = None
@@ -133,7 +134,7 @@ def resolve_run_spec(
     evaluation_regime: EvaluationRegimeRef | None = None,
     provider_route_request: ProviderRoute | None = None,
     randomization_seed: Annotated[int, Field(strict=True, ge=0)] | None = None,
-    execution_policy_version: int = 1,
+    execution_policy: ExecutionPolicy,
 ) -> ResolvedRunSpec:
     """Resolve one manifest into an explicit requested run condition."""
 
@@ -177,7 +178,7 @@ def resolve_run_spec(
         verification_enabled=not manifest.disable_verification,
         reviewer=manifest.reviewer,
         randomization_seed=randomization_seed,
-        execution_policy_version=execution_policy_version,
+        execution_policy=execution_policy,
         visibility=tuple(manifest.tasks.visibility_filter),
         expected_authorities=tuple(expected_authorities),
         evaluation_regime=evaluation_regime,

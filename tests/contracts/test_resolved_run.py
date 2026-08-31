@@ -8,6 +8,7 @@ from pydantic import ValidationError
 
 from aec_bench.contracts.artifacts import ArtifactRef
 from aec_bench.contracts.dataset import BundleDatasetRef
+from aec_bench.contracts.execution_policy import ExecutionPolicy
 from aec_bench.contracts.experiment_manifest import (
     AgentCondition,
     AgentConfig,
@@ -21,6 +22,8 @@ from aec_bench.contracts.resolved_run import ResolvedRunSpec, resolve_run_spec
 from aec_bench.contracts.task_definition import Visibility
 from aec_bench.contracts.task_snapshot import ArtifactTaskSnapshotRef
 from aec_bench.contracts.trial_record import AuthorityExpectation, ProviderRoute
+
+_EXECUTION_POLICY = ExecutionPolicy(max_concurrency=1)
 
 
 def _identity(kind: EntityKind, key: str, version: int = 1) -> EntityIdentity:
@@ -106,12 +109,13 @@ def test_resolve_run_spec_retains_requested_json_shape() -> None:
         run_identity=run,
         created_at=datetime(2026, 8, 30, 12, 0, tzinfo=UTC),
         created_by="theo",
+        execution_policy=_EXECUTION_POLICY,
         expected_authorities=(AuthorityExpectation(authority_kind="provider", protocol="provider/1"),),
         provider_route_request=ProviderRoute(provider="anthropic", route="anthropic-api"),
     )
 
     assert isinstance(spec, ResolvedRunSpec)
-    assert spec.schema_version == 1
+    assert spec.schema_version == 2
     assert spec.experiment_identity == experiment
     assert spec.run_identity == run
     assert spec.run_id == run.id
@@ -124,6 +128,7 @@ def test_resolve_run_spec_retains_requested_json_shape() -> None:
     assert spec.agent_conditions[0].model == "model-a"
     assert spec.dataset == manifest.tasks.dataset
     assert spec.repetitions == 2
+    assert spec.execution_policy == _EXECUTION_POLICY
     assert spec.verification_enabled is False
     assert spec.reviewer == manifest.reviewer
     assert spec.visibility == (Visibility.PUBLIC, Visibility.PRIVATE)
@@ -142,6 +147,7 @@ def test_resolve_run_spec_retains_resolved_model_name(monkeypatch: pytest.Monkey
         run_identity=_identity(EntityKind.RUN, "pump-study-run"),
         created_at=datetime.now(UTC),
         created_by="theo",
+        execution_policy=_EXECUTION_POLICY,
     )
 
     assert spec.agent_conditions[0].model == "model-from-environment"
@@ -166,6 +172,7 @@ def test_resolve_run_spec_retains_named_secret_environment_reference() -> None:
         run_identity=_identity(EntityKind.RUN, "pump-study-run"),
         created_at=datetime.now(UTC),
         created_by="theo",
+        execution_policy=_EXECUTION_POLICY,
     )
 
     assert spec.agent_conditions[0].parameters == {"api_key_env": "MODEL_API_KEY"}
@@ -192,6 +199,7 @@ def test_resolve_run_spec_rejects_literal_secret_values() -> None:
             run_identity=_identity(EntityKind.RUN, "pump-study-run"),
             created_at=datetime.now(UTC),
             created_by="theo",
+            execution_policy=_EXECUTION_POLICY,
         )
 
 
@@ -205,6 +213,7 @@ def test_resolved_run_spec_rejects_unresolved_task_and_secret_values() -> None:
             run_name="Pump study",
             created_at=datetime.now(UTC),
             created_by="theo",
+            execution_policy=_EXECUTION_POLICY,
             task_releases=(
                 ArtifactTaskSnapshotRef(
                     task_id="civil/pump-sizing",
@@ -230,6 +239,7 @@ def test_resolved_run_spec_rejects_unresolved_task_and_secret_values() -> None:
             run_name="Pump study",
             created_at=datetime.now(UTC),
             created_by="theo",
+            execution_policy=_EXECUTION_POLICY,
             task_releases=(_snapshot("civil/pump-sizing"),),
             agent_conditions=(condition.model_copy(update={"parameters": {"api_key": "literal-secret"}}),),
             compute=manifest.compute,
@@ -252,6 +262,7 @@ def test_resolve_run_spec_rejects_unresolved_system_prompt_file() -> None:
             run_identity=_identity(EntityKind.RUN, "pump-study-run"),
             created_at=datetime.now(UTC),
             created_by="theo",
+            execution_policy=_EXECUTION_POLICY,
         )
 
 
@@ -266,6 +277,7 @@ def test_resolve_run_spec_rejects_mismatched_agent_and_seed() -> None:
             run_identity=_identity(EntityKind.RUN, "pump-study-run"),
             created_at=datetime.now(UTC),
             created_by="theo",
+            execution_policy=_EXECUTION_POLICY,
         )
 
     with pytest.raises(ValidationError, match="greater than or equal to 0"):
@@ -277,6 +289,7 @@ def test_resolve_run_spec_rejects_mismatched_agent_and_seed() -> None:
             run_identity=_identity(EntityKind.RUN, "pump-study-run"),
             created_at=datetime.now(UTC),
             created_by="theo",
+            execution_policy=_EXECUTION_POLICY,
             randomization_seed=-1,
         )
 
@@ -291,6 +304,7 @@ def test_resolved_run_spec_rejects_naive_created_at() -> None:
             run_identity=_identity(EntityKind.RUN, "pump-study-run"),
             created_at=datetime(2026, 8, 30, 12, 0),
             created_by="theo",
+            execution_policy=_EXECUTION_POLICY,
         )
 
 
@@ -308,6 +322,7 @@ def test_resolve_run_spec_rejects_identity_and_reference_duplicates() -> None:
             run_identity=run,
             created_at=datetime.now(UTC),
             created_by="theo",
+            execution_policy=_EXECUTION_POLICY,
         )
 
     with pytest.raises(ValidationError, match="agent conditions must be unique"):
@@ -325,6 +340,7 @@ def test_resolve_run_spec_rejects_identity_and_reference_duplicates() -> None:
             run_identity=run,
             created_at=datetime.now(UTC),
             created_by="theo",
+            execution_policy=_EXECUTION_POLICY,
         )
 
 
@@ -338,6 +354,7 @@ def test_resolve_run_spec_requires_experiment_key_match_and_distinct_run() -> No
             run_identity=_identity(EntityKind.RUN, "pump-study-run"),
             created_at=datetime.now(UTC),
             created_by="theo",
+            execution_policy=_EXECUTION_POLICY,
         )
 
     identity = _identity(EntityKind.EXPERIMENT, "pump-study")
@@ -349,6 +366,7 @@ def test_resolve_run_spec_requires_experiment_key_match_and_distinct_run() -> No
             run_name="Pump study",
             created_at=datetime.now(UTC),
             created_by="theo",
+            execution_policy=_EXECUTION_POLICY,
             task_releases=(_snapshot("civil/pump-sizing"),),
             agent_conditions=(_condition(manifest.agents[0]),),
             compute=ComputeConfig(backend="local"),

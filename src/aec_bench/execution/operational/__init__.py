@@ -12,6 +12,7 @@ from aec_bench.execution.operational.store import (
     OperationalStoreNotFound,
     PlannedTrialRecord,
     PlanRecord,
+    QueueCount,
     RunRecord,
     WorkItemRecord,
 )
@@ -27,6 +28,7 @@ __all__ = (
     "OperationalStoreNotFound",
     "PlanRecord",
     "PlannedTrialRecord",
+    "QueueCount",
     "RunRecord",
     "WorkItemRecord",
 )

@@ -11,6 +11,7 @@ from pydantic import ValidationError
 
 import aec_bench.lifecycles.application as lifecycle_application
 from aec_bench.contracts.artifacts import ArtifactRef
+from aec_bench.contracts.execution_policy import ExecutionPolicy
 from aec_bench.contracts.execution_release import LifecycleExecutionRelease, WorldExecutionRelease
 from aec_bench.contracts.experiment_manifest import (
     AgentCondition,
@@ -48,6 +49,8 @@ from aec_bench.lifecycles.compiled import CompiledLifecycle, CompiledLifecycleEn
 from aec_bench.lifecycles.runtime.episode import LifecycleExecutionMode, LifecycleVisibilityPolicy
 from aec_bench.trials import PlannedTrial as LegacyPlannedTrial
 from aec_bench.worlds.tasks import WorldTask, build_world_task
+
+_EXECUTION_POLICY = ExecutionPolicy(max_concurrency=1)
 
 
 def _identity(kind: EntityKind, key: str, version: int = 1) -> EntityIdentity:
@@ -125,6 +128,7 @@ def _spec_and_plan(
         run_identity=_identity(EntityKind.RUN, "family-run"),
         created_at=datetime(2026, 8, 30, 12, tzinfo=UTC),
         created_by="test",
+        execution_policy=_EXECUTION_POLICY,
     )
     profile = TaskPlanningProfile(
         metadata=TaskMetadata(
