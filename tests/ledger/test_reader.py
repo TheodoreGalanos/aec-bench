@@ -1,25 +1,15 @@
 # ABOUTME: Tests for ledger read and query helpers in the Python ledger package.
 # ABOUTME: Verifies deterministic trial discovery, round-trip loading, and common filters.
 
-import os
 from pathlib import Path
-
-import pytest
 
 from aec_bench.ledger.reader import (
     _iter_trial_record_paths,
-    _reset_cache_for_testing,
     query_trial_records,
     read_trial_records,
 )
 from aec_bench.ledger.writer import write_trial_record
 from tests.support.trial_record_factories import make_trial_record
-
-
-@pytest.fixture(autouse=True)
-def _clear_ledger_cache() -> None:
-    """Reset the module-level cache so tests never see a stale entry from a sibling."""
-    _reset_cache_for_testing()
 
 
 def test_iter_trial_record_paths_returns_sorted_json_files(tmp_path: Path) -> None:
@@ -153,36 +143,22 @@ def test_reader_skips_underscore_prefixed_directories(tmp_path: Path) -> None:
     assert paths[0].name == "trial-001.json"
 
 
-def test_read_trial_records_returns_cached_list_on_repeat_call(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Second call with no changes hits the cache (no re-parse)."""
+def test_read_trial_records_reads_current_files_on_each_call(tmp_path: Path) -> None:
+    """Repeated reads reflect the current portable ledger files."""
     record = make_trial_record(trial_id="trial-001")
     write_trial_record(ledger_root=tmp_path, record=record)
 
-    from aec_bench.ledger import reader
-
-    # Prime the cache.
     first = read_trial_records(tmp_path)
     assert [r.trial_id for r in first] == ["trial-001"]
 
-    # Spy on the parse function; a cache hit must not invoke it.
-    parse_calls = 0
-    real_parse = reader._read_trial_record
-
-    def _spy(path):
-        nonlocal parse_calls
-        parse_calls += 1
-        return real_parse(path)
-
-    monkeypatch.setattr(reader, "_read_trial_record", _spy)
-
     second = read_trial_records(tmp_path)
 
-    assert parse_calls == 0
     assert [r.trial_id for r in second] == ["trial-001"]
+    assert first is not second
 
 
-def test_read_trial_records_invalidates_cache_when_new_trial_written(tmp_path: Path) -> None:
-    """A new trial written after a cached read must be visible on the next read."""
+def test_read_trial_records_sees_new_trial_written_after_read(tmp_path: Path) -> None:
+    """A new trial written after a read is visible on the next read."""
     record_a = make_trial_record(trial_id="trial-001")
     write_trial_record(ledger_root=tmp_path, record=record_a)
 
@@ -191,19 +167,14 @@ def test_read_trial_records_invalidates_cache_when_new_trial_written(tmp_path: P
 
     record_b = make_trial_record(trial_id="trial-002")
     write_trial_record(ledger_root=tmp_path, record=record_b)
-    # Force a later mtime on the new file (filesystem resolution may be coarse).
-    new_path = tmp_path / record_b.experiment_id / f"{record_b.trial_id}.json"
-    now = os.path.getmtime(new_path)
-    os.utime(new_path, (now + 2.0, now + 2.0))
-
     second = read_trial_records(tmp_path)
 
     assert [r.trial_id for r in second] == ["trial-001", "trial-002"]
     assert first is not second
 
 
-def test_read_trial_records_scoped_does_not_poison_unscoped_cache(tmp_path: Path) -> None:
-    """A scoped read (experiment_id=...) must not populate or return the unscoped cache."""
+def test_read_trial_records_scoped_and_unscoped_reads_are_independent(tmp_path: Path) -> None:
+    """Scoped and unscoped reads use their explicit path selections."""
     record_a = make_trial_record(trial_id="trial-001", experiment_id="exp-a")
     record_b = make_trial_record(trial_id="trial-002", experiment_id="exp-b")
     write_trial_record(ledger_root=tmp_path, record=record_a)
