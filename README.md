@@ -172,7 +172,13 @@ uv run aec-bench run status <run-id> --operational-store artefacts/operational.s
 
 # Request idempotent cancellation of queued work and mark active work for reconciliation
 uv run aec-bench run cancel <run-id> --operational-store artefacts/operational.sqlite3
+
+# Start or resume a persisted local artifact plan (all roots are explicit)
+uv run aec-bench run start <run-id> --tasks-root tasks --operational-store artefacts/operational.sqlite3 --plan-root artefacts/runs
+uv run aec-bench run resume <run-id> --tasks-root tasks --operational-store artefacts/operational.sqlite3 --plan-root artefacts/runs
 ```
+
+`run start` and `run resume` execute only ready artifact plans with the local scheduler. Resume reconciles expired and unknown work before it leases new work.
 
 `run plan --config` currently accepts identity-bearing artifact tasks. It rejects Interactive World and lifecycle
 task values until those loaders expose the same identity-bearing task snapshot boundary.

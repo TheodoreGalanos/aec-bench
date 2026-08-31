@@ -7,7 +7,7 @@ import time
 from datetime import UTC, datetime
 from getpass import getuser
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal, cast
 
 import typer
 import yaml
@@ -123,12 +123,12 @@ def run_experiment(
     operational_store_path: Path | None = typer.Option(
         None,
         "--operational-store",
-        help="Explicit SQLite operational store for `run status`",
+        help="Explicit SQLite operational store for run control and status",
     ),
     plan_root: Path | None = typer.Option(
         None,
         "--plan-root",
-        help="Explicit portable run-plan root for `run status`",
+        help="Explicit portable run-plan root for run control and status",
     ),
 ) -> None:
     """Run an experiment.
@@ -159,6 +159,15 @@ def run_experiment(
         return
     if tasks_path == "cancel":
         _cancel_run(selector=package_value, operational_store_path=operational_store_path)
+        return
+    if tasks_path in {"start", "resume"}:
+        _start_or_resume_run(
+            operation=cast(Literal["start", "resume"], tasks_path),
+            selector=package_value,
+            tasks_root=tasks_root,
+            operational_store_path=operational_store_path,
+            plan_root=plan_root,
+        )
         return
     if tasks_path in {"plan", "inspect", "diff", "reconcile"}:
         _review_run(
@@ -260,6 +269,44 @@ def _status_run(
         return
     data = present_run_progress(progress).model_dump(mode="json")
     emit("run status", data=data, start_time=start, human_renderer=_render_status_human)
+
+
+def _start_or_resume_run(
+    *,
+    operation: Literal["start", "resume"],
+    selector: str | None,
+    tasks_root: str | None,
+    operational_store_path: Path | None,
+    plan_root: Path | None,
+) -> None:
+    """Run one persisted plan through the current local scheduler composition."""
+
+    start = time.monotonic()
+    if selector is None:
+        emit(f"run {operation}", data=None, errors=[f"run {operation} requires <run-id>"], start_time=start)
+        return
+    if operational_store_path is None or plan_root is None:
+        emit(
+            f"run {operation}",
+            data=None,
+            errors=[f"run {operation} requires --operational-store and --plan-root"],
+            start_time=start,
+        )
+        return
+    from aec_bench.harness.run_control import RunControlError, start_or_resume_run
+
+    try:
+        result = start_or_resume_run(
+            run_selector=selector,
+            operation=operation,
+            plan_root=plan_root,
+            operational_store_path=operational_store_path,
+            tasks_root=None if tasks_root is None else Path(tasks_root),
+        )
+    except (RunControlError, ValueError) as error:
+        emit(f"run {operation}", data=None, errors=[str(error)], start_time=start)
+        return
+    emit(f"run {operation}", data=result.as_dict(), start_time=start)
 
 
 def _render_status_human(data: object) -> None:
