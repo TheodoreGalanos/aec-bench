@@ -12,8 +12,11 @@ from pathlib import Path
 import pytest
 
 from scripts.audit_package_dependencies import (
+    OwnerDependencyException,
     build_audit,
     load_owner_dependency_policy,
+    render_audit_report,
+    validate_owner_dependency_exceptions,
     validate_owner_dependency_policy,
 )
 
@@ -106,12 +109,338 @@ def test_owner_dependency_policy_reports_missing_and_forbidden_edges() -> None:
     )
 
 
+def test_owner_dependency_policy_reports_unknown_owner_and_target() -> None:
+    violations = validate_owner_dependency_policy(
+        {"contracts": set()},
+        {"contracts": {"missing"}, "unknown": set()},
+    )
+
+    assert violations == (
+        "policy declares unknown owner: unknown",
+        "policy declares unknown dependency: contracts -> missing",
+    )
+
+
 def test_owner_dependency_policy_loader_rejects_duplicate_targets(tmp_path: Path) -> None:
     policy_path = tmp_path / "owner_dependencies.toml"
     policy_path.write_text('[owners.contracts]\nmay_depend_on = ["ledger", "ledger"]\n', encoding="utf-8")
 
     with pytest.raises(ValueError, match="targets must be unique: contracts"):
         load_owner_dependency_policy(policy_path)
+
+
+def _dependency_fixture(
+    tmp_path: Path,
+    files: dict[str, str],
+    policy: str | None,
+) -> Path:
+    repository_root = tmp_path / "repository"
+    package_root = repository_root / "src" / "aec_bench"
+    package_root.mkdir(parents=True)
+    (package_root / "__init__.py").write_text("", encoding="utf-8")
+    for relative_path, source in files.items():
+        path = package_root / relative_path
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(source, encoding="utf-8")
+    if policy is not None:
+        policy_path = repository_root / "scripts" / "owner_dependencies.toml"
+        policy_path.parent.mkdir(parents=True, exist_ok=True)
+        policy_path.write_text(policy, encoding="utf-8")
+    return repository_root
+
+
+def _audit_fixture(repository_root: Path) -> dict[str, object]:
+    return build_audit(
+        repository_root=repository_root,
+        commit="fixture",
+        minimal_import_smoke="not-run",
+        minimal_import_command="",
+    )
+
+
+def test_dependency_audit_reports_missing_policy_deterministically(tmp_path: Path) -> None:
+    repository_root = _dependency_fixture(tmp_path, {"contracts/value.py": ""}, policy=None)
+
+    audit = _audit_fixture(repository_root)
+
+    assert audit["owner_dependency_policy_violations"] == [
+        f"owner dependency policy file is missing: {repository_root / 'scripts' / 'owner_dependencies.toml'}"
+    ]
+
+
+def test_dependency_audit_parses_source_without_importing_it(tmp_path: Path) -> None:
+    repository_root = _dependency_fixture(
+        tmp_path,
+        {"contracts/explosive.py": 'raise RuntimeError("audit must not import source")\n'},
+        policy="[owners.contracts]\nmay_depend_on = []\n",
+    )
+
+    audit = _audit_fixture(repository_root)
+
+    assert audit["owner_dependency_policy_violations"] == []
+
+
+def test_dependency_audit_reports_cycle_and_forbidden_edge(tmp_path: Path) -> None:
+    repository_root = _dependency_fixture(
+        tmp_path,
+        {
+            "alpha/one.py": "from aec_bench.beta.two import VALUE\n",
+            "beta/two.py": "from aec_bench.alpha.one import VALUE\n",
+        },
+        policy="[owners.alpha]\nmay_depend_on = []\n\n[owners.beta]\nmay_depend_on = []\n",
+    )
+
+    audit = _audit_fixture(repository_root)
+
+    assert audit["owner_dependency_policy_violations"] == [
+        "undeclared owner import: alpha -> aec_bench.beta.two",
+        "undeclared owner import: beta -> aec_bench.alpha.one",
+    ]
+    assert audit["top_level_strongly_connected_components"] == [["alpha", "beta"]]
+    report = render_audit_report(audit)
+    assert "alpha -> beta" in report
+    assert "Violations:" in report
+
+
+def test_dependency_audit_rejects_generic_runtime_back_import(tmp_path: Path) -> None:
+    repository_root = _dependency_fixture(
+        tmp_path,
+        {
+            "worlds/runtime/runner.py": "from aec_bench.worlds.monitoring.task import VALUE\n",
+            "worlds/monitoring/task.py": "VALUE = 1\n",
+        },
+        policy="[owners.worlds]\nmay_depend_on = []\n",
+    )
+
+    audit = _audit_fixture(repository_root)
+
+    assert audit["generic_runtime_back_imports"] == [
+        "aec_bench.worlds.runtime.runner -> aec_bench.worlds.monitoring.task",
+    ]
+
+
+def test_dependency_audit_rejects_optional_runtime_in_neutral_owner(tmp_path: Path) -> None:
+    repository_root = _dependency_fixture(
+        tmp_path,
+        {"contracts/provider_boundary.py": "import openai\n"},
+        policy="[owners.contracts]\nmay_depend_on = []\n",
+    )
+
+    audit = _audit_fixture(repository_root)
+
+    assert audit["optional_dependency_leakage"] == ["aec_bench.contracts.provider_boundary: openai"]
+
+
+def test_dependency_audit_accepts_a_current_narrow_exception(tmp_path: Path) -> None:
+    repository_root = _dependency_fixture(
+        tmp_path,
+        {
+            "alpha/one.py": "from aec_bench.beta.two import VALUE\n",
+            "beta/two.py": "VALUE = 1\n",
+        },
+        """
+[owners.alpha]
+may_depend_on = []
+
+[owners.beta]
+may_depend_on = []
+
+[exceptions.alpha-beta]
+source_owner = "alpha"
+target_owner = "beta"
+import_prefix = "aec_bench.beta.two"
+reason = "The current adapter boundary requires this narrow value import."
+expiry = "2099-12-31"
+owner_approval = "architecture-owner"
+""",
+    )
+
+    audit = _audit_fixture(repository_root)
+
+    assert audit["owner_dependency_policy_violations"] == []
+
+
+def test_dependency_audit_exception_does_not_waive_other_imports_on_same_edge(tmp_path: Path) -> None:
+    repository_root = _dependency_fixture(
+        tmp_path,
+        {
+            "alpha/one.py": ("from aec_bench.beta.two import VALUE\nfrom aec_bench.beta.three import OTHER\n"),
+            "beta/two.py": "VALUE = 1\n",
+            "beta/three.py": "OTHER = 2\n",
+        },
+        """
+[owners.alpha]
+may_depend_on = []
+
+[owners.beta]
+may_depend_on = []
+
+[exceptions.alpha-beta]
+source_owner = "alpha"
+target_owner = "beta"
+import_prefix = "aec_bench.beta.two"
+reason = "The current adapter boundary requires this narrow value import."
+expiry = "2099-12-31"
+owner_approval = "architecture-owner"
+""",
+    )
+
+    audit = _audit_fixture(repository_root)
+
+    assert audit["owner_dependency_policy_violations"] == [
+        "undeclared owner import: alpha -> aec_bench.beta.three",
+    ]
+
+
+def test_dependency_audit_rejects_expired_exception(tmp_path: Path) -> None:
+    repository_root = _dependency_fixture(
+        tmp_path,
+        {
+            "alpha/one.py": "from aec_bench.beta.two import VALUE\n",
+            "beta/two.py": "VALUE = 1\n",
+        },
+        """
+[owners.alpha]
+may_depend_on = []
+
+[owners.beta]
+may_depend_on = []
+
+[exceptions.alpha-beta]
+source_owner = "alpha"
+target_owner = "beta"
+import_prefix = "aec_bench.beta.two"
+reason = "Expired test exception."
+expiry = "2000-01-01"
+owner_approval = "architecture-owner"
+""",
+    )
+
+    audit = _audit_fixture(repository_root)
+
+    assert audit["owner_dependency_policy_violations"] == [
+        "exception is expired: alpha -> beta (aec_bench.beta.two)",
+        "undeclared owner import: alpha -> aec_bench.beta.two",
+    ]
+
+
+def test_dependency_audit_rejects_broad_exception_prefix(tmp_path: Path) -> None:
+    repository_root = _dependency_fixture(
+        tmp_path,
+        {"alpha/one.py": ""},
+        """
+[owners.alpha]
+may_depend_on = []
+
+[exceptions.broad]
+source_owner = "alpha"
+target_owner = "alpha"
+import_prefix = "aec_bench.alpha"
+reason = "Too broad."
+review_condition = "Never"
+owner_approval = "architecture-owner"
+""",
+    )
+
+    audit = _audit_fixture(repository_root)
+
+    assert audit["owner_dependency_policy_violations"] == [
+        "owner dependency exception import prefix is too broad: broad"
+    ]
+
+
+def test_dependency_audit_rejects_unenforceable_review_condition(tmp_path: Path) -> None:
+    repository_root = _dependency_fixture(
+        tmp_path,
+        {
+            "alpha/one.py": "from aec_bench.beta.two import VALUE\n",
+            "beta/two.py": "VALUE = 1\n",
+        },
+        """
+[owners.alpha]
+may_depend_on = []
+
+[owners.beta]
+may_depend_on = []
+
+[exceptions.unenforceable]
+source_owner = "alpha"
+target_owner = "beta"
+import_prefix = "aec_bench.beta.two"
+reason = "Free text cannot be checked."
+review_condition = "review this later"
+owner_approval = "architecture-owner"
+""",
+    )
+
+    audit = _audit_fixture(repository_root)
+
+    assert audit["owner_dependency_policy_violations"] == [
+        "owner dependency exception review condition is invalid: unenforceable"
+    ]
+
+
+@pytest.mark.parametrize(
+    ("review_condition", "expected_violations"),
+    (
+        ("review-by:2099-12-31", []),
+        (
+            "review-by:2000-01-01",
+            [
+                "exception review is overdue: alpha -> beta (aec_bench.beta.two)",
+                "undeclared owner import: alpha -> aec_bench.beta.two",
+            ],
+        ),
+    ),
+)
+def test_dependency_audit_enforces_exception_review_date(
+    tmp_path: Path,
+    review_condition: str,
+    expected_violations: list[str],
+) -> None:
+    repository_root = _dependency_fixture(
+        tmp_path,
+        {
+            "alpha/one.py": "from aec_bench.beta.two import VALUE\n",
+            "beta/two.py": "VALUE = 1\n",
+        },
+        f"""
+[owners.alpha]
+may_depend_on = []
+
+[owners.beta]
+may_depend_on = []
+
+[exceptions.alpha-beta]
+source_owner = "alpha"
+target_owner = "beta"
+import_prefix = "aec_bench.beta.two"
+reason = "The dependency is reviewed on a fixed date."
+review_condition = "{review_condition}"
+owner_approval = "architecture-owner"
+""",
+    )
+
+    audit = _audit_fixture(repository_root)
+
+    assert audit["owner_dependency_policy_violations"] == expected_violations
+
+
+def test_dependency_audit_exception_validation_rejects_unknown_owners() -> None:
+    exception = OwnerDependencyException(
+        source_owner="missing",
+        target_owner="unknown",
+        import_prefix="aec_bench.unknown.module",
+        reason="test",
+        expiry=None,
+        review_condition="test review",
+        owner_approval="owner",
+    )
+
+    violations, allowed_edges = validate_owner_dependency_exceptions({"contracts": set()}, {}, (exception,))
+
+    assert violations == ("exception declares unknown source owner: missing -> unknown (aec_bench.unknown.module)",)
+    assert allowed_edges == {}
 
 
 def test_neutral_contracts_and_domains_do_not_import_optional_runtimes() -> None:
