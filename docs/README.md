@@ -57,6 +57,7 @@ authority.
 | [Project structure](PROJECT_STRUCTURE.md) | Guide | Current | Contributors and agents | Repository maintainers |
 | [Public API inventory](API_INVENTORY.md) | Normative | Current | Python and CLI integrators | Repository maintainers |
 | [World authoring](world-authoring.md) | Guide | Current | Task and interactive-world contributors | Task, engineering, world, and lifecycle owners |
+| [Extension authoring](extension-authoring.md) | Guide | Current | Contributors adding tasks, worlds, lifecycles, or execution backends | Repository maintainers and domain owners |
 | [Interactive-world runtime](protocols/interactive-world-runtime.md) | Protocol | Current | World, runtime, and transport contributors | World runtime and registered worlds |
 | [Staged evidence and publication](protocols/staged-evidence-and-publication.md) | Protocol | Current | Lifecycle and evaluation contributors | Lifecycle runtime and task owners |
 | [Learning Studies Gate A](adr/learning-studies-gate-a.md) | Decision | Current | Learning Studies and lifecycle contributors | Repository architecture review |
