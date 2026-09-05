@@ -1,0 +1,43 @@
+{
+  "investigation": {
+    "cost_limit": 8,
+    "deadline_minutes": 90,
+    "reading_cost": 1,
+    "instrument_cost": 2,
+    "inspection_cost": 4,
+    "instrument_minutes": 5,
+    "inspection_minutes": 20
+  },
+  "task_world_id": "dam-seepage-monitoring",
+  "profile_id": "investigation-fault",
+  "monitoring_point_id": "SEEP-WEIR-02",
+  "objective": "Use the declared investigation allowance to obtain sufficient evidence and submit a supported response before the deadline. Credits and minutes are synthetic experimental limits.",
+  "baseline_note": "Expected and alert flows are site-specific values from this task-owned synthetic monitoring plan. They are not general dam-safety limits.",
+  "required_consecutive_alert_readings": 2,
+  "visual_alert_conditions": [
+    "cloudy",
+    "sediment-observed",
+    "new-seep"
+  ],
+  "instrument_condition": "unreliable",
+  "readings": [
+    {
+      "elapsed_hours": 0,
+      "reservoir_level_m": 100.0,
+      "recent_rainfall_mm": 0.0,
+      "expected_flow_l_min": 20.0,
+      "alert_flow_l_min": 27.0,
+      "measured_flow_l_min": 19.5,
+      "downstream_condition": "clear"
+    },
+    {
+      "elapsed_hours": 1,
+      "reservoir_level_m": 100.0,
+      "recent_rainfall_mm": 0.0,
+      "expected_flow_l_min": 20.0,
+      "alert_flow_l_min": 27.0,
+      "measured_flow_l_min": 20.1,
+      "downstream_condition": "clear"
+    }
+  ]
+}

@@ -50,6 +50,13 @@ artifact/workspace execution    interactive-world execution
           CLI, TUI, web, reports, and research
 ```
 
+Engineering decision capabilities remain with the hydraulic lifecycle and dam and
+pump world owners. Maintained experiment definitions and deterministic comparison
+policies live in `aec_bench.experimentation.engineering_decisions`. Qualification
+consumes those experiments and their ordinary trial evidence. It does not own a
+second execution or scoring path. See the
+[engineering decision guide](engineering-decision-experiments.md) for use and scope.
+
 ### Artifact and workspace tasks
 
 An artifact task gives an agent an instruction and an execution environment.

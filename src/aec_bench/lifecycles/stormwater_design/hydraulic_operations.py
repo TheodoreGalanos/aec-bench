@@ -110,6 +110,26 @@ class HydraulicOperationResolver:
             resolving=(),
         )
 
+    def retained_calculation_ids(
+        self,
+        baseline_actions: Sequence[LifecycleOperationActionRecord],
+        revision_action: LifecycleOperationActionRecord,
+    ) -> set[str]:
+        """Derive current operations from actual input projections after a source change."""
+        actions = (*baseline_actions, revision_action)
+        retained: set[str] = set()
+        for operation in self._operation_specs.values():
+            if operation.kind in self._source_transition_kinds():
+                continue
+            try:
+                plan = self.plan(operation, actions)
+            except LifecycleOperationPrerequisiteError:
+                # A changed prerequisite makes this operation stale as well.
+                continue
+            if current_lifecycle_operation_action(actions, plan) is not None:
+                retained.add(operation.operation_id)
+        return retained
+
     def _plan_source_transition(
         self,
         operation: LifecycleOperationSpec,

@@ -56,6 +56,7 @@ authority.
 | [Provenance policy](PROVENANCE_POLICY.md) | Normative | Current | Contributors adding persisted or public identity and evidence fields | Contracts and benchmark governance |
 | [Project structure](PROJECT_STRUCTURE.md) | Guide | Current | Contributors and agents | Repository maintainers |
 | [Public API inventory](API_INVENTORY.md) | Normative | Current | Python and CLI integrators | Repository maintainers |
+| [Engineering decision experiments](engineering-decision-experiments.md) | Guide | Current | Environment and evaluation contributors | Experimentation and task owners |
 | [World authoring](world-authoring.md) | Guide | Current | Task and interactive-world contributors | Task, engineering, world, and lifecycle owners |
 | [Extension authoring](extension-authoring.md) | Guide | Current | Contributors adding tasks, worlds, lifecycles, or execution backends | Repository maintainers and domain owners |
 | [Interactive-world runtime](protocols/interactive-world-runtime.md) | Protocol | Current | World, runtime, and transport contributors | World runtime and registered worlds |

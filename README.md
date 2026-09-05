@@ -1207,6 +1207,15 @@ dependency direction.
 
 ## Development
 
+Run separate [engineering decision experiments](docs/engineering-decision-experiments.md)
+with `python -m aec_bench.experimentation.engineering_decisions` and a `hydraulic`,
+`dam`, `pump`, or `verifier` argument. Check all four locally without model calls
+or training:
+
+```bash
+uv run python -m aec_bench.experimentation.qualification.engineering_decisions --output /tmp/aec-engineering-decisions
+```
+
 ```bash
 # Run tests
 uv run pytest tests/ -q

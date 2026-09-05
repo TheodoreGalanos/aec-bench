@@ -29,6 +29,7 @@ from aec_bench.lifecycles.stormwater_design.hydraulic_review_variants import (
     HydraulicReviewVariantSpec,
     get_hydraulic_review_variant,
 )
+from aec_bench.lifecycles.stormwater_design.hydraulics.lineages import HydraulicLineage
 from aec_bench.lifecycles.stormwater_design.hydraulics.models import HydraulicSourceState
 from aec_bench.lifecycles.stormwater_design.hydraulics.package import (
     build_hydraulic_run_request,
@@ -181,6 +182,7 @@ def materialize_hydraulic_review_lifecycle(
     output_dir: Path,
     *,
     variant_id: str | None = None,
+    lineage: HydraulicLineage | None = None,
 ) -> Path:
     """Materialize one deterministic three-checkpoint hydraulic interaction package."""
     output = Path(output_dir)
@@ -201,8 +203,14 @@ def materialize_hydraulic_review_lifecycle(
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(release, encoding="utf-8")
 
-    baseline_source = build_source_state()
-    revision_source = build_hydraulic_revision_source_state(variant.revision_id)
+    baseline_source = build_source_state() if lineage is None else lineage.source()
+    revision_source = (
+        build_hydraulic_revision_source_state(variant.revision_id)
+        if lineage is None
+        else lineage.source(variant.revision_id)
+    )
+    if lineage is not None:
+        _write_json(output / "hidden" / "lineage.json", lineage.model_dump(mode="json"))
     materialize_hydraulic_package(
         baseline_source,
         output / "hidden" / "hydraulic" / "packages" / "baseline",
@@ -230,7 +238,15 @@ def validated_hydraulic_review_variant(package_dir: Path) -> dict[str, Any]:
         build_hydraulic_run_request(revision_package, scenario_id="design-10yr")
         baseline = HydraulicSourceState.model_validate(_read_json(baseline_package / "source" / "source-state.json"))
         revision = HydraulicSourceState.model_validate(_read_json(revision_package / "source" / "source-state.json"))
-        if baseline != build_source_state() or revision != build_hydraulic_revision_source_state(variant.revision_id):
+        lineage_path = package / "hidden" / "lineage.json"
+        lineage = HydraulicLineage.model_validate(_read_json(lineage_path)) if lineage_path.exists() else None
+        expected_baseline = build_source_state() if lineage is None else lineage.source()
+        expected_revision = (
+            build_hydraulic_revision_source_state(variant.revision_id)
+            if lineage is None
+            else lineage.source(variant.revision_id)
+        )
+        if baseline != expected_baseline or revision != expected_revision:
             raise ValueError("embedded hydraulic source mismatch")
         if _read_json(package / "hidden" / "lifecycle-operation-resolutions.json") != _resolution_manifest(variant):
             raise ValueError("operation resolution mismatch")

@@ -64,6 +64,19 @@ _PROFILE_IDENTITIES = {
     ),
 }
 
+for _profile_id, _identity in (
+    ("investigation-routine", "01a056f1-af83-7100-8000-000000000001"),
+    ("investigation-fault", "01a056f1-af83-7100-8000-000000000002"),
+    ("investigation-urgent-fault", "01a056f1-af83-7100-8000-000000000003"),
+):
+    _PROFILE_IDENTITIES[_profile_id] = MemberIdentity(
+        id=UUID(_identity),
+        key=EntityKey(f"{_WORLD_IDENTITY.key}/{_profile_id}"),
+        version=1,
+        parent_id=_WORLD_IDENTITY.id,
+        registration_id=_profile_id,
+    )
+
 
 @dataclass(frozen=True, slots=True)
 class DamSeepageProfile:
@@ -101,6 +114,14 @@ def _registered_profiles() -> dict[str, _RegisteredProfile]:
             summary=variant.summary,
             difficulty=variant.difficulty,
             tags=variant.tags,
+        )
+    for profile_id in ("investigation-routine", "investigation-fault", "investigation-urgent-fault"):
+        registered[profile_id] = _RegisteredProfile(
+            scenario_path=Path(__file__).with_name(profile_id + ".json"),
+            title="Costed seepage investigation",
+            summary="A synthetic investigation with declared credits and a response deadline.",
+            difficulty=Difficulty.MEDIUM,
+            tags=("dam", "monitoring", "seepage", "synthetic", "investigation"),
         )
     return registered
 
