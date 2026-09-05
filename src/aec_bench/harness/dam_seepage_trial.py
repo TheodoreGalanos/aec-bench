@@ -18,14 +18,12 @@ from aec_bench.trials import PlannedTrial
 from aec_bench.worlds import load_profile
 from aec_bench.worlds.monitoring.dam_seepage.definition import DamSeepageProfile
 from aec_bench.worlds.monitoring.dam_seepage.episode_runtime import DamSeepageEpisodeHost
+from aec_bench.worlds.monitoring.dam_seepage.replay import dam_replay_valid
 from aec_bench.worlds.monitoring.dam_seepage.world import (
     DAM_SEEPAGE_TASK_WORLD_ID,
-    SeepageEvaluation,
     evaluate,
-    transition,
 )
 from aec_bench.worlds.runtime.episode import EpisodeStatus
-from aec_bench.worlds.runtime.world_logic import ActionRejected
 from aec_bench.worlds.tasks import WorldTask
 
 DAM_SEEPAGE_EVIDENCE_PROTOCOL = "aec-bench/dam-seepage-trial/1"
@@ -48,7 +46,7 @@ async def run_dam_seepage_trial(
 
     ``read_only_context_text``, when supplied, is composed into the instruction text delivered to
     the actor after a fixed policy sentence. ``task.instruction`` itself is never mutated, and
-    nothing about the composed text reaches ``evaluate()``, ``_replay_valid()``, or the world
+    nothing about the composed text reaches ``evaluate()``, ``dam_replay_valid()``, or the world
     evidence file.
     """
 
@@ -75,7 +73,7 @@ async def run_dam_seepage_trial(
         private_paths=(retained_root / "world",),
     )
     task_evaluation = evaluate(host.state)
-    replay_valid = _replay_valid(profile=loaded.value, host=host, evaluation=task_evaluation)
+    replay_valid = dam_replay_valid(profile=loaded.value, host=host, evaluation=task_evaluation)
     evaluation = EvaluationResult(
         reward=1.0 if task_evaluation.successful else 0.0,
         validity=ValidityCheck(
@@ -118,21 +116,6 @@ async def run_dam_seepage_trial(
         truncated=truncated,
         final_reason=host.status.value,
     )
-
-
-def _replay_valid(
-    *,
-    profile: DamSeepageProfile,
-    host: DamSeepageEpisodeHost,
-    evaluation: SeepageEvaluation,
-) -> bool:
-    state = profile.opening_state
-    for recorded in host.recorder.steps:
-        result = transition(state, recorded.action)
-        if isinstance(result, ActionRejected) or result.state != recorded.next_state:
-            return False
-        state = result.state
-    return state == host.state and evaluate(state) == evaluation
 
 
 __all__ = ("run_dam_seepage_trial",)

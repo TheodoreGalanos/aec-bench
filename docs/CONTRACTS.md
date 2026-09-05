@@ -1193,3 +1193,32 @@ documented boundary.
   detection, or external reference.
 - Update all repository callers when an internal pre-1.0 contract changes.
 - Do not preserve an obsolete internal envelope with a compatibility adapter.
+
+## Engineering decision experiment boundaries
+
+Generated hydraulic packages can bind a `HydraulicLineage` seed to exact baseline
+and revision sources. The experiment definition assigns each seed to one partition
+before revision expansion. The generator does not choose dataset membership.
+The resolver determines retained operations from current input projections.
+
+Dam `SeepageInvestigation` constraints are actor-visible. Only accepted actions
+consume credits and time. Evaluation separates response correctness, evidence
+completeness, and the declared response deadline. Profiles without investigation
+constraints retain their existing semantics.
+
+`PumpHandover` contains only facts available in one released actor observation.
+Assessment binds to that view and reports omissions, contradictions, invented facts,
+and source mismatch. It grants no Operations authority and does not alter the frozen
+pump evaluation format. See [engineering decision experiments](engineering-decision-experiments.md)
+for the qualification scope and measurement limits.
+
+Maintained engineering decision experiments save explicit conditions and normal
+`PlannedTrial` values before execution. Lifecycle trials use the existing finalizer;
+world trials use the existing world experiment boundary and ledger writer. The
+`aec-bench/deterministic-world-trial/1` authority evidence contains the exact world
+and profile references plus task-owned evaluation and control diagnostics. Dam
+accepted actions are checked by the shared task replay function. Pump evidence
+retains the existing durable repository files; no additional world state or replay
+system is introduced. The normal run manifest owns source references. An unresolved
+source reference does not establish code provenance. Qualification reads these
+records and diagnostics; it does not replace task evaluation or establish model performance.

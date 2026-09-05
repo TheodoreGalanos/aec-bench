@@ -51,22 +51,6 @@ GATE_IDS = (
     "final_readiness",
     "claim_boundary",
 )
-_AFFECTED_SCENARIOS: dict[str, set[str]] = {
-    "administrative_no_op": set(),
-    "major_idf_revision": {"major-100yr"},
-    "outlet_geometry_revision": set(SCENARIO_IDS),
-    "tailwater_revision": set(SCENARIO_IDS),
-}
-_REUSED_OPERATION_IDS: dict[str, set[str]] = {
-    "administrative_no_op": set(CALCULATION_OPERATION_IDS),
-    "major_idf_revision": {
-        "hydrology.design-10yr",
-        "detention-outlet.design-10yr.declared-outlet",
-        "network-hgl.design-10yr.declared-tailwater",
-    },
-    "outlet_geometry_revision": {"hydrology.design-10yr", "hydrology.major-100yr"},
-    "tailwater_revision": {"hydrology.design-10yr", "hydrology.major-100yr"},
-}
 
 
 class BaselineSubmission(StrictModel):
@@ -155,10 +139,16 @@ def verify_hydraulic_interaction_lifecycle(
     source_failures = _source_failures(package, baseline, revision, closeout, revision_selected, variant_id)
     operation_failures = baseline_selection_failures + revision_selection_failures
     operation_failures.extend(operation_transaction_failures(run, actions.values()))
+    source_action = revision_selected.get(SOURCE_REVISION_OPERATION_ID)
+    reused = (
+        operation_resolver.retained_calculation_ids(tuple(baseline_selected.values()), source_action)
+        if source_action is not None
+        else set()
+    )
     selective_failures = _selective_recomputation_failures(
         baseline_selected,
         revision_selected,
-        variant_id,
+        reused,
     )
 
     baseline_evidence, baseline_evidence_failures = load_scenario_evidence(
@@ -175,7 +165,11 @@ def verify_hydraulic_interaction_lifecycle(
     operation_failures.extend(revision_evidence_failures)
 
     expected_baseline_decisions = _expected_decisions(baseline_evidence, revision=False)
-    affected = _AFFECTED_SCENARIOS[variant_id]
+    affected: set[str] = {
+        scenario_id
+        for scenario_id in SCENARIO_IDS
+        if any(scenario_id in operation_id and operation_id not in reused for operation_id in CALCULATION_OPERATION_IDS)
+    }
     expected_revision_decisions: dict[str, ScenarioDecision] = {
         scenario_id: (
             _expected_decision(revision_evidence[scenario_id], revision=True)
@@ -347,7 +341,7 @@ def _source_failures(
 def _selective_recomputation_failures(
     baseline: dict[str, LifecycleOperationActionRecord],
     revision: dict[str, LifecycleOperationActionRecord],
-    variant_id: str,
+    reused: set[str],
 ) -> list[str]:
     failures: list[str] = []
     source = revision.get(SOURCE_REVISION_OPERATION_ID)
@@ -357,7 +351,6 @@ def _selective_recomputation_failures(
         or source.disposition != LifecycleOperationDisposition.ACTIVATED
     ):
         failures.append("revision_analysis.source_revision.currentness")
-    reused = _REUSED_OPERATION_IDS[variant_id]
     for operation_id in CALCULATION_OPERATION_IDS:
         baseline_action = baseline.get(operation_id)
         revision_action = revision.get(operation_id)

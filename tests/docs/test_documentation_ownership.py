@@ -51,6 +51,7 @@ EXPECTED_REPOSITORY_DOCS = {
     "research/learning-studies/release-a/studies/A04-artifact-composition.md",
     "world-authoring.md",
     "extension-authoring.md",
+    "engineering-decision-experiments.md",
 }
 MAINTAINED_INDEX_TARGETS = {
     "AGENTS.md",
@@ -75,6 +76,7 @@ MAINTAINED_INDEX_TARGETS = {
     "protocols/staged-evidence-and-publication.md",
     "world-authoring.md",
     "extension-authoring.md",
+    "engineering-decision-experiments.md",
 }
 MARKDOWN_LINK = re.compile(r"!?\[[^\]]*\]\((?P<target>[^)]+)\)")
 FIXED_TEST_COUNT = re.compile(r"\b\d[\d,]*\s+(?:tests?|test cases)\b", re.IGNORECASE)

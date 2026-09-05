@@ -63,7 +63,27 @@ class SeepageReading(FrozenStrictModel):
         return self
 
 
+class SeepageInvestigation(FrozenStrictModel):
+    """Public synthetic investigation costs and response deadline, in credits and minutes."""
+
+    cost_limit: int = Field(gt=0, strict=True)
+    deadline_minutes: int = Field(gt=0, strict=True)
+    reading_cost: int = Field(gt=0, strict=True)
+    instrument_cost: int = Field(gt=0, strict=True)
+    inspection_cost: int = Field(gt=0, strict=True)
+    instrument_minutes: int = Field(gt=0, strict=True)
+    inspection_minutes: int = Field(gt=0, strict=True)
+
+    def cost(self, action: SeepageAction) -> int:
+        return {
+            SeepageAction.RECORD_CONFIRMATION_READING: self.reading_cost,
+            SeepageAction.CHECK_MEASUREMENT_SYSTEM: self.instrument_cost,
+            SeepageAction.INSPECT_DOWNSTREAM_AREA: self.inspection_cost,
+        }.get(action, 0)
+
+
 class SeepageScenario(FrozenStrictModel):
+    investigation: SeepageInvestigation | None = None
     task_world_id: Literal["dam-seepage-monitoring"]
     profile_id: NonEmptyStr
     monitoring_point_id: NonEmptyStr
@@ -97,6 +117,8 @@ class SeepageState:
     measurement_system_checked: bool = False
     inspected_reading_indexes: tuple[int, ...] = ()
     response: SeepageResponse | None = None
+    investigation_spent: int = 0
+    elapsed_minutes: int = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -124,6 +146,9 @@ class SeepageObservation:
     scheduled_readings_remaining: int
     instrument_condition: InstrumentCondition | None
     response: SeepageResponse | None
+    investigation: SeepageInvestigation | None = None
+    investigation_spent: int = 0
+    elapsed_minutes: int = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -143,6 +168,8 @@ class SeepageEvaluation:
     latest_downstream_area_inspected: bool
     evidence_complete: bool
     successful: bool
+    response_timely: bool = True
+    investigation_spent: int = 0
 
 
 def initial_state(scenario: SeepageScenario) -> SeepageState:
@@ -187,6 +214,9 @@ def observe(state: SeepageState) -> SeepageObservation:
         scheduled_readings_remaining=len(state.scenario.readings) - state.reading_index - 1,
         instrument_condition=(state.scenario.instrument_condition if state.measurement_system_checked else None),
         response=state.response,
+        investigation=state.scenario.investigation,
+        investigation_spent=state.investigation_spent,
+        elapsed_minutes=state.elapsed_minutes,
     )
 
 
@@ -207,7 +237,10 @@ def available_actions(state: SeepageState) -> tuple[SeepageAction, ...]:
             SeepageAction.CONTINUE_ROUTINE_SURVEILLANCE,
         )
     )
-    return tuple(actions)
+    budget = state.scenario.investigation
+    return tuple(
+        a for a in actions if budget is None or state.investigation_spent + budget.cost(a) <= budget.cost_limit
+    )
 
 
 def _accepted(
@@ -217,6 +250,25 @@ def _accepted(
     *,
     termination_reason: str | None = None,
 ) -> Transition[SeepageState, SeepageActionResult]:
+    budget = state.scenario.investigation
+    if budget is not None:
+        elapsed = state.elapsed_minutes
+        if action is SeepageAction.RECORD_CONFIRMATION_READING:
+            elapsed = max(
+                elapsed,
+                60
+                * (
+                    state.scenario.readings[state.reading_index].elapsed_hours
+                    - state.scenario.readings[0].elapsed_hours
+                ),
+            )
+        elif action is SeepageAction.CHECK_MEASUREMENT_SYSTEM:
+            elapsed += budget.instrument_minutes
+        elif action is SeepageAction.INSPECT_DOWNSTREAM_AREA:
+            elapsed += budget.inspection_minutes
+        state = replace(
+            state, investigation_spent=state.investigation_spent + budget.cost(action), elapsed_minutes=elapsed
+        )
     return Transition(
         state=state,
         output=SeepageActionResult(action=action, detail=detail),
@@ -233,6 +285,10 @@ def transition(
         return ActionRejected("world-terminated", "the seepage assessment is already submitted")
     if not isinstance(action, SeepageAction):
         return ActionRejected("action-unknown", "the seepage action is not supported")
+
+    budget = state.scenario.investigation
+    if budget is not None and state.investigation_spent + budget.cost(action) > budget.cost_limit:
+        return ActionRejected("investigation-budget", "the investigation cost exceeds the remaining allowance")
 
     if action is SeepageAction.RECORD_CONFIRMATION_READING:
         if state.reading_index + 1 >= len(state.scenario.readings):
@@ -330,6 +386,9 @@ def evaluate(state: SeepageState) -> SeepageEvaluation:
         else all_readings_reviewed and state.measurement_system_checked and latest_inspected
     )
     response_correct = state.response is not None and state.response is required_response
+    timely = (
+        state.scenario.investigation is None or state.elapsed_minutes <= state.scenario.investigation.deadline_minutes
+    )
     return SeepageEvaluation(
         assessment_submitted=state.response is not None,
         selected_response=state.response,
@@ -339,5 +398,7 @@ def evaluate(state: SeepageState) -> SeepageEvaluation:
         measurement_system_checked=state.measurement_system_checked,
         latest_downstream_area_inspected=latest_inspected,
         evidence_complete=evidence_complete,
-        successful=response_correct and evidence_complete,
+        successful=response_correct and evidence_complete and timely,
+        response_timely=timely,
+        investigation_spent=state.investigation_spent,
     )
