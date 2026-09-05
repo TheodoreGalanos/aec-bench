@@ -17,6 +17,7 @@ from aec_bench.evaluation.artifact import (
     EvaluationFilters,
     write_evaluation_artifact,
 )
+from aec_bench.evaluation.costs import summarize_costs
 from aec_bench.experimentation.lifecycle_studies.ablation_plan import (
     LifecycleAblationManifest,
     LifecycleAblationPlan,
@@ -53,7 +54,7 @@ def build_lifecycle_ablation_evaluation(
         "failed_trials": failed,
         "passed_trials": passed,
         "mean_reward": _mean(rewards),
-        "total_cost_usd": sum(record.cost.estimated_cost_usd or 0.0 for record in records if record.cost is not None),
+        **summarize_costs(records),
         "groups": _group_records(records, planned),
     }
     record_digest = hashlib.sha256(
@@ -162,9 +163,7 @@ def _group_records(
                 "passed": sum(reward >= 1.0 for reward in rewards),
                 "mean_reward": _mean(rewards),
                 "mean_retention": _mean(retentions) if retentions else None,
-                "total_cost_usd": sum(
-                    record.cost.estimated_cost_usd or 0.0 for record in group if record.cost is not None
-                ),
+                **summarize_costs(group),
                 "turn_budget_scope": "per_session",
                 "max_turns_per_session": max_turns_per_session,
                 "total_sessions": sum(session_counts),

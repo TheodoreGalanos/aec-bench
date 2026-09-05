@@ -38,9 +38,9 @@ def load_generated_environment(package_dir: Path, env_id: str) -> PrimeCheck:
     env["PYTHONPATH"] = f"{package_dir}{os.pathsep}{existing_pythonpath}" if existing_pythonpath else str(package_dir)
     code = (
         "from verifiers import load_environment\n"
-        f"env = load_environment({env_id!r})\n"
+        f"env = load_environment({env_id!r}, split='all')\n"
         "print(type(env).__name__)\n"
-        "print(len(env.dataset))\n"
+        "print(len(env.get_eval_dataset()))\n"
     )
     result = _run([sys.executable, "-c", code], env=env, cwd=package_dir)
     if result.returncode == 0:
@@ -85,6 +85,8 @@ def run_prime_eval_smoke(
         env_id,
         "--model",
         model,
+        "--env-args",
+        '{"split":"all"}',
         "--num-examples",
         "1",
         "--rollouts-per-example",

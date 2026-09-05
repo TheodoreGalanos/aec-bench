@@ -715,6 +715,16 @@ uv run aec-bench prime smoke \
   --task electrical/rlm-test
 ```
 
+Generated task packages use a fixed 80/20 split by sorted task ID. The default
+`split="train"` supplies separate training and evaluation datasets. Filters,
+shuffling, and limits apply within each split. A required empty split is an
+error. Use `split="eval"` for evaluation rows, or `split="all"` to evaluate all
+rows without a training dataset. The smoke command uses `all`, including for
+single-task packages. Instance separation does not prove task-family separation.
+Verifier crashes, timeouts, missing output, and invalid rewards stop scoring
+with `verifiers.InfraError`; they are not zero-reward training samples. A valid
+zero reward still means that the verifier completed and awarded zero.
+
 Run a hosted Prime eval against an existing Hub environment:
 
 ```bash
@@ -853,6 +863,12 @@ uv run aec-bench evaluate -e experiment-001 --report report.html
 # Filter by model or adapter
 uv run aec-bench evaluate -e experiment-001 --model "<model-id>"
 ```
+
+`evaluate`, `report summary`, `report leaderboard`, and lifecycle-study
+summaries keep unknown costs separate from free trials.
+If any trial lacks an estimated cost, `total_cost_usd` is null. The summary also
+reports `known_cost_usd`, `n_costed`, and `n_uncosted`. Text and HTML reports
+show the unknown total with its known subtotal.
 
 Published evaluation regimes use one artifact reference as their compatibility
 identity. Inspect one regime or compare two regimes with semantic field paths:

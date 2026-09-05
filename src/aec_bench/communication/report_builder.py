@@ -12,9 +12,9 @@ from aec_bench.communication.metrics import (
     mean_reward,
     perfect_trial_rate,
     resolve_agent_name,
-    total_cost_usd,
 )
 from aec_bench.contracts.trial_record import TrialRecord
+from aec_bench.evaluation.costs import summarize_costs
 
 
 @dataclass(frozen=True)
@@ -25,7 +25,10 @@ class LeaderboardEntry:
     n_trials: int
     mean_reward: float
     perfect_trial_rate: float
-    total_cost_usd: float
+    total_cost_usd: float | None
+    known_cost_usd: float
+    n_costed: int
+    n_uncosted: int
 
 
 @dataclass(frozen=True)
@@ -51,7 +54,8 @@ def leaderboard_to_dict(report: LeaderboardReport) -> dict[str, Any]:
                 **asdict(entry),
                 "mean_reward": round(entry.mean_reward, 4),
                 "perfect_trial_rate": round(entry.perfect_trial_rate, 4),
-                "total_cost_usd": round(entry.total_cost_usd, 4),
+                "total_cost_usd": round(entry.total_cost_usd, 4) if entry.total_cost_usd is not None else None,
+                "known_cost_usd": round(entry.known_cost_usd, 4),
             }
             for entry in report.entries
         ]
@@ -67,5 +71,5 @@ def _build_entry(experiment_id: str, records: Sequence[TrialRecord]) -> Leaderbo
         n_trials=len(records),
         mean_reward=mean_reward(records),
         perfect_trial_rate=perfect_trial_rate(records),
-        total_cost_usd=total_cost_usd(records),
+        **summarize_costs(records),
     )

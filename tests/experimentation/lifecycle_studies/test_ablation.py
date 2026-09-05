@@ -2007,6 +2007,9 @@ def test_lifecycle_ablation_evaluation_reads_only_core_trial_records(tmp_path: P
 
     first = build_lifecycle_ablation_evaluation(manifest)
     summary = first.summary
+    assert summary["total_cost_usd"] is None
+    assert summary["known_cost_usd"] == 0.0
+    assert summary["n_uncosted"] == 1
     assert summary["planned_trials"] == 1
     assert summary["invocation_records"] == 1
     assert summary["completed_trials"] == 1
@@ -2031,7 +2034,10 @@ def test_lifecycle_ablation_evaluation_reads_only_core_trial_records(tmp_path: P
             "passed": 1,
             "mean_reward": 1.0,
             "mean_retention": 1.0,
-            "total_cost_usd": 0.0,
+            "total_cost_usd": None,
+            "known_cost_usd": 0.0,
+            "n_costed": 0,
+            "n_uncosted": 1,
             "turn_budget_scope": "per_session",
             "max_turns_per_session": 10,
             "total_sessions": 3,

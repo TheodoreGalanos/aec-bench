@@ -5,6 +5,7 @@ from collections.abc import Sequence
 from typing import Any
 
 from aec_bench.contracts.trial_record import TrialRecord
+from aec_bench.evaluation.costs import summarize_costs
 
 
 def mean_reward(records: Sequence[TrialRecord]) -> float:
@@ -20,8 +21,8 @@ def perfect_trial_rate(records: Sequence[TrialRecord]) -> float:
     return perfect_count / len(records)
 
 
-def total_cost_usd(records: Sequence[TrialRecord]) -> float:
-    return sum(record.cost.estimated_cost_usd or 0.0 for record in records if record.cost is not None)
+def total_cost_usd(records: Sequence[TrialRecord]) -> float | None:
+    return summarize_costs(records)["total_cost_usd"]
 
 
 def coerce_int(value: Any, fallback: int = 0) -> int:

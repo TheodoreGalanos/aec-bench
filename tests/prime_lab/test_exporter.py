@@ -186,7 +186,7 @@ def test_export_creates_prime_lab_package(tmp_path: Path) -> None:
     assert (package_dir / "README.md").exists()
     assert (package_dir / "aec_voltage_drop" / "environment.py").exists()
     assert (package_dir / "aec_voltage_drop" / "tasks" / "electrical" / "voltage-drop" / "instruction.md").exists()
-    assert 'dependencies = ["datasets>=4.0", "verifiers>=0.1.10"]' in (package_dir / "pyproject.toml").read_text(
+    assert 'dependencies = ["datasets>=4.0", "verifiers==0.1.14"]' in (package_dir / "pyproject.toml").read_text(
         encoding="utf-8"
     )
     assert 'tags = ["aec-bench", "aec", "benchmark"]' in (package_dir / "pyproject.toml").read_text(encoding="utf-8")
@@ -412,7 +412,7 @@ def test_generated_stateful_package_loads_outside_repo_root(tmp_path: Path) -> N
             sys.executable,
             "-c",
             "from verifiers import load_environment; "
-            "env = load_environment('aec_workspace_task'); "
+            "env = load_environment('aec_workspace_task', split='all'); "
             "print(type(env).__name__)",
         ],
         cwd=tmp_path,
@@ -471,9 +471,9 @@ def test_generated_stateful_workspace_tools_score_with_verifier(tmp_path: Path) 
             "    run_command,\n"
             "    submit_answer,\n"
             ")\n"
-            "environment = load_environment()\n"
+            "environment = load_environment(split='all')\n"
             "state = asyncio.run(environment.setup_state(\n"
-            "    vf.State.for_task(environment.dataset[0])\n"
+            "    vf.State.for_task(environment.get_eval_dataset()[0])\n"
             "))\n"
             "workspace = Path(state['workspace_path'])\n"
             "private_task = Path(state['task_path'])\n"
@@ -545,9 +545,9 @@ def test_generated_stateful_write_file_keeps_rollout_open_for_workspace_alias(
             "    write_file,\n"
             "    submit_answer,\n"
             ")\n"
-            "environment = load_environment()\n"
+            "environment = load_environment(split='all')\n"
             "state = asyncio.run(environment.setup_state(\n"
-            "    vf.State.for_task(environment.dataset[0])\n"
+            "    vf.State.for_task(environment.get_eval_dataset()[0])\n"
             "))\n"
             "commands = state['workspace']\n"
             "written = write_file('/workspace/output.md', '42', commands)\n"
@@ -831,7 +831,7 @@ def test_prime_smoke_runs_eval_from_generated_package(monkeypatch, tmp_path: Pat
     assert pwd_file.read_text(encoding="utf-8").strip() == str(output_dir / "aec_voltage_drop")
 
 
-def test_exported_environment_filters_training_tasks_by_difficulty(tmp_path: Path) -> None:
+def test_exported_environment_filters_evaluation_tasks_by_difficulty(tmp_path: Path) -> None:
     tasks_root = tmp_path / "tasks"
     _make_task(tasks_root, "electrical/easy-a", difficulty="easy")
     _make_task(tasks_root, "electrical/easy-b", difficulty="easy")
@@ -852,11 +852,11 @@ def test_exported_environment_filters_training_tasks_by_difficulty(tmp_path: Pat
         "import sys\n"
         f"sys.path.insert(0, {str(result.package_dir)!r})\n"
         "from aec_difficulty_filter.environment import load_environment\n"
-        "env = load_environment(difficulty=['easy'], num_examples=1, seed=7)\n"
-        "print(len(env.dataset))\n"
-        "print(env.dataset[0]['answer'])\n"
+        "env = load_environment(split='all', difficulty=['easy'], num_examples=1, seed=7)\n"
+        "print(len(env.get_eval_dataset()))\n"
+        "print(env.get_eval_dataset()[0]['answer'])\n"
         "eval_env = load_environment(split='eval', difficulty='hard')\n"
-        "print(eval_env.dataset[0]['answer'])\n"
+        "print(eval_env.get_eval_dataset()[0]['answer'])\n"
     )
     process = subprocess.run(
         [sys.executable, "-c", code],
@@ -896,7 +896,7 @@ def test_exported_environment_uses_disjoint_train_and_eval_splits(tmp_path: Path
         "train_env = load_environment(split='train', difficulty='easy', seed=7)\n"
         "eval_env = load_environment(split='eval', difficulty='easy', seed=7)\n"
         "train_ids = {row['answer'] for row in train_env.dataset}\n"
-        "eval_ids = {row['answer'] for row in eval_env.dataset}\n"
+        "eval_ids = {row['answer'] for row in eval_env.get_eval_dataset()}\n"
         "print(len(train_ids))\n"
         "print(len(eval_ids))\n"
         "print(bool(train_ids & eval_ids))\n"
@@ -1488,3 +1488,18 @@ def test_prime_train_runs_hosted_training_config(monkeypatch, tmp_path: Path) ->
     assert result.exit_code == 0, result.output
     assert calls == [(["prime", "train", str(config_path), "--plain"], None, True)]
     assert '"config_path":' in result.output
+
+
+def test_prime_eval_smoke_selects_all_tasks_without_training_rows(monkeypatch: pytest.MonkeyPatch) -> None:
+    from aec_bench.prime_lab import doctor
+
+    commands: list[list[str]] = []
+
+    def run(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        commands.append(command)
+        return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(doctor, "_run", run)
+    assert doctor.run_prime_eval_smoke(env_id="single-task", model="test-model").ok
+    command = commands[0]
+    assert json.loads(command[command.index("--env-args") + 1]) == {"split": "all"}

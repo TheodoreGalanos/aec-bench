@@ -4,6 +4,7 @@
 import json
 from pathlib import Path
 
+import pytest
 from typer.testing import CliRunner
 
 from aec_bench.cli.main import app
@@ -120,3 +121,70 @@ def test_evaluate_empty_results(tmp_path: Path) -> None:
     assert result.exit_code == 1
     envelope = json.loads(result.output)
     assert envelope["status"] == "error"
+
+
+def test_unknown_cost_survives_json_text_and_html_reports(tmp_path: Path) -> None:
+    for trial_id, cost in [("known", {"estimated_cost_usd": 0.25}), ("unknown", None)]:
+        write_trial_record(
+            ledger_root=tmp_path,
+            record=make_trial_record(trial_id=trial_id, experiment_id="costs", cost=cost),
+        )
+    report_path = tmp_path / "costs.html"
+    result = runner.invoke(
+        app,
+        [
+            "--text",
+            "evaluate",
+            "--experiment",
+            "costs",
+            "--ledger-root",
+            str(tmp_path),
+            "--report",
+            str(report_path),
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    assert "Unknown" in result.output
+    html = report_path.read_text()
+    assert "Unknown ($0.25 known; 1 uncosted)" in html
+    assert '"total_cost_usd": null' in html
+    result = runner.invoke(
+        app,
+        [
+            "--text",
+            "report",
+            "summary",
+            "--experiment-id",
+            "costs",
+            "--ledger-root",
+            str(tmp_path),
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    assert "Unknown ($0.25 known; 1 uncosted)" in result.output
+
+
+def test_leaderboard_renders_unknown_cost(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from aec_bench.communication import standalone
+    from aec_bench.communication.report_builder import build_leaderboard, leaderboard_to_dict
+
+    records = [make_trial_record(cost=None)]
+
+    def build_artifact(**kwargs: object) -> dict[str, object]:
+        return {"leaderboard": leaderboard_to_dict(build_leaderboard(records))}
+
+    monkeypatch.setattr(standalone, "build_leaderboard_artifact", build_artifact)
+    result = runner.invoke(
+        app,
+        [
+            "--text",
+            "report",
+            "leaderboard",
+            "--ledger-root",
+            str(tmp_path),
+            "--tasks-root",
+            str(tmp_path),
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    assert "Unknown" in result.output

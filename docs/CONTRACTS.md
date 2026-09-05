@@ -627,6 +627,13 @@ evaluation extensions. Invalid or unparseable output cannot carry positive
 reward. Presentation code consumes this record and does not recalculate a
 competing result.
 
+The `evaluate`, `report summary`, and `report leaderboard` commands, and
+lifecycle-study summaries, report `total_cost_usd: null` when any included
+trial has no estimated cost. `known_cost_usd` is the sum of known costs;
+`n_costed` and `n_uncosted` give coverage. An explicit zero is a known cost.
+These rules apply to each complete summary and its groups. Text and HTML
+summary reports show unknown totals and the known subtotal.
+
 Task-specific verifier details can remain in their owning evidence artifact
 while the common evaluation envelope reports the normalized result.
 
@@ -636,6 +643,24 @@ hydraulic fields to the shared envelope. New task-specific details stay in a
 typed owner-specific evidence artifact and enter the common result through its
 normalized fields and evidence reference. Moving the stewardship field needs
 an approved persisted-record migration.
+
+The pump evaluator derives terminal physical review from the current operating
+boundaries: review is required if a pump is not assured for outage planning.
+Its combined physical/service review flag also includes any unserved capacity
+in the verified run. These diagnostic flags do not change the integrity gates
+or turn a valid evidence record into a failed record.
+
+Terminal overdue durations sum positive deadline exceedances over obligations
+that are not fulfilled. Calendar deadlines use the station calendar. Runtime
+deadlines use the affected pump's cumulative runtime. Each obligation counts
+separately; the sums are obligation-seconds, not elapsed station time.
+
+`handover_count` counts recorded actor-tenure changes. The current world does
+not record required handover contents, so `handover_omission_count` remains a
+reserved zero in the frozen format. It is not a measured absence of omissions
+and must not be used as a training or acceptance criterion. Likewise,
+`decision_time_invalid_count` is an aggregate actor-action validity indicator
+(0 or 1), not a count of individual invalid decisions.
 
 Lifecycle verification records are boundary contracts. Lifecycle progression
 can validate and store them without importing scoring policy from

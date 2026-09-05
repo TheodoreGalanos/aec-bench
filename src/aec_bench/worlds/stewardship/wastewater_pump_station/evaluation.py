@@ -171,11 +171,22 @@ def evaluate(
         terminal_stewardship_available=terminal_stewardship_available,
         errors=tuple(dict.fromkeys(errors)),
     )
+    physical_review_required = any(
+        not state.physical.availability(pump.pump_id).assured_for_outage_planning for pump in state.physical.pumps
+    )
+    open_obligations = tuple(
+        obligation for obligation in state.obligations if obligation.status is not PumpStationObligationStatus.FULFILLED
+    )
     terminal = StewardshipTerminalLiability(
-        review_required_physical_state=False,
+        review_required_physical_state=physical_review_required,
         active_restriction_count=len(state.active_restriction_ids),
-        overdue_calendar_seconds=0,
-        overdue_affected_pump_runtime_seconds=0,
+        overdue_calendar_seconds=sum(
+            max(0, state.calendar_seconds - obligation.due_calendar_seconds) for obligation in open_obligations
+        ),
+        overdue_affected_pump_runtime_seconds=sum(
+            max(0, state.physical.pump(obligation.pump_id).exposure.runtime_seconds - obligation.due_runtime_seconds)
+            for obligation in open_obligations
+        ),
         breached_obligation_count=breached_obligations,
         unresolved_verification_count=sum(
             "verification" in item.work_type and item.item_id in closing_work for item in state.backlog
@@ -187,7 +198,9 @@ def evaluate(
     )
     metrics = StewardshipMetricVector(
         decision_time_invalid_count=0 if report.actor_actions_valid else 1,
-        physical_service_review_required=False,
+        physical_service_review_required=(
+            physical_review_required or report.conservation.duty.unserved_capacity_seconds > 0
+        ),
         maintenance_intervention_count=sum(
             receipt.action_or_control_kind
             in {
@@ -202,6 +215,8 @@ def evaluate(
         evidence_integrity_gap_count=evidence_gaps,
         consumed_maintenance_resource_count=consumed_resources,
         handover_count=_handover_count(steps),
+        # The frozen format reserves this field. The world has no handover-content
+        # contract, so zero is not a measured absence of omissions (docs/CONTRACTS.md).
         handover_omission_count=0,
         terminal_liability=terminal,
     )

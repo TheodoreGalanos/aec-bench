@@ -14,6 +14,7 @@ import typer
 from aec_bench import __version__
 from aec_bench.cli.commands.config import resolve_path
 from aec_bench.cli.output import console, emit
+from aec_bench.communication.cost_display import format_summary_cost
 
 
 def evaluate_experiment(
@@ -134,7 +135,7 @@ def _print_overview_table(
 
     table.add_row("Total Trials", str(summary.get("n_trials", 0)))
     table.add_row("Mean Reward", f"{summary.get('mean_reward', 0):.3f}")
-    table.add_row("Total Cost", f"${summary.get('total_cost_usd', 0):.2f}")
+    table.add_row("Total Cost", format_summary_cost(summary))
 
     console.print(table)
 
@@ -160,7 +161,7 @@ def _print_adapter_table(by_adapter: dict[str, Any]) -> None:
             f"{metrics.get('mean_reward', 0):.3f}",
             f"{metrics.get('perfect_rate', 0):.1%}",
             f"{metrics.get('zero_rate', 0):.1%}",
-            f"${metrics.get('total_cost_usd', 0):.2f}",
+            format_summary_cost(metrics),
         )
 
     console.print(table)
@@ -187,7 +188,7 @@ def _print_task_table(by_task: dict[str, Any]) -> None:
             f"{metrics.get('mean_reward', 0):.3f}",
             f"{metrics.get('perfect_rate', 0):.1%}",
             f"{metrics.get('zero_rate', 0):.1%}",
-            f"${metrics.get('total_cost_usd', 0):.2f}",
+            format_summary_cost(metrics),
         )
 
     console.print(table)
