@@ -1219,6 +1219,6 @@ world trials use the existing world experiment boundary and ledger writer. The
 and profile references plus task-owned evaluation and control diagnostics. Dam
 accepted actions are checked by the shared task replay function. Pump evidence
 retains the existing durable repository files; no additional world state or replay
-system is introduced. Source digests identify the installed code but do not claim
-a retained source snapshot. Qualification reads these records and diagnostics;
-it does not replace task evaluation or establish model performance.
+system is introduced. The normal run manifest owns source references. An unresolved
+source reference does not establish code provenance. Qualification reads these
+records and diagnostics; it does not replace task evaluation or establish model performance.

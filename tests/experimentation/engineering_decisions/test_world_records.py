@@ -31,6 +31,7 @@ def test_saved_dam_definition_reproduces_results_and_retains_failed_controls(tmp
     first = run_dam_experiment(tmp_path / "first", definition)
     saved = json.loads((tmp_path / "first" / "experiment.json").read_text())
     second = run_dam_experiment(tmp_path / "second", DamExperiment.model_validate(saved["definition"]))
+    assert not (tmp_path / "first" / "source-digests.json").exists()
     assert [r.trial_id for r in first] == [r.trial_id for r in second]
     assert all(r.evaluation is not None for r in first)
     assert [r.evaluation for r in first] == [r.evaluation for r in second]
@@ -40,7 +41,6 @@ def test_saved_dam_definition_reproduces_results_and_retains_failed_controls(tmp
         assert record.evidence_status is EvidenceStatus.VERIFIED
         assert record.authority_evidence
         assert record.output.artifact_path("experiment_definition")
-        assert record.output.artifact_path("source_digests")
         report = diagnostics(record)
         assert record.evaluation.breakdown == report["evaluation"]
         assert report["replay_valid"]

@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 from pathlib import Path
 from typing import Any
@@ -83,16 +82,6 @@ def qualify_engineering_decisions(output: Path, seeds: tuple[int, ...] = (2, 8, 
         "pump_delayed_liability": bad_liability["overdue_calendar_seconds"]
         > good_liability["overdue_calendar_seconds"],
     }
-    module_path = Path(__file__).resolve()
-    source_root = module_path.parents[2]
-    owned_paths = [
-        module_path,
-        *source_root.joinpath("experimentation/engineering_decisions").glob("*.py"),
-        *source_root.joinpath("lifecycles/stormwater_design").rglob("*.py"),
-        *source_root.joinpath("worlds/monitoring/dam_seepage").glob("*.py"),
-        *source_root.joinpath("worlds/monitoring/dam_seepage").glob("*.json"),
-        source_root / "worlds/stewardship/wastewater_pump_station/handover.py",
-    ]
     report = {
         "checks": checks,
         "passed": all(checks.values()),
@@ -101,10 +90,6 @@ def qualify_engineering_decisions(output: Path, seeds: tuple[int, ...] = (2, 8, 
         "partitions": [p.model_dump(mode="json") for p in definition.partitions],
         "split_unit": "project_lineage",
         "acceptance_sealed": False,
-        "source_sha256": {
-            p.relative_to(source_root).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()
-            for p in sorted(set(owned_paths))
-        },
         "hydraulic": hydraulic,
         "verifier_challenges": challenges,
         "dam": {"evidence_first": dam, "unsupported": unsupported, "late": late},

@@ -15,5 +15,5 @@ def test_qualification_reports_from_an_aliased_package_path(tmp_path: Path, monk
     monkeypatch.setattr(engineering_decisions, "__file__", str(alias / module.name))
     result = engineering_decisions.qualify_engineering_decisions(tmp_path / "result", seeds=(2,))
     assert result["passed"]
-    assert "experimentation/qualification/engineering_decisions.py" in result["source_sha256"]
+    assert "source_sha256" not in result
     assert (tmp_path / "result" / "qualification.json").is_file()

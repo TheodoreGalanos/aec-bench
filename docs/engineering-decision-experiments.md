@@ -31,12 +31,13 @@ Each experiment saves its definition and `PlannedTrial` values before execution.
 Hydraulic execution uses `run_lifecycle_trial()`. Dam and pump execution use
 `run_world_experiment()` with deterministic controllers and the existing world
 hosts. All return ordinary `TrialRecord` values and publish them through the
-ledger writer. Records retain the experiment definition, source digests, diagnostics,
+ledger writer. Records retain the experiment definition, diagnostics,
 and execution evidence. Pump records also retain the existing world repository
 files in a `world_run` ZIP artifact. Restore it to a private directory, with
 owner-only directory access and file read/write permissions, before opening the
-canonical repository. The source digests identify source bytes; they are not a source archive.
-Use the same package build and dependency environment for reproduction.
+canonical repository. Repeat conditions with the same pinned library revision or
+package build and dependency environment. Source references remain in the normal
+run manifests; a control record with unresolved source does not establish code provenance.
 
 The controls are explicit Python policies. This command does not select arbitrary
 model adapters. Model comparisons can use the domain capabilities through their

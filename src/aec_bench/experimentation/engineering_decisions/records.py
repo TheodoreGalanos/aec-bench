@@ -1,7 +1,6 @@
 # ABOUTME: Publishes deterministic world experiment results through the normal trial ledger.
 # ABOUTME: Retains declared plans and actual world evidence without impersonating a model provider.
 
-import hashlib
 import json
 import platform
 from dataclasses import asdict
@@ -37,13 +36,6 @@ def write_plan(output: Path, definition: StrictModel, trials: list[PlannedTrial]
     if output.exists() and (not output.is_dir() or any(output.iterdir())):
         raise ValueError("experiment output must be empty")
     output.mkdir(parents=True, exist_ok=True, mode=0o700)
-    source_root = Path(__file__).resolve().parents[2]
-    source_hashes = {
-        p.relative_to(source_root).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()
-        for p in sorted(source_root.rglob("*.py"))
-        if "__pycache__" not in p.parts
-    }
-    (output / "source-digests.json").write_text(json.dumps(source_hashes, indent=2, sort_keys=True) + "\n")
     (output / "experiment.json").write_text(
         json.dumps(
             {
@@ -87,9 +79,7 @@ def world_record(
     manifest = RunManifest(
         run_id=trial.trial_id,
         experiment_id=trial.experiment_id,
-        source=UnresolvedSourceRef(
-            reason="local experiment uses a recorded source digest; no retained source snapshot"
-        ),
+        source=UnresolvedSourceRef(reason="deterministic control run has no retained library source reference"),
         agent=AgentConfiguration(
             adapter=trial.agent.adapter, model=trial.agent.model, configuration=trial.agent.parameters
         ),
@@ -144,7 +134,6 @@ def publish_record(output: Path, record: TrialRecord) -> TrialRecord:
     from aec_bench.ledger.writer import write_trial_record
 
     record.attach_artifact("experiment_definition", output / "experiment.json", media_type="application/json")
-    record.attach_artifact("source_digests", output / "source-digests.json", media_type="application/json")
     ledger = output / "ledger"
     path = write_trial_record(ledger_root=ledger, record=record)
     return read_trial_record(path, ledger_root=ledger)
