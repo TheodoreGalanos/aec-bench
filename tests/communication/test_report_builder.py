@@ -67,3 +67,13 @@ def test_leaderboard_costs_distinguish_unknown_and_free_experiments() -> None:
     assert partial["n_uncosted"] == 1
     assert total_cost_usd(records) is None
     assert total_cost_usd([]) == 0.0
+
+
+def test_leaderboard_metrics_exclude_trials_without_evaluation() -> None:
+    from aec_bench.communication.metrics import mean_reward, perfect_trial_rate
+
+    records = [make_trial_record(), make_trial_record(trial_id="unevaluated", evaluation=None)]
+    assert mean_reward(records) == 1.0
+    assert perfect_trial_rate(records) == 1.0
+    assert mean_reward(records[1:]) == 0.0
+    assert perfect_trial_rate(records[1:]) == 0.0
