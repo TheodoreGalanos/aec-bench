@@ -35,7 +35,8 @@ may_depend_on = ["adapters", "contracts", "evaluation", "generation", "harness",
 may_depend_on = ["contracts"]
 
 [owners.experimentation]
-may_depend_on = ["adapters", "contracts", "evaluation", "evolution", "generation", "harness", "ledger", "lifecycles", "prime_agent", "providers", "tasks", "templates", "trials", "worlds"]
+may_depend_on = ["adapters", "contracts", "evaluation", "evolution", "generation", "harness", "ledger", "lifecycles", "prime_agent",
+  "prime_lab", "providers", "tasks", "templates", "trials", "worlds"]
 
 [owners.feedback]
 may_depend_on = ["contracts", "ledger", "tasks"]

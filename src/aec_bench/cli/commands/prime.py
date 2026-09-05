@@ -5,8 +5,8 @@ from __future__ import annotations
 
 import fnmatch
 import json
-import math
 import subprocess
+import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TypedDict
@@ -21,6 +21,7 @@ from aec_bench.prime_lab.exporter import (
     PrimeExportHarnessMode,
     normalise_environment_id,
 )
+from aec_bench.prime_lab.training import render_train_config, validate_training_handoff
 
 app = typer.Typer(help="Export aec-bench tasks for Prime Lab.")
 
@@ -34,22 +35,6 @@ class _PrimePackageExport:
     env_id: str
     package_dir: Path
     task_count: int
-
-
-@dataclass(frozen=True)
-class _DifficultyRatio:
-    difficulty: str
-    ratio: float
-
-
-@dataclass(frozen=True)
-class _PrimeTrainBufferConfig:
-    env_ratios: list[float] | None = None
-    online_difficulty_filtering: bool = False
-    easy_threshold: float | None = None
-    hard_threshold: float | None = None
-    easy_fraction: float | None = None
-    hard_fraction: float | None = None
 
 
 class _SmokeCheckRow(TypedDict):
@@ -481,7 +466,7 @@ def prime_train_config(
     difficulty_ratio: list[str] | None = typer.Option(
         None,
         "--difficulty-ratio",
-        help="Difficulty sampling ratio as DIFFICULTY=RATIO; repeat to create one env block per difficulty.",
+        help="Unsupported: Prime removed the difficulty buffer.",
     ),
     harness: str | None = typer.Option(
         None,
@@ -494,6 +479,7 @@ def prime_train_config(
         min=1,
         help="Training examples passed through to load_environment args.",
     ),
+    checkpoint_id: str | None = typer.Option(None, "--checkpoint-id", help="Prime checkpoint to initialize training."),
     max_steps: int = typer.Option(20, "--max-steps", min=1),
     batch_size: int = typer.Option(32, "--batch-size", min=1),
     rollouts_per_example: int = typer.Option(4, "--rollouts-per-example", min=1),
@@ -509,35 +495,35 @@ def prime_train_config(
     online_difficulty_filtering: bool = typer.Option(
         False,
         "--online-difficulty-filtering",
-        help="Enable Prime's online difficulty buffer for hosted training.",
+        help="Unsupported: Prime removed the difficulty buffer.",
     ),
     easy_threshold: float = typer.Option(
         0.8,
         "--easy-threshold",
         min=0.0,
         max=1.0,
-        help="Reward threshold above which Prime treats examples as easy.",
+        help="Unsupported: Prime removed the difficulty buffer.",
     ),
     hard_threshold: float = typer.Option(
         0.2,
         "--hard-threshold",
         min=0.0,
         max=1.0,
-        help="Reward threshold below which Prime treats examples as hard.",
+        help="Unsupported: Prime removed the difficulty buffer.",
     ),
     easy_fraction: float = typer.Option(
         0.0,
         "--easy-fraction",
         min=0.0,
         max=1.0,
-        help="Fraction of easy examples retained when online filtering is enabled.",
+        help="Unsupported: Prime removed the difficulty buffer.",
     ),
     hard_fraction: float = typer.Option(
         0.0,
         "--hard-fraction",
         min=0.0,
         max=1.0,
-        help="Fraction of hard examples retained when online filtering is enabled.",
+        help="Unsupported: Prime removed the difficulty buffer.",
     ),
     adapters_keep_last: int = typer.Option(3, "--adapters-keep-last", min=1),
 ) -> None:
@@ -555,36 +541,36 @@ def prime_train_config(
     if num_examples is not None:
         base_env_args["num_examples"] = num_examples
 
-    parsed_difficulty_ratios = _parse_difficulty_ratios(difficulty_ratio or [])
-    env_args_list = _prime_train_env_args_list(
-        base_env_args=base_env_args,
-        difficulty=difficulty,
-        difficulty_ratios=parsed_difficulty_ratios,
-    )
-    buffer_config = _prime_train_buffer_config(
-        difficulty_ratios=parsed_difficulty_ratios,
-        online_difficulty_filtering=online_difficulty_filtering,
-        easy_threshold=easy_threshold,
-        hard_threshold=hard_threshold,
-        easy_fraction=easy_fraction,
-        hard_fraction=hard_fraction,
-    )
+    if (
+        difficulty_ratio
+        or online_difficulty_filtering
+        or (easy_threshold, hard_threshold, easy_fraction, hard_fraction) != (0.8, 0.2, 0.0, 0.0)
+    ):
+        raise typer.BadParameter(
+            "Prime removed the difficulty buffer; supply a current rollout-filter TOML to prime train"
+        )
+    if difficulty:
+        base_env_args["difficulty"] = difficulty[0] if len(difficulty) == 1 else difficulty
 
-    config_text = _render_train_config(
+    config_text = render_train_config(
         environment=environment,
         model=model,
         max_steps=max_steps,
         batch_size=batch_size,
         rollouts_per_example=rollouts_per_example,
         max_tokens=max_tokens,
-        env_args_list=env_args_list,
-        buffer_config=buffer_config,
+        env_args_list=[base_env_args],
         eval_interval=eval_interval,
         eval_num_examples=eval_num_examples,
         eval_rollouts_per_example=eval_rollouts_per_example,
         eval_base_model=not no_eval_base_model,
         adapters_keep_last=adapters_keep_last,
+        checkpoint_id=checkpoint_id,
     )
+    try:
+        validate_training_handoff(tomllib.loads(config_text))
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc)) from exc
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(config_text, encoding="utf-8")
     data = {
@@ -613,6 +599,10 @@ def prime_train(
     yes: bool = typer.Option(False, "--yes", "-y", help="Skip Prime confirmation prompt."),
 ) -> None:
     """Launch a Hosted Training run through the Prime CLI."""
+    try:
+        validate_training_handoff(tomllib.loads(config_path.read_text(encoding="utf-8")))
+    except (OSError, ValueError) as exc:
+        raise typer.BadParameter(str(exc)) from exc
     _require_prime_runtime()
     command = ["prime", "train", str(config_path), "--plain"]
     for item in env_var or []:
@@ -1023,190 +1013,6 @@ def _parse_env_arg(item: str) -> tuple[str, object]:
     except json.JSONDecodeError:
         value = raw_value
     return key, value
-
-
-def _parse_difficulty_ratios(items: list[str]) -> list[_DifficultyRatio]:
-    ratios: list[_DifficultyRatio] = []
-    seen: set[str] = set()
-    for item in items:
-        difficulty, separator, raw_ratio = item.partition("=")
-        difficulty = difficulty.strip()
-        if not separator or not difficulty:
-            raise typer.BadParameter("--difficulty-ratio must use DIFFICULTY=RATIO format")
-        if difficulty in seen:
-            raise typer.BadParameter(f"duplicate --difficulty-ratio difficulty: {difficulty}")
-        try:
-            ratio = float(raw_ratio)
-        except ValueError as exc:
-            raise typer.BadParameter("--difficulty-ratio ratio must be a positive number") from exc
-        if not math.isfinite(ratio) or ratio <= 0:
-            raise typer.BadParameter("--difficulty-ratio ratio must be a positive number")
-        seen.add(difficulty)
-        ratios.append(_DifficultyRatio(difficulty=difficulty, ratio=ratio))
-    return ratios
-
-
-def _prime_train_env_args_list(
-    *,
-    base_env_args: dict[str, object],
-    difficulty: list[str] | None,
-    difficulty_ratios: list[_DifficultyRatio],
-) -> list[dict[str, object]]:
-    if difficulty_ratios:
-        env_args_list = []
-        for item in difficulty_ratios:
-            env_args = dict(base_env_args)
-            env_args["difficulty"] = item.difficulty
-            env_args_list.append(env_args)
-        return env_args_list
-
-    env_args = dict(base_env_args)
-    if difficulty:
-        env_args["difficulty"] = difficulty[0] if len(difficulty) == 1 else list(difficulty)
-    return [env_args]
-
-
-def _prime_train_buffer_config(
-    *,
-    difficulty_ratios: list[_DifficultyRatio],
-    online_difficulty_filtering: bool,
-    easy_threshold: float,
-    hard_threshold: float,
-    easy_fraction: float,
-    hard_fraction: float,
-) -> _PrimeTrainBufferConfig | None:
-    if not difficulty_ratios and not online_difficulty_filtering:
-        return None
-    return _PrimeTrainBufferConfig(
-        env_ratios=[item.ratio for item in difficulty_ratios] or None,
-        online_difficulty_filtering=online_difficulty_filtering,
-        easy_threshold=easy_threshold if online_difficulty_filtering else None,
-        hard_threshold=hard_threshold if online_difficulty_filtering else None,
-        easy_fraction=easy_fraction if online_difficulty_filtering else None,
-        hard_fraction=hard_fraction if online_difficulty_filtering else None,
-    )
-
-
-def _render_train_config(
-    *,
-    environment: str,
-    model: str,
-    max_steps: int,
-    batch_size: int,
-    rollouts_per_example: int,
-    max_tokens: int,
-    env_args_list: list[dict[str, object]],
-    buffer_config: _PrimeTrainBufferConfig | None,
-    eval_interval: int | None,
-    eval_num_examples: int | None,
-    eval_rollouts_per_example: int,
-    eval_base_model: bool,
-    adapters_keep_last: int,
-) -> str:
-    lines = [
-        f"model = {_toml_string(model)}",
-        f"max_steps = {max_steps}",
-        f"batch_size = {batch_size}",
-        f"rollouts_per_example = {rollouts_per_example}",
-        "",
-        "[sampling]",
-        f"max_tokens = {max_tokens}",
-    ]
-    for env_args in env_args_list:
-        lines.extend(
-            [
-                "",
-                "[[env]]",
-                f"id = {_toml_string(environment)}",
-            ]
-        )
-        if env_args:
-            lines.append(f"args = {_toml_inline_table(env_args)}")
-
-    if buffer_config is not None:
-        lines.extend(["", "[buffer]"])
-        lines.extend(_render_buffer_config_lines(buffer_config))
-
-    if eval_interval is not None:
-        lines.extend(
-            [
-                "",
-                "[eval]",
-                f"interval = {eval_interval}",
-            ]
-        )
-        if eval_num_examples is not None:
-            lines.append(f"num_examples = {eval_num_examples}")
-        lines.extend(
-            [
-                f"rollouts_per_example = {eval_rollouts_per_example}",
-                f"eval_base_model = {_toml_bool(eval_base_model)}",
-            ]
-        )
-
-    lines.extend(
-        [
-            "",
-            "[adapters]",
-            "interval = 0",
-            f"keep_last = {adapters_keep_last}",
-            "",
-        ]
-    )
-    return "\n".join(lines)
-
-
-def _render_buffer_config_lines(buffer_config: _PrimeTrainBufferConfig) -> list[str]:
-    values: dict[str, object] = {}
-    if buffer_config.env_ratios is not None:
-        values["env_ratios"] = buffer_config.env_ratios
-    if buffer_config.online_difficulty_filtering:
-        values["online_difficulty_filtering"] = True
-    if buffer_config.easy_threshold is not None:
-        values["easy_threshold"] = buffer_config.easy_threshold
-    if buffer_config.hard_threshold is not None:
-        values["hard_threshold"] = buffer_config.hard_threshold
-    if buffer_config.easy_fraction is not None:
-        values["easy_fraction"] = buffer_config.easy_fraction
-    if buffer_config.hard_fraction is not None:
-        values["hard_fraction"] = buffer_config.hard_fraction
-    return [f"{key} = {_toml_value(value)}" for key, value in values.items()]
-
-
-def _toml_inline_table(values: dict[str, object]) -> str:
-    bits = [f"{key} = {_toml_value(value)}" for key, value in values.items()]
-    return "{ " + ", ".join(bits) + " }"
-
-
-def _toml_value(value: object) -> str:
-    if isinstance(value, str):
-        return _toml_string(value)
-    if isinstance(value, bool):
-        return _toml_bool(value)
-    if isinstance(value, int) and not isinstance(value, bool):
-        return str(value)
-    if isinstance(value, float):
-        return _toml_float(value)
-    if isinstance(value, list):
-        return "[" + ", ".join(_toml_value(item) for item in value) + "]"
-    raise TypeError(f"unsupported TOML value: {value!r}")
-
-
-def _toml_string(value: str) -> str:
-    return json.dumps(value)
-
-
-def _toml_bool(value: bool) -> str:
-    return "true" if value else "false"
-
-
-def _toml_float(value: float) -> str:
-    if not math.isfinite(value):
-        raise TypeError(f"unsupported TOML float: {value!r}")
-    text = format(value, ".15g")
-    if "." not in text and "e" not in text.lower():
-        return f"{text}.0"
-    return text
 
 
 def _run_prime_command(command: list[str], *, cwd: Path | None) -> None:

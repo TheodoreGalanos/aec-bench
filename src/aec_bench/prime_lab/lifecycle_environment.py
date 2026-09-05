@@ -6,6 +6,7 @@ from __future__ import annotations
 import hashlib
 import importlib
 import json
+import math
 import random
 import tarfile
 import tempfile
@@ -42,6 +43,7 @@ from aec_bench.prime_lab.lifecycle_exporter import (
     _validated_source_project_root,
     load_prime_lifecycle_manifest,
 )
+from aec_bench.prime_lab.lifecycle_source import read_runtime_requirements, snapshot_lifecycle_source
 from aec_bench.providers.source_identity import resolve_provider_adapter_identity
 
 _SYSTEM_PROMPT = """You are completing one staged AEC evidence lifecycle in a single persistent interaction.
@@ -62,8 +64,8 @@ def load_local_lifecycle_environment(
     harness: str | None = None,
 ) -> Any:
     """Load one local-only persistent lifecycle environment from a strict manifest."""
-    if split not in {"eval", "all"}:
-        raise ValueError("local lifecycle exports support only split='eval' or split='all'")
+    if split not in {"train", "eval", "all"}:
+        raise ValueError("lifecycle exports support split='train', split='eval', or split='all'")
     if harness not in {None, "persistent_lifecycle"}:
         raise ValueError("local lifecycle exports require harness='persistent_lifecycle'")
     if num_examples is not None and num_examples <= 0:
@@ -84,10 +86,34 @@ def load_local_lifecycle_environment(
     else:
         _assert_source_provenance(manifest.source)
         records = manifest.packages
+    training_records: tuple[LifecyclePackageDocument, ...] = ()
+    assigned = isinstance(manifest, PrimeLifecycleExportManifest) and any(
+        record.dataset_assignment is not None for record in manifest.packages
+    )
+    if split == "train" and not assigned:
+        raise ValueError("training requires explicit disjoint lifecycle group assignments")
+    if assigned and split != "all":
+        evaluation_records = tuple(
+            record
+            for record in records
+            if isinstance(record, PrimeLifecyclePackageRecord)
+            and record.dataset_assignment is not None
+            and record.dataset_assignment.split == "eval"
+        )
+        if split == "train":
+            training_records = _select_records(
+                tuple(record for record in records if record not in evaluation_records),
+                variant=variant,
+                num_examples=num_examples,
+                seed=seed,
+            )
+        records = evaluation_records
     records = _select_records(records, variant=variant, num_examples=num_examples, seed=seed)
+    evaluation_dataset = _build_dataset(records)
+    records = training_records + records
     supports_evidence_requests = _records_support_evidence_requests(records)
     supports_lifecycle_operations = _records_support_lifecycle_operations(records)
-    dataset = _build_dataset(records)
+    dataset = _build_dataset(training_records) if training_records else None
     vf = importlib.import_module("verifiers")
     rubric = _build_lifecycle_rubric(vf)
     environment_type = _build_environment_type(
@@ -99,6 +125,7 @@ def load_local_lifecycle_environment(
         manifest=manifest,
         records=records,
         dataset=dataset,
+        eval_dataset=evaluation_dataset,
         rubric=rubric,
         manifest_root=resolved_manifest_path.parent,
         package_storage=package_storage,
@@ -230,6 +257,7 @@ def _build_environment_type(
             manifest: PrimeLifecycleManifestDocument,
             records: tuple[PrimeLifecyclePackageRecord, ...] | tuple[LegacyPrimeLifecyclePackageRecord, ...],
             dataset: Any,
+            eval_dataset: Any,
             rubric: Any,
             manifest_root: Path,
             package_storage: tempfile.TemporaryDirectory[str] | None,
@@ -256,7 +284,7 @@ def _build_environment_type(
                 tools=[],
                 max_turns=manifest.max_turns,
                 dataset=dataset,
-                eval_dataset=dataset,
+                eval_dataset=eval_dataset,
                 rubric=rubric,
                 system_prompt=system_prompt,
             )
@@ -356,6 +384,22 @@ def _build_lifecycle_rubric(vf: Any) -> Any:
     class AecBenchLifecycleRubric(vf.Rubric):  # type: ignore[misc]
         def __init__(self) -> None:
             super().__init__(funcs=[aec_bench_lifecycle_reward])
+
+        async def _call_individual_reward_func(self, func: Any, state: Any) -> float:
+            # A failed verifier is infrastructure failure, not a negative training example.
+            try:
+                reward = float(await func(state=state))
+                if not math.isfinite(reward) or not 0 <= reward <= 1:
+                    raise ValueError("lifecycle reward must be finite and in [0, 1]")
+                return reward
+            except Exception as cause:
+                error = cause if isinstance(cause, vf.InfraError) else vf.InfraError("AEC lifecycle verifier failed")
+                state["error"] = error
+                state["reward"] = None
+                state["metrics"] = {}
+                if error is cause:
+                    raise
+                raise error from cause
 
         @vf.cleanup  # type: ignore[untyped-decorator]
         async def cleanup_lifecycle_state(self, state: dict[str, Any]) -> None:
@@ -463,7 +507,19 @@ def _assert_source_provenance(
     if manifest_root is None:
         raise ValueError("current Prime lifecycle source provenance requires its manifest root")
     if expected.source_snapshot is not None:
-        _verify_artifact_ref(expected.source_snapshot, root=manifest_root)
+        snapshot = _verify_artifact_ref(expected.source_snapshot, root=manifest_root)
+        requirements = read_runtime_requirements(snapshot)
+        if requirements is not None:
+            with tempfile.TemporaryDirectory(prefix="aec-prime-source-check-") as temporary:
+                actual = snapshot_lifecycle_source(
+                    Path(__file__).resolve().parents[1],
+                    Path(temporary) / "provider-source.tar",
+                    package_version=_distribution_version("aec-bench"),
+                    requirements=requirements,
+                )
+            if actual != expected:
+                raise ValueError("installed aec-bench source identity does not match lifecycle export")
+            return
     source_root = _validated_source_project_root(Path(__file__).resolve().parents[3])
     with tempfile.TemporaryDirectory(prefix="aec-prime-source-check-") as temporary:
         current_actual = resolve_provider_adapter_identity(

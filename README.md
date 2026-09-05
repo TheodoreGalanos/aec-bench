@@ -777,6 +777,15 @@ content-bound artifacts. Live Prime commands remain explicit and require the
 user's Prime installation, credentials, and network access; the normal test
 suite makes no hosted calls.
 
+To qualify hydraulic lifecycle training data and tools without provider calls,
+use the [local hydraulic training qualification](docs/engineering-decision-experiments.md#hydraulic-training-qualification).
+It separates project lineages, retains verified scripted demonstrations, and
+writes a training handoff. Hosted execution and weight updates require separate
+validation. Lifecycle exports pin their runtime dependencies and verify adapter
+source bytes after installation. Prime training configuration targets the pinned
+CLI, includes explicit evaluation environments, supports `--checkpoint-id`, and
+rejects the removed difficulty-buffer configuration.
+
 ### Datasets
 
 Datasets separate semantic task selection from immutable byte identity. A

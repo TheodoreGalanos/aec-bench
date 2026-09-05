@@ -883,11 +883,26 @@ remain `EvaluationResult` authority.
 
 Prime lifecycle export schema 3 retains each public lifecycle as one tar
 `ArtifactRef`. It records the generated package version, independent Prime
-protocol versions, and one `ProviderAdapterIdentity`. Clean source uses one
-full Git revision. Dirty or non-Git source uses one retained source snapshot.
+protocol versions, and one `ProviderAdapterIdentity`. New exports retain the
+adapter distribution source as a portable snapshot, including its exact runtime
+dependency versions. The same source bytes and dependencies validate from a
+checkout or an installed wheel. The snapshot is the reconstructive artifact;
+there is no second source inventory or repository revision for the same claim.
+Existing checkout-bound revision and snapshot references remain readable.
 The package does not persist an absolute repository root, source inventory,
 lifecycle-spec digest, or a second raw package digest. The reader keeps schema
 2 support for existing local packages.
+
+Prime lifecycle packages can optionally declare one `dataset_assignment` per
+package, with a caller-owned `group_id` and `train` or `eval` split. An assigned
+export requires both splits, assigns every package, and rejects a group that
+crosses splits. Revisions in distinct groups can share a lifecycle and variant
+ID. The local loader supplies training rows only for `split="train"`; evaluation
+and `all` loads have no training dataset. Unassigned exports remain evaluation
+only. These local qualification assignments do not change hosted or training
+qualification claims in the manifest. Infrastructure failures during lifecycle
+scoring propagate as `verifiers.InfraError`; incomplete, otherwise valid
+rollouts retain their task-owned zero reward.
 
 Adapter-only extraction metadata must not become task-semantic output. The
 lambda-RLM `__confidence__` key is reserved for extraction confidence and is

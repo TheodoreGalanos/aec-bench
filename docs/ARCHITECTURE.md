@@ -57,6 +57,12 @@ consumes those experiments and their ordinary trial evidence. It does not own a
 second execution or scoring path. See the
 [engineering decision guide](engineering-decision-experiments.md) for use and scope.
 
+Hydraulic training qualification under `experimentation.qualification` consumes
+`prime_lab` export, tool-runtime, and config interfaces. Prime owns protocol
+translation; the existing hydraulic lifecycle owns actions and reward. The
+qualification keeps project partitions and comparison controls in
+experimentation. `prime_lab` does not depend on experimentation.
+
 ### Artifact and workspace tasks
 
 An artifact task gives an agent an instruction and an execution environment.

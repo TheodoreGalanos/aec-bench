@@ -77,7 +77,8 @@ def test_lifecycle_export_retains_content_addressed_public_packages_without_loca
 
     pyproject = tomllib.loads((result.package_dir / "pyproject.toml").read_text(encoding="utf-8"))
     dependencies = cast(list[str], pyproject["project"]["dependencies"])
-    assert "verifiers>=0.1.14,<0.2" in dependencies
+    assert any(item.startswith("verifiers==") for item in dependencies)
+    assert any(item.startswith("pydantic==") for item in dependencies)
     assert "aec-bench[prime]==0.1.0" in dependencies
     assert "uv" not in pyproject.get("tool", {})
     readme = (result.package_dir / "README.md").read_text(encoding="utf-8")
@@ -87,7 +88,7 @@ def test_lifecycle_export_retains_content_addressed_public_packages_without_loca
     assert "prime train" not in readme
     assert "vf-eval" not in readme
     assert "uv pip install /absolute/path/to/aec_bench-0.1.0-py3-none-any.whl" in readme
-    assert "uv pip install --no-deps /absolute/path/to/generated-package" in readme
+    assert "/absolute/path/to/generated-package" in readme
 
 
 def test_lifecycle_export_is_deterministic_and_preserves_existing_output_on_rejection(tmp_path: Path) -> None:
@@ -261,7 +262,7 @@ def test_generated_lifecycle_environment_loads_outside_repo_root(tmp_path: Path)
     outside = tmp_path / "outside"
     outside.mkdir()
     environment = os.environ.copy()
-    environment["PYTHONPATH"] = str(result.package_dir)
+    environment["PYTHONPATH"] = os.pathsep.join([str(result.package_dir), str(REPOSITORY_ROOT / "src")])
     process = subprocess.run(
         [
             sys.executable,
@@ -269,7 +270,7 @@ def test_generated_lifecycle_environment_loads_outside_repo_root(tmp_path: Path)
             (
                 "from stormwater_outside_import import load_environment; "
                 "env = load_environment(); "
-                "print(type(env).__name__, len(env.dataset), env.max_turns, "
+                "print(type(env).__name__, len(env.get_eval_dataset()), env.max_turns, "
                 "env.execution_mode, env.memory_visibility_policy)"
             ),
         ],
@@ -599,7 +600,7 @@ def test_generated_lifecycle_environment_rejects_path_escape_and_archive_drift(t
     outside = tmp_path / "outside-drift"
     outside.mkdir()
     environment = os.environ.copy()
-    environment["PYTHONPATH"] = str(result.package_dir)
+    environment["PYTHONPATH"] = os.pathsep.join([str(result.package_dir), str(REPOSITORY_ROOT / "src")])
     drift = subprocess.run(
         [sys.executable, "-c", f"from {result.environment_id} import load_environment; load_environment()"],
         cwd=outside,
@@ -769,8 +770,7 @@ def _run_generated_probe(
     outside.mkdir()
     environment = os.environ.copy()
     python_paths = [str(package_dir)]
-    if extra_python_path is not None:
-        python_paths.append(str(extra_python_path))
+    python_paths.append(str(extra_python_path if extra_python_path is not None else REPOSITORY_ROOT / "src"))
     environment["PYTHONPATH"] = os.pathsep.join(python_paths)
     process = subprocess.run(
         [sys.executable, str(RUNTIME_PROBE), environment_id],

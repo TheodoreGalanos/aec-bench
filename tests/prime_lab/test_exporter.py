@@ -1380,11 +1380,12 @@ def test_prime_train_config_writes_hosted_baby_qwen_config(tmp_path: Path) -> No
     assert payload["eval"]["num_examples"] == 10
     assert payload["eval"]["rollouts_per_example"] == 1
     assert payload["eval"]["eval_base_model"] is True
+    assert payload["eval"]["env"][0]["args"]["split"] == "eval"
     assert payload["adapters"]["interval"] == 0
     assert payload["adapters"]["keep_last"] == 3
 
 
-def test_prime_train_config_writes_online_difficulty_buffer_config(tmp_path: Path) -> None:
+def test_prime_train_config_rejects_removed_difficulty_buffer(tmp_path: Path) -> None:
     config_path = tmp_path / "configs" / "rl" / "aec-filtered-ratios.toml"
 
     result = runner.invoke(
@@ -1429,25 +1430,12 @@ def test_prime_train_config_writes_online_difficulty_buffer_config(tmp_path: Pat
         ],
     )
 
-    assert result.exit_code == 0, result.output
-    payload = tomllib.loads(config_path.read_text(encoding="utf-8"))
-    assert [env["args"]["difficulty"] for env in payload["env"]] == ["easy", "medium", "hard"]
-    assert payload["env"][0]["args"] == {
-        "split": "all",
-        "harness": "stateful",
-        "difficulty": "easy",
-    }
-    assert payload["buffer"] == {
-        "env_ratios": [0.45, 0.40, 0.15],
-        "online_difficulty_filtering": True,
-        "easy_threshold": 0.8,
-        "hard_threshold": 0.2,
-        "easy_fraction": 0.25,
-        "hard_fraction": 0.25,
-    }
+    assert result.exit_code != 0
+    assert "removed the difficulty buffer" in unstyle(result.output)
+    assert not config_path.exists()
 
 
-def test_prime_train_config_rejects_duplicate_difficulty_ratios(tmp_path: Path) -> None:
+def test_prime_train_config_rejects_removed_difficulty_ratios(tmp_path: Path) -> None:
     config_path = tmp_path / "configs" / "rl" / "aec-filtered-ratios.toml"
 
     result = runner.invoke(
@@ -1469,12 +1457,16 @@ def test_prime_train_config_rejects_duplicate_difficulty_ratios(tmp_path: Path) 
     )
 
     assert result.exit_code != 0
-    assert "duplicate --difficulty-ratio difficulty" in unstyle(result.output)
+    assert "removed the difficulty buffer" in unstyle(result.output)
 
 
 def test_prime_train_runs_hosted_training_config(monkeypatch, tmp_path: Path) -> None:
     config_path = tmp_path / "aec-train.toml"
-    config_path.write_text('model = "Qwen/Qwen3.5-0.8B"\n', encoding="utf-8")
+    config_path.write_text(
+        'model = "Qwen/Qwen3.5-0.8B"\nmax_steps = 1\nbatch_size = 4\nrollouts_per_example = 4\n'
+        '[[env]]\nid = "aec-hydraulic"\nargs = {split = "train"}\n',
+        encoding="utf-8",
+    )
     calls: list[tuple[list[str], Path | None, bool]] = []
 
     def fake_run(command: list[str], *, cwd: Path | None = None, check: bool = False):
