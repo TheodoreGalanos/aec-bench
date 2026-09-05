@@ -2360,3 +2360,18 @@ class _TerminalProviderFailurePersistentRegistry(_GoldPersistentRegistry):
 
         adapter.execute = execute
         return adapter
+
+
+def test_ablation_metrics_require_an_evaluation() -> None:
+    from aec_bench.experimentation.lifecycle_studies.evaluation import (
+        _operational_metric,
+        _record_completed,
+        _retention,
+    )
+    from tests.support.trial_record_factories import make_trial_record
+
+    record = make_trial_record(evaluation=None)
+    assert not _record_completed(record)
+    for read_metric in (lambda: _retention(record), lambda: _operational_metric(record, "requests")):
+        with pytest.raises(ValueError, match="requires an evaluation"):
+            read_metric()

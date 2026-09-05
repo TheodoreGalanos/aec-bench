@@ -11,6 +11,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from aec_bench.contracts.evaluation_result import EvaluationResult
 from aec_bench.contracts.trial_record import ArtifactReference, TrialRecord
 from aec_bench.evaluation.artifact import (
     EvaluationArtifact,
@@ -44,8 +45,8 @@ def build_lifecycle_ablation_evaluation(
 
     completed = sum(_record_completed(record) for record in records)
     failed = len(records) - completed
-    passed = sum(record.evaluation.reward >= 1.0 for record in records)
-    rewards = [record.evaluation.reward for record in records]
+    passed = sum(_evaluation(record).reward >= 1.0 for record in records)
+    rewards = [_evaluation(record).reward for record in records]
     summary = {
         "study_design": plan.study_design.model_dump(mode="json"),
         "planned_trials": plan.trial_count,
@@ -102,7 +103,7 @@ def _group_records(
 
     result: list[dict[str, Any]] = []
     for key, group in sorted(grouped.items()):
-        rewards = [record.evaluation.reward for record in group]
+        rewards = [_evaluation(record).reward for record in group]
         retentions = [retention for record in group if (retention := _retention(record)) is not None]
         completed = sum(_record_completed(record) for record in group)
         executions = [record.lifecycle_execution for record in group]
@@ -278,7 +279,7 @@ def _read_artifact_json(
 
 
 def _retention(record: TrialRecord) -> float | None:
-    breakdown = record.evaluation.breakdown
+    breakdown = _evaluation(record).breakdown
     if not isinstance(breakdown, dict):
         return None
     semantic = breakdown.get("semantic_transition")
@@ -295,12 +296,13 @@ def _record_completed(record: TrialRecord) -> bool:
     return bool(
         record.lifecycle_execution is not None
         and record.lifecycle_execution.status == "completed"
+        and record.evaluation is not None
         and record.evaluation.validity.verifier_completed
     )
 
 
 def _operational_metric(record: TrialRecord, name: str) -> int:
-    breakdown = record.evaluation.breakdown
+    breakdown = _evaluation(record).breakdown
     operational = breakdown.get("operational_metrics") if isinstance(breakdown, dict) else None
     value = operational.get(name) if isinstance(operational, dict) else None
     if not isinstance(value, int) or isinstance(value, bool) or value < 0:
@@ -310,3 +312,9 @@ def _operational_metric(record: TrialRecord, name: str) -> int:
 
 def _mean(values: Sequence[float | int]) -> float:
     return sum(values) / len(values) if values else 0.0
+
+
+def _evaluation(record: TrialRecord) -> EvaluationResult:
+    if record.evaluation is None:
+        raise ValueError(f"lifecycle ablation summary requires an evaluation: {record.trial_id}")
+    return record.evaluation

@@ -9,16 +9,13 @@ from aec_bench.evaluation.costs import summarize_costs
 
 
 def mean_reward(records: Sequence[TrialRecord]) -> float:
-    if not records:
-        return 0.0
-    return sum(record.evaluation.reward for record in records) / len(records)
+    rewards = [record.evaluation.reward for record in records if record.evaluation is not None]
+    return sum(rewards) / len(rewards) if rewards else 0.0
 
 
 def perfect_trial_rate(records: Sequence[TrialRecord]) -> float:
-    if not records:
-        return 0.0
-    perfect_count = sum(1 for record in records if record.evaluation.reward >= 1.0)
-    return perfect_count / len(records)
+    rewards = [record.evaluation.reward for record in records if record.evaluation is not None]
+    return sum(reward >= 1.0 for reward in rewards) / len(rewards) if rewards else 0.0
 
 
 def total_cost_usd(records: Sequence[TrialRecord]) -> float | None:
