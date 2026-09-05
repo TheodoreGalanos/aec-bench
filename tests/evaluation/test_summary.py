@@ -18,6 +18,29 @@ from aec_bench.evaluation.pipeline import summarize_evaluation_records
 from tests.support.trial_record_factories import make_trial_record
 
 
+@pytest.mark.parametrize("missing", [None, {"estimated_cost_usd": None}])
+def test_unknown_cost_is_not_a_free_trial(missing: object) -> None:
+    records = [
+        make_trial_record(trial_id="known", cost={"estimated_cost_usd": 0.25}),
+        make_trial_record(trial_id="unknown", cost=missing),
+        make_trial_record(trial_id="free", cost={"estimated_cost_usd": 0.0}),
+    ]
+    summary = summarize_evaluation_records(records)
+    for metrics in [summary, summary["by_adapter"]["tool_loop"], summary["by_experiment"]["experiment-001"]]:
+        assert metrics["total_cost_usd"] is None
+        assert metrics["known_cost_usd"] == 0.25
+        assert metrics["n_costed"] == 2
+        assert metrics["n_uncosted"] == 1
+
+
+def test_empty_cost_total_is_zero_and_complete_cost_total_includes_free_trials() -> None:
+    assert summarize_evaluation_records([])["total_cost_usd"] == 0.0
+    summary = summarize_evaluation_records([make_trial_record(cost={"estimated_cost_usd": 0.0})])
+    assert summary["total_cost_usd"] == 0.0
+    assert summary["n_costed"] == 1
+    assert summary["n_uncosted"] == 0
+
+
 class StubClassifier:
     def classify_trace(self, trace: BehavioralTrace) -> ClassifiedTrace:
         classifications: list[TurnClassification] = []

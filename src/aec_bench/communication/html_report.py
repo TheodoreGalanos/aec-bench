@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+from aec_bench.communication.cost_display import format_summary_cost
 from aec_bench.evaluation.artifact import EvaluationArtifact
 
 
@@ -23,7 +24,7 @@ def _build_overview_section(summary: dict[str, Any], experiment_id: str) -> str:
     """Build the overview statistics section."""
     n_trials = summary.get("n_trials", 0)
     mean_reward = summary.get("mean_reward", 0.0)
-    total_cost = summary.get("total_cost_usd", 0.0)
+    total_cost = format_summary_cost(summary)
     return f"""
     <div class="card">
       <h2>Overview</h2>
@@ -42,7 +43,7 @@ def _build_overview_section(summary: dict[str, Any], experiment_id: str) -> str:
         </div>
         <div class="stat">
           <span class="stat-label">Total Cost</span>
-          <span class="stat-value">${total_cost:.2f}</span>
+          <span class="stat-value">{total_cost}</span>
         </div>
       </div>
     </div>
@@ -57,12 +58,12 @@ def _build_group_table(title: str, group_data: dict[str, dict[str, Any]]) -> str
     for name, metrics in sorted(group_data.items()):
         n = metrics.get("n_trials", 0)
         reward = metrics.get("mean_reward", 0.0)
-        cost = metrics.get("total_cost_usd", 0.0)
+        cost = format_summary_cost(metrics)
         color = _reward_color(reward)
         rows.append(
             f'<tr><td>{name}</td><td class="num">{n}</td>'
             f'<td class="num" style="color:{color}">{reward:.3f}</td>'
-            f'<td class="num">${cost:.2f}</td></tr>'
+            f'<td class="num">{cost}</td></tr>'
         )
     return f"""
     <div class="card">

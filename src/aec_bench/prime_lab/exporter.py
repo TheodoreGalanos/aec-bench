@@ -272,7 +272,7 @@ def _render_pyproject(name: str, version: str, description: str | None) -> str:
         readme = "README.md"
         requires-python = ">=3.10"
         tags = ["aec-bench", "aec", "benchmark"]
-        dependencies = ["datasets>=4.0", "verifiers>=0.1.10"]
+        dependencies = ["datasets>=4.0", "verifiers==0.1.14"]
 
         [build-system]
         requires = ["hatchling"]
@@ -308,6 +308,25 @@ def _render_readme(name: str, records: list[dict[str, Any]]) -> str:
 
         {environment_summary}
 
+        ## Training and evaluation
+
+        The default `split="train"` uses a fixed 80/20 task-instance split and
+        provides separate training and evaluation datasets. Split membership is
+        set by sorted task ID before difficulty filters, shuffling, or limits.
+        A required split with no tasks is an error. Training requires at least
+        two tasks. These splits do not prove separation between task families.
+
+        `split="eval"` provides only the evaluation dataset. `split="all"`
+        evaluates all selected tasks and provides no training dataset; use it
+        for a one-task smoke test. The aliases `validation`, `val`, and `test`
+        select evaluation; `any` and `full` select all tasks.
+
+        Verifier failures raise `verifiers.InfraError` and stop scoring, including
+        group scoring. A failed verifier is not a zero-reward training sample.
+        A completed verifier can return any finite numeric reward in [0, 1].
+        The generated package pins Verifiers because it overrides its reward
+        invocation hook to preserve these errors.
+
         ## Tasks
 
         {task_lines}
@@ -316,7 +335,7 @@ def _render_readme(name: str, records: list[dict[str, Any]]) -> str:
 
         ```bash
         uv pip install -e .
-        uv run vf-eval {name}
+        uv run vf-eval {name} --env-args '{{"split":"all"}}'
         ```
 
         ## Prime Lab
@@ -324,7 +343,7 @@ def _render_readme(name: str, records: list[dict[str, Any]]) -> str:
         ```bash
         prime env install {name} --path prime-rl/environments
         prime env push
-        prime eval run <owner>/{name} -m <model> -n 20 -r 1 --max-tokens 2048
+        prime eval run <owner>/{name} -m <model> -n 20 -r 1 --max-tokens 2048 --env-args '{{"split":"all"}}'
         prime train run configs/lab/{name}.toml
         ```
         """
@@ -341,6 +360,84 @@ def _requires_stateful_workspace(records: list[dict[str, Any]]) -> bool:
     return any(record.get("environment_kind") == PrimeHarnessKind.STATEFUL_WORKSPACE.value for record in records)
 
 
+def _render_scoring_and_split_helpers() -> str:
+    return """def _select_task_splits(
+    split: str,
+    difficulty: str | list[str] | None,
+    num_examples: int | None,
+    seed: int | None,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    normalized = split.strip().lower().replace("_", "-")
+    if normalized not in {"train", "eval", "validation", "val", "test", "all", "any", "full"}:
+        raise ValueError(f"unsupported split: {split}")
+    tasks = sorted(TASKS, key=lambda task: task["task_id"])
+    if normalized in {"all", "any", "full"}:
+        train, evaluation = [], tasks
+    else:
+        if len(tasks) < 2:
+            raise ValueError("train/eval splits require at least two tasks; use split='all' for evaluation only")
+        boundary = max(1, min(len(tasks) - 1, int(len(tasks) * 0.8)))
+        train = tasks[:boundary] if normalized == "train" else []
+        evaluation = tasks[boundary:]
+
+    def select(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        if difficulty is not None:
+            allowed = {difficulty} if isinstance(difficulty, str) else set(difficulty)
+            rows = [task for task in rows if task.get("difficulty") in allowed]
+        if seed is not None:
+            random.Random(seed).shuffle(rows)
+        if num_examples is not None and num_examples >= 0:
+            rows = rows[:num_examples]
+        if not rows:
+            raise ValueError("no tasks remain in a required split after filtering")
+        return rows
+
+    return (select(train) if normalized == "train" else []), select(evaluation)
+
+
+class AecBenchRubric(vf.Rubric):
+    async def _call_individual_reward_func(self, func: Any, state: vf.State) -> float:
+        # Verifiers' default hook turns exceptions into zero rewards. Abort scoring
+        # instead, so a broken verifier cannot create a training penalty.
+        try:
+            return await func(completion=state["completion"], info=state["info"], state=state)
+        except Exception as cause:
+            error = cause if isinstance(cause, vf.InfraError) else vf.InfraError("AEC verifier execution failed")
+            state["error"] = error
+            state["reward"] = None
+            state["metrics"] = {}
+            if error is cause:
+                raise
+            raise error from cause
+
+
+def _score_submission(task_dir: Path, timeout_seconds: int) -> float:
+    reward_path = task_dir.parent / "reward.json"
+    verifier = task_dir / "tests" / "verify.py"
+    try:
+        reward_path.unlink(missing_ok=True)
+        if not verifier.is_file():
+            raise vf.InfraError("AEC verifier is missing")
+        process = subprocess.run(
+            [sys.executable, str(verifier), "--input", str(task_dir / "output.md"), "--output", str(reward_path)],
+            cwd=task_dir,
+            capture_output=True,
+            text=True,
+            timeout=timeout_seconds,
+            check=False,
+        )
+        if process.returncode != 0:
+            raise vf.InfraError(f"AEC verifier exited with status {process.returncode}")
+        payload = json.loads(reward_path.read_text(encoding="utf-8"))
+        reward = payload.get("reward") if isinstance(payload, dict) else None
+        if type(reward) not in (int, float) or not math.isfinite(reward) or not 0 <= reward <= 1:
+            raise vf.InfraError("AEC verifier reward must be a finite number in [0, 1]")
+        return float(reward)
+    except (OSError, ValueError, subprocess.TimeoutExpired) as cause:
+        raise vf.InfraError("AEC verifier failed to produce a valid reward") from cause
+"""
+
+
 def _render_single_turn_environment_py(records: list[dict[str, Any]]) -> str:
     task_json = json.dumps(records, indent=2)
     return f"""# ABOUTME: Prime Lab environment generated from selected aec-bench tasks.
@@ -349,6 +446,7 @@ def _render_single_turn_environment_py(records: list[dict[str, Any]]) -> str:
 from __future__ import annotations
 
 import json
+import math
 import random
 import subprocess
 import sys
@@ -371,48 +469,18 @@ def load_environment(
     harness: str | None = None,
 ) -> vf.Environment:
     del harness
-    tasks = _select_tasks(
+    train_tasks, eval_tasks = _select_task_splits(
         split=split,
         difficulty=difficulty,
         num_examples=num_examples,
         seed=seed,
     )
-    dataset = _dataset_from_tasks(tasks, workspace=False)
-    rubric = vf.Rubric(funcs=[aec_bench_reward])
-    return vf.SingleTurnEnv(dataset=dataset, eval_dataset=dataset, rubric=rubric)
+    dataset = _dataset_from_tasks(train_tasks, workspace=False) if train_tasks else None
+    eval_dataset = _dataset_from_tasks(eval_tasks, workspace=False)
+    return vf.SingleTurnEnv(dataset=dataset, eval_dataset=eval_dataset, rubric=AecBenchRubric(funcs=[aec_bench_reward]))
 
 
-def _select_tasks(
-    split: str,
-    difficulty: str | list[str] | None,
-    num_examples: int | None,
-    seed: int | None,
-) -> list[dict[str, Any]]:
-    selected = list(TASKS)
-    if difficulty is not None:
-        allowed = {{difficulty}} if isinstance(difficulty, str) else set(difficulty)
-        selected = [task for task in selected if task.get("difficulty") in allowed]
-    selected = _split_tasks(selected, split)
-    if seed is not None:
-        rng = random.Random(seed)
-        rng.shuffle(selected)
-    if num_examples is not None and num_examples >= 0:
-        selected = selected[:num_examples]
-    return selected
-
-
-def _split_tasks(tasks: list[dict[str, Any]], split: str) -> list[dict[str, Any]]:
-    normalized = (split or "train").strip().lower().replace("_", "-")
-    if normalized in {{"all", "any", "full"}}:
-        return list(tasks)
-    if len(tasks) < 5:
-        return list(tasks)
-    boundary = max(1, min(len(tasks) - 1, int(len(tasks) * 0.8)))
-    if normalized == "train":
-        return list(tasks[:boundary])
-    if normalized in {{"eval", "validation", "val", "test"}}:
-        return list(tasks[boundary:])
-    raise ValueError(f"unsupported split: {{split}}")
+{_render_scoring_and_split_helpers()}
 
 
 def _dataset_from_tasks(tasks: list[dict[str, Any]], *, workspace: bool) -> Dataset:
@@ -439,7 +507,7 @@ def _dataset_from_tasks(tasks: list[dict[str, Any]], *, workspace: bool) -> Data
 
 
 async def aec_bench_reward(
-    completion: list[dict[str, Any]], info: dict[str, Any] | str
+    completion: list[dict[str, Any]], info: dict[str, Any] | str, state: vf.State | None = None
 ) -> float:
     task_info = json.loads(info) if isinstance(info, str) else info
     response = _completion_text(completion)
@@ -452,33 +520,8 @@ async def aec_bench_reward(
         task_dir = temp_path / "task"
         _copy_resource_tree(task_resource, task_dir)
 
-        output_path = task_dir / "output.md"
-        reward_path = temp_path / "reward.json"
-        output_path.write_text(response, encoding="utf-8")
-
-        verifier = task_dir / "tests" / "verify.py"
-        if not verifier.exists():
-            return 0.0
-
-        process = subprocess.run(
-            [
-                sys.executable,
-                str(verifier),
-                "--input",
-                str(output_path),
-                "--output",
-                str(reward_path),
-            ],
-            cwd=task_dir,
-            capture_output=True,
-            text=True,
-            timeout=timeout_seconds,
-            check=False,
-        )
-        if process.returncode != 0 or not reward_path.exists():
-            return 0.0
-        payload = json.loads(reward_path.read_text(encoding="utf-8"))
-        return float(payload.get("reward", 0.0))
+        (task_dir / "output.md").write_text(response, encoding="utf-8")
+        return _score_submission(task_dir, timeout_seconds)
 
 
 def _completion_text(completion: list[dict[str, Any]]) -> str:
@@ -513,6 +556,7 @@ def _render_stateful_environment_py(records: list[dict[str, Any]]) -> str:
 from __future__ import annotations
 
 import json
+import math
 import random
 import shlex
 import shutil
@@ -741,53 +785,24 @@ def load_environment(
     harness: str | None = None,
 ) -> vf.Environment:
     del harness
-    tasks = _select_tasks(
+    train_tasks, eval_tasks = _select_task_splits(
         split=split,
         difficulty=difficulty,
         num_examples=num_examples,
         seed=seed,
     )
-    dataset = _dataset_from_tasks(tasks, workspace=True)
-    rubric = vf.Rubric(funcs=[aec_bench_reward])
+    dataset = _dataset_from_tasks(train_tasks, workspace=True) if train_tasks else None
+    eval_dataset = _dataset_from_tasks(eval_tasks, workspace=True)
+    rubric = AecBenchRubric(funcs=[aec_bench_reward])
     return AecBenchStatefulWorkspaceEnv(
-        tasks=tasks,
+        tasks=train_tasks + eval_tasks,
         dataset=dataset,
-        eval_dataset=dataset,
+        eval_dataset=eval_dataset,
         rubric=rubric,
     )
 
 
-def _select_tasks(
-    split: str,
-    difficulty: str | list[str] | None,
-    num_examples: int | None,
-    seed: int | None,
-) -> list[dict[str, Any]]:
-    selected = list(TASKS)
-    if difficulty is not None:
-        allowed = {{difficulty}} if isinstance(difficulty, str) else set(difficulty)
-        selected = [task for task in selected if task.get("difficulty") in allowed]
-    selected = _split_tasks(selected, split)
-    if seed is not None:
-        rng = random.Random(seed)
-        rng.shuffle(selected)
-    if num_examples is not None and num_examples >= 0:
-        selected = selected[:num_examples]
-    return selected
-
-
-def _split_tasks(tasks: list[dict[str, Any]], split: str) -> list[dict[str, Any]]:
-    normalized = (split or "train").strip().lower().replace("_", "-")
-    if normalized in {{"all", "any", "full"}}:
-        return list(tasks)
-    if len(tasks) < 5:
-        return list(tasks)
-    boundary = max(1, min(len(tasks) - 1, int(len(tasks) * 0.8)))
-    if normalized == "train":
-        return list(tasks[:boundary])
-    if normalized in {{"eval", "validation", "val", "test"}}:
-        return list(tasks[boundary:])
-    raise ValueError(f"unsupported split: {{split}}")
+{_render_scoring_and_split_helpers()}
 
 
 def _dataset_from_tasks(tasks: list[dict[str, Any]], *, workspace: bool) -> Dataset:
@@ -879,32 +894,6 @@ async def aec_bench_reward(
         _copy_resource_tree(task_resource, task_dir)
         (task_dir / "output.md").write_text(response, encoding="utf-8")
         return _score_submission(task_dir, timeout_seconds)
-
-
-def _score_submission(task_dir: Path, timeout_seconds: int) -> float:
-    reward_path = task_dir.parent / "reward.json"
-    verifier = task_dir / "tests" / "verify.py"
-    if not verifier.exists():
-        return 0.0
-    process = subprocess.run(
-        [
-            sys.executable,
-            str(verifier),
-            "--input",
-            str(task_dir / "output.md"),
-            "--output",
-            str(reward_path),
-        ],
-        cwd=task_dir,
-        capture_output=True,
-        text=True,
-        timeout=timeout_seconds,
-        check=False,
-    )
-    if process.returncode != 0 or not reward_path.exists():
-        return 0.0
-    payload = json.loads(reward_path.read_text(encoding="utf-8"))
-    return float(payload.get("reward", 0.0))
 
 
 def _completion_text(completion: list[dict[str, Any]]) -> str:

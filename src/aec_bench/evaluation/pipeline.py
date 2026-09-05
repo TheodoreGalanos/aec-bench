@@ -11,6 +11,7 @@ from typing import Any
 from aec_bench.contracts.evaluation_result import ConfidenceMetadata
 from aec_bench.contracts.trial_record import TrialRecord
 from aec_bench.evaluation.aggregation import BehavioralTraceClassifier, summarize_behavioral_records
+from aec_bench.evaluation.costs import summarize_costs
 from aec_bench.evaluation.stats import mean
 from aec_bench.evaluation.trace_summary import summarize_trial_traces
 
@@ -44,14 +45,13 @@ def summarize_evaluation_records(
     n_trials = len(records)
     evaluated_records = [record for record in records if record.evaluation is not None]
     rewards = [record.evaluation.reward for record in evaluated_records if record.evaluation is not None]
-    total_cost = sum(record.cost.estimated_cost_usd or 0.0 for record in records if record.cost is not None)
 
     summary: dict[str, Any] = {
         "n_trials": n_trials,
         "n_evaluated": len(evaluated_records),
         "n_unevaluated": n_trials - len(evaluated_records),
         "mean_reward": mean(rewards),
-        "total_cost_usd": total_cost,
+        **summarize_costs(records),
         "by_adapter": _group_summary(records, key_fn=lambda record: record.agent.adapter),
         "by_task_prefix": _group_summary(
             records,
@@ -117,11 +117,11 @@ def _group_summary(
     records: list[TrialRecord],
     *,
     key_fn: Callable[[TrialRecord], str],
-) -> dict[str, dict[str, float | int]]:
+) -> dict[str, dict[str, object]]:
     grouped: dict[str, list[TrialRecord]] = defaultdict(list)
     for record in records:
         grouped[str(key_fn(record))].append(record)
-    result: dict[str, dict[str, float | int]] = {}
+    result: dict[str, dict[str, object]] = {}
     for key, group_records in sorted(grouped.items()):
         rewards = [record.evaluation.reward for record in group_records if record.evaluation is not None]
         n = len(rewards)
@@ -133,8 +133,6 @@ def _group_summary(
             "mean_reward": mean(rewards),
             "perfect_rate": sum(1 for r in rewards if r >= 1.0) / n if n else 0.0,
             "zero_rate": sum(1 for r in rewards if r <= 0.0) / n if n else 0.0,
-            "total_cost_usd": sum(
-                record.cost.estimated_cost_usd or 0.0 for record in group_records if record.cost is not None
-            ),
+            **summarize_costs(group_records),
         }
     return result

@@ -10,6 +10,7 @@ import typer
 from aec_bench.cli.commands.config import resolve_path
 from aec_bench.cli.optional_dependencies import require_optional_extra
 from aec_bench.cli.output import console, emit, print_success
+from aec_bench.communication.cost_display import format_summary_cost
 
 app = typer.Typer(help="Generate reports and analysis from ledger data.")
 
@@ -50,7 +51,7 @@ def summary(
     def _render(d: dict[str, Any]) -> None:
         console.print(f"[bold]Experiment Summary[/bold] ({d['n_trials']} trials)")
         console.print(f"  Mean reward: [green]{d['mean_reward']:.3f}[/green]")
-        console.print(f"  Total cost:  ${d.get('total_cost_usd', 0):.2f}")
+        console.print(f"  Total cost:  {format_summary_cost(d)}")
 
         by_adapter = d.get("by_adapter", {})
         if by_adapter:
@@ -135,7 +136,7 @@ def leaderboard(
                 str(entry.get("n_trials", 0)),
                 f"{entry.get('mean_reward', 0):.3f}",
                 f"{entry.get('perfect_trial_rate', 0):.1%}",
-                f"${entry.get('total_cost_usd', 0):.2f}",
+                format_summary_cost(entry),
             )
 
         console.print(table)
