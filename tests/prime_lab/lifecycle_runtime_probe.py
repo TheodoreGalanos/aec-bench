@@ -28,7 +28,7 @@ def main() -> None:
         path = Path(mutation_path)
         path.write_text(path.read_text(encoding="utf-8") + "\nmutated\n", encoding="utf-8")
 
-    dataset_row = dict(environment.dataset[0])
+    dataset_row = dict(environment.get_eval_dataset()[0])
     state = vf.State(input=dataset_row)
     state["task"] = dataset_row
     state["trajectory_id"] = request["trajectory_id"]

@@ -87,6 +87,12 @@ for the same claim. Dirty source needs reconstructive bytes, such as a complete
 snapshot or a patch with its base revision. An opaque dirty-tree digest is not
 enough to reconstruct the source.
 
+Prime lifecycle exports identify the portable adapter distribution, not a
+checkout. They retain one reconstructive source snapshot with exact runtime
+dependency versions, including when exported from a checkout. This lets an
+installed wheel verify the same source bytes without repository metadata. The
+export does not add a Git revision or a second inventory for the same claim.
+
 Current DeepSeek evidence uses `ProviderAdapterIdentity.source_revision` or a
 reconstructive `source_snapshot`. The retained v2 reader keeps
 `aec_bench_revision` for its protected wire shape.

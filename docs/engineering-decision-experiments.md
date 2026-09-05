@@ -144,3 +144,72 @@ evidence, late supported answers, handover omissions and contradictions, and exa
 pump replay. Do not turn deterministic control success into a model-performance,
 real-project, or RL-readiness claim. Weight training and its hosted integration remain
 separate work.
+
+## Hydraulic training qualification
+
+Run the local Prime qualification with the `prime` extra installed. From an
+installed environment, use a working directory outside the repository root:
+
+```bash
+python -m aec_bench.experimentation.qualification.hydraulic_training \
+  --output /tmp/aec-hydraulic-training
+```
+
+The repository's `agents/` directory can shadow the `openai-agents` dependency
+when Python starts from the repository root. The output directory must be empty.
+Use `--definition` to supply a `HydraulicExperiment` JSON file with non-empty
+train, development, and acceptance partitions. The default uses the existing
+synthetic hydraulic lineages and four revision conditions.
+
+The qualification assigns complete project lineages before materializing their
+revision siblings. It generates acceptance fixtures separately and excludes them
+from the Prime package. These are public synthetic fixtures assigned to an
+acceptance partition; they are not an independently sealed benchmark holdout.
+
+The output contains:
+
+- `definition.json`: generation conditions and partition membership.
+- `reference_trials/`: ordinary planned trials and ledger evidence from the
+  existing deterministic hydraulic experiment.
+- `environments/aec_hydraulic_training/`: a generated local Verifiers package
+  containing training and development groups.
+- `prime_controls/`: transcripts and task-verifier results from replay through
+  the actual Prime lifecycle tool interface.
+- `training_demonstrations.jsonl`: only successful training-group controls,
+  represented as messages and OpenAI-format tool definitions. Environment
+  observations are tool messages. Hidden verifier results and group metadata
+  are not model inputs. These are scripted demonstrations, not model samples.
+- `training.toml`: a one-step hosted handoff using the existing small-model
+  default. The environment ID resolves only after that package is installed or
+  published through an approved deployment procedure.
+- `qualification.json`: local checks, installed versions, package requirements,
+  and separate hosted-run and weight-update status.
+
+The command makes no provider calls. It checks terminal reward agreement,
+zero reward for incomplete work, and isolation between rollouts. A local pass
+establishes the tested tool and reward boundary. It does not establish a model
+weight update, SFT token-mask correctness, hosted dependency compatibility,
+physical-distribution coverage, or generalization. The generator still uses
+narrow synthetic parameter ranges and the existing calculation structure.
+
+The exported package pins the installed Prime dependency closure. Its retained
+source archive uses package-relative paths and includes those exact versions.
+The loader checks both source bytes and installed versions before accepting a
+rollout. Install the bound AEC-Bench wheel and generated environment together;
+a package version alone does not establish source equivalence.
+
+Before running training, verify the hosted Python and Verifiers versions against
+the generated package, install the bound AEC-Bench source, and confirm the model
+is available. For the SFT-to-RL comparison, verify that the RL run can start from
+the exact SFT checkpoint. The current open-source Prime trainer and the local
+AEC-Bench lifecycle package require different Python and Verifiers versions;
+these are separate runtime checks, not resolved by generating TOML.
+
+`aec-bench prime train-config --checkpoint-id` records an explicit Prime
+checkpoint. The generated configuration targets the pinned Prime CLI. It uses
+`eval.eval_base_model` and explicit `[[eval.env]]` entries with `split="eval"`,
+so the CLI includes evaluation in its API request. The command rejects the
+removed difficulty-buffer options. `aec-bench prime train` rejects incompatible
+fields and evaluation-only training splits before invoking Prime.
+Prime retains ownership of complete configuration and model validation. See
+[Prime's configuration reference](https://docs.primeintellect.ai/hosted-training/advanced-configs).

@@ -11,7 +11,7 @@ import tempfile
 import textwrap
 import tomllib
 import warnings
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from importlib import metadata as importlib_metadata
 from pathlib import Path
 from typing import Any, Literal
@@ -28,10 +28,8 @@ from aec_bench.lifecycles.runtime.lifecycle import (
     load_evidence_lifecycle_spec,
 )
 from aec_bench.prime_lab.exporter import DEFAULT_PRIME_ENVIRONMENTS_DIR, normalise_environment_id
-from aec_bench.providers.source_identity import (
-    resolve_provider_adapter_identity,
-    write_deterministic_source_snapshot,
-)
+from aec_bench.prime_lab.lifecycle_source import lifecycle_runtime_requirements, snapshot_lifecycle_source
+from aec_bench.providers.source_identity import write_deterministic_source_snapshot
 
 
 class LegacyPrimeLifecycleSourceProvenance(StrictModel):
@@ -95,6 +93,13 @@ class PrimeLifecycleProtocolVersions(StrictModel):
     lifecycle_operation: Literal["1"] = "1"
 
 
+class LifecycleDatasetAssignment(StrictModel):
+    """Caller-owned lineage membership for local training qualification."""
+
+    group_id: NonEmptyStr
+    split: Literal["train", "eval"]
+
+
 class PrimeLifecyclePackageRecord(StrictModel):
     package: ArtifactRef
     template_id: NonEmptyStr
@@ -103,6 +108,8 @@ class PrimeLifecyclePackageRecord(StrictModel):
     lifecycle_id: NonEmptyStr
     checkpoint_ids: tuple[NonEmptyStr, ...] = Field(min_length=1)
     initial_instruction: NonEmptyStr
+
+    dataset_assignment: LifecycleDatasetAssignment | None = None
 
     _package_dir: Path | None = PrivateAttr(default=None)
 
@@ -142,7 +149,25 @@ class PrimeLifecycleExportManifest(StrictModel):
 
     @model_validator(mode="after")
     def validate_packages(self) -> PrimeLifecycleExportManifest:
-        identities = [(record.lifecycle_id, record.variant_id) for record in self.packages]
+        identities = [
+            (
+                record.lifecycle_id,
+                record.variant_id,
+                record.dataset_assignment.group_id if record.dataset_assignment else None,
+            )
+            for record in self.packages
+        ]
+        assignments = [record.dataset_assignment for record in self.packages]
+        if any(assignments):
+            if not all(assignments):
+                raise ValueError("every lifecycle package requires a dataset assignment")
+            groups: dict[str, str] = {}
+            for assignment in assignments:
+                assert assignment is not None
+                if groups.setdefault(assignment.group_id, assignment.split) != assignment.split:
+                    raise ValueError("a lifecycle group cannot cross training and evaluation splits")
+            if set(groups.values()) != {"train", "eval"}:
+                raise ValueError("training qualification requires non-empty train and eval groups")
         if len(set(identities)) != len(identities):
             raise ValueError("duplicate lifecycle package identity")
         artifact_ids = [record.package.artifact_id for record in self.packages]
@@ -173,6 +198,7 @@ class PrimeLifecycleExportConfig:
     description: str | None = None
     max_turns: int = 60
     aec_bench_root: Path | None = None
+    dataset_assignments: dict[Path, LifecycleDatasetAssignment] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -203,8 +229,14 @@ def export_prime_lifecycle_environment(config: PrimeLifecycleExportConfig) -> Pr
             key=lambda record: (record.template_id, record.lifecycle_id, record.variant_id, record.package_dir),
         )
     )
+    assignments = {Path(path).resolve(): assignment for path, assignment in config.dataset_assignments.items()}
+    if assignments and set(assignments) != {record.package_dir for record in records}:
+        raise ValueError("dataset assignments must match the selected lifecycle packages exactly")
     duplicate_paths = [str(record.package_dir) for record in records]
-    duplicate_identities = [(record.lifecycle_id, record.variant_id) for record in records]
+    duplicate_identities = [
+        (record.lifecycle_id, record.variant_id, assignments[record.package_dir].group_id if assignments else None)
+        for record in records
+    ]
     if len(set(duplicate_paths)) != len(duplicate_paths) or len(set(duplicate_identities)) != len(duplicate_identities):
         raise ValueError("duplicate lifecycle package reference")
 
@@ -212,28 +244,30 @@ def export_prime_lifecycle_environment(config: PrimeLifecycleExportConfig) -> Pr
     package_dir = output_dir / environment_id
     _assert_destination_is_safe(package_dir, environment_id, records)
 
-    source_root = _validated_source_project_root(
-        Path(config.aec_bench_root).resolve()
-        if config.aec_bench_root is not None
-        else Path(__file__).resolve().parents[3]
-    )
-    source_paths = _prime_source_paths(source_root)
+    if config.aec_bench_root is None:
+        package_root = Path(__file__).resolve().parents[1]
+    else:
+        source_root = _validated_source_project_root(Path(config.aec_bench_root))
+        package_root = source_root / "src" / "aec_bench"
+        if not package_root.is_dir():
+            package_root = source_root / "aec_bench"
+    requirements = lifecycle_runtime_requirements()
 
     output_dir.mkdir(parents=True, exist_ok=True)
     staging = Path(tempfile.mkdtemp(prefix=f".{environment_id}.tmp-", dir=output_dir))
     try:
         module_dir = staging / environment_id
         module_dir.mkdir(parents=True)
-        source = resolve_provider_adapter_identity(
-            adapter_id="aec-bench/prime-lifecycle",
+        source = snapshot_lifecycle_source(
+            package_root,
+            module_dir / "provider-source.tar",
             package_version=_distribution_version("aec-bench"),
-            source_root=source_root,
-            source_paths=source_paths,
-            snapshot_path=module_dir / "provider-source.tar",
-            snapshot_artifact_id="provider-source.tar",
+            requirements=requirements,
         )
         packaged_records = tuple(
-            _archive_lifecycle_package(record, module_dir=module_dir, index=index)
+            _archive_lifecycle_package(record, module_dir=module_dir, index=index).model_copy(
+                update={"dataset_assignment": assignments.get(record.package_dir)}
+            )
             for index, record in enumerate(records)
         )
         manifest = PrimeLifecycleExportManifest(
@@ -253,17 +287,16 @@ def export_prime_lifecycle_environment(config: PrimeLifecycleExportConfig) -> Pr
                 version=config.version,
                 description=config.description,
                 aec_bench_version=source.package_version,
+                requirements=requirements,
             ),
         )
         _write_text(staging / "README.md", _render_local_readme(environment_id, packaged_records))
         recheck_path = staging / ".source-recheck.tar"
-        actual_source = resolve_provider_adapter_identity(
-            adapter_id="aec-bench/prime-lifecycle",
+        actual_source = snapshot_lifecycle_source(
+            package_root,
+            recheck_path,
             package_version=source.package_version,
-            source_root=source_root,
-            source_paths=source_paths,
-            snapshot_path=recheck_path,
-            snapshot_artifact_id="provider-source.tar",
+            requirements=lifecycle_runtime_requirements(),
         )
         recheck_path.unlink(missing_ok=True)
         if actual_source != source:
@@ -444,12 +477,12 @@ def _render_local_pyproject(
     version: str,
     description: str | None,
     aec_bench_version: str,
+    requirements: dict[str, str],
 ) -> str:
     package_description = description or "Local persistent AEC evidence-lifecycle environment"
     dependencies = [
-        "datasets>=4.0",
-        "verifiers>=0.1.14,<0.2",
         f"aec-bench[prime]=={aec_bench_version}",
+        *(f"{name}=={version}" for name, version in requirements.items()),
     ]
     dependency_lines = ",\n".join(f"    {json.dumps(item)}" for item in dependencies)
     return textwrap.dedent(
@@ -499,14 +532,14 @@ def _render_local_readme(
 
         ## Local loading
 
-        Install the exact `aec-bench` version declared in `pyproject.toml` from its release artifact or
-        source distribution. Then install this generated package without replacing that resolved runtime.
+        Install the bound `aec-bench` wheel and this generated package together. The generated package
+        pins the resolved runtime dependencies. Loading verifies those versions and the adapter source
+        bytes, so another build with the same package version is not sufficient.
         Run the import from outside the aec-bench repository root so the repository `agents/` directory
         cannot shadow the installed `openai-agents` package used by Verifiers.
 
         ```bash
-        uv pip install /absolute/path/to/aec_bench-0.1.0-py3-none-any.whl
-        uv pip install --no-deps /absolute/path/to/generated-package
+        uv pip install /absolute/path/to/aec_bench-0.1.0-py3-none-any.whl /absolute/path/to/generated-package
         cd /tmp
         python \\
           -c "from {environment_id} import load_environment; print(type(load_environment()).__name__)"
