@@ -15,10 +15,10 @@ from aec_bench.adapters.lambda_rlm.config import (
     ReviewConfig,
 )
 from aec_bench.adapters.rlm.client import ReplayRlmClient, RlmCompletionResponse
-from aec_bench.adapters.rlm.template import ReportTemplate
-from aec_bench.adapters.rlm.template_parser import parse_report_template
 from aec_bench.contracts.agent_output import AgentOutputStatus
 from aec_bench.contracts.synthesis import SynthesisConfig, SynthesisOutput
+from aec_bench.templates.report.parser import parse_report_template
+from aec_bench.templates.report.session import ReportSession
 
 _SINGLE_SECTION_TEMPLATE = """
 [[sections]]
@@ -80,7 +80,7 @@ def test_synthesis_dispatch_generates_k_candidates_and_invokes_synthesiser(
         adapter_name="lambda-rlm",
         model_name="test-model",
         client=client,
-        template=ReportTemplate(template),
+        template=ReportSession(template),
         source_docs=source_docs,
         config=config,
         workspace=str(workspace),
@@ -100,7 +100,11 @@ def test_synthesis_dispatch_generates_k_candidates_and_invokes_synthesiser(
         "aec_bench.adapters.lambda_rlm.synthesis.synthesise",
         return_value=fake_output,
     ):
-        result = adapter.execute(AdapterRequest(instruction="Write methodology."))
+        result = adapter.execute(
+            AdapterRequest(
+                output_path=str(workspace / "output.md"), output_format="markdown", instruction="Write methodology."
+            )
+        )
 
     assert result.agent_output.status == AgentOutputStatus.COMPLETED
     # Final section content is the synthesiser's output, not any single candidate.
@@ -108,7 +112,7 @@ def test_synthesis_dispatch_generates_k_candidates_and_invokes_synthesiser(
     assert "Synthesised: staged and iterative rollout." in output_file.read_text()
 
 
-def test_synthesis_dispatch_respects_apply_to_sections(tmp_path: Path) -> None:
+def test_synthesis_rejects_unknown_section_allowlist(tmp_path: Path) -> None:
     """When apply_to_sections is set and current section isn't in it,
     executor must use the single-call path instead of K-candidate synthesis."""
     workspace = tmp_path / "workspace"
@@ -138,22 +142,21 @@ def test_synthesis_dispatch_respects_apply_to_sections(tmp_path: Path) -> None:
         adapter_name="lambda-rlm",
         model_name="test-model",
         client=client,
-        template=ReportTemplate(template),
+        template=ReportSession(template),
         source_docs=source_docs,
         config=config,
         workspace=str(workspace),
     )
 
     # Patch synthesise — if it's called, test fails.
-    with patch(
-        "aec_bench.adapters.lambda_rlm.synthesis.synthesise",
-        side_effect=AssertionError("synthesis should not be invoked"),
-    ):
-        result = adapter.execute(AdapterRequest(instruction="Write methodology."))
+    import pytest
 
-    assert result.agent_output.status == AgentOutputStatus.COMPLETED
-    output_file = Path(result.agent_output.output_path)
-    assert "Single-call output." in output_file.read_text()
+    with pytest.raises(ValueError, match="Unknown fill_section.apply_to_sections"):
+        adapter.execute(
+            AdapterRequest(
+                instruction="Write methodology.", output_path=str(workspace / "output.md"), output_format="markdown"
+            )
+        )
 
 
 def test_synthesis_falls_back_when_synthesiser_returns_fallback(
@@ -189,7 +192,7 @@ def test_synthesis_falls_back_when_synthesiser_returns_fallback(
         adapter_name="lambda-rlm",
         model_name="test-model",
         client=client,
-        template=ReportTemplate(template),
+        template=ReportSession(template),
         source_docs=source_docs,
         config=config,
         workspace=str(workspace),
@@ -209,7 +212,11 @@ def test_synthesis_falls_back_when_synthesiser_returns_fallback(
         "aec_bench.adapters.lambda_rlm.synthesis.synthesise",
         return_value=failed,
     ):
-        result = adapter.execute(AdapterRequest(instruction="Write methodology."))
+        result = adapter.execute(
+            AdapterRequest(
+                output_path=str(workspace / "output.md"), output_format="markdown", instruction="Write methodology."
+            )
+        )
 
     assert result.agent_output.status == AgentOutputStatus.COMPLETED
     output_file = Path(result.agent_output.output_path)
@@ -273,7 +280,7 @@ def test_synthesis_uses_rubric_criteria_when_rubric_provided(tmp_path: Path) -> 
         adapter_name="lambda-rlm",
         model_name="test-model",
         client=client,
-        template=ReportTemplate(template),
+        template=ReportSession(template),
         source_docs=source_docs,
         config=config,
         workspace=str(workspace),
@@ -297,7 +304,11 @@ def test_synthesis_uses_rubric_criteria_when_rubric_provided(tmp_path: Path) -> 
         "aec_bench.adapters.lambda_rlm.synthesis.synthesise",
         side_effect=_capture,
     ):
-        adapter.execute(AdapterRequest(instruction="Write methodology."))
+        adapter.execute(
+            AdapterRequest(
+                output_path=str(workspace / "output.md"), output_format="markdown", instruction="Write methodology."
+            )
+        )
 
     criteria = captured["input"].criteria
     assert criteria.rubric_criteria == (
@@ -328,7 +339,7 @@ def test_k_candidate_generation_runs_in_parallel(tmp_path: Path) -> None:
             self._lock = threading.Lock()
             self._extraction = extraction_response
 
-        def generate(self, *, model, messages, system_prompt, temperature=None):  # noqa: ARG002
+        def generate(self, *, model, messages, system_prompt, temperature=None, max_output_tokens=None):  # noqa: ARG002
             with self._lock:
                 i = self._counter
                 self._counter += 1
@@ -355,7 +366,7 @@ def test_k_candidate_generation_runs_in_parallel(tmp_path: Path) -> None:
         adapter_name="lambda-rlm",
         model_name="test-model",
         client=client,
-        template=ReportTemplate(template),
+        template=ReportSession(template),
         source_docs={"brief:Scope": "s"},
         config=config,
         workspace=str(workspace),
@@ -374,7 +385,11 @@ def test_k_candidate_generation_runs_in_parallel(tmp_path: Path) -> None:
         return_value=fake_output,
     ):
         t0 = time.monotonic()
-        result = adapter.execute(AdapterRequest(instruction="Write methodology."))
+        result = adapter.execute(
+            AdapterRequest(
+                output_path=str(workspace / "output.md"), output_format="markdown", instruction="Write methodology."
+            )
+        )
         elapsed = time.monotonic() - t0
 
     assert result.agent_output.status == AgentOutputStatus.COMPLETED
@@ -409,7 +424,7 @@ def test_synthesis_with_no_rubric_keeps_backward_compat(tmp_path: Path) -> None:
         adapter_name="lambda-rlm",
         model_name="test-model",
         client=client,
-        template=ReportTemplate(template),
+        template=ReportSession(template),
         source_docs={"brief:Scope": "s"},
         config=config,
         workspace=str(workspace),
@@ -433,7 +448,11 @@ def test_synthesis_with_no_rubric_keeps_backward_compat(tmp_path: Path) -> None:
         "aec_bench.adapters.lambda_rlm.synthesis.synthesise",
         side_effect=_capture,
     ):
-        adapter.execute(AdapterRequest(instruction="Write methodology."))
+        adapter.execute(
+            AdapterRequest(
+                output_path=str(workspace / "output.md"), output_format="markdown", instruction="Write methodology."
+            )
+        )
 
     criteria = captured["input"].criteria
     assert criteria.rubric_criteria == ()

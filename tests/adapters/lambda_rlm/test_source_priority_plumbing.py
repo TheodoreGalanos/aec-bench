@@ -13,16 +13,16 @@ from aec_bench.adapters.lambda_rlm.state import (
     SectionPlan,
 )
 from aec_bench.adapters.rlm.client import ReplayRlmClient, RlmCompletionResponse
-from aec_bench.adapters.rlm.template import ReportTemplate
 from aec_bench.contracts.repl import DependencyTreeSchema, OutputField, TreeSection
+from aec_bench.templates.report.session import ReportSession
 
 _EXTRACT_PATH = "aec_bench.adapters.lambda_rlm.executor.build_extraction_prompt"
 _GENERATE_PATH = "aec_bench.adapters.lambda_rlm.executor.build_generation_prompt"
 _REVIEW_PATH = "aec_bench.adapters.lambda_rlm.executor.run_review"
 
 
-def _template_with_priority() -> ReportTemplate:
-    return ReportTemplate(
+def _template_with_priority() -> ReportSession:
+    return ReportSession(
         DependencyTreeSchema(
             sections=(
                 TreeSection(
@@ -158,7 +158,7 @@ def test_executor_passes_empty_priority_when_unconfigured():
         captured["source_priority"] = kwargs.get("source_priority")
         return "gen"
 
-    template = ReportTemplate(
+    template = ReportSession(
         DependencyTreeSchema(
             sections=(
                 TreeSection(

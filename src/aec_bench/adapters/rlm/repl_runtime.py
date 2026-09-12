@@ -9,12 +9,13 @@ import re
 import threading
 import tomllib
 from collections.abc import Callable
+from dataclasses import replace
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 from aec_bench.adapters.advisor_usage import AdvisorUsageAccumulator
 from aec_bench.adapters.base import initialize_transcript
-from aec_bench.adapters.rlm.client import RlmMessage, ToolCapableRlmClient
+from aec_bench.adapters.rlm.client import AuxiliaryRlmClient, RlmMessage, ToolCapableRlmClient
 from aec_bench.adapters.rlm.context_filter import ContextFilter
 from aec_bench.adapters.rlm.engine import ReplEnvironment
 from aec_bench.adapters.rlm.errors import ErrorTracker
@@ -40,7 +41,6 @@ from aec_bench.adapters.rlm.scaffolding import ScaffoldingState
 from aec_bench.adapters.rlm.scratchpad import Scratchpad
 from aec_bench.adapters.rlm.subcall_log import SubcallLog
 from aec_bench.adapters.rlm.subcall_registry import build_subcall_functions
-from aec_bench.adapters.rlm.template import ReportTemplate
 from aec_bench.adapters.rlm.tokens import TokenTracker
 from aec_bench.contracts.adapter_execution import TranscriptEntry
 from aec_bench.contracts.advisor import AdvisorRequest, AdvisorResponse
@@ -50,7 +50,7 @@ from aec_bench.contracts.constitution import (
     ProgressObligationParams,
     StatePersistenceParams,
 )
-from aec_bench.contracts.pricing import estimate_cost_usd
+from aec_bench.templates.report.session import ReportSession
 
 if TYPE_CHECKING:
     from aec_bench.adapters.advisor import AdvisorResult
@@ -102,16 +102,51 @@ def prepare_execution_state(
     resolved: ResolvedRlmRequest,
 ) -> RlmExecutionState:
     """Prepare all local state before the first provider effect."""
+    if runtime.template is not None:
+        from aec_bench.templates.report.output import REPORT_OUTPUT_FORMATS
+        from aec_bench.templates.report.sources import contained_path
+
+        runtime = replace(runtime, template=runtime.template.fresh())
+        if runtime.execution.scaffolding and resolved.request.output_format not in REPORT_OUTPUT_FORMATS:
+            raise ValueError(f"Unsupported report output format: {resolved.request.output_format}")
+        if runtime.execution.scaffolding and runtime.workspace_path:
+            contained_path(Path(runtime.workspace_path), resolved.request.output_path)
+    from aec_bench.adapters.rlm.config import validate_execution
+
+    validate_execution(runtime.execution)
     repl = ReplEnvironment()
     output = OutputCompletionState.from_request(resolved.request)
     guardrails = _build_guardrails(runtime, resolved)
     token_tracker = TokenTracker(context_limit=resolved.context_limit)
+    policy = "\n\n".join(
+        dict.fromkeys(p for p in (resolved.request.system_prompt, runtime.external_system_prompt) if p)
+    )
+    lock = threading.Lock()
+
+    def auxiliary(client: Any, category: Literal["subcall", "compaction", "advisor"]) -> AuxiliaryRlmClient:
+        return AuxiliaryRlmClient(
+            client or runtime.client,
+            guardrails=guardrails,
+            instruction=resolved.request.instruction,
+            system_prompt=policy,
+            token_tracker=token_tracker,
+            category=category,
+            lock=lock,
+        )
+
+    runtime = replace(
+        runtime,
+        external_system_prompt=policy,
+        subcall_client=auxiliary(runtime.subcall_client, "subcall"),
+        compaction_client=auxiliary(runtime.compaction_client, "compaction"),
+        advisor_client=auxiliary(runtime.advisor_client, "advisor") if runtime.advisor_config else None,
+    )
     scaffolding = build_scaffolding_state(runtime)
     context_filter = build_context_filter(runtime)
     transcript = initialize_transcript(resolved.request)
     enabled_subcalls = enabled_subcall_names(runtime.subcall_configs)
     scratchpad_enabled = runtime.scratchpad_path is not None
-    template_enabled = runtime.template is not None
+    template_enabled = runtime.template is not None and runtime.execution.scaffolding
     advisor_enabled = _advisor_enabled(runtime)
     advisor_usage = AdvisorUsageAccumulator() if advisor_enabled else None
     system_prompt = (
@@ -142,11 +177,15 @@ def prepare_execution_state(
         advisor_usage=advisor_usage,
     )
     if runtime.workspace_path and runtime.execution.scaffolding:
+        protected = dict(scaffolds)
         load_repl_commands(
             repl,
             workspace_path=runtime.workspace_path,
             template=runtime.template,
         )
+        collisions = [name for name, value in protected.items() if repl.get_variable(name) is not value]
+        if collisions:
+            raise ValueError(f"Task commands overwrite built-in commands: {', '.join(collisions)}")
     if runtime.trajectory is not None:
         runtime.trajectory.system(system_prompt)
         runtime.trajectory.user(resolved.request.instruction)
@@ -230,6 +269,39 @@ def _inject_repl_surface(
         token_tracker=token_tracker,
     )
     _inject_parallel_and_template(repl, scaffolds, runtime)
+    if runtime.template is not None and runtime.execution.scaffolding:
+        from aec_bench.adapters.rlm.report_commands import report_commands
+
+        template = runtime.template
+        for name, command in report_commands(
+            template,
+            output_path=resolved.request.output_path,
+            output_format=resolved.request.output_format,
+            workspace=runtime.workspace_path,
+        ).items():
+            _inject_protected(repl, scaffolds, name, command)
+        original_commit = repl.get_variable("COMMIT_OUTPUT")
+        if original_commit is not None:
+
+            def report_commit() -> str:
+                from aec_bench.templates.report.output import report_artifact_matches
+
+                if not report_artifact_matches(
+                    template,
+                    resolved.request.output_path,
+                    resolved.request.output_format,
+                    workspace=runtime.workspace_path,
+                ):
+                    return (
+                        "COMMIT_OUTPUT rejected: call SUBMIT() after the final accepted fill; "
+                        "artifact does not match report state"
+                    )
+                submission = template.submit()
+                if not submission.complete:
+                    return f"COMMIT_OUTPUT rejected: report incomplete; gaps={submission.gaps}"
+                return str(original_commit())
+
+            _inject_protected(repl, scaffolds, "COMMIT_OUTPUT", report_commit)
     _inject_grep(repl, scaffolds)
     _inject_advisor(
         repl=repl,
@@ -261,7 +333,7 @@ def _inject_core_commands(
         enabled_subcalls=enabled_subcalls,
         output_commit_enabled=output.commit_enabled,
         scratchpad_enabled=runtime.scratchpad_path is not None,
-        template_enabled=runtime.template is not None,
+        template_enabled=runtime.template is not None and runtime.execution.scaffolding,
         advisor_enabled=_advisor_enabled(runtime),
         max_iterations=resolved.max_iterations,
     )
@@ -303,47 +375,16 @@ def _inject_subcalls(
     if runtime.subcall_configs:
         client = runtime.subcall_client or runtime.client
         model = runtime.subcall_model or runtime.model_name
-        callback = _subcall_accounting_callback(
-            model=model,
-            guardrails=guardrails,
-            token_tracker=token_tracker,
-        )
         functions = build_subcall_functions(
             configs=runtime.subcall_configs,
             client=client,
             model=model,
-            token_callback=callback,
             subcall_log=subcall_log,
             template=runtime.template,
         )
         for name, function in functions.items():
             _inject_protected(repl, scaffolds, name, function)
     _inject_protected(repl, scaffolds, "SUBCALL_LOG", subcall_log)
-
-
-def _subcall_accounting_callback(
-    *,
-    model: str,
-    guardrails: GuardrailState,
-    token_tracker: TokenTracker,
-) -> Callable[[int, int], None]:
-    lock = threading.Lock()
-
-    def record(input_tokens: int, output_tokens: int) -> None:
-        with lock:
-            cost = estimate_cost_usd(model, input_tokens=input_tokens, output_tokens=output_tokens) or 0.0
-            token_tracker.record_subcall(
-                input_tokens=input_tokens,
-                output_tokens=output_tokens,
-                cost_usd=cost,
-            )
-            guardrails.record_subcall_tokens(
-                input_tokens=input_tokens,
-                output_tokens=output_tokens,
-                cost_usd=cost,
-            )
-
-    return record
 
 
 def _inject_parallel_and_template(
@@ -357,13 +398,13 @@ def _inject_parallel_and_template(
         callables: list[Callable[[], Any]],
         max_workers: int | None = None,
     ) -> list[Any]:
-        return parallel(callables, max_workers=max_workers or default_workers)
+        return parallel(callables, max_workers=min(max_workers or default_workers, default_workers))
 
     _inject_protected(repl, scaffolds, "parallel", bound_parallel)
     if runtime.template is None:
         return
     template = runtime.template
-    repl.inject_object("report", template)
+    _inject_protected(repl, scaffolds, "report", template)
 
     def bound_fill_parallel(
         generator: SectionGenerator,
@@ -374,7 +415,7 @@ def _inject_parallel_and_template(
             template=template,
             generator=generator,
             section_ids=section_ids,
-            max_workers=max_workers or default_workers,
+            max_workers=min(max_workers or default_workers, default_workers),
         )
 
     _inject_protected(repl, scaffolds, "fill_parallel", bound_fill_parallel)
@@ -444,6 +485,7 @@ class AdvisorCommand:
     ) -> None:
         if runtime.advisor_client is None or runtime.advisor_config is None:
             raise ValueError("advisor command requires client and configuration")
+        self._call_lock = threading.Lock()
         self._runtime = runtime
         self._transcript = transcript
         self._scratchpad = scratchpad
@@ -456,6 +498,10 @@ class AdvisorCommand:
         problem: str,
         attempt: str | None = None,
     ) -> AdvisorResult:
+        with self._call_lock:
+            return self._advise(goal=goal, problem=problem, attempt=attempt)
+
+    def _advise(self, *, goal: str, problem: str, attempt: str | None) -> AdvisorResult:
         config = self._runtime.advisor_config
         client = self._runtime.advisor_client
         if config is None or client is None:
@@ -465,6 +511,13 @@ class AdvisorCommand:
         from aec_bench.adapters.advisor import default_advise
 
         request = AdvisorRequest(goal=goal, problem=problem, attempt=attempt)
+        if isinstance(client, AuxiliaryRlmClient):
+            from aec_bench.adapters.advisor import AdvisorResult
+            from aec_bench.adapters.base import AdapterStopReason
+
+            verdict = client.guardrails.check()
+            if not verdict.can_continue and verdict.stop_code != AdapterStopReason.ITERATION_CAP:
+                return AdvisorResult(response=None, error=verdict.stop_reason)
         self._usage.begin_call()
         try:
             result = default_advise(
@@ -569,7 +622,7 @@ def load_repl_commands(
     repl: ReplEnvironment,
     *,
     workspace_path: str,
-    template: ReportTemplate | None,
+    template: ReportSession | None,
 ) -> None:
     """Load a task-owned repl_commands.py module into the prepared REPL."""
     workspace = Path(workspace_path)

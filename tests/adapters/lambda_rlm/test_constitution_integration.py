@@ -22,6 +22,7 @@ class _StubClient:
         messages: list[RlmMessage],
         system_prompt: str | None,
         temperature: float | None = None,
+        max_output_tokens: int | None = None,
     ) -> RlmCompletionResponse:
         self.calls.append((model, messages))
         return RlmCompletionResponse(
@@ -73,48 +74,18 @@ definition = "report_template.toml"
 
 [constitution]
 path = "constitution.toml"
-model = "au.anthropic.claude-haiku-4-5-20251001-v1:0"
 """)
 
     return workspace
 
 
-def test_build_adapter_fires_constitutional_inference(tmp_path):
-    workspace = _write_minimal_task(tmp_path)
-    stub = _StubClient(
-        response_json={
-            "source_fidelity": {
-                "require_source_tracing": True,
-                "tbd_placeholder": "[TBD]",
-                "gap_framing": "exclude",
-            },
-            "information_minimality": {
-                "default_threshold": 2000,
-                "search_threshold": 15000,
-                "preview_length": 300,
-                "truncation_strategy": "metadata",
-            },
-        }
-    )
+def test_build_adapter_rejects_unmetered_inference(tmp_path: Path) -> None:
+    import pytest
 
-    adapter = build_lambda_rlm_adapter(
-        config_path=workspace / "lambda-rlm.toml",
-        client=_StubClient({}),  # main client stub — won't be invoked in builder
-        adapter_name="lambda-rlm",
-        model_name="test-model",
-        workspace=str(workspace),
-        constitutional_client=stub,
-        task_metadata={"difficulty": "hard", "tags": ["public-works"], "category": "report"},
-    )
+    from aec_bench.adapters.lambda_rlm.config import parse_lambda_rlm_config
 
-    # Inference should have fired exactly once
-    assert len(stub.calls) == 1
-    # Manifest should be stashed on the adapter
-    assert adapter._constitution is not None
-    assert adapter._constitution.source_fidelity is not None
-    assert adapter._constitution.source_fidelity.gap_framing == "exclude"
-    assert adapter._constitution.information_minimality is not None
-    assert adapter._constitution.information_minimality.preview_length == 300
+    with pytest.raises(ValueError, match="constitutional inference"):
+        parse_lambda_rlm_config('[constitution]\nmodel="test-model"')
 
 
 def test_build_adapter_without_constitution_does_nothing(tmp_path):

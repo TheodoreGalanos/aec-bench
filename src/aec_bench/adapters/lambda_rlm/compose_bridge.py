@@ -7,7 +7,7 @@ import json
 import re
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from aec_bench.adapters.lambda_rlm.sandbox import DocumentSandbox, parse_anchor_ref
 from aec_bench.adapters.lambda_rlm.task_handlers import (
@@ -16,10 +16,6 @@ from aec_bench.adapters.lambda_rlm.task_handlers import (
     get_prose_handler,
     get_slot_handler,
 )
-
-if TYPE_CHECKING:
-    from aec_bench.adapters.lambda_rlm.sandbox_tools import SandboxToolHarness  # noqa: F401
-
 from aec_bench.adapters.rlm.client import RlmClient, RlmMessage
 from aec_bench.contracts.report_template import (
     Block,
@@ -41,61 +37,13 @@ _SLOT_SYSTEM_PROMPT_DEFAULT = (
 )
 
 _GENERATE_SYSTEM_PROMPT_BODY = (
-    "You write project-specific paragraphs for an engineering Scope of Works "
-    "using only facts present in the provided source documents. "
-    "\n\n"
-    "Every factual claim — certifications, standards, accreditations, dates, "
-    "dollar amounts, rates, organisational facts, personnel titles, system "
-    "capabilities — MUST be traceable to an explicit source (primary source "
-    "documents, boilerplate fragments, or the scratchpad's slot values). "
-    "DO NOT introduce claims from your own general knowledge, even when you "
-    "believe them to be true. Common world-knowledge leaks to avoid: ISO or "
-    "other certification numbers for a party that no source cites; company "
-    "addresses, registration numbers, or bank details; software-version or "
-    "vendor facts; professional-body memberships. If a fact is not evidenced "
-    "in a cited source, OMIT it — do not infer, do not fill in, do not add "
-    "plausible-sounding detail to round out a paragraph. "
-    "\n\n"
-    "If the scratchpad includes back_brief content, treat it strictly as a "
-    "PHRASING, CLAUSE, and FORMATTING reference. NEVER import from back_brief "
-    "any scope item, deliverable, exclusion, personnel, organisation, dollar "
-    "amount, rate, date, standard, certification, or other project-specific "
-    "fact — those belong to other engagements. Scope authority rests solely "
-    "with the primary source documents (e.g. the email thread or instruction). "
-    "If a fact is not evidenced in those primary sources, OMIT it. "
-    "\n\n"
-    "Write only text that would appear in the final signed document. Do NOT "
-    "write drafter notes, editorial meta-commentary, or explanations of what "
-    "is missing or why. Forbidden register: 'at the time of writing', "
-    "'Entry cannot be finalised', 'has been omitted', 'No reference "
-    "documentation was available', 'pending confirmation', 'source is "
-    "silent', 'most probable identity is', 'most likely identity', "
-    "'identified as likely', 'were not specified', 'were not stated', "
-    "'no LinkedIn or other public profile', 'public profile was located', "
-    "any URL pointing to linkedin.com or other research-trail sources. "
-    "Missing information is represented by a bare [TBC] inline — "
-    "not by narration around the [TBC], and not by speculation about who or "
-    "what the missing item *might* be. Not-applicable sections read "
-    "'Not applicable.' alone. "
-    "\n"
-    "  DO: 'Richard [surname TBC]' \n"
-    "  DON'T: 'Richard''s surname is not stated in the thread; pending "
-    "confirmation it is recorded here as [TBC].' \n"
-    "  DO: 'Staff-hours breakdown per role: [TBC].' \n"
-    "  DON'T: 'No specific hours breakdown per role was provided in the "
-    "email thread. Accordingly, a staff-hours table cannot be included and "
-    "has been omitted.' \n"
-    "  DO: 'Project Lead: Richard [surname TBC], ExampleCo.' \n"
-    "  DON'T: 'Project Lead: Richard, ExampleCo (most probable identity is "
-    "Richard Smith, https://linkedin.com/in/...).' \n"
-    "  DO: 'Programme: workshop week of [date TBC]; report two weeks "
-    "thereafter.' \n"
-    "  DON'T: 'Programme: dates marked [TBD] were not specified in the "
-    "email thread.' \n"
-    "\n"
-    "Keep the prose concise and in formal "
+    "Write the requested report block using the permitted source documents. "
+    "Ground factual claims in explicit evidence. Follow the task's declared source "
+    "precedence, writing guidance, and treatment of missing information. Do not invent facts. "
+    "Treat reference digests as guidance about phrasing and structure, unless the task "
+    "explicitly permits their factual content. Return only the requested block text. "
 )
-_GENERATE_SYSTEM_PROMPT_DEFAULT_VOICE = "Formal contract voice."
+_GENERATE_SYSTEM_PROMPT_DEFAULT_VOICE = "Use clear, concise report prose."
 
 
 def _build_slot_system_prompt(domain_override: str | None) -> str:
@@ -246,6 +194,7 @@ class LambdaRlmSlotResolver:
         scratchpad: dict[str, str | dict[str, str]] | None = None,
         voice_override: str | None = None,
         domain_override: str | None = None,
+        section_guidance: str = "",
         sandbox: DocumentSandbox | None = None,
     ) -> None:
         self._client = client
@@ -254,6 +203,7 @@ class LambdaRlmSlotResolver:
         self._scratchpad = scratchpad
         self._voice_override = voice_override
         self._domain_override = domain_override
+        self._section_guidance = section_guidance
         self._sandbox = sandbox
         self.calls = 0
         self.input_tokens = 0
@@ -314,7 +264,7 @@ class LambdaRlmSlotResolver:
         response = self._client.generate(
             model=self._model,
             messages=[RlmMessage(role="user", content=prompt)],
-            system_prompt=_build_slot_system_prompt(self._domain_override),
+            system_prompt=_build_slot_system_prompt(self._domain_override) + "\n" + self._section_guidance,
         )
         self.calls += 1
         self.input_tokens += response.input_tokens
@@ -356,8 +306,8 @@ class LambdaRlmBlockGenerator:
         scratchpad: dict[str, str | dict[str, str]] | None = None,
         voice_override: str | None = None,
         domain_override: str | None = None,
+        section_guidance: str = "",
         sandbox: DocumentSandbox | None = None,
-        tool_harness: SandboxToolHarness | None = None,
     ) -> None:
         self._client = client
         self._model = model
@@ -365,8 +315,8 @@ class LambdaRlmBlockGenerator:
         self._scratchpad = scratchpad
         self._voice_override = voice_override
         self._domain_override = domain_override
+        self._section_guidance = section_guidance
         self._sandbox = sandbox
-        self._tool_harness = tool_harness
         self.calls = 0
         self.input_tokens = 0
         self.output_tokens = 0
@@ -385,12 +335,6 @@ class LambdaRlmBlockGenerator:
         self.last_declared_provenance = tuple(sources)
         self.last_fetched_provenance = ()
         self.last_prompt = ""
-
-        if self._tool_harness is not None and self._tool_harness.enabled:
-            self._tool_harness.reset_block_counter()
-            fetched_before = len(self._tool_harness.fetched_anchors())
-        else:
-            fetched_before = 0
 
         back_brief = None
         scope_evolution = None
@@ -432,15 +376,12 @@ class LambdaRlmBlockGenerator:
         response = self._client.generate(
             model=self._model,
             messages=[RlmMessage(role="user", content=full_prompt)],
-            system_prompt=_build_generate_system_prompt(self._voice_override),
+            system_prompt=_build_generate_system_prompt(self._voice_override) + "\n" + self._section_guidance,
         )
         self.calls += 1
         self.input_tokens += response.input_tokens
         self.output_tokens += response.output_tokens
 
-        if self._tool_harness is not None and self._tool_harness.enabled:
-            all_fetched = self._tool_harness.fetched_anchors()
-            self.last_fetched_provenance = all_fetched[fetched_before:]
         self.last_provenance = self.last_declared_provenance + self.last_fetched_provenance
 
         return handler.parse(response.output_text)
@@ -471,8 +412,8 @@ def render_compose_section(
     scratchpad: dict[str, str | dict[str, str]] | None = None,
     voice_override: str | None = None,
     domain_override: str | None = None,
+    section_guidance: str = "",
     sandbox: DocumentSandbox | None = None,
-    tool_harness: SandboxToolHarness | None = None,
 ) -> tuple[str, CompositionTrace, ComposeStats]:
     """Render a compose-mode section using lambda-rlm's LLM client.
 
@@ -487,8 +428,7 @@ def render_compose_section(
 
     When *sandbox* is provided, source references are resolved to anchored
     document slices via DocumentSandbox rather than the fallback source_resolver
-    callable. When *tool_harness* is also provided (and enabled), the block
-    generator can perform tool-use calls against the sandbox.
+    callable.
     """
     slot_resolver = LambdaRlmSlotResolver(
         client=client,
@@ -497,6 +437,7 @@ def render_compose_section(
         scratchpad=scratchpad,
         voice_override=voice_override,
         domain_override=domain_override,
+        section_guidance=section_guidance,
         sandbox=sandbox,
     )
     block_generator = LambdaRlmBlockGenerator(
@@ -506,8 +447,8 @@ def render_compose_section(
         scratchpad=scratchpad,
         voice_override=voice_override,
         domain_override=domain_override,
+        section_guidance=section_guidance,
         sandbox=sandbox,
-        tool_harness=tool_harness,
     )
 
     content, trace = render_section(

@@ -4,18 +4,18 @@
 from aec_bench.adapters.lambda_rlm.adapter import LambdaRlmAdapter
 from aec_bench.adapters.lambda_rlm.config import LambdaRlmConfig
 from aec_bench.adapters.rlm.client import ReplayRlmClient
-from aec_bench.adapters.rlm.template import ReportTemplate
 from aec_bench.contracts.constitution import (
     ConstitutionManifest,
     InformationMinimalityParams,
     SourceFidelityParams,
 )
 from aec_bench.contracts.repl import DependencyTreeSchema, OutputField, TreeSection
+from aec_bench.templates.report.session import ReportSession
 
 
-def _minimal_template() -> ReportTemplate:
+def _minimal_template() -> ReportSession:
     """Single-section template — used only to satisfy LambdaRlmAdapter construction."""
-    return ReportTemplate(
+    return ReportSession(
         DependencyTreeSchema(
             sections=(
                 TreeSection(

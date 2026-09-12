@@ -24,7 +24,6 @@ from aec_bench.adapters.rlm.runtime_contracts import (
     LifecycleTransition,
     RlmExecutionState,
 )
-from aec_bench.adapters.rlm.template import TemplateStatus
 from aec_bench.adapters.rlm.tokens import TurnMetrics
 from aec_bench.adapters.rlm.turn_execution import TurnExecution, TurnExecutionSurface
 from aec_bench.contracts.adapter_execution import (
@@ -34,6 +33,7 @@ from aec_bench.contracts.adapter_execution import (
     TranscriptRole,
 )
 from aec_bench.contracts.agent_output import AgentOutputStatus
+from aec_bench.templates.report.session import TemplateStatus
 
 logger = logging.getLogger(__name__)
 
@@ -359,6 +359,8 @@ class TurnProcessor:
             error=result.error,
             code=code,
             new_vars=new_variables or None,
+            stdout_chars=result.stdout_chars,
+            error_chars=result.error_chars,
         )
         variable_diff = state.context_filter.format_var_diff(
             new=new_variables,
@@ -480,11 +482,6 @@ class TurnProcessor:
         if template is not None:
             state.scaffolding.record_progress(template.get_status().completed_sections)
         execution_config = state.runtime.execution
-        if state.tokens.needs_compaction(
-            metrics.call_input_tokens,
-            execution_config.compaction_threshold_pct,
-        ):
-            return LifecycleTransition.compact()
         if state.tokens.hit_hard_ceiling(
             metrics.call_input_tokens,
             execution_config.hard_ceiling_pct,
@@ -505,6 +502,11 @@ class TurnProcessor:
                     raw_output_text=response.output_text or None,
                 )
             )
+        if state.tokens.needs_compaction(
+            metrics.call_input_tokens,
+            execution_config.compaction_threshold_pct,
+        ):
+            return LifecycleTransition.compact()
         return LifecycleTransition.continue_execution()
 
     def _append_text_conversation(

@@ -6,10 +6,10 @@ from pathlib import Path
 from aec_bench.adapters.base import AdapterRequest
 from aec_bench.adapters.rlm.client import ReplayRlmClient, RlmCompletionResponse
 from aec_bench.adapters.rlm.initialiser import build_rlm_adapter
-from aec_bench.adapters.rlm.template_parser import parse_report_template_with_rubric
 from aec_bench.contracts.agent_output import AgentOutputStatus
 from aec_bench.contracts.rubric import DimensionScore
 from aec_bench.evaluation.rubric_scorer import score_rubric
+from aec_bench.templates.report.parser import parse_report_template_with_rubric
 
 
 def test_e2e_config_to_template_to_rubric(tmp_path: Path) -> None:
@@ -87,7 +87,9 @@ criteria = ["Sound reasoning"]
             ),
             # Agent fills analysis
             RlmCompletionResponse(
-                output_text=('```repl\nreport.fill_section("analysis", {"findings": "Traffic improved"})\n```'),
+                output_text=(
+                    '```repl\nreport.fill_section("analysis", {"findings": "Traffic improved"})\nSUBMIT()\n```'
+                ),
                 input_tokens=300,
                 output_tokens=100,
             ),
@@ -109,15 +111,25 @@ criteria = ["Sound reasoning"]
     )
 
     # 3. Run the adapter
-    result = adapter.execute(AdapterRequest(instruction="Write a report about the project."))
+    result = adapter.execute(
+        AdapterRequest(
+            instruction="Write a report about the project.",
+            output_path=str(tmp_path / "report.json"),
+            output_format="json",
+        )
+    )
     assert result.agent_output.status == AgentOutputStatus.COMPLETED
 
     # 4. Verify template was filled
     template = adapter._template
     assert template is not None
     status = template.get_status()
-    assert status.completed_sections == 2
+    assert status.completed_sections == 0  # Execution uses an independent session.
     assert status.total_sections == 2
+
+    import json
+
+    assert set(json.loads((tmp_path / "report.json").read_text())) == {"background", "analysis"}
 
     # 5. Score with rubric
     _, rubric = parse_report_template_with_rubric(template_toml.read_text())
@@ -129,7 +141,7 @@ criteria = ["Sound reasoning"]
             dimension_id="completeness",
             score=10.0,
             max_score=10.0,
-            evidence=f"{status.completed_sections}/{status.total_sections} sections",
+            evidence="2/2 sections in the submitted report",
             eval_method_used="automated",
         ),
         DimensionScore(

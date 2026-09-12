@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING
 from aec_bench.adapters.rlm.engine import ExecutionResult
 
 if TYPE_CHECKING:
-    from aec_bench.adapters.rlm.template import TemplateStatus
+    from aec_bench.templates.report.session import TemplateStatus
 
 
 def format_iteration_metadata(

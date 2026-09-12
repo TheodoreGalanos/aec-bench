@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import tomllib
 from dataclasses import dataclass, field
-from typing import Literal
+from typing import Any, Literal
 
 
 @dataclass(frozen=True)
@@ -88,9 +88,8 @@ class ConstitutionalPrinciple:
 class ConstitutionManifest:
     """The complete constitution for an adapter run.
 
-    Principles are always listed. Parameter models are None when they
-    should be inferred by the LLM at adapter init, and populated when
-    the user has provided explicit overrides.
+    Principles are always listed. Parameter models are None when the runtime uses its
+    defaults, and populated when the user supplies explicit overrides.
     """
 
     version: str
@@ -121,75 +120,47 @@ def parse_constitution(toml_str: str) -> ConstitutionManifest:
       default_threshold = 3000
       ...
 
-    Unspecified parameter tables mean "infer at runtime" (None).
+    Unspecified parameter tables leave the runtime defaults in place (None).
     """
-    data = tomllib.loads(toml_str)
+    return parse_constitution_data(tomllib.loads(toml_str))
 
-    version = data.get("version", "0.1.0")
 
-    principles: list[ConstitutionalPrinciple] = []
-    for p_data in data.get("principles", []):
-        principles.append(
-            ConstitutionalPrinciple(
-                name=p_data["name"],
-                description=p_data["description"],
-                evaluation_criteria=p_data["evaluation_criteria"],
-                enabled=p_data.get("enabled", True),
-            )
-        )
+def parse_constitution_data(data: dict[str, Any]) -> ConstitutionManifest:
+    """Validate a declared constitution without a TOML string round trip."""
+    from dataclasses import fields
 
-    information_minimality: InformationMinimalityParams | None = None
-    im_data = data.get("information_minimality")
-    if im_data is not None:
-        information_minimality = InformationMinimalityParams(
-            default_threshold=im_data.get("default_threshold", 2000),
-            search_threshold=im_data.get("search_threshold", 10_000),
-            preview_length=im_data.get("preview_length", 200),
-            truncation_strategy=im_data.get("truncation_strategy", "metadata"),
-        )
+    from pydantic import TypeAdapter
 
-    state_persistence: StatePersistenceParams | None = None
-    sp_data = data.get("state_persistence")
-    if sp_data is not None:
-        state_persistence = StatePersistenceParams(
-            preserve_variables=sp_data.get("preserve_variables", True),
-            preserve_scratchpad=sp_data.get("preserve_scratchpad", True),
-            compaction_strategy=sp_data.get("compaction_strategy", "llm_summary"),
-        )
-
-    progress_obligation: ProgressObligationParams | None = None
-    po_data = data.get("progress_obligation")
-    if po_data is not None:
-        progress_obligation = ProgressObligationParams(
-            gentle_nudge_turns=po_data.get("gentle_nudge_turns", 10),
-            strong_nudge_turns=po_data.get("strong_nudge_turns", 20),
-            stall_threshold_turns=po_data.get("stall_threshold_turns", 3),
-        )
-
-    source_fidelity: SourceFidelityParams | None = None
-    sf_data = data.get("source_fidelity")
-    if sf_data is not None:
-        source_fidelity = SourceFidelityParams(
-            require_source_tracing=sf_data.get("require_source_tracing", True),
-            tbd_placeholder=sf_data.get("tbd_placeholder", "[TBD]"),
-            gap_framing=sf_data.get("gap_framing", "exclude"),
-        )
-
-    earned_autonomy: EarnedAutonomyParams | None = None
-    ea_data = data.get("earned_autonomy")
-    if ea_data is not None:
-        earned_autonomy = EarnedAutonomyParams(
-            initial_mode=ea_data.get("initial_mode", "constrained"),
-            promotion_threshold=ea_data.get("promotion_threshold", 2),
-            demotion_on_stall=ea_data.get("demotion_on_stall", True),
-        )
-
-    return ConstitutionManifest(
-        version=version,
-        principles=principles,
-        information_minimality=information_minimality,
-        state_persistence=state_persistence,
-        progress_obligation=progress_obligation,
-        source_fidelity=source_fidelity,
-        earned_autonomy=earned_autonomy,
-    )
+    allowed = {f.name for f in fields(ConstitutionManifest)}
+    if unknown := data.keys() - allowed:
+        raise ValueError(f"Unknown constitution options: {sorted(unknown)}")
+    parameter_types = {
+        "information_minimality": InformationMinimalityParams,
+        "state_persistence": StatePersistenceParams,
+        "progress_obligation": ProgressObligationParams,
+        "source_fidelity": SourceFidelityParams,
+        "earned_autonomy": EarnedAutonomyParams,
+    }
+    for name, cls in parameter_types.items():
+        value = data.get(name)
+        if isinstance(value, dict) and (unknown := value.keys() - {f.name for f in fields(cls)}):
+            raise ValueError(f"Unknown constitution.{name} options: {sorted(unknown)}")
+    for principle in data.get("principles", []):
+        if isinstance(principle, dict) and (
+            unknown := principle.keys() - {f.name for f in fields(ConstitutionalPrinciple)}
+        ):
+            raise ValueError(f"Unknown principle options: {sorted(unknown)}")
+    manifest = TypeAdapter(ConstitutionManifest).validate_python({"version": "0.1.0", **data})
+    info = manifest.information_minimality
+    if info and not all(
+        0 < value <= 1_000_000 for value in (info.default_threshold, info.search_threshold, info.preview_length)
+    ):
+        raise ValueError("Information minimality limits must be in [1, 1000000]")
+    progress = manifest.progress_obligation
+    if progress and not (
+        0 < progress.gentle_nudge_turns <= progress.strong_nudge_turns and progress.stall_threshold_turns > 0
+    ):
+        raise ValueError("Invalid progress obligation thresholds")
+    if manifest.earned_autonomy and manifest.earned_autonomy.promotion_threshold <= 0:
+        raise ValueError("Autonomy promotion_threshold must be positive")
+    return manifest

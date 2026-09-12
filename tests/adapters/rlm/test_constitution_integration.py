@@ -86,12 +86,12 @@ class TestRlmAdapterUsesConstitution:
 
     def test_scaffolding_uses_constitutional_thresholds(self) -> None:
         from aec_bench.adapters.rlm.adapter import RlmAdapter
-        from aec_bench.adapters.rlm.template import TemplateStatus
         from aec_bench.contracts.constitution import (
             ConstitutionalPrinciple,
             ConstitutionManifest,
             ProgressObligationParams,
         )
+        from aec_bench.templates.report.session import TemplateStatus
 
         manifest = ConstitutionManifest(
             version="0.1.0",
@@ -184,7 +184,6 @@ tier = "flat"
 
 [constitution]
 path = "src/aec_bench/adapters/constitution_default.toml"
-model = "claude-opus-4-6"
 
 [constitution.information_minimality]
 default_threshold = 2500
@@ -212,7 +211,6 @@ default_threshold = 2500
             client=StubClient(),
             adapter_name="rlm-test",
             model_name="claude-opus-4-6",
-            constitutional_client=StubInferenceClient(),
         )
         # User override (2500) must win over inferred (9999)
         assert adapter.constitution is not None

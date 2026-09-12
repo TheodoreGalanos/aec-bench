@@ -4,8 +4,6 @@
 import json
 from pathlib import Path
 
-import pytest
-
 from aec_bench.adapters.base import AdapterRequest
 from aec_bench.adapters.lambda_rlm.adapter import LambdaRlmAdapter
 from aec_bench.adapters.lambda_rlm.config import (
@@ -14,9 +12,9 @@ from aec_bench.adapters.lambda_rlm.config import (
     ReviewConfig,
 )
 from aec_bench.adapters.rlm.client import ReplayRlmClient, RlmCompletionResponse
-from aec_bench.adapters.rlm.template import ReportTemplate
-from aec_bench.adapters.rlm.template_parser import parse_report_template
 from aec_bench.contracts.agent_output import AgentOutputStatus
+from aec_bench.templates.report.parser import parse_report_template
+from aec_bench.templates.report.session import ReportSession
 from aec_bench.trajectory.writer import TrajectoryWriter
 
 _TEMPLATE_TOML = """
@@ -95,13 +93,17 @@ def test_adapter_produces_completed_result(tmp_path: Path):
         adapter_name="lambda-rlm",
         model_name="test-model",
         client=client,
-        template=ReportTemplate(template),
+        template=ReportSession(template),
         source_docs=source_docs,
         config=LambdaRlmConfig(),
         workspace=str(workspace),
     )
 
-    result = adapter.execute(AdapterRequest(instruction="Write the proposal."))
+    result = adapter.execute(
+        AdapterRequest(
+            output_path=str(workspace / "output.md"), output_format="markdown", instruction="Write the proposal."
+        )
+    )
 
     assert result.agent_output.status == AgentOutputStatus.COMPLETED
     assert result.adapter_name == "lambda-rlm"
@@ -135,13 +137,15 @@ def test_adapter_writes_output_file(tmp_path: Path):
         adapter_name="lambda-rlm",
         model_name="test-model",
         client=client,
-        template=ReportTemplate(template),
+        template=ReportSession(template),
         source_docs=source_docs,
         config=LambdaRlmConfig(),
         workspace=str(workspace),
     )
 
-    adapter.execute(AdapterRequest(instruction="Write it."))
+    adapter.execute(
+        AdapterRequest(output_path=str(workspace / "output.md"), output_format="markdown", instruction="Write it.")
+    )
 
     output_path = workspace / "output.md"
     assert output_path.exists()
@@ -181,13 +185,15 @@ dtype = "str"
         adapter_name="lambda-rlm",
         model_name="test-model",
         client=client,
-        template=ReportTemplate(template),
+        template=ReportSession(template),
         source_docs=source_docs,
         config=LambdaRlmConfig(),
         workspace=str(workspace),
     )
 
-    result = adapter.execute(AdapterRequest(instruction="Go."))
+    result = adapter.execute(
+        AdapterRequest(output_path=str(workspace / "output.md"), output_format="markdown", instruction="Go.")
+    )
 
     call_types = [e.call_type for e in result.transcript if hasattr(e, "call_type")]
     assert "plan" in call_types
@@ -224,13 +230,15 @@ dtype = "str"
         adapter_name="lambda-rlm",
         model_name="test-model",
         client=client,
-        template=ReportTemplate(template),
+        template=ReportSession(template),
         source_docs=source_docs,
         config=LambdaRlmConfig(review=ReviewConfig(enabled=False)),
         workspace=str(workspace),
     )
 
-    result = adapter.execute(AdapterRequest(instruction="Go."))
+    result = adapter.execute(
+        AdapterRequest(output_path=str(workspace / "output.md"), output_format="markdown", instruction="Go.")
+    )
     assert result.agent_output.status == AgentOutputStatus.COMPLETED
 
 
@@ -265,20 +273,23 @@ dtype = "str"
         adapter_name="lambda-rlm",
         model_name="test-model",
         client=client,
-        template=ReportTemplate(parse_report_template(single_toml)),
+        template=ReportSession(parse_report_template(single_toml)),
         source_docs={"brief:bg": "Some background."},
         config=LambdaRlmConfig(review=ReviewConfig(enabled=False)),
         workspace=str(workspace),
     )
 
-    with pytest.raises(RuntimeError, match="max_turns=1"):
-        adapter.execute(
-            AdapterRequest(
-                instruction="Use one model call only.",
-                configuration={"max_turns": 1},
-            )
+    result = adapter.execute(
+        AdapterRequest(
+            output_path=str(workspace / "output.md"),
+            output_format="markdown",
+            instruction="Use one model call only.",
+            configuration={"max_turns": 1},
         )
+    )
 
+    assert result.agent_output.status == AgentOutputStatus.PARTIAL
+    assert result.turns_used == 1
     assert client.calls == 1
 
 
@@ -307,13 +318,15 @@ def test_adapter_writes_trajectory_entries(tmp_path: Path):
         adapter_name="lambda-rlm",
         model_name="test-model",
         client=client,
-        template=ReportTemplate(template),
+        template=ReportSession(template),
         source_docs=source_docs,
         config=LambdaRlmConfig(),
         workspace=str(workspace),
         trajectory_writer=writer,
     )
-    adapter.execute(AdapterRequest(instruction="Write it."))
+    adapter.execute(
+        AdapterRequest(output_path=str(workspace / "output.md"), output_format="markdown", instruction="Write it.")
+    )
     writer.close()
 
     entries = []
@@ -362,7 +375,7 @@ def test_adapter_writes_extraction_candidates_artifact(tmp_path: Path):
         adapter_name="lambda-rlm",
         model_name="test-model",
         client=client,
-        template=ReportTemplate(template),
+        template=ReportSession(template),
         source_docs=source_docs,
         config=LambdaRlmConfig(
             extract=ExtractConfig(k_candidates=3, keep_candidates_artifact=True),
@@ -372,7 +385,11 @@ def test_adapter_writes_extraction_candidates_artifact(tmp_path: Path):
         workspace=str(workspace),
     )
 
-    adapter.execute(AdapterRequest(instruction="Write the proposal."))
+    adapter.execute(
+        AdapterRequest(
+            output_path=str(workspace / "output.md"), output_format="markdown", instruction="Write the proposal."
+        )
+    )
 
     candidates_path = workspace / "extraction_candidates.json"
     assert candidates_path.exists()
@@ -416,13 +433,15 @@ dtype = "str"
         adapter_name="lambda-rlm",
         model_name="test-model",
         client=client,
-        template=ReportTemplate(template),
+        template=ReportSession(template),
         source_docs=source_docs,
         config=LambdaRlmConfig(),
         workspace=str(workspace),
         trajectory_writer=writer,
     )
-    adapter.execute(AdapterRequest(instruction="Go."))
+    adapter.execute(
+        AdapterRequest(output_path=str(workspace / "output.md"), output_format="markdown", instruction="Go.")
+    )
     writer.close()
 
     entries = []
@@ -472,12 +491,14 @@ dtype = "str"
         adapter_name="lambda-rlm",
         model_name="test-model",
         client=client,
-        template=ReportTemplate(template),
+        template=ReportSession(template),
         source_docs=source_docs,
         config=LambdaRlmConfig(),
         workspace=str(workspace),
     )
-    result = adapter.execute(AdapterRequest(instruction="Go."))
+    result = adapter.execute(
+        AdapterRequest(output_path=str(workspace / "output.md"), output_format="markdown", instruction="Go.")
+    )
     assert result.agent_output.status == AgentOutputStatus.COMPLETED
 
 
@@ -496,7 +517,7 @@ def test_adapter_callback_attaches_synthesis_event(tmp_path: Path):
         adapter_name="lambda-rlm",
         model_name="test-model",
         client=ReplayRlmClient(responses=[]),
-        template=ReportTemplate(parse_report_template(_TEMPLATE_TOML)),
+        template=ReportSession(parse_report_template(_TEMPLATE_TOML)),
         source_docs={},
         config=LambdaRlmConfig(),
         workspace=str(workspace),

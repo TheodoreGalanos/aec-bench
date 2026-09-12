@@ -1,0 +1,10 @@
+[template]
+definition = "report_template.toml"
+source_mapping = "sources.toml"
+validation_rules = "checks.toml"
+[execution]
+scaffolding = true
+context_limit = 128000
+[guardrails]
+token_budget = 10000
+max_iterations = 10

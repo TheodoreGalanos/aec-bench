@@ -45,6 +45,8 @@ generation output root records source identity and replay inputs. The root
 [README](../README.md#generate-tasks) owns public CLI instructions; this guide
 does not duplicate the full task-authoring workflow.
 
+For template-driven report tasks, use the shared [report agent harness](protocols/report-agent-harness.md). Its synthetic example shows public assets and independent artifact verification.
+
 ## Minimum interactive world
 
 The world owns engineering behaviour. The episode host owns the decision

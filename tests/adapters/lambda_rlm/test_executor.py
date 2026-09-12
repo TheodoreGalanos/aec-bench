@@ -21,11 +21,11 @@ from aec_bench.adapters.lambda_rlm.state import (
     SectionPlan,
 )
 from aec_bench.adapters.rlm.client import ReplayRlmClient, RlmCompletionResponse
-from aec_bench.adapters.rlm.template import ReportTemplate
 from aec_bench.contracts.repl import DependencyTreeSchema, OutputField, TreeSection
+from aec_bench.templates.report.session import ReportSession
 
 
-def _make_template() -> ReportTemplate:
+def _make_template() -> ReportSession:
     """Minimal two-section template."""
     schema = DependencyTreeSchema(
         sections=(
@@ -49,7 +49,7 @@ def _make_template() -> ReportTemplate:
             ),
         )
     )
-    return ReportTemplate(schema)
+    return ReportSession(schema)
 
 
 def _make_plan() -> ExecutionPlan:
@@ -158,6 +158,7 @@ class RecordingRlmClient:
         messages: list,
         system_prompt: str | None,
         temperature: float | None = None,
+        max_output_tokens: int | None = None,
     ) -> RlmCompletionResponse:
         with self._lock:
             response = self._responses[self._index]
@@ -275,7 +276,7 @@ def test_executor_tracks_extractions():
 
 
 def test_executor_fills_template():
-    """Executor should fill the ReportTemplate and it should report sections as completed."""
+    """Executor should fill the ReportSession and it should report sections as completed."""
     client = ReplayRlmClient(
         responses=[
             _extraction_response({"location": "Highway"}),

@@ -53,9 +53,8 @@ class SynthesisConfig:
     max_output_tokens: int = 16_000
     verify_sources: bool = True
     fallback_on_failure: bool = True
-    # Task-domain hint rendered into the prompt. Default suits AEC engineering
-    # proposals; override per-task for other domains.
-    domain_hint: str = "engineering proposal"
+    # Task-domain hint rendered into the prompt.
+    domain_hint: str = "report"
     # "plain" = single LLM call with all K candidates in the prompt.
     # "tool_loop" = AggAgent-style agent with get_candidate / get_source /
     # search_* / get_criteria_bundle / finish tools. See amendment §3.

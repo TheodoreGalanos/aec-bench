@@ -107,6 +107,7 @@ class ReviewResult:
     risks: list[str]
     reextract_sources: list[str]
     supplement_guidance: str | None
+    criterion_findings: list[dict[str, Any]] = field(default_factory=list)
 
     @property
     def needs_action(self) -> bool:
@@ -120,6 +121,11 @@ class PlanState:
     extractions: dict[str, dict[str, Any]] = field(default_factory=dict)
     reviews: dict[str, ReviewResult] = field(default_factory=dict)
     sections: dict[str, str] = field(default_factory=dict)
+    validation_failures: dict[str, str] = field(default_factory=dict)
+    advice: dict[str, str] = field(default_factory=dict)
+    advisor_calls: int = 0
+    advisor_input_tokens: int = 0
+    advisor_output_tokens: int = 0
     # Per-section composition traces for compose-mode sections. Keys are
     # section IDs; values are lists of BlockTrace-shaped dicts ready for
     # JSON serialisation (see compose_bridge / adapter for the write path).
@@ -203,6 +209,7 @@ class PlanState:
                     "status": review.status,
                     "gaps": review.gaps,
                     "risks": review.risks,
+                    "criterion_findings": review.criterion_findings,
                 }
                 for section_id, review in self.reviews.items()
             },
@@ -226,6 +233,8 @@ class PlanState:
             "compose_scratchpad": dict(self.compose_scratchpad),
             "structure_retries": dict(self.structure_retries),
             "structure_unresolved_count": len(self.structure_unresolved),
+            "validation_failures": dict(self.validation_failures),
+            "advice": dict(self.advice),
         }
 
 

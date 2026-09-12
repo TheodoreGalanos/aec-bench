@@ -1,7 +1,7 @@
 # ABOUTME: Tests for lambda-RLM source label resolution and unresolved-source auditing.
 # ABOUTME: Covers exact labels, colon-suffixed labels, special references, and misses.
 
-from aec_bench.adapters.lambda_rlm.source_resolution import (
+from aec_bench.templates.report.sources import (
     SourceResolution,
     audit_section_sources,
     resolve_source_label,

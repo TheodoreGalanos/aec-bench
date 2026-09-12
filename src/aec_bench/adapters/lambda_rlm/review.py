@@ -19,8 +19,7 @@ _log = logging.getLogger(__name__)
 def parse_review_response(raw_text: str) -> ReviewResult:
     """Parse a review LLM response into a ReviewResult.
 
-    Falls back to 'pass' if the response is malformed — we don't want a
-    parsing failure in review to block generation.
+    Malformed review output remains an unresolved advisory finding.
     """
     try:
         text = raw_text.strip()
@@ -30,18 +29,30 @@ def parse_review_response(raw_text: str) -> ReviewResult:
             text = "\n".join(lines)
 
         data = json.loads(text)
+        if data.get("status") not in {"pass", "fail", "needs_reextract", "needs_supplement"}:
+            raise ValueError("invalid review status")
+        findings = data.get("criterion_findings", [])
+        if not isinstance(findings, list) or any(
+            not isinstance(item, dict)
+            or not item.get("dimension_id")
+            or item.get("status") not in {"satisfied", "unsatisfied", "unassessed"}
+            or not isinstance(item.get("evidence"), str)
+            for item in findings
+        ):
+            raise ValueError("invalid criterion findings")
         return ReviewResult(
-            status=data.get("status", "pass"),
+            status=data["status"],
             gaps=data.get("gaps", []),
             risks=data.get("risks", []),
             reextract_sources=data.get("reextract_sources", []),
             supplement_guidance=data.get("supplement_guidance"),
+            criterion_findings=findings,
         )
-    except (json.JSONDecodeError, KeyError, TypeError):
-        _log.warning("Failed to parse review response, defaulting to pass")
+    except (ValueError, KeyError, TypeError, AttributeError):
+        _log.warning("Failed to parse review response, retaining unresolved review")
         return ReviewResult(
-            status="pass",
-            gaps=[],
+            status="fail",
+            gaps=["Review response could not be interpreted"],
             risks=[],
             reextract_sources=[],
             supplement_guidance=None,

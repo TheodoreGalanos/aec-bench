@@ -5,13 +5,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from aec_bench.adapters.lambda_rlm.criteria import CriteriaBundle
 from aec_bench.adapters.lambda_rlm.pairwise_judge import (
     LlmPairwiseJudge,
     _build_prompt,
     _parse_verdict,
 )
 from aec_bench.adapters.rlm.client import RlmCompletionResponse
+from aec_bench.templates.report.criteria import CriteriaBundle
 
 
 @dataclass
@@ -21,7 +21,7 @@ class _StubClient:
     response_text: str
     last_prompt: str = ""
 
-    def generate(self, *, model, messages, system_prompt, temperature=None):
+    def generate(self, *, model, messages, system_prompt, temperature=None, max_output_tokens=None):
         self.last_prompt = messages[0].content
         return RlmCompletionResponse(
             output_text=self.response_text,

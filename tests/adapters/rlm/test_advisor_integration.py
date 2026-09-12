@@ -173,8 +173,8 @@ class TestAdvisorReplFunction:
 
         result = adapter.execute(AdapterRequest(instruction="Do something"))
 
-        assert result.agent_output.status == "completed"
-        assert result.usage_model_calls == 2
+        assert result.agent_output.status == "partial"
+        assert result.usage_model_calls == 1
         assert result.usage_advisor_calls == 1
         assert result.usage_advisor_input_tokens == 40
         assert result.usage_advisor_output_tokens == 0

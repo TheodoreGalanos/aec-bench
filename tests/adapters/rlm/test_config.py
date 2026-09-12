@@ -106,7 +106,7 @@ tier = "flat"
     assert config.execution.compaction_threshold_pct == 0.85
     assert config.execution.hard_ceiling_pct == 0.95
     assert config.execution.compaction_model is None
-    assert config.execution.context_limit == 1_000_000
+    assert config.execution.context_limit == 128_000
 
 
 def test_parse_execution_config_explicit() -> None:
@@ -131,7 +131,7 @@ def test_execution_config_compaction_defaults() -> None:
     assert config.compaction_threshold_pct == 0.85
     assert config.hard_ceiling_pct == 0.95
     assert config.compaction_model is None
-    assert config.context_limit == 1_000_000
+    assert config.context_limit == 128_000
 
 
 def test_parse_execution_config_with_compaction() -> None:
@@ -324,11 +324,10 @@ tier = "flat"
 
 [constitution]
 path = "src/aec_bench/adapters/constitution_default.toml"
-model = "claude-opus-4-6"
 """
         cfg = parse_rlm_config(toml)
         assert cfg.constitution_path == "src/aec_bench/adapters/constitution_default.toml"
-        assert cfg.constitution_model == "claude-opus-4-6"
+        assert cfg.constitution_model is None
         assert cfg.constitution_inline is None
 
     def test_constitution_inline(self) -> None:
@@ -339,14 +338,13 @@ model = "claude-opus-4-6"
 tier = "flat"
 
 [constitution]
-model = "claude-opus-4-6"
 
 [constitution.information_minimality]
 default_threshold = 3500
 """
         cfg = parse_rlm_config(toml)
         assert cfg.constitution_path is None
-        assert cfg.constitution_model == "claude-opus-4-6"
+        assert cfg.constitution_model is None
         assert cfg.constitution_inline is not None
         assert cfg.constitution_inline.information_minimality is not None
         assert cfg.constitution_inline.information_minimality.default_threshold == 3500

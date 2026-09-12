@@ -11,7 +11,7 @@ from aec_bench.contracts.constitution import (
 )
 
 if TYPE_CHECKING:
-    from aec_bench.adapters.rlm.template import TemplateStatus
+    from aec_bench.templates.report.session import TemplateStatus
 
 
 class ScaffoldingState:

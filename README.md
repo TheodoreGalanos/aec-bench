@@ -672,6 +672,16 @@ The recipe writes a scriptable workspace for intake, problem-model generation, r
 evidence, governance, and comparison artifacts. Run
 `aec-bench meta-harness --help` for the complete command surface.
 
+### Report generation
+
+The `rlm` and `lambda-rlm` adapters share template-driven report state, public
+writing checks, scoped rubric guidance, and artifact assembly. Guided RLM
+provides source inspection, section commands, persistent notes, and context
+management. Lambda-RLM provides automatic extraction, review, generation, and
+optional candidate synthesis. Both keep task verification independent.
+See the [report harness protocol](docs/protocols/report-agent-harness.md) and
+[synthetic inspection task](tasks/civil/report/synthetic-inspection/instruction.md).
+
 ### Finite Lifecycles
 
 All finite lifecycle commands are under `aec-bench task lifecycle`:

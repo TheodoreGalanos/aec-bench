@@ -187,8 +187,8 @@ def run_local(
         None,
         "--constitutional-model",
         help=(
-            "Model for constitutional inference (overrides rlm.toml [constitution].model). "
-            "Only used when rlm.toml has a [constitution] section."
+            "Constitutional inference is unsupported for report execution. "
+            "Use explicit parameters in the [constitution] configuration."
         ),
     ),
     reviewer: bool = typer.Option(False, "--reviewer", help="Run the post-verifier LLM reviewer stage"),

@@ -5,10 +5,9 @@ from __future__ import annotations
 
 import json
 import logging
-import re
 import threading
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -21,14 +20,16 @@ from aec_bench.adapters.base import (
     AdapterFailureKind,
     AdapterRequest,
     AdapterResult,
+    AdapterStopReason,
+    initialize_transcript,
 )
 from aec_bench.adapters.config import record_effective_configuration
-from aec_bench.adapters.lambda_rlm.config import LambdaRlmConfig
+from aec_bench.adapters.lambda_rlm.config import LambdaRlmConfig, validate_lambda_config
 from aec_bench.adapters.lambda_rlm.executor import PlanExecutor
 from aec_bench.adapters.lambda_rlm.planner import build_execution_plan
 from aec_bench.adapters.lambda_rlm.state import PlanState
+from aec_bench.adapters.output_commit import configured_output_completion_commit, configured_output_completion_contract
 from aec_bench.adapters.rlm.client import RlmClient, RlmCompletionResponse, RlmMessage
-from aec_bench.adapters.rlm.template import ReportTemplate
 from aec_bench.adapters.runtime_limits import AdapterRuntimeLimitError, configured_positive_int
 from aec_bench.contracts.adapter_execution import (
     TokenUsage,
@@ -41,21 +42,12 @@ from aec_bench.contracts.agent_output import AgentOutput, AgentOutputStatus
 from aec_bench.contracts.constitution import ConstitutionManifest
 from aec_bench.contracts.pricing import estimate_cost_usd
 from aec_bench.contracts.rubric import Rubric
+from aec_bench.templates.report.criteria import validate_rubric
+from aec_bench.templates.report.output import REPORT_OUTPUT_FORMATS, write_report
+from aec_bench.templates.report.session import ReportSession
+from aec_bench.templates.report.sources import contained_path
 
 _log = logging.getLogger(__name__)
-
-_OUTPUT_FILENAME = "output.md"
-
-_LEADING_H1_RE = re.compile(r"^# [^\n]*\n+")
-
-
-def _strip_leading_top_level_heading(content: str) -> str:
-    """Remove a leading top-level (``# ...``) heading line from *content* if present.
-
-    The assembler owns section numbering, so any heading the LLM included would
-    duplicate (and likely contradict) the canonical one.
-    """
-    return _LEADING_H1_RE.sub("", content, count=1)
 
 
 @dataclass(frozen=True)
@@ -68,8 +60,23 @@ class _LambdaTranscriptEntry(TranscriptEntry):
 class _TokenCountingClient:
     """Thin wrapper around an RlmClient that accumulates input/output token totals."""
 
-    def __init__(self, inner: RlmClient, *, max_calls: int | None = None) -> None:
+    def __init__(
+        self,
+        inner: RlmClient,
+        *,
+        max_calls: int | None = None,
+        token_budget: int | None = None,
+        instruction: str = "",
+        system_prompt: str | None = None,
+    ) -> None:
+        self.model_clients: dict[str, RlmClient] = {}
         self._inner = inner
+        self.token_budget = token_budget
+        self.instruction = instruction
+        self.system_prompt = system_prompt
+        self.stop_error: Exception | None = None
+        self.usage_known = True
+        self.per_model: dict[str, dict[str, int]] = {}
         self._max_calls = max_calls
         self._calls_started = 0
         self._lock = threading.Lock()
@@ -92,25 +99,54 @@ class _TokenCountingClient:
         messages: list[RlmMessage],
         system_prompt: str | None,
         temperature: float | None = None,
+        max_output_tokens: int | None = None,
     ) -> RlmCompletionResponse:
         with self._lock:
+            if self.stop_error is not None:
+                raise self.stop_error
             if self._max_calls is not None and self._calls_started >= self._max_calls:
-                raise AdapterRuntimeLimitError(
-                    f"max_turns={self._max_calls} exhausted before the next lambda-RLM model call"
-                )
+                self.stop_error = AdapterRuntimeLimitError(f"max_turns={self._max_calls} exhausted")
+                raise self.stop_error
             self._calls_started += 1
+            usage = self.per_model.setdefault(
+                model,
+                {"calls": 0, "input_tokens": 0, "output_tokens": 0, "cache_read_tokens": 0, "cache_write_tokens": 0},
+            )
+            usage["calls"] += 1
 
-        response = self._inner.generate(
-            model=model,
-            messages=messages,
-            system_prompt=system_prompt,
-            temperature=temperature,
-        )
+        policy = "\n\n".join(p for p in [self.system_prompt, system_prompt] if p)
+        task_messages = [RlmMessage(role="user", content=self.instruction)] if self.instruction else []
+        try:
+            output_settings = {"max_output_tokens": max_output_tokens} if max_output_tokens is not None else {}
+            response = self.model_clients.get(model, self._inner).generate(
+                model=model,
+                messages=task_messages + messages,
+                system_prompt=policy or None,
+                temperature=temperature,
+                **output_settings,
+            )
+        except Exception as exc:
+            with self._lock:
+                self.usage_known = False
+                self.stop_error = exc
+            raise
         with self._lock:
             self.total_input += response.input_tokens
             self.total_output += response.output_tokens
             self.total_cache_read += response.cache_read_tokens
             self.total_cache_write += response.cache_write_tokens
+            usage = self.per_model[model]
+            usage["input_tokens"] += response.input_tokens
+            usage["output_tokens"] += response.output_tokens
+            usage["cache_read_tokens"] += response.cache_read_tokens
+            usage["cache_write_tokens"] += response.cache_write_tokens
+            if response.error_message:
+                self.usage_known = False
+                self.stop_error = RuntimeError(response.error_message)
+            elif self.token_budget is not None and self.total_input + self.total_output >= self.token_budget:
+                self.stop_error = AdapterRuntimeLimitError(f"Observed token budget {self.token_budget} reached")
+        if response.error_message:
+            raise RuntimeError(response.error_message)
         return response
 
 
@@ -150,7 +186,7 @@ class LambdaRlmAdapter:
         adapter_name: str,
         model_name: str,
         client: RlmClient,
-        template: ReportTemplate,
+        template: ReportSession,
         source_docs: dict[str, str],
         config: LambdaRlmConfig,
         workspace: str,
@@ -163,6 +199,7 @@ class LambdaRlmAdapter:
         template_meta: TemplateMeta | None = None,
         sandbox: DocumentSandbox | None = None,
     ) -> None:
+        self._execution_lock = threading.Lock()
         self._adapter_name = adapter_name
         self._model_name = model_name
         self._client = client
@@ -174,7 +211,7 @@ class LambdaRlmAdapter:
         self._advisor_client = advisor_client
         self._advisor_config = advisor_config
         self._constitution = constitution
-        self._rubric = rubric
+        self._rubric = rubric or template.rubric
         self._boilerplate_fragments = boilerplate_fragments or {}
         self._template_meta = template_meta
         self._sandbox = sandbox
@@ -187,8 +224,38 @@ class LambdaRlmAdapter:
     # -- Adapter protocol -------------------------------------------------------
 
     def execute(self, request: AdapterRequest) -> AdapterResult:
-        """Run the full lambda-rlm pipeline and return an AdapterResult."""
-        transcript: list[TranscriptEntry] = []
+        """Keep invocations that share this adapter's workspace separate."""
+        with self._execution_lock:
+            return self._execute(request)
+
+    def _execute(self, request: AdapterRequest) -> AdapterResult:
+        """Run the report pipeline with fresh mutable report state."""
+        validate_lambda_config(self._config)
+        if request.output_format not in REPORT_OUTPUT_FORMATS:
+            raise ValueError(f"Unsupported report output format: {request.output_format}")
+        contained_path(Path(self._workspace), request.output_path)
+        contract = configured_output_completion_contract(request)
+        if contract is not None or configured_output_completion_commit(request, contract=contract):
+            raise ValueError("lambda-RLM does not support explicit output commitment")
+        output_target = contained_path(Path(self._workspace), request.output_path)
+        if output_target in {
+            Path(self._workspace).resolve() / name
+            for name in (
+                "sections.json",
+                "composition_trace.json",
+                "extraction_candidates.json",
+                "grounding_report.json",
+            )
+        }:
+            raise ValueError("Report output path conflicts with an auxiliary artifact")
+        self._template = self._template.fresh()
+        unknown_targets = set(self._config.fill_section.apply_to_sections) - {
+            s.id for s in self._template.schema.sections
+        }
+        if unknown_targets:
+            raise ValueError(f"Unknown fill_section.apply_to_sections: {sorted(unknown_targets)}")
+        validate_rubric(self._template.schema, self._rubric, self._source_docs)
+        transcript = initialize_transcript(request)
 
         # Phase 1: Plan
         sections = self._extract_section_dicts()
@@ -223,7 +290,19 @@ class LambdaRlmAdapter:
         # Phases 2–4: Extract → Review → Generate (via PlanExecutor)
         # Wrap client to capture separate input/output token totals
         max_turns = configured_positive_int(request.configuration, "max_turns")
-        counting_client = _TokenCountingClient(self._client, max_calls=max_turns)
+        token_budget = min(
+            self._config.token_budget,
+            configured_positive_int(request.configuration, "token_budget") or self._config.token_budget,
+        )
+        counting_client = _TokenCountingClient(
+            self._client,
+            max_calls=max_turns,
+            token_budget=token_budget,
+            instruction=request.instruction,
+            system_prompt=request.system_prompt,
+        )
+        if self._advisor_client is not None and self._advisor_config is not None:
+            counting_client.model_clients[self._advisor_config.model] = self._advisor_client
         source_fidelity = self._constitution.source_fidelity if self._constitution else None
         information_minimality = self._constitution.information_minimality if self._constitution else None
         executor = PlanExecutor(
@@ -240,25 +319,38 @@ class LambdaRlmAdapter:
             template_meta=self._template_meta,
             sandbox=self._sandbox,
         )
-        state = executor.execute(plan)
+        state = PlanState(estimated_calls=plan.total_estimated_calls)
+        run_error: Exception | None = None
+        try:
+            executor.execute(plan, state=state)
+        except Exception as exc:
+            run_error = exc
+        run_error = counting_client.stop_error or run_error
 
+        state.llm_calls = counting_client.calls_started
+        state.tokens_used = counting_client.total_input + counting_client.total_output
         total_input = counting_client.total_input
         total_output = counting_client.total_output
         total_cache_read = counting_client.total_cache_read
         total_cache_write = counting_client.total_cache_write
 
-        cost = estimate_cost_usd(
-            self._model_name,
-            input_tokens=total_input,
-            output_tokens=total_output,
-            cache_read_tokens=total_cache_read,
-            cache_write_tokens=total_cache_write,
-        )
+        model_costs = [
+            estimate_cost_usd(
+                model,
+                input_tokens=usage["input_tokens"],
+                output_tokens=usage["output_tokens"],
+                cache_read_tokens=usage["cache_read_tokens"],
+                cache_write_tokens=usage["cache_write_tokens"],
+            )
+            for model, usage in counting_client.per_model.items()
+        ]
+        cost_known = counting_client.usage_known and all(cost is not None for cost in model_costs)
+        cost = sum(cost for cost in model_costs if cost is not None) if cost_known else None
         cost_str = f", est ${cost:.3f}" if cost is not None else ""
 
         # Write a completion entry after all phases finish
         completion_summary = (
-            f"Completed {state.llm_calls} LLM calls, "
+            f"Executed {state.llm_calls} LLM calls, "
             f"{state.tokens_used} tokens used"
             f" (cache read: {total_cache_read:,}, cache write: {total_cache_write:,})"
             f"{cost_str}"
@@ -288,11 +380,9 @@ class LambdaRlmAdapter:
         )
 
         # Phase 5: Submit and assemble output document
-        submission = self._template.submit()
-        output_text = self._assemble_output(submission.sections)
-
-        output_path = str(Path(self._workspace) / _OUTPUT_FILENAME)
-        Path(output_path).write_text(output_text, encoding="utf-8")
+        submission = write_report(self._template, request.output_path, request.output_format, workspace=self._workspace)
+        output_path = request.output_path
+        output_text = output_target.read_text(encoding="utf-8")
 
         # Write structured sections for downstream export (e.g. Word template population)
         sections_path = Path(self._workspace) / "sections.json"
@@ -328,10 +418,39 @@ class LambdaRlmAdapter:
 
         # Skipped sections (e.g. generation_mode=external) are intentional gaps
         real_gaps = [g for g in submission.gaps if g not in plan.skipped_sections]
-        is_complete = len(real_gaps) == 0
+        is_complete = submission.complete and not state.structure_unresolved and run_error is None
         status = AgentOutputStatus.COMPLETED if is_complete else AgentOutputStatus.PARTIAL
         failure_kind = None if is_complete else AdapterFailureKind.MISSING_OUTPUT
 
+        stop_reason = None
+        if isinstance(run_error, AdapterRuntimeLimitError):
+            token_stop = counting_client.total_input + counting_client.total_output >= token_budget
+            failure_kind = (
+                AdapterFailureKind.TOKEN_BUDGET_REACHED if token_stop else AdapterFailureKind.TURN_LIMIT_REACHED
+            )
+            stop_reason = AdapterStopReason.TOKEN_BUDGET if token_stop else AdapterStopReason.ITERATION_CAP
+        elif run_error is not None:
+            failure_kind = AdapterFailureKind.PROVIDER_ERROR
+
+        if not is_complete:
+            transcript.append(
+                _LambdaTranscriptEntry(
+                    role=TranscriptRole.ASSISTANT,
+                    call_type="report_diagnostics",
+                    content=json.dumps(
+                        {
+                            "gaps": submission.gaps,
+                            "validation_failures": state.validation_failures,
+                            "public_checks": {key: asdict(value) for key, value in submission.diagnostics.items()},
+                            "rejected_drafts": {key: state.sections.get(key, "") for key in state.validation_failures},
+                            "structure_unresolved": {
+                                key: asdict(value) for key, value in state.structure_unresolved.items()
+                            },
+                        },
+                        default=str,
+                    ),
+                )
+            )
         if real_gaps:
             _log.warning("Template incomplete; gaps: %s", real_gaps)
 
@@ -340,25 +459,53 @@ class LambdaRlmAdapter:
             resolved_model=self._model_name,
             configuration_record=record_effective_configuration(
                 resolved_model=self._model_name,
-                configuration=dict(request.configuration),
+                configuration=dict(request.configuration)
+                | {
+                    "report_config": _configuration_snapshot(self._config) | {"token_budget": token_budget},
+                    "constitution": asdict(self._constitution) if self._constitution else None,
+                    "report_assets": self._template.configuration(),
+                    "usage_by_model": counting_client.per_model,
+                },
             ),
             agent_output=AgentOutput(
                 status=status,
                 output_path=output_path,
-                output_format="md",
-                error_message=None,
+                output_format=request.output_format,
+                error_message=str(run_error)
+                if run_error
+                else (
+                    str(
+                        {
+                            "gaps": submission.gaps,
+                            "validation": state.validation_failures,
+                            "structure": state.structure_unresolved,
+                        }
+                    )
+                    if not is_complete
+                    else None
+                ),
             ),
             transcript=transcript,
             failure_kind=failure_kind,
+            stop_reason=stop_reason,
             turns_used=counting_client.calls_started,
             max_turns=max_turns,
             raw_output_text=output_text,
-            provider_error=None,
-            usage_model_calls=counting_client.calls_started,
-            usage_input_tokens=total_input,
-            usage_output_tokens=total_output,
+            provider_error=str(run_error)
+            if run_error and not isinstance(run_error, AdapterRuntimeLimitError)
+            else None,
+            usage_model_calls=counting_client.calls_started - state.advisor_calls,
+            usage_input_tokens=total_input - state.advisor_input_tokens if counting_client.usage_known else None,
+            usage_output_tokens=total_output - state.advisor_output_tokens if counting_client.usage_known else None,
             usage_cache_read_tokens=total_cache_read,
             usage_cache_write_tokens=total_cache_write,
+            usage_advisor_calls=state.advisor_calls if self._config.advisor else None,
+            usage_advisor_input_tokens=state.advisor_input_tokens
+            if self._config.advisor and counting_client.usage_known
+            else None,
+            usage_advisor_output_tokens=state.advisor_output_tokens
+            if self._config.advisor and counting_client.usage_known
+            else None,
         )
 
     def adapter_name(self) -> str:
@@ -497,25 +644,10 @@ class LambdaRlmAdapter:
             )
         return result
 
-    def _assemble_output(self, sections: dict[str, dict[str, Any]]) -> str:
-        """Join section prose values into a single markdown document.
 
-        The assembler owns section numbering — every section gets a
-        ``# {N}. {title}`` heading where N is its 1-indexed position in the
-        template. LLM-supplied leading ``# ...`` headings on transform/guided
-        content are stripped before the assembler prepends its own, so we
-        never end up with duplicate or hallucinated section numbers.
-        """
-        parts: list[str] = []
-        position = 0
-        for section in self._template._schema.sections:
-            filled = sections.get(section.id)
-            if filled is None:
-                continue
-            content = filled.get("content", "")
-            if not content:
-                continue
-            position += 1
-            body = _strip_leading_top_level_heading(str(content))
-            parts.append(f"# {position}. {section.title}\n\n{body}")
-        return "\n\n".join(parts)
+def _configuration_snapshot(config: LambdaRlmConfig) -> dict[str, Any]:
+    result = asdict(config)
+    result["grounding"]["custom_facts"] = {
+        key: pattern.pattern for key, pattern in config.grounding.custom_facts.items()
+    }
+    return result

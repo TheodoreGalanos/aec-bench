@@ -5,7 +5,15 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from aec_bench.adapters.base import AdapterStopReason
+from aec_bench.adapters.base import AdapterFailureKind, AdapterStopReason
+
+GUARDRAIL_FAILURE_KINDS = {
+    AdapterStopReason.ITERATION_CAP: AdapterFailureKind.TURN_LIMIT_REACHED,
+    AdapterStopReason.TOKEN_BUDGET: AdapterFailureKind.TOKEN_BUDGET_REACHED,
+    AdapterStopReason.SUBCALL_LIMIT: AdapterFailureKind.SUBCALL_LIMIT_REACHED,
+    AdapterStopReason.COST_BUDGET: AdapterFailureKind.COST_BUDGET_REACHED,
+    AdapterStopReason.BILLABLE_INPUT_BUDGET: AdapterFailureKind.BILLABLE_INPUT_BUDGET_REACHED,
+}
 
 
 @dataclass(frozen=True)
@@ -33,6 +41,8 @@ class GuardrailState:
         max_budget_usd: float = 0.0,
         billable_input_budget: int = 0,
     ) -> None:
+        self.provider_error: str | None = None
+        self.usage_known = True
         self._token_budget = token_budget
         self._max_iterations = max_iterations
         self._max_subcall_depth = max_subcall_depth
@@ -69,9 +79,31 @@ class GuardrailState:
         cache_read_tokens: int = 0,
     ) -> None:
         """Add tokens consumed by a sub-call without incrementing iteration count."""
+        self.record_auxiliary_tokens(
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            cost_usd=cost_usd,
+            cache_read_tokens=cache_read_tokens,
+            counts_as_subcall=True,
+        )
+
+    def record_auxiliary_tokens(
+        self,
+        *,
+        input_tokens: int,
+        output_tokens: int,
+        cost_usd: float = 0.0,
+        cache_read_tokens: int = 0,
+        counts_as_subcall: bool = False,
+    ) -> None:
         self._total_tokens += input_tokens + output_tokens
         self._total_cost_usd += cost_usd
         self._billable_input_tokens += max(input_tokens - cache_read_tokens, 0)
+        if counts_as_subcall:
+            self._subcall_count += 1
+
+    def reserve_subcall(self) -> None:
+        """Count an admitted call before parallel work can consume the same slot."""
         self._subcall_count += 1
 
     def can_subcall(self, current_depth: int) -> bool:

@@ -38,11 +38,11 @@ def test_parse_review_response_needs_reextract():
     assert "brief:milestones" in result.reextract_sources
 
 
-def test_parse_review_response_malformed_falls_back_to_pass():
+def test_parse_review_response_malformed_is_unresolved():
     """If the model returns unparseable JSON, default to pass (don't block)."""
     result = parse_review_response("This is not JSON at all.")
-    assert result.status == "pass"
-    assert result.needs_action is False
+    assert result.status == "fail"
+    assert result.needs_action is True
 
 
 def test_run_review_calls_client():

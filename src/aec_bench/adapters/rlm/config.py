@@ -3,14 +3,16 @@
 
 from __future__ import annotations
 
+import math
 import tomllib
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields
 from typing import Any
 
+from aec_bench.adapters.config import merge_configuration, reject_unknown
 from aec_bench.contracts.advisor import AdvisorConfig
 from aec_bench.contracts.constitution import (
     ConstitutionManifest,
-    parse_constitution,
+    parse_constitution_data,
 )
 
 
@@ -57,7 +59,7 @@ class ExecutionConfig:
     hard_ceiling_pct: float = 0.95  # force finalisation at this %
     compaction_model: str | None = None  # None = use agent's model
     subcall_model: str | None = None  # None = use agent's model for sub-calls
-    context_limit: int = 1_000_000  # model's context window in tokens
+    context_limit: int = 128_000  # model's context window in tokens
     max_parallel_workers: int = 4  # concurrency for parallel() and fill_parallel()
 
 
@@ -67,6 +69,8 @@ class RlmConfig:
 
     template_tier: str
     template_definition: str | None = None
+    source_mapping: str | None = None
+    validation_rules: str | None = None
     inputs: list[InputConfig] = field(default_factory=list)
     hints: list[str] = field(default_factory=list)
     prohibited: list[str] = field(default_factory=list)
@@ -79,16 +83,19 @@ class RlmConfig:
     constitution_model: str | None = None
 
 
-def parse_rlm_config(toml_str: str) -> RlmConfig:
+def parse_rlm_config(toml_str: str, *, overrides: dict[str, Any] | None = None) -> RlmConfig:
     """Parse an rlm.toml string into an RlmConfig."""
-    data = tomllib.loads(toml_str)
+    data = merge_configuration(tomllib.loads(toml_str), overrides or {})
+    _validate_keys(data)
     template_data = data.get("template", {})
     hints_data = data.get("hints", {})
     constitution_path, constitution_inline, constitution_model = _parse_constitution(data.get("constitution"))
 
-    return RlmConfig(
+    config = RlmConfig(
         template_tier=template_data.get("tier", "flat"),
         template_definition=template_data.get("definition"),
+        source_mapping=template_data.get("source_mapping"),
+        validation_rules=template_data.get("validation_rules"),
         inputs=_parse_inputs(data.get("inputs", {})),
         hints=hints_data.get("phases", []),
         prohibited=hints_data.get("prohibited", []),
@@ -100,6 +107,53 @@ def parse_rlm_config(toml_str: str) -> RlmConfig:
         constitution_inline=constitution_inline,
         constitution_model=constitution_model,
     )
+
+    if config.advisor and (
+        not config.advisor.model
+        or config.advisor.max_uses < 0
+        or min(config.advisor.max_response_tokens, config.advisor.context_window) <= 0
+    ):
+        raise ValueError("invalid advisor limits or model")
+    validate_execution(config.execution)
+    if config.guardrails.token_budget <= 0 or config.guardrails.max_iterations <= 0:
+        raise ValueError("token_budget and max_iterations must be positive")
+    if not 0 < config.guardrails.budget_warning_pct <= 100:
+        raise ValueError("budget_warning_pct must be in (0, 100]")
+    for name in ("max_subcall_depth", "max_subcalls", "max_budget_usd", "billable_input_budget"):
+        value = getattr(config.guardrails, name)
+        if not math.isfinite(value) or value < 0:
+            raise ValueError(f"guardrails.{name} must be finite and nonnegative")
+    if config.constitution_model:
+        raise ValueError(
+            "constitutional inference is unsupported in metered report execution; supply explicit parameters"
+        )
+    return config
+
+
+def validate_execution(config: ExecutionConfig) -> None:
+    if config.context_limit <= 0 or config.max_parallel_workers <= 0:
+        raise ValueError("context_limit and max_parallel_workers must be positive")
+    if not 0 < config.compaction_threshold_pct < config.hard_ceiling_pct <= 1:
+        raise ValueError("require 0 < compaction_threshold_pct < hard_ceiling_pct <= 1")
+
+
+def _validate_keys(data: dict[str, Any]) -> None:
+    reject_unknown(
+        data, {"template", "inputs", "hints", "subcalls", "guardrails", "execution", "advisor", "constitution"}, "rlm"
+    )
+    for name, allowed in {
+        "template": {"tier", "definition", "source_mapping", "validation_rules"},
+        "hints": {"phases", "prohibited"},
+        "guardrails": {f.name for f in fields(GuardrailConfig)},
+        "execution": {f.name for f in fields(ExecutionConfig)},
+        "advisor": {f.name for f in fields(AdvisorConfig)},
+        "constitution": set(_CONSTITUTION_INLINE_KEYS) | {"path", "model"},
+    }.items():
+        reject_unknown(data.get(name, {}), allowed, name)
+    for name, item in data.get("inputs", {}).items():
+        reject_unknown(item, {"type", "source", "pre_parse", "description"}, f"inputs.{name}")
+    for name, item in data.get("subcalls", {}).items():
+        reject_unknown(item, {"enabled", "custom_impl", "description"}, f"subcalls.{name}")
 
 
 def _parse_inputs(data: dict[str, Any]) -> list[InputConfig]:
@@ -146,7 +200,7 @@ def _parse_execution(data: dict[str, Any]) -> ExecutionConfig:
         hard_ceiling_pct=data.get("hard_ceiling_pct", 0.95),
         compaction_model=data.get("compaction_model"),
         subcall_model=data.get("subcall_model"),
-        context_limit=data.get("context_limit", 1_000_000),
+        context_limit=data.get("context_limit", 128_000),
         max_parallel_workers=data.get("max_parallel_workers", 4),
     )
 
@@ -169,7 +223,7 @@ def _parse_constitution(
     if data is None:
         return None, None, None
     inline_fragment = {key: value for key, value in data.items() if key in _CONSTITUTION_INLINE_KEYS}
-    inline = parse_constitution(_inline_constitution_toml(inline_fragment)) if inline_fragment else None
+    inline = parse_constitution_data(inline_fragment) if inline_fragment else None
     return data.get("path"), inline, data.get("model")
 
 
@@ -181,26 +235,3 @@ _CONSTITUTION_SECTIONS = (
     "earned_autonomy",
 )
 _CONSTITUTION_INLINE_KEYS = frozenset((*_CONSTITUTION_SECTIONS, "principles", "version"))
-
-
-def _inline_constitution_toml(data: dict[str, Any]) -> str:
-    parts = [f'version = "{data.get("version", "0.1.0")}"']
-    for section_key in _CONSTITUTION_SECTIONS:
-        section = data.get(section_key)
-        if isinstance(section, dict):
-            parts.append(f"\n[{section_key}]")
-            parts.extend(_toml_assignment(key, value) for key, value in section.items())
-    principles = data.get("principles")
-    if isinstance(principles, list):
-        for principle in principles:
-            parts.append("\n[[principles]]")
-            parts.extend(_toml_assignment(key, value) for key, value in principle.items())
-    return "\n".join(parts)
-
-
-def _toml_assignment(key: str, value: Any) -> str:
-    if isinstance(value, str):
-        return f'{key} = "{value}"'
-    if isinstance(value, bool):
-        return f"{key} = {str(value).lower()}"
-    return f"{key} = {value}"

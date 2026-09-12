@@ -7,8 +7,8 @@ from typing import Any
 
 from aec_bench.adapters.rlm.fill_parallel import fill_parallel
 from aec_bench.adapters.rlm.parallel import ParallelError
-from aec_bench.adapters.rlm.template import ReportTemplate
 from aec_bench.contracts.repl import DependencyTreeSchema, OutputField, TreeSection
+from aec_bench.templates.report.session import ReportSession
 
 
 def _make_schema(*sections: tuple[str, list[str]]) -> DependencyTreeSchema:
@@ -33,7 +33,7 @@ class TestFillParallel:
             ("method", []),
             ("results", ["intro", "method"]),
         )
-        template = ReportTemplate(schema)
+        template = ReportSession(schema)
 
         def generator(
             section_id: str,
@@ -51,7 +51,7 @@ class TestFillParallel:
 
     def test_explicit_section_ids(self) -> None:
         schema = _make_schema(("a", []), ("b", []), ("c", []))
-        template = ReportTemplate(schema)
+        template = ReportSession(schema)
 
         def generator(
             section_id: str,
@@ -73,7 +73,7 @@ class TestFillParallel:
 
     def test_skips_sections_with_unmet_deps(self) -> None:
         schema = _make_schema(("a", []), ("b", ["a"]))
-        template = ReportTemplate(schema)
+        template = ReportSession(schema)
 
         def generator(
             section_id: str,
@@ -95,7 +95,7 @@ class TestFillParallel:
 
     def test_generator_error_returns_parallel_error(self) -> None:
         schema = _make_schema(("a", []), ("b", []))
-        template = ReportTemplate(schema)
+        template = ReportSession(schema)
 
         def generator(
             section_id: str,
@@ -115,7 +115,7 @@ class TestFillParallel:
 
     def test_passes_context_and_guidance(self) -> None:
         schema = _make_schema(("base", []), ("derived", ["base"]))
-        template = ReportTemplate(schema)
+        template = ReportSession(schema)
 
         # Fill base first
         template.fill_section("base", {"content": "base content"})
@@ -136,8 +136,9 @@ class TestFillParallel:
         assert "base" in received["context"]
 
     def test_returns_empty_when_nothing_unlocked(self) -> None:
-        schema = _make_schema(("a", ["b"]), ("b", ["a"]))  # circular
-        template = ReportTemplate(schema)
+        schema = _make_schema(("a", []))
+        template = ReportSession(schema)
+        template.fill_section("a", {"content": "Complete"})
 
         def generator(
             section_id: str,

@@ -119,7 +119,9 @@ def _run_adapter(workspace: Path) -> None:
         model_name="test-model",
         workspace=str(workspace),
     )
-    adapter.execute(AdapterRequest(instruction="Test run"))
+    adapter.execute(
+        AdapterRequest(output_path=str(workspace / "output.md"), output_format="markdown", instruction="Test run")
+    )
 
 
 # ─────────────────────────────────────────────────────────────────────────────

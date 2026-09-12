@@ -17,8 +17,8 @@ from aec_bench.adapters.rlm.config import (
 )
 from aec_bench.adapters.rlm.engine import ExecutionResult, ReplEnvironment
 from aec_bench.adapters.rlm.initialiser import build_rlm_adapter
-from aec_bench.adapters.rlm.template import ReportTemplate
 from aec_bench.adapters.rlm.turn_execution import TurnExecution, TurnExecutionSurface
+from aec_bench.templates.report.session import ReportSession
 
 __all__ = [
     "ExecutionConfig",
@@ -26,7 +26,7 @@ __all__ = [
     "GuardrailConfig",
     "ReplayRlmClient",
     "ReplEnvironment",
-    "ReportTemplate",
+    "ReportSession",
     "RlmAdapter",
     "RlmClient",
     "RlmCompletionResponse",

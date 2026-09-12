@@ -1,0 +1,10 @@
+[[sections]]
+id = "comparison"
+title = "Options comparison"
+input_mapping = ["options"]
+fields = [{name = "text", dtype = "str", required = true}]
+[[sections]]
+id = "decision"
+title = "Decision"
+depends_on = ["comparison"]
+fields = [{name = "text", dtype = "str", required = true}]

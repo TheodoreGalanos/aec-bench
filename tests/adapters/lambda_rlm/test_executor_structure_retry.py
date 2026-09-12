@@ -16,8 +16,8 @@ from aec_bench.adapters.rlm.client import (
     RlmCompletionResponse,
     RlmMessage,
 )
-from aec_bench.adapters.rlm.template import ReportTemplate
-from aec_bench.adapters.rlm.template_parser import parse_report_template
+from aec_bench.templates.report.parser import parse_report_template
+from aec_bench.templates.report.session import ReportSession
 
 _REGISTER_TOML = """
 [[sections]]
@@ -31,9 +31,9 @@ revision = { dtype = "str", description = "rev", required = true }
 """
 
 
-def _make_template() -> ReportTemplate:
+def _make_template() -> ReportSession:
     schema = parse_report_template(_REGISTER_TOML)
-    return ReportTemplate(schema=schema)
+    return ReportSession(schema=schema)
 
 
 def _resp(text: str, *, in_tokens: int = 100, out_tokens: int = 50) -> RlmCompletionResponse:
@@ -99,7 +99,7 @@ generation_mode = "transform"
 notes = { dtype = "str", description = "", required = false }
 """
     schema = parse_report_template(toml)
-    template = ReportTemplate(schema=schema)
+    template = ReportSession(schema=schema)
     client = ReplayRlmClient(responses=[_resp("free prose")])
     cfg = LambdaRlmConfig(
         structure_enforcement=StructureEnforcementConfig(enabled=True),

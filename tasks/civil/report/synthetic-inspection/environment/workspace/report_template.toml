@@ -1,0 +1,43 @@
+[meta]
+domain = "synthetic inspection report"
+voice = "Use plain, factual prose"
+
+[[sections]]
+id = "findings"
+title = "Findings"
+input_mapping = ["inspection"]
+writing_guidance = ["State the observed count and cite the source ID."]
+fields = [{name = "text", dtype = "str", required = true}]
+
+[[sections]]
+id = "summary"
+title = "Summary"
+depends_on = ["findings"]
+fields = [{name = "text", dtype = "str", required = true}]
+
+[rubric]
+visibility = "public"
+rollup_strategy = "weighted_mean"
+[[rubric.dimensions]]
+id = "evidence"
+name = "Evidence and consistency"
+weight = 2
+max_score = 10
+eval_method = "automated"
+eval_sections = []
+eval_references = ["inspection"]
+expert_persona = "Report reviewer"
+criteria = [
+  {text = "State only the recorded count in both sections.", category = "essential"},
+  {text = "Cite the source ID inspection in both sections.", category = "important"},
+]
+
+[[rubric.dimensions]]
+id = "clarity"
+name = "Concise presentation"
+weight = 1
+max_score = 1
+eval_method = "automated"
+eval_sections = []
+eval_references = ["inspection"]
+criteria = [{text = "Keep each section below 160 characters.", category = "optional"}]

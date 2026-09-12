@@ -343,8 +343,7 @@ trigger = "both"
 confidence_threshold = 0.5
 consistency_threshold = 0.8
 """
-        with pytest.warns(UserWarning, match="requires k_candidates > 1"):
-            config = parse_lambda_rlm_config(toml)
+        config = parse_lambda_rlm_config(toml + "\n[extract]\nk_candidates = 2\n")
         assert config.review.trigger == "both"
         assert config.review.confidence_threshold == 0.5
         assert config.review.consistency_threshold == 0.8
@@ -371,6 +370,8 @@ class TestTopLevelKCandidates:
     def test_top_level_propagates_to_extract(self) -> None:
         toml = """
 k_candidates = 3
+[fill_section]
+tournament_mode = "synthesis"
 
 [template]
 tier = "dependency_tree"
@@ -381,6 +382,8 @@ tier = "dependency_tree"
     def test_top_level_propagates_to_fill_section(self) -> None:
         toml = """
 k_candidates = 3
+[fill_section]
+tournament_mode = "synthesis"
 
 [template]
 tier = "dependency_tree"
@@ -391,7 +394,6 @@ tier = "dependency_tree"
     def test_per_section_overrides_top_level(self) -> None:
         toml = """
 k_candidates = 3
-
 [template]
 tier = "dependency_tree"
 
@@ -399,21 +401,16 @@ tier = "dependency_tree"
 k_candidates = 5
 
 [fill_section]
+tournament_mode = "synthesis"
 k_candidates = 2
 """
         config = parse_lambda_rlm_config(toml)
         assert config.extract.k_candidates == 5
         assert config.fill_section.k_candidates == 2
 
-    def test_template_level_k_candidates_still_supported(self) -> None:
-        toml = """
-[template]
-tier = "dependency_tree"
-k_candidates = 4
-"""
-        config = parse_lambda_rlm_config(toml)
-        assert config.extract.k_candidates == 4
-        assert config.fill_section.k_candidates == 4
+    def test_template_level_k_candidates_is_rejected(self) -> None:
+        with pytest.raises(ValueError, match="unknown template options"):
+            parse_lambda_rlm_config("[template]\nk_candidates = 4")
 
     def test_absent_top_level_defaults_to_one(self) -> None:
         toml = '[template]\ntier = "dependency_tree"\n'
@@ -449,8 +446,7 @@ tier = "dependency_tree"
 [review]
 trigger = "both"
 """
-        with pytest.warns(UserWarning, match="requires k_candidates > 1"):
-            config = parse_lambda_rlm_config(toml)
+        config = parse_lambda_rlm_config(toml + "\n[extract]\nk_candidates = 2\n")
         assert config.uncertainty_scoring_active is True
 
     def test_trigger_consistency_means_scoring_inactive(self) -> None:
@@ -461,8 +457,7 @@ tier = "dependency_tree"
 [review]
 trigger = "consistency"
 """
-        with pytest.warns(UserWarning, match="requires k_candidates > 1"):
-            config = parse_lambda_rlm_config(toml)
+        config = parse_lambda_rlm_config(toml + "\n[extract]\nk_candidates = 2\n")
         assert config.uncertainty_scoring_active is False
 
     def test_trigger_never_means_scoring_inactive(self) -> None:
@@ -491,69 +486,31 @@ k_candidates = 0
         with pytest.raises(ValueError, match="k_candidates"):
             parse_lambda_rlm_config(toml)
 
-    def test_k_gt_one_with_zero_temperature_warns(self) -> None:
-        import warnings
+    def test_zero_temperature_is_explicit(self) -> None:
+        config = parse_lambda_rlm_config("[extract]\nk_candidates=3\ntemperature=0.0")
+        assert config.extract.temperature == 0.0
 
-        toml = """
-[template]
-tier = "dependency_tree"
+    def test_single_extract_temperature_is_explicit(self) -> None:
+        config = parse_lambda_rlm_config("[extract]\ntemperature=0.9")
+        assert config.extract.temperature == 0.9
 
-[extract]
-k_candidates = 3
-temperature = 0.0
-"""
-        with warnings.catch_warnings(record=True) as w:
-            warnings.simplefilter("always")
-            parse_lambda_rlm_config(toml)
-            assert any("temperature" in str(warning.message) for warning in w)
-
-    def test_k_one_with_explicit_temperature_warns(self) -> None:
-        import warnings
-
-        toml = """
-[template]
-tier = "dependency_tree"
-
-[extract]
-k_candidates = 1
-temperature = 0.9
-"""
-        with warnings.catch_warnings(record=True) as w:
-            warnings.simplefilter("always")
-            parse_lambda_rlm_config(toml)
-            assert any("temperature" in str(warning.message) for warning in w)
-
-    def test_consistency_trigger_with_k_one_warns(self) -> None:
-        import warnings
-
-        toml = """
-[template]
-tier = "dependency_tree"
-
-[review]
-trigger = "consistency"
-"""
-        with warnings.catch_warnings(record=True) as w:
-            warnings.simplefilter("always")
-            parse_lambda_rlm_config(toml)
-            assert any("consistency" in str(warning.message).lower() for warning in w)
+    def test_consistency_requires_multiple_extractions(self) -> None:
+        with pytest.raises(ValueError, match="requires extract.k_candidates"):
+            parse_lambda_rlm_config('[review]\ntrigger="consistency"')
 
 
 def test_compose_mode_defaults_to_orchestrated():
     cfg = parse_lambda_rlm_config("")
     assert cfg.compose.mode == "orchestrated"
-    assert cfg.compose.planning_phase_blocking is True
 
 
 def test_compose_mode_agentic():
     toml_str = """
 [compose]
 mode = "agentic"
-planning_phase_blocking = false
 """
     cfg = parse_lambda_rlm_config(toml_str)
     assert cfg.compose.mode == "agentic"
-    assert cfg.compose.planning_phase_blocking is False
 
 
 def test_compose_mode_rejects_unknown_value():
@@ -696,8 +653,6 @@ def test_sandbox_block_disabled_by_default():
     cfg = parse_lambda_rlm_config('[template]\ndefinition="t.toml"\n')
     assert cfg.sandbox.enabled is False
     assert cfg.sandbox.tool_use is False
-    assert cfg.sandbox.tool_use_caps.max_fetches_per_block == 5
-    assert cfg.sandbox.tool_use_caps.max_total_fetches == 30
     assert cfg.sandbox.extractor_overrides == {}
 
 
@@ -708,17 +663,12 @@ definition = "t.toml"
 [sandbox]
 enabled = true
 tool_use = false
-[sandbox.tool_use_caps]
-max_fetches_per_block = 10
-max_total_fetches = 50
 [sandbox.extractor_overrides]
 "thread.md" = "email_thread"
 """
     cfg = parse_lambda_rlm_config(toml_text)
     assert cfg.sandbox.enabled is True
     assert cfg.sandbox.tool_use is False
-    assert cfg.sandbox.tool_use_caps.max_fetches_per_block == 10
-    assert cfg.sandbox.tool_use_caps.max_total_fetches == 50
     assert cfg.sandbox.extractor_overrides == {"thread.md": "email_thread"}
 
 

@@ -110,7 +110,9 @@ def default_advise(
 
     messages = [RlmMessage(role="user", content="\n".join(user_parts))]
 
-    response = client.generate(model=model, messages=messages, system_prompt=system)
+    response = client.generate(
+        model=model, messages=messages, system_prompt=system, max_output_tokens=max_response_tokens
+    )
 
     if response.error_message:
         return AdvisorResult(

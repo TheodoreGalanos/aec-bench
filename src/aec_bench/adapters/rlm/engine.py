@@ -6,6 +6,7 @@ from __future__ import annotations
 import io
 import re
 import sys
+import threading
 import traceback
 from dataclasses import dataclass, field
 from typing import Any
@@ -52,6 +53,24 @@ class ExecutionResult:
     stdout: str
     error: str | None = None
     variables_changed: list[str] = field(default_factory=list)
+    stdout_chars: int | None = None
+    error_chars: int | None = None
+
+
+_EXECUTION_LOCK = threading.RLock()
+
+
+class _BoundedCapture(io.StringIO):
+    def __init__(self, limit: int) -> None:
+        super().__init__()
+        self.limit = limit
+        self.total = 0
+
+    def write(self, text: str) -> int:
+        available = max(0, self.limit - self.tell())
+        super().write(text[:available])
+        self.total += len(text)
+        return len(text)
 
 
 class ReplEnvironment:
@@ -62,9 +81,11 @@ class ReplEnvironment:
     manipulation.
     """
 
-    def __init__(self, max_output_chars: int = 2000) -> None:
+    def __init__(self, max_capture_chars: int = 1_000_000) -> None:
         self._globals: dict[str, Any] = {"__builtins__": __builtins__}
-        self._max_output_chars = max_output_chars
+        if max_capture_chars <= 0:
+            raise ValueError("max_capture_chars must be positive")
+        self._max_capture_chars = max_capture_chars
         self._user_vars: set[str] = set()
         self._protected_vars: set[str] = set()
         self.final_value: Any = None
@@ -72,7 +93,12 @@ class ReplEnvironment:
 
     def execute(self, code: str) -> ExecutionResult:
         """Execute a code block and return captured output."""
-        stdout_capture = io.StringIO()
+        # stdout is process-global; session executions must not capture each other's output.
+        with _EXECUTION_LOCK:
+            return self._execute(code)
+
+    def _execute(self, code: str) -> ExecutionResult:
+        stdout_capture = _BoundedCapture(self._max_capture_chars)
         old_stdout = sys.stdout
         vars_before = set(self._globals.keys())
 
@@ -86,16 +112,19 @@ class ReplEnvironment:
             new_vars = list(vars_after - vars_before)
             self._user_vars.update(new_vars)
 
-            stdout = self._truncate(raw_output)
-            return ExecutionResult(stdout=stdout, variables_changed=new_vars)
+            return ExecutionResult(stdout=raw_output, variables_changed=new_vars, stdout_chars=stdout_capture.total)
 
         except Exception:
             sys.stdout = old_stdout
             error_text = traceback.format_exc()
             return ExecutionResult(
                 stdout=stdout_capture.getvalue(),
-                error=error_text,
+                error=error_text[: self._max_capture_chars],
+                stdout_chars=stdout_capture.total,
+                error_chars=len(error_text),
             )
+        finally:
+            sys.stdout = old_stdout
 
     def inject_variable(self, var_name: str, expression: str) -> None:
         """Inject a variable into the REPL by executing an assignment."""
@@ -156,11 +185,6 @@ class ReplEnvironment:
         """
         for name, obj in scaffolds.items():
             self._globals[name] = obj
-
-    def _truncate(self, text: str) -> str:
-        if len(text) <= self._max_output_chars:
-            return text
-        return text[: self._max_output_chars] + "\n...[truncated]...\n"
 
 
 def _safe_serialize(val: Any, max_repr_len: int = 200) -> Any:

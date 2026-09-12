@@ -13,10 +13,10 @@ from aec_bench.adapters.rlm.compaction import compact
 from aec_bench.adapters.rlm.engine import ReplEnvironment
 from aec_bench.adapters.rlm.scaffolding import ScaffoldingState
 from aec_bench.adapters.rlm.scratchpad import Scratchpad
-from aec_bench.adapters.rlm.template import ReportTemplate
 from aec_bench.adapters.rlm.tokens import TokenTracker
 from aec_bench.contracts.constitution import StatePersistenceParams
 from aec_bench.contracts.pricing import estimate_cost_usd
+from aec_bench.templates.report.session import ReportSession
 
 logger = logging.getLogger(__name__)
 
@@ -58,7 +58,7 @@ def run_compaction_transition(
     model: str,
     repl: ReplEnvironment,
     scratchpad: Scratchpad | None,
-    template: ReportTemplate | None,
+    template: ReportSession | None,
     params: StatePersistenceParams,
     previous_count: int,
     pre_message_count: int,

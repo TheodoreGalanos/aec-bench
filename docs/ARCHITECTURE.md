@@ -57,6 +57,18 @@ consumes those experiments and their ordinary trial evidence. It does not own a
 second execution or scoring path. See the
 [engineering decision guide](engineering-decision-experiments.md) for use and scope.
 
+### Report generation
+
+`templates/report/` owns report asset parsing, permitted source resolution,
+public rubric context, section state, validation, and artifact assembly. The
+`rlm` adapter binds these operations to a persistent REPL. The `lambda_rlm`
+adapter orchestrates extraction, review, generation, and synthesis against the
+same state. Provider admission and accounting include secondary model work.
+Task staging excludes private verifier material before either adapter runs.
+Evaluation remains the scoring authority. This capability uses the normal
+artifact execution family; it adds no scheduler, run type, or ledger. See the
+[report harness protocol](protocols/report-agent-harness.md).
+
 ### Artifact and workspace tasks
 
 An artifact task gives an agent an instruction and an execution environment.

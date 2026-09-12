@@ -78,7 +78,7 @@ def test_metadata_with_no_execution_result() -> None:
 
 
 def test_metadata_includes_template_status() -> None:
-    from aec_bench.adapters.rlm.template import TemplateStatus
+    from aec_bench.templates.report.session import TemplateStatus
 
     status = TemplateStatus(
         total_sections=5,
