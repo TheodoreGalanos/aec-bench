@@ -6,8 +6,8 @@ from unittest.mock import MagicMock
 
 from aec_bench.adapters.lambda_rlm.initialiser import (
     build_lambda_rlm_adapter,
-    discover_source_docs,
 )
+from aec_bench.templates.report.sources import discover_source_index
 
 _LAMBDA_RLM_TOML = """
 [template]
@@ -47,7 +47,7 @@ def test_discover_source_docs_from_workspace(tmp_path: Path):
     supp_dir.mkdir()
     (supp_dir / "context.md").write_text("Extra context.")
 
-    docs = discover_source_docs(str(tmp_path))
+    docs = discover_source_index(tmp_path).read_all()
     assert "brief" in docs
     assert "Project brief content." in docs["brief"]
     assert "references/proposal" in docs
@@ -109,36 +109,15 @@ access_route = "Access via the {{access_point}}."
 """
 
 
-def test_discover_boilerplate_fragments_loads_from_reference_data(tmp_path: Path):
-    from aec_bench.adapters.lambda_rlm.initialiser import discover_boilerplate_fragments
-
-    template_path = tmp_path / "report_template.toml"
-    template_path.write_text(_TEMPLATE_TOML)
-    ref_dir = tmp_path / "reference_data"
-    ref_dir.mkdir()
-    (ref_dir / "sow_boilerplate.toml").write_text(_BOILERPLATE_TOML)
-
-    fragments = discover_boilerplate_fragments(template_path)
-    assert fragments["the_site"]["condition"]["preamble"].startswith("The Site remains")
-    assert "{{access_point}}" in fragments["the_site"]["access"]["access_route"]
-
-
-def test_discover_boilerplate_fragments_returns_empty_when_file_missing(tmp_path: Path):
-    from aec_bench.adapters.lambda_rlm.initialiser import discover_boilerplate_fragments
-
-    template_path = tmp_path / "report_template.toml"
-    template_path.write_text(_TEMPLATE_TOML)
-    # No reference_data/ directory at all.
-    assert discover_boilerplate_fragments(template_path) == {}
-
-
 def test_build_adapter_passes_boilerplate_fragments_when_present(tmp_path: Path):
     workspace = tmp_path / "workspace"
     workspace.mkdir()
-    (workspace / "report_template.toml").write_text(_TEMPLATE_TOML)
+    (workspace / "report_template.toml").write_text(
+        '[boilerplate]\npath = "reference_data/fragments.toml"\n' + _TEMPLATE_TOML
+    )
     ref_dir = workspace / "reference_data"
     ref_dir.mkdir()
-    (ref_dir / "sow_boilerplate.toml").write_text(_BOILERPLATE_TOML)
+    (ref_dir / "fragments.toml").write_text(_BOILERPLATE_TOML)
     docs_dir = workspace / "documents"
     docs_dir.mkdir()
     (docs_dir / "brief.md").write_text("Brief.")

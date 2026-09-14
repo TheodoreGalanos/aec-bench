@@ -1,0 +1,3 @@
+[sources.options]
+path = "inputs/options.txt"
+visibility = "public"

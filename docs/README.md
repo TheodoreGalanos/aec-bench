@@ -66,6 +66,7 @@ authority.
 | [Learning Studies Gate B](adr/learning-studies-gate-b.md) | Decision | Current | Learning Studies, lifecycle, and world contributors | Repository architecture review |
 | [Learning Studies Gate C](adr/learning-studies-gate-c.md) | Decision | Current | Learning Studies, lifecycle, and world contributors | Repository architecture review |
 | [Artifact task composition](plans/artifact-task-composition.md) | Plan | Proposed | Task generation, dataset, harness, evaluation, and CLI contributors | Repository maintainers |
+| [Report agent harness](protocols/report-agent-harness.md) | Protocol | Current | Task authors, adapter contributors, and experiment authors | Report template and agent runtime maintainers |
 | [Lifecycle functional composition](plans/lifecycle-functional-composition.md) | Plan | Historical | Lifecycle, harness, experimentation, evaluation, and CLI contributors | Repository maintainers |
 | [Environment category contract plan](plans/environment-category-contracts.md) | Plan | Historical | World, lifecycle, task, and runtime contributors | Repository maintainers |
 | [Prime and interactive-world boundary study](plans/prime-world-boundary-study.md) | Plan | Historical | Prime, harness, and task-world contributors | Repository maintainers |

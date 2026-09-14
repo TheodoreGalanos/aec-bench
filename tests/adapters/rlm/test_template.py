@@ -1,10 +1,10 @@
-# ABOUTME: Tests for the ReportTemplate active REPL object.
+# ABOUTME: Tests for the ReportSession active REPL object.
 # ABOUTME: Verifies fill state tracking, dependency enforcement, progress, and submission.
 
 from __future__ import annotations
 
-from aec_bench.adapters.rlm.template import ReportTemplate
 from aec_bench.contracts.repl import DependencyTreeSchema, OutputField, TreeSection
+from aec_bench.templates.report.session import ReportSession
 
 
 def _make_simple_tree() -> DependencyTreeSchema:
@@ -54,7 +54,7 @@ def _make_simple_tree() -> DependencyTreeSchema:
 
 
 def test_initial_status_shows_all_pending() -> None:
-    tpl = ReportTemplate(_make_simple_tree())
+    tpl = ReportSession(_make_simple_tree())
     status = tpl.get_status()
     assert status.total_sections == 3
     assert status.completed_sections == 0
@@ -62,21 +62,21 @@ def test_initial_status_shows_all_pending() -> None:
 
 
 def test_fill_section_succeeds_when_deps_met() -> None:
-    tpl = ReportTemplate(_make_simple_tree())
+    tpl = ReportSession(_make_simple_tree())
     result = tpl.fill_section("background", {"context": "Project in Sydney"})
     assert result.success
     assert tpl.get_status().completed_sections == 1
 
 
 def test_fill_section_fails_when_deps_not_met() -> None:
-    tpl = ReportTemplate(_make_simple_tree())
+    tpl = ReportSession(_make_simple_tree())
     result = tpl.fill_section("design", {"features": "New intersection"})
     assert not result.success
     assert "background" in result.error.lower()
 
 
 def test_fill_section_unlocks_dependents() -> None:
-    tpl = ReportTemplate(_make_simple_tree())
+    tpl = ReportSession(_make_simple_tree())
     tpl.fill_section("background", {"context": "Project in Sydney"})
     status = tpl.get_status()
     assert "design" in status.unlocked
@@ -84,13 +84,13 @@ def test_fill_section_unlocks_dependents() -> None:
 
 
 def test_get_dependencies() -> None:
-    tpl = ReportTemplate(_make_simple_tree())
+    tpl = ReportSession(_make_simple_tree())
     deps = tpl.get_dependencies("risks")
     assert deps == ["design"]
 
 
 def test_get_section_context_returns_filled_data() -> None:
-    tpl = ReportTemplate(_make_simple_tree())
+    tpl = ReportSession(_make_simple_tree())
     tpl.fill_section("background", {"context": "Sydney project"})
     ctx = tpl.get_section_context("design")
     assert "background" in ctx
@@ -98,19 +98,19 @@ def test_get_section_context_returns_filled_data() -> None:
 
 
 def test_get_section_context_empty_when_deps_not_filled() -> None:
-    tpl = ReportTemplate(_make_simple_tree())
+    tpl = ReportSession(_make_simple_tree())
     ctx = tpl.get_section_context("design")
     assert ctx == {}
 
 
 def test_get_writing_guidance() -> None:
-    tpl = ReportTemplate(_make_simple_tree())
+    tpl = ReportSession(_make_simple_tree())
     guidance = tpl.get_writing_guidance("background")
     assert "Describe the project context" in guidance
 
 
 def test_submit_when_all_complete() -> None:
-    tpl = ReportTemplate(_make_simple_tree())
+    tpl = ReportSession(_make_simple_tree())
     tpl.fill_section("background", {"context": "Sydney"})
     tpl.fill_section("design", {"features": "Intersection upgrade"})
     tpl.fill_section("risks", {"risk_table": "Utility conflicts"})
@@ -120,7 +120,7 @@ def test_submit_when_all_complete() -> None:
 
 
 def test_submit_when_incomplete() -> None:
-    tpl = ReportTemplate(_make_simple_tree())
+    tpl = ReportSession(_make_simple_tree())
     tpl.fill_section("background", {"context": "Sydney"})
     result = tpl.submit()
     assert not result.complete
@@ -128,15 +128,54 @@ def test_submit_when_incomplete() -> None:
 
 
 def test_fill_unknown_section_returns_error() -> None:
-    tpl = ReportTemplate(_make_simple_tree())
+    tpl = ReportSession(_make_simple_tree())
     result = tpl.fill_section("nonexistent", {"x": 1})
     assert not result.success
     assert "unknown" in result.error.lower()
 
 
 def test_refill_section_overwrites() -> None:
-    tpl = ReportTemplate(_make_simple_tree())
+    tpl = ReportSession(_make_simple_tree())
     tpl.fill_section("background", {"context": "Old"})
     tpl.fill_section("background", {"context": "New"})
     ctx = tpl.get_section_context("design")
     assert ctx["background"]["context"] == "New"
+
+
+def test_refill_invalidates_transitive_dependants() -> None:
+    tpl = ReportSession(_make_simple_tree())
+    tpl.fill_section("background", {"context": "Old"})
+    tpl.fill_section("design", {"features": "Based on old context"})
+    tpl.fill_section("risks", {"risk_table": "Based on old design"})
+    tpl.fill_section("background", {"context": "New"})
+    assert tpl.get_status().completed == ["background"]
+    assert tpl.submit().gaps == ["design", "risks"]
+
+
+def test_dependency_context_cannot_mutate_accepted_content() -> None:
+    tpl = ReportSession(_make_simple_tree())
+    tpl.fill_section("background", {"context": "Accepted"})
+    tpl.get_section_context("design")["background"]["context"] = "Changed"
+    assert tpl.submit().sections["background"]["context"] == "Accepted"
+
+
+def test_invalid_field_type_preserves_previous_content() -> None:
+    tpl = ReportSession(_make_simple_tree())
+    tpl.fill_section("background", {"context": "Accepted"})
+    result = tpl.fill_section("background", {"context": 10})
+    assert not result.success
+    assert tpl.submit().sections["background"]["context"] == "Accepted"
+
+
+def test_required_field_blocks_fill() -> None:
+    tpl = ReportSession(
+        DependencyTreeSchema(
+            sections=[
+                TreeSection(
+                    id="summary", title="Summary", fields={"text": OutputField("text", "str", "", required=True)}
+                )
+            ]
+        )
+    )
+    assert not tpl.fill_section("summary", {}).success
+    assert not tpl.fill_section("summary", {"text": "  "}).success

@@ -7,12 +7,10 @@ import hashlib
 import logging
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
-if TYPE_CHECKING:
-    from pydantic_ai.models import KnownModelName, Model
-
-from aec_bench.adapters.lambda_rlm.criteria import CriteriaBundle
+from aec_bench.adapters.rlm.client import RlmClient, RlmCompletionResponse, RlmMessage
+from aec_bench.adapters.runtime_limits import AdapterRuntimeLimitError
 from aec_bench.contracts.synthesis import (
     SynthesisCandidate,
     SynthesisConfig,
@@ -20,22 +18,13 @@ from aec_bench.contracts.synthesis import (
     SynthesisInput,
     SynthesisOutput,
 )
-from aec_bench.providers.behavioral_llm import (
-    BedrockBehavioralLLMClient,
-    build_behavioral_llm_client,
-    detect_behavioral_provider,
-)
 from aec_bench.synthesis.engine import (
-    BehavioralLLMClient,
     SynthesisBudgetError,
     synthesise,
 )
+from aec_bench.templates.report.criteria import CriteriaBundle
 
 _log = logging.getLogger(__name__)
-
-# Long read_timeout for the synthesiser Bedrock client. Synthesis prompts can
-# push past the default 60s boto3 read timeout on large inputs.
-_SYNTHESIS_READ_TIMEOUT_SECONDS = 600
 
 
 @dataclass(frozen=True)
@@ -65,39 +54,30 @@ def _bundle_to_contract(bundle: CriteriaBundle) -> SynthesisCriteria:
         writing_rules=tuple(bundle.writing_rules),
         rubric_criteria=rubric_criteria,
         expert_personas=tuple(bundle.expert_personas),
-        summary=bundle.summary,
+        summary=bundle.format_for_judge(),
     )
 
 
-def _build_synthesiser_client(config: SynthesisConfig) -> BehavioralLLMClient:
-    """Build the provider-appropriate behavioural LLM client with a long read timeout."""
-    model = config.synthesiser_model
-    if detect_behavioral_provider(model) == "bedrock":
-        return BedrockBehavioralLLMClient(
-            model=model,
-            read_timeout_seconds=_SYNTHESIS_READ_TIMEOUT_SECONDS,
-        )
-    # Anthropic direct client already has a 90s httpx timeout — sufficient.
-    return build_behavioral_llm_client(model)
+class _SynthesisClient:
+    def __init__(self, client: RlmClient, model: str) -> None:
+        self.client = client
+        self.model = model
+        self.response: RlmCompletionResponse | None = None
+        self.limit_error: AdapterRuntimeLimitError | None = None
 
-
-def _build_synthesiser_pydantic_model(config: SynthesisConfig) -> Model | KnownModelName | str:
-    """Build a pydantic-ai compatible model for tool-loop synthesis.
-
-    Mirrors the detection logic in ``_build_synthesiser_client`` — Bedrock
-    model names route through BedrockConverseModel, everything else is
-    handed to pydantic-ai as a raw model string.
-    """
-    model = config.synthesiser_model
-    if detect_behavioral_provider(model) == "bedrock":
-        import os
-
-        from pydantic_ai.models.bedrock import BedrockConverseModel
-        from pydantic_ai.providers.bedrock import BedrockProvider
-
-        region = os.environ.get("AWS_REGION") or os.environ.get("AWS_DEFAULT_REGION")
-        return BedrockConverseModel(model, provider=BedrockProvider(region_name=region))
-    return model
+    def complete(self, prompt: str, *, temperature: float = 0.0, max_tokens: int = 4000) -> str:
+        try:
+            self.response = self.client.generate(
+                model=self.model,
+                messages=[RlmMessage(role="user", content=prompt)],
+                system_prompt=None,
+                temperature=temperature,
+                max_output_tokens=max_tokens,
+            )
+        except AdapterRuntimeLimitError as exc:
+            self.limit_error = exc
+            raise
+        return self.response.output_text
 
 
 def _content_hash(content: str) -> str:
@@ -124,6 +104,7 @@ def synthesise_section(
     bundle: CriteriaBundle,
     references: Mapping[str, str],
     config: SynthesisConfig,
+    client: RlmClient,
 ) -> SynthesisSectionResult:
     """Run synthesis for one section and return content + trajectory event.
 
@@ -173,15 +154,17 @@ def synthesise_section(
     fallback_reason: str | None = None
     output: SynthesisOutput | None = None
     try:
-        if config.synthesis_mode == "tool_loop":
-            output = synthesise(
-                synthesis_input,
-                model=_build_synthesiser_pydantic_model(config),
-            )
-        else:
-            output = synthesise(
-                synthesis_input,
-                client=_build_synthesiser_client(config),
+        if config.synthesis_mode != "plain":
+            raise ValueError("lambda-RLM supports only plain synthesis with run accounting")
+        bridge = _SynthesisClient(client, config.synthesiser_model)
+        output = synthesise(synthesis_input, client=bridge)
+        if bridge.limit_error is not None:
+            raise bridge.limit_error
+        if bridge.response is not None:
+            from dataclasses import replace
+
+            output = replace(
+                output, input_tokens=bridge.response.input_tokens, output_tokens=bridge.response.output_tokens
             )
     except SynthesisBudgetError as exc:
         fallback_reason = f"budget_exceeded: {exc}"

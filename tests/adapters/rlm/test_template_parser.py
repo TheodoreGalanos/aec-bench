@@ -2,12 +2,14 @@
 # ABOUTME: Verifies that TOML section definitions are correctly parsed into DependencyTreeSchema.
 """Tests for report_template.toml parsing."""
 
-from aec_bench.adapters.rlm.template_parser import (
+import pytest
+
+from aec_bench.contracts.repl import DependencyTreeSchema
+from aec_bench.contracts.rubric import RubricCriterion
+from aec_bench.templates.report.parser import (
     parse_report_template,
     parse_report_template_with_rubric,
 )
-from aec_bench.contracts.repl import DependencyTreeSchema
-from aec_bench.contracts.rubric import RubricCriterion
 
 _TEMPLATE_TOML = """\
 [meta]
@@ -259,3 +261,23 @@ some_table = "table"
     schema = parse_report_template(toml)
     sec = schema.sections[0]
     assert sec.fields["some_table"].required is False
+
+
+@pytest.mark.parametrize(
+    "fields",
+    [
+        "{ count = 12 }",
+        '{ count = { dtype = "int", requried = true } }',
+        '[{ name = "count", dtype = "int", requried = true }]',
+        '{ count = { dtype = "int", required = "false" } }',
+        '[{ name = "count", dtype = "int", required = 1 }]',
+    ],
+)
+def test_malformed_field_constraints_are_rejected(fields: str) -> None:
+    with pytest.raises(ValueError, match="field"):
+        parse_report_template(f'[[sections]]\nid = "inspection"\ntitle = "Inspection"\nfields = {fields}')
+
+
+def test_unknown_section_constraint_is_rejected() -> None:
+    with pytest.raises(ValueError, match="section"):
+        parse_report_template('[[sections]]\nid = "summary"\ntitle = "Summary"\ndepends_onn = ["findings"]')

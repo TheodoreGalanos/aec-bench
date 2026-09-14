@@ -40,7 +40,7 @@ CONTEXT MODEL — how your REPL output works:
 a summary (type, size, preview) instead. The full data lives in your \
 REPL variables — that is where your data is.
 - grep() results are shown up to 10,000 chars with line numbers for navigation.
-- Errors are always shown in full.
+- Errors have bounded previews, with their original size reported.
 - print() of large data returns a summary, not the content. Do not try to \
 force output by slicing, chunking, or looping — it will not work. Your \
 data is already in variables. Use grep() to access it.
@@ -470,14 +470,19 @@ def make_help(
                 "    Fill unlocked template sections in parallel.\n"
                 "    generator(section_id, context, guidance) → dict of field values.\n"
                 "\nREPORT TEMPLATE:\n"
-                "  report.fill_section(section_id, content_dict) → str\n"
-                "    Returns a message string. Check for errors by reading the return value.\n"
+                "  DOCS(), READ(source_id), STATUS(), START(section_id)\n"
+                "  GUIDANCE(section_id), CONTEXT(section_id), RULES(section_id)\n"
+                "  VALIDATE(section_id, fields) → ValidationResult (no mutation)\n"
+                "  FILL(section_id, fields) → FillResult (.success, .error, .validation)\n"
+                "  SUBMIT() → SubmissionResult; writes the declared artifact without finalising.\n"
+                "  report.fill_section(section_id, content_dict) → FillResult\n"
+                "    Check .success; rejected content does not replace accepted content.\n"
                 "  report.get_status() → TemplateStatus\n"
                 "    .total_sections, .completed_sections, .unlocked, .pending, .completed\n"
                 "  report.get_section_context(section_id) → dict\n"
                 "  report.get_writing_guidance(section_id) → list[str]\n"
                 "  report.get_dependencies(section_id) → list[str]\n"
-                "  report.submit() → str — submit the completed report\n"
+                "  report.submit() → SubmissionResult (.complete, .sections, .gaps, .diagnostics)\n"
             )
         return "".join(parts)
 

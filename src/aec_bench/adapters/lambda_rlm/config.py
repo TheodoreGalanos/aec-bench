@@ -3,22 +3,15 @@
 
 from __future__ import annotations
 
+import math
 import re
 import tomllib
-import warnings
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields
 from typing import Any, Literal
 
+from aec_bench.adapters.config import merge_configuration, reject_unknown
 from aec_bench.contracts.advisor import AdvisorConfig
 from aec_bench.contracts.synthesis import SynthesisConfig
-
-
-@dataclass(frozen=True)
-class ToolUseCapsConfig:
-    """Rate-limit caps for sandbox tool_use mode."""
-
-    max_fetches_per_block: int = 5
-    max_total_fetches: int = 30
 
 
 @dataclass(frozen=True)
@@ -27,7 +20,6 @@ class SandboxConfig:
 
     enabled: bool = False
     tool_use: bool = False
-    tool_use_caps: ToolUseCapsConfig = field(default_factory=ToolUseCapsConfig)
     extractor_overrides: dict[str, str] = field(default_factory=dict)
 
 
@@ -118,7 +110,6 @@ class ComposeConfig:
     """
 
     mode: ComposeMode = "orchestrated"
-    planning_phase_blocking: bool = True
 
 
 @dataclass(frozen=True)
@@ -211,6 +202,8 @@ class LambdaRlmConfig:
 
     template_tier: str = "dependency_tree"
     template_definition: str | None = None
+    source_mapping: str | None = None
+    validation_rules: str | None = None
     planner: PlannerConfig = PlannerConfig()
     review: ReviewConfig = ReviewConfig()
     extract: ExtractConfig = field(default_factory=ExtractConfig)
@@ -236,9 +229,10 @@ class LambdaRlmConfig:
         return self.review.trigger in ("uncertainty", "both")
 
 
-def parse_lambda_rlm_config(toml_str: str) -> LambdaRlmConfig:
+def parse_lambda_rlm_config(toml_str: str, *, overrides: dict[str, Any] | None = None) -> LambdaRlmConfig:
     """Parse a lambda-rlm.toml string into a LambdaRlmConfig."""
-    raw = tomllib.loads(toml_str)
+    raw = merge_configuration(tomllib.loads(toml_str), overrides or {})
+    _validate_keys(raw)
 
     template = raw.get("template", {})
     planner_raw = raw.get("planner", {})
@@ -289,8 +283,7 @@ def parse_lambda_rlm_config(toml_str: str) -> LambdaRlmConfig:
     fill_section = _parse_fill_section(raw.get("fill_section", {}))
 
     # Top-level k_candidates is a shared default for [extract] and [fill_section].
-    # Keep a fallback to [template].k_candidates for local backward compatibility.
-    top_level_k = raw.get("k_candidates", template.get("k_candidates", 1))
+    top_level_k = raw.get("k_candidates", 1)
 
     extract = _parse_extract_config(raw.get("extract", {}), top_level_k)
     uncertainty = _parse_uncertainty_config(raw.get("uncertainty", {}))
@@ -306,12 +299,11 @@ def parse_lambda_rlm_config(toml_str: str) -> LambdaRlmConfig:
 
         fill_section = replace(fill_section, k_candidates=top_level_k)
 
-    # Validation.
-    _validate_config(extract, review, uncertainty)
-
-    return LambdaRlmConfig(
+    config = LambdaRlmConfig(
         template_tier=template.get("tier", "dependency_tree"),
         template_definition=template.get("definition"),
+        source_mapping=template.get("source_mapping"),
+        validation_rules=template.get("validation_rules"),
         planner=planner,
         review=review,
         extract=extract,
@@ -329,6 +321,9 @@ def parse_lambda_rlm_config(toml_str: str) -> LambdaRlmConfig:
         grounding=grounding,
         structure_enforcement=structure_enforcement,
     )
+
+    validate_lambda_config(config)
+    return config
 
 
 def _parse_fill_section(raw: dict[str, Any]) -> FillSectionConfig:
@@ -398,7 +393,6 @@ def _parse_compose_config(raw: dict[str, Any]) -> ComposeConfig:
         )
     return ComposeConfig(
         mode=mode,
-        planning_phase_blocking=raw.get("planning_phase_blocking", True),
     )
 
 
@@ -437,15 +431,9 @@ def _parse_planning_phase_config(raw: dict[str, Any]) -> PlanningPhaseConfig:
 
 def _parse_sandbox(raw: dict[str, Any]) -> SandboxConfig:
     section = raw.get("sandbox", {})
-    caps_raw = section.get("tool_use_caps", {})
-    caps = ToolUseCapsConfig(
-        max_fetches_per_block=int(caps_raw.get("max_fetches_per_block", 5)),
-        max_total_fetches=int(caps_raw.get("max_total_fetches", 30)),
-    )
     return SandboxConfig(
         enabled=bool(section.get("enabled", False)),
         tool_use=bool(section.get("tool_use", False)),
-        tool_use_caps=caps,
         extractor_overrides=dict(section.get("extractor_overrides", {})),
     )
 
@@ -501,34 +489,101 @@ def _parse_uncertainty_config(raw: dict[str, Any]) -> UncertaintyConfig:
     )
 
 
-def _validate_config(
-    extract: ExtractConfig,
-    review: ReviewConfig,
-    uncertainty: UncertaintyConfig,  # noqa: ARG001
-) -> None:
-    """Validate cross-cutting config rules."""
-    if extract.k_candidates < 1:
-        msg = f"extract.k_candidates must be >= 1, got {extract.k_candidates}"
-        raise ValueError(msg)
-
-    if extract.k_candidates > 1 and extract.temperature == 0.0:
-        warnings.warn(
-            "extract.temperature is 0.0 with k_candidates > 1; "
-            "all K candidates will be identical, yielding no consistency signal",
-            stacklevel=2,
+def validate_lambda_config(config: LambdaRlmConfig) -> None:
+    if config.token_budget <= 0 or config.max_parallel_workers <= 0:
+        raise ValueError("token_budget and max_parallel_workers must be positive")
+    for name, phase in (("extract", config.extract), ("fill_section", config.fill_section)):
+        if phase.k_candidates < 1:
+            raise ValueError(f"{name}.k_candidates must be >= 1")
+        if not math.isfinite(phase.temperature) or not 0 <= phase.temperature <= 2:
+            raise ValueError(f"{name}.temperature must be finite and in [0, 2]")
+    if config.fill_section.k_candidates > 1 and config.fill_section.tournament_mode != "synthesis":
+        raise ValueError("fill_section.k_candidates > 1 requires tournament_mode = synthesis")
+    if min(config.fill_section.synthesis.max_input_tokens, config.fill_section.synthesis.max_output_tokens) <= 0:
+        raise ValueError("synthesis token limits must be positive")
+    if config.advisor and (
+        not config.advisor.model
+        or config.advisor.max_uses < 0
+        or min(config.advisor.max_response_tokens, config.advisor.context_window) <= 0
+    ):
+        raise ValueError("invalid advisor limits or model")
+    if config.fill_section.synthesis.synthesis_mode != "plain":
+        raise ValueError("lambda-RLM supports only plain synthesis with run accounting")
+    if config.sandbox.tool_use:
+        raise ValueError("sandbox.tool_use is unsupported: lambda-RLM has no tool execution loop")
+    if config.constitution_model:
+        raise ValueError(
+            "constitutional inference is unsupported in metered report execution; supply explicit parameters"
         )
-
-    if extract.k_candidates == 1 and extract.temperature != ExtractConfig().temperature:
-        warnings.warn(
-            "extract.temperature is set but k_candidates is 1; temperature has no effect on single-call extraction",
-            stacklevel=2,
+    if config.review.trigger not in {"always", "uncertainty", "consistency", "both", "never"}:
+        raise ValueError("unsupported review.trigger")
+    if config.review.trigger in {"consistency", "both"} and config.extract.k_candidates == 1:
+        raise ValueError("consistency review requires extract.k_candidates > 1")
+    for value in (config.review.confidence_threshold, config.review.consistency_threshold):
+        if not 0 <= value <= 1:
+            raise ValueError("review thresholds must be in [0, 1]")
+    if (
+        min(
+            config.review.max_retries_per_source,
+            config.review.max_supplements_per_section,
+            config.structure_enforcement.max_retries,
         )
+        < 0
+    ):
+        raise ValueError("review and structure retry limits must be nonnegative")
+    if config.planner.context_window_chars <= 0 or config.planner.max_branching_factor < 2:
+        raise ValueError("planner requires positive context and branching factor >= 2")
+    for value in (config.planner.accuracy_target, config.planner.leaf_accuracy, config.planner.compose_accuracy):
+        if not 0 < value <= 1:
+            raise ValueError("planner accuracies must be in (0, 1]")
+    if (
+        config.uncertainty.lambda_ < 0
+        or not 0 < config.uncertainty.min_confidence_eps <= 1
+        or config.uncertainty.min_samples < 2
+    ):
+        raise ValueError("invalid uncertainty parameters")
+    for planning_phase in (config.planning_phase.back_brief, config.planning_phase.scope_evolution):
+        if planning_phase.max_output_tokens <= 0:
+            raise ValueError("planning max_output_tokens must be positive")
 
-    if review.trigger in ("consistency", "both") and extract.k_candidates == 1:
-        warnings.warn(
-            f"review.trigger={review.trigger!r} requires k_candidates > 1 "
-            "to produce consistency data; review will fall back to 'always'",
-            stacklevel=2,
+
+def _validate_keys(raw: dict[str, Any]) -> None:
+    sections = {
+        "planner": PlannerConfig,
+        "review": ReviewConfig,
+        "extract": ExtractConfig,
+        "fill_section": FillSectionConfig,
+        "compose": ComposeConfig,
+        "planning_phase": PlanningPhaseConfig,
+        "sandbox": SandboxConfig,
+        "grounding": GroundingConfig,
+        "structure_enforcement": StructureEnforcementConfig,
+    }
+    reject_unknown(
+        raw,
+        set(sections)
+        | {"template", "guardrails", "execution", "advisor", "constitution", "k_candidates", "uncertainty"},
+        "lambda-rlm",
+    )
+    for name, cls in sections.items():
+        reject_unknown(raw.get(name, {}), {f.name for f in fields(cls)}, name)
+    for name, allowed in {
+        "template": {"tier", "definition", "source_mapping", "validation_rules"},
+        "guardrails": {"token_budget"},
+        "execution": {"max_parallel_workers"},
+        "advisor": {f.name for f in fields(AdvisorConfig)},
+        "constitution": {"path", "inline", "model"},
+        "uncertainty": {"lambda", "min_confidence_eps", "min_samples", "review_joint_threshold"},
+    }.items():
+        reject_unknown(raw.get(name, {}), allowed, name)
+    reject_unknown(
+        raw.get("fill_section", {}).get("synthesis", {}),
+        {f.name for f in fields(SynthesisConfig)},
+        "fill_section.synthesis",
+    )
+    for name, cls in (("back_brief", BackBriefConfig), ("scope_evolution", ScopeEvolutionConfig)):
+        reject_unknown(
+            raw.get("planning_phase", {}).get(name, {}), {f.name for f in fields(cls)}, f"planning_phase.{name}"
         )
 
 

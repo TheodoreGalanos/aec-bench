@@ -58,6 +58,7 @@ class _GenerateArguments:
     """Typed provider arguments for one plain generation request."""
 
     temperature: float | None
+    max_output_tokens: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -463,8 +464,12 @@ def _decode_admitted_call(
             int | float,
         ):
             raise ProviderBrokerError("temperature must be numeric or null")
+        raw_max = request.get("max_output_tokens")
+        if raw_max is not None and (type(raw_max) is not int or raw_max <= 0):
+            raise ProviderBrokerError("max_output_tokens must be a positive integer")
         arguments: _GenerateArguments | _ToolArguments = _GenerateArguments(
             temperature=(None if raw_temperature is None else float(raw_temperature)),
+            max_output_tokens=raw_max,
         )
     else:
         arguments = _tool_arguments_from_request(request)
@@ -537,11 +542,17 @@ def _invoke_provider(
 ) -> RlmCompletionResponse:
     messages = list(admitted.messages)
     if isinstance(admitted.arguments, _GenerateArguments):
+        settings = (
+            {"max_output_tokens": admitted.arguments.max_output_tokens}
+            if admitted.arguments.max_output_tokens is not None
+            else {}
+        )
         return client.generate(
             model=model,
             messages=messages,
             system_prompt=admitted.system_prompt,
             temperature=admitted.arguments.temperature,
+            **settings,
         )
     if not isinstance(client, ToolCapableRlmClient):
         return client.generate(

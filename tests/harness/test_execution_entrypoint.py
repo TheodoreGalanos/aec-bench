@@ -452,7 +452,7 @@ def test_default_tool_loop_client_exposes_only_the_selected_task_tool_surface(
     (
         (None, False, [True, False]),
         (False, False, [False, False]),
-        (False, True, [False, False, False]),
+        (False, True, [False, False]),
     ),
 )
 def test_execution_entrypoint_runs_rlm_bundle_and_writes_result(
@@ -800,7 +800,7 @@ def test_execution_entrypoint_runs_lambda_rlm_bundle_and_writes_result(
                     system_prompt=None,
                     tools=[],
                     configuration={"meta_harness_context": meta_harness_context},
-                    output_path="/workspace/output.md",
+                    output_path=str(tmp_path / "output.md"),
                     output_format="markdown",
                 ),
             ),

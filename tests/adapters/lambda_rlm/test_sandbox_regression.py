@@ -107,7 +107,7 @@ def _run_adapter(workspace: Path, config_toml: str) -> str:
         model_name="test-model",
         workspace=str(workspace),
     )
-    request = AdapterRequest(instruction="Test run")
+    request = AdapterRequest(output_path=str(workspace / "output.md"), output_format="markdown", instruction="Test run")
     adapter.execute(request)
     return (workspace / "output.md").read_text(encoding="utf-8")
 

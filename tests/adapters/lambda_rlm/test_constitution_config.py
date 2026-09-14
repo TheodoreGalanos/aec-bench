@@ -18,11 +18,10 @@ def test_parse_constitution_path():
     toml = """
 [constitution]
 path = "src/aec_bench/adapters/constitution_default.toml"
-model = "au.anthropic.claude-haiku-4-5-20251001-v1:0"
 """
     config = parse_lambda_rlm_config(toml)
     assert config.constitution_path == "src/aec_bench/adapters/constitution_default.toml"
-    assert config.constitution_model == "au.anthropic.claude-haiku-4-5-20251001-v1:0"
+    assert config.constitution_model is None
     assert config.constitution_inline is None
 
 

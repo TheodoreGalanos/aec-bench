@@ -7,15 +7,17 @@ from unittest.mock import patch
 
 import pytest
 
-from aec_bench.adapters.lambda_rlm.criteria import CriteriaBundle, RubricCriterion
 from aec_bench.adapters.lambda_rlm.synthesis import (
     CandidateGeneration,
     synthesise_section,
 )
+from aec_bench.adapters.rlm.client import ReplayRlmClient
+from aec_bench.contracts.rubric import RubricCriterion
 from aec_bench.contracts.synthesis import (
     SynthesisConfig,
     SynthesisOutput,
 )
+from aec_bench.templates.report.criteria import CriteriaBundle
 
 
 def _bundle() -> CriteriaBundle:
@@ -52,6 +54,7 @@ class TestKEquals1:
             output_tokens=200,
         )
         result = synthesise_section(
+            client=ReplayRlmClient(responses=[]),
             section_id="methodology",
             candidates=[only],
             bundle=_bundle(),
@@ -81,6 +84,7 @@ class TestHappyPath:
             return_value=fake_output,
         ):
             result = synthesise_section(
+                client=ReplayRlmClient(responses=[]),
                 section_id="methodology",
                 candidates=candidates,
                 bundle=_bundle(),
@@ -111,6 +115,7 @@ class TestHappyPath:
             return_value=fake_output,
         ):
             result = synthesise_section(
+                client=ReplayRlmClient(responses=[]),
                 section_id="methodology",
                 candidates=candidates,
                 bundle=_bundle(),
@@ -139,6 +144,7 @@ class TestHappyPath:
             return_value=fake_output,
         ):
             result = synthesise_section(
+                client=ReplayRlmClient(responses=[]),
                 section_id="methodology",
                 candidates=candidates,
                 bundle=_bundle(),
@@ -165,6 +171,7 @@ class TestHappyPath:
             return_value=failed,
         ):
             result = synthesise_section(
+                client=ReplayRlmClient(responses=[]),
                 section_id="methodology",
                 candidates=candidates,
                 bundle=_bundle(),
@@ -182,6 +189,7 @@ class TestHappyPath:
             output_tokens=200,
         )
         result = synthesise_section(
+            client=ReplayRlmClient(responses=[]),
             section_id="methodology",
             candidates=[only],
             bundle=_bundle(),
@@ -211,6 +219,7 @@ class TestFallback:
             return_value=failed,
         ):
             result = synthesise_section(
+                client=ReplayRlmClient(responses=[]),
                 section_id="methodology",
                 candidates=candidates,
                 bundle=_bundle(),
@@ -231,6 +240,7 @@ class TestFallback:
             side_effect=SynthesisBudgetError("exceeds max_input_tokens 80000"),
         ):
             result = synthesise_section(
+                client=ReplayRlmClient(responses=[]),
                 section_id="methodology",
                 candidates=candidates,
                 bundle=_bundle(),
@@ -260,6 +270,7 @@ class TestFallback:
         ):
             with pytest.raises(RuntimeError) as excinfo:
                 synthesise_section(
+                    client=ReplayRlmClient(responses=[]),
                     section_id="methodology",
                     candidates=candidates,
                     bundle=_bundle(),
@@ -273,6 +284,7 @@ class TestInputValidation:
     def test_empty_candidates_raises(self) -> None:
         with pytest.raises(ValueError, match="at least one candidate"):
             synthesise_section(
+                client=ReplayRlmClient(responses=[]),
                 section_id="methodology",
                 candidates=[],
                 bundle=_bundle(),
@@ -282,44 +294,16 @@ class TestInputValidation:
 
 
 class TestToolLoopDispatch:
-    def test_tool_loop_config_routes_to_driver(self) -> None:
-        """When config.synthesis_mode == 'tool_loop', the bridge should
-        invoke synthesise() with a pydantic-ai model (not a plain-synthesis
-        client). We mock the engine to verify the dispatch path."""
-        from aec_bench.contracts.synthesis import SynthesisConfig, SynthesisOutput
-
-        candidates = _candidates(3)
-        cfg = SynthesisConfig(
-            synthesis_mode="tool_loop",
-            synthesiser_model="anthropic:claude-sonnet-4-6",
-        )
-        fake_output = SynthesisOutput(
-            content="tool-loop draft",
-            reason="merged",
-            synthesiser_model="anthropic:claude-sonnet-4-6",
-            input_tokens=100,
-            output_tokens=50,
-            elapsed_s=1.0,
-            synthesiser_turns=4,
-            tool_calls=({"tool": "get_candidate", "args": {}},),
-        )
-        with patch(
-            "aec_bench.adapters.lambda_rlm.synthesis.synthesise",
-            return_value=fake_output,
-        ) as mock_engine:
-            result = synthesise_section(
-                section_id="methodology",
-                candidates=candidates,
+    def test_tool_loop_is_rejected(self) -> None:
+        with pytest.raises(ValueError, match="plain synthesis"):
+            synthesise_section(
+                client=ReplayRlmClient(responses=[]),
+                section_id="s",
+                candidates=_candidates(),
                 bundle=_bundle(),
                 references={},
-                config=cfg,
+                config=SynthesisConfig(synthesis_mode="tool_loop"),
             )
-        # The bridge must pass `model=` (not `client=`) for tool-loop mode.
-        call_kwargs = mock_engine.call_args.kwargs
-        assert "model" in call_kwargs
-        assert call_kwargs.get("client") is None or "client" not in call_kwargs
-        assert result.content == "tool-loop draft"
-        assert result.used_synthesiser is True
 
 
 class TestBundleConversion:
@@ -343,6 +327,7 @@ class TestBundleConversion:
             side_effect=_capture,
         ):
             synthesise_section(
+                client=ReplayRlmClient(responses=[]),
                 section_id="methodology",
                 candidates=candidates,
                 bundle=_bundle(),

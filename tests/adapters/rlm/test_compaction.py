@@ -7,8 +7,8 @@ from aec_bench.adapters.rlm.client import ReplayRlmClient, RlmCompletionResponse
 from aec_bench.adapters.rlm.compaction import build_compaction_prompt, compact
 from aec_bench.adapters.rlm.engine import ReplEnvironment
 from aec_bench.adapters.rlm.scratchpad import Scratchpad
-from aec_bench.adapters.rlm.template import TemplateStatus
 from aec_bench.contracts.constitution import StatePersistenceParams
+from aec_bench.templates.report.session import TemplateStatus
 
 
 class TestBuildCompactionPrompt:
@@ -105,7 +105,7 @@ class TestCompact:
         responses_received: list[str] = []
 
         class CapturingClient:
-            def generate(self, *, model, messages, system_prompt):
+            def generate(self, *, model, messages, system_prompt, max_output_tokens=None):
                 responses_received.append(messages[0].content)
                 return RlmCompletionResponse(
                     output_text="Compacted.",
@@ -132,7 +132,7 @@ class TestCompact:
         system_prompts_received: list[str] = []
 
         class CapturingClient:
-            def generate(self, *, model, messages, system_prompt):
+            def generate(self, *, model, messages, system_prompt, max_output_tokens=None):
                 system_prompts_received.append(system_prompt or "")
                 return RlmCompletionResponse(
                     output_text="Summary.",

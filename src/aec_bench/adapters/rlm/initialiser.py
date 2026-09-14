@@ -9,18 +9,15 @@ from typing import Any
 from aec_bench.adapters.rlm.adapter import RlmAdapter
 from aec_bench.adapters.rlm.client import RlmClient
 from aec_bench.adapters.rlm.config import RlmConfig, parse_rlm_config
-from aec_bench.adapters.rlm.template import ReportTemplate
-from aec_bench.adapters.rlm.template_parser import parse_report_template
 from aec_bench.contracts.constitution import ConstitutionManifest, parse_constitution
-
-# infer_constitutional_parameters is imported lazily inside build_rlm_adapter to
-# avoid a circular import: constitutional.py → rlm.client → rlm/__init__.py →
-# initialiser. Import occurs only when inference is actually needed.
+from aec_bench.templates.report.assets import load_report_assets
+from aec_bench.templates.report.session import ReportSession
+from aec_bench.templates.report.sources import contained_path
 
 
 def build_rlm_adapter(
     *,
-    rlm_config_path: Path,
+    rlm_config_path: Path | None,
     client: RlmClient,
     adapter_name: str,
     model_name: str,
@@ -33,28 +30,22 @@ def build_rlm_adapter(
     advisor_client: RlmClient | None = None,
     constitutional_client: RlmClient | None = None,
     task_metadata: dict[str, Any] | None = None,
+    configuration: dict[str, Any] | None = None,
+    parsed_config: RlmConfig | None = None,
 ) -> RlmAdapter:
-    """Build a fully-configured RlmAdapter from config file paths.
-
-    Reads rlm.toml for guardrails, hints, sub-call declarations,
-    execution config, and template tier. If a template definition file
-    is specified, loads the report template resolved relative to
-    rlm.toml's directory.
-
-    When *workspace_path* is provided, loads ``system_prompt.md`` and
-    ``notes.md`` if present, and sets up the scratchpad path.
-
-    Constitutional resolution (precedence chain):
-      1. If config has constitution_inline (inline overrides present), use it.
-      2. If config has constitution_path, load that file as the base manifest.
-      3. Otherwise, constitution=None (legacy default-behaviour mode).
-      4. If constitutional_client is provided AND a constitution was resolved,
-         run inference to fill unpopulated parameter slots; user overrides win.
-    """
-    config = parse_rlm_config(rlm_config_path.read_text())
+    """Bind a report template and explicit configuration in the actor workspace."""
+    if rlm_config_path is None and workspace_path is None:
+        raise ValueError("workspace_path is required without an RLM configuration file")
+    config_root = rlm_config_path.parent if rlm_config_path else Path(workspace_path or ".")
+    config = parsed_config or parse_rlm_config(
+        rlm_config_path.read_text() if rlm_config_path else "", overrides=configuration
+    )
+    if constitutional_client is not None:
+        raise ValueError("constitutional inference is unsupported in metered report execution")
     template = _load_report_template(
         config,
-        config_root=rlm_config_path.parent,
+        config_root=config_root,
+        workspace=Path(workspace_path) if workspace_path else config_root,
     )
     resolved_system_prompt, scratchpad_path = _resolve_workspace_surface(
         workspace_path=workspace_path,
@@ -62,14 +53,7 @@ def build_rlm_adapter(
     )
     constitution = _resolve_constitution(
         config,
-        config_root=rlm_config_path.parent,
-    )
-    constitution = _infer_constitution(
-        constitution,
-        config=config,
-        client=constitutional_client,
-        model_name=model_name,
-        task_metadata=task_metadata,
+        config_root=config_root,
     )
 
     return RlmAdapter(
@@ -89,7 +73,7 @@ def build_rlm_adapter(
         scratchpad_path=scratchpad_path,
         external_system_prompt=resolved_system_prompt or "",
         workspace_path=workspace_path,
-        advisor_client=advisor_client,
+        advisor_client=advisor_client or subcall_client or client,
         advisor_config=config.advisor,
         constitution=constitution,
     )
@@ -99,11 +83,17 @@ def _load_report_template(
     config: RlmConfig,
     *,
     config_root: Path,
-) -> ReportTemplate | None:
+    workspace: Path | None = None,
+) -> ReportSession | None:
     if not config.template_definition:
         return None
     template_path = config_root / config.template_definition
-    return ReportTemplate(parse_report_template(template_path.read_text()))
+    return load_report_assets(
+        template_path.resolve(),
+        workspace=workspace or config_root,
+        source_mapping=config.source_mapping,
+        validation_rules=config.validation_rules,
+    ).session
 
 
 def _resolve_workspace_surface(
@@ -178,32 +168,4 @@ def _resolve_constitution_path(
     *,
     config_root: Path,
 ) -> Path:
-    if path.is_absolute():
-        return path
-    candidate = config_root / path
-    return candidate if candidate.exists() else Path.cwd() / path
-
-
-def _infer_constitution(
-    constitution: ConstitutionManifest | None,
-    *,
-    config: RlmConfig,
-    client: RlmClient | None,
-    model_name: str,
-    task_metadata: dict[str, Any] | None,
-) -> ConstitutionManifest | None:
-    if constitution is None or client is None:
-        return constitution
-    # Lazy import — see top-of-module note about the circular dependency.
-    from aec_bench.adapters.constitutional import (
-        infer_constitutional_parameters,
-    )
-
-    result = infer_constitutional_parameters(
-        constitution=constitution,
-        task_metadata=task_metadata or {},
-        capabilities=RlmAdapter.declare_capabilities(),
-        client=client,
-        model=config.constitution_model or model_name,
-    )
-    return result.manifest
+    return contained_path(config_root, path)

@@ -7,7 +7,7 @@ from collections.abc import Callable
 from typing import Any
 
 from aec_bench.adapters.rlm.parallel import ParallelError, parallel
-from aec_bench.adapters.rlm.template import ReportTemplate
+from aec_bench.templates.report.session import ReportSession
 
 # Type alias for the generator callable the agent provides.
 # Signature: (section_id, dependency_context, writing_guidance) -> content_dict
@@ -16,7 +16,7 @@ SectionGenerator = Callable[[str, dict[str, Any], list[str]], dict[str, Any]]
 
 def fill_parallel(
     *,
-    template: ReportTemplate,
+    template: ReportSession,
     generator: SectionGenerator,
     section_ids: list[str] | None = None,
     max_workers: int = 4,
@@ -48,10 +48,8 @@ def fill_parallel(
     status = template.get_status()
     unlocked = set(status.unlocked)
 
-    if section_ids is not None:
-        targets = [sid for sid in section_ids if sid in unlocked]
-    else:
-        targets = list(unlocked)
+    requested = set(section_ids) if section_ids is not None else unlocked
+    targets = [sid for sid in status.unlocked if sid in requested]
 
     if not targets:
         return []

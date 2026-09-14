@@ -176,10 +176,11 @@ def test_repl_captures_runtime_errors() -> None:
 
 
 def test_repl_truncates_long_output() -> None:
-    repl = ReplEnvironment(max_output_chars=100)
+    repl = ReplEnvironment(max_capture_chars=100)
     result = repl.execute("print('x' * 500)")
     assert len(result.stdout) <= 120  # allows for truncation message
-    assert "truncated" in result.stdout.lower() or len(result.stdout) <= 100
+    assert len(result.stdout) == 100
+    assert result.stdout_chars == 501
 
 
 def test_repl_tracks_variable_names() -> None:
@@ -333,3 +334,8 @@ def test_final_value_not_in_snapshot() -> None:
     snap = repl.snapshot_variables()
     assert "FINAL_VAR" not in snap
     assert "x" in snap
+
+
+def test_capture_does_not_pretruncate_search_output() -> None:
+    result = ReplEnvironment().execute("print('1 match(es) for /fact/:\\n' + 'x' * 5000)")
+    assert len(result.stdout) > 5000

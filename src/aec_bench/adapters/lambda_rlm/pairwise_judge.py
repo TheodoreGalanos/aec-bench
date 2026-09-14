@@ -8,12 +8,12 @@ import re
 from collections.abc import Mapping
 from dataclasses import dataclass
 
-from aec_bench.adapters.lambda_rlm.criteria import CriteriaBundle
 from aec_bench.adapters.lambda_rlm.tournament import (
     PairwiseOutcome,
     _should_swap_stable,
 )
 from aec_bench.adapters.rlm.client import RlmClient, RlmMessage
+from aec_bench.templates.report.criteria import CriteriaBundle
 
 _log = logging.getLogger(__name__)
 

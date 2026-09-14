@@ -12,6 +12,7 @@ from aec_bench.adapters.base import (
     AdapterResult,
     SerializedClientSpec,
 )
+from aec_bench.adapters.config import report_configuration
 from aec_bench.adapters.direct import (
     DirectAdapter,
     DirectClient,
@@ -150,8 +151,6 @@ class RlmExecutionDriver:
     workspace_dir: Path
 
     def execute(self, bundle: ExecutionBundle) -> AdapterResult:
-        from aec_bench.adapters.rlm.adapter import RlmAdapter
-
         trajectory_writer = _build_trajectory_writer(
             workspace_dir=self.workspace_dir,
             configuration=bundle.request.configuration,
@@ -175,52 +174,31 @@ class RlmExecutionDriver:
 
         rlm_toml = self.workspace_dir / "rlm.toml"
 
-        # Build advisor client if rlm.toml declares an [advisor] block
-        advisor_client: RlmClient | None = None
-        if rlm_toml.exists():
-            from aec_bench.adapters.rlm.config import parse_rlm_config
+        from aec_bench.adapters.rlm.config import parse_rlm_config
+        from aec_bench.adapters.rlm.initialiser import build_rlm_adapter
 
-            _rlm_cfg = parse_rlm_config(rlm_toml.read_text())
-            if _rlm_cfg.advisor and _rlm_cfg.advisor.enabled:
-                if broker_client is not None:
-                    if _rlm_cfg.advisor.model != model_name:
-                        raise ValueError(
-                            "provider broker does not authorize a distinct advisor model",
-                        )
-                    advisor_client = compaction_client
-                else:
-                    advisor_client = make_rlm_client(
-                        _rlm_cfg.advisor.model,
-                        cache=prompt_cache,
-                    )
+        config = parse_rlm_config(
+            rlm_toml.read_text() if rlm_toml.exists() else "",
+            overrides=report_configuration(bundle.request.configuration),
+        )
+        if broker_client is not None and config.advisor and config.advisor.enabled:
+            if config.advisor.model != model_name:
+                raise ValueError("provider broker does not authorize a distinct advisor model")
 
         try:
-            if rlm_toml.exists():
-                from aec_bench.adapters.rlm.initialiser import build_rlm_adapter
-
-                adapter = build_rlm_adapter(
-                    rlm_config_path=rlm_toml,
-                    client=client,
-                    adapter_name=bundle.execution.adapter_name,
-                    model_name=model_name,
-                    subcall_client=compaction_client,
-                    compaction_client=compaction_client,
-                    trajectory_writer=trajectory_writer,
-                    workspace_path=str(self.workspace_dir),
-                    external_system_prompt=bundle.request.system_prompt,
-                    advisor_client=advisor_client,
-                )
-            else:
-                adapter = RlmAdapter(
-                    adapter_name=bundle.execution.adapter_name,
-                    model_name=model_name,
-                    client=client,
-                    compaction_client=compaction_client,
-                    trajectory_writer=trajectory_writer,
-                    scratchpad_path=str(self.workspace_dir / ".scratchpad.json"),
-                    external_system_prompt=bundle.request.system_prompt or "",
-                    workspace_path=str(self.workspace_dir),
-                )
+            adapter = build_rlm_adapter(
+                rlm_config_path=rlm_toml if rlm_toml.exists() else None,
+                client=client,
+                adapter_name=bundle.execution.adapter_name,
+                model_name=model_name,
+                subcall_client=compaction_client,
+                compaction_client=compaction_client,
+                trajectory_writer=trajectory_writer,
+                workspace_path=str(self.workspace_dir),
+                external_system_prompt=bundle.request.system_prompt,
+                advisor_client=compaction_client,
+                parsed_config=config,
+            )
 
             result = adapter.execute(_adapter_request(bundle))
         except BaseException:
@@ -266,15 +244,6 @@ class LambdaRlmExecutionDriver:
         else:
             config_path = None
 
-        # Build advisor client if config declares an [advisor] block
-        advisor_client = None
-        if config_path and config_path.exists():
-            from aec_bench.adapters.lambda_rlm.config import parse_lambda_rlm_config
-
-            _lrlm_cfg = parse_lambda_rlm_config(config_path.read_text())
-            if _lrlm_cfg.advisor and _lrlm_cfg.advisor.enabled:
-                advisor_client = make_rlm_client(_lrlm_cfg.advisor.model, cache=True)
-
         adapter = build_lambda_rlm_adapter(
             config_path=config_path,
             client=client,
@@ -282,7 +251,7 @@ class LambdaRlmExecutionDriver:
             model_name=model_name,
             workspace=str(self.workspace_dir),
             trajectory_writer=trajectory_writer,
-            advisor_client=advisor_client,
+            configuration=report_configuration(bundle.request.configuration),
         )
 
         return adapter.execute(_adapter_request(bundle))

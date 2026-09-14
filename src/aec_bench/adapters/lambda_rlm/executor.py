@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from aec_bench.adapters.lambda_rlm.sandbox import DocumentSandbox
 
+from aec_bench.adapters.advisor import default_advise
 from aec_bench.adapters.lambda_rlm.combinators import split_text
 from aec_bench.adapters.lambda_rlm.compose_bridge import render_compose_section
 from aec_bench.adapters.lambda_rlm.config import LambdaRlmConfig, TemplateMeta
@@ -35,87 +36,32 @@ from aec_bench.adapters.lambda_rlm.structure_validator import (
 from aec_bench.adapters.lambda_rlm.uncertainty import RunningStats, compute_joint_score
 from aec_bench.adapters.rlm.client import RlmClient, RlmCompletionResponse, RlmMessage
 from aec_bench.adapters.rlm.parallel import parallel
-from aec_bench.adapters.rlm.template import ReportTemplate
+from aec_bench.contracts.advisor import AdvisorRequest
 from aec_bench.contracts.constitution import (
     InformationMinimalityParams,
     SourceFidelityParams,
 )
 from aec_bench.contracts.repl import OutputField
 from aec_bench.contracts.rubric import Rubric
+from aec_bench.templates.report.session import ReportSession
+from aec_bench.templates.report.sources import resolve_source_label
 
 _log = logging.getLogger(__name__)
 
 _PLANNING_SYSTEM_PROMPT = (
-    "You extract a set of named slot values from source documents to seed "
-    "an engineering Statement-of-Work template. Return ONLY a JSON object "
-    "whose keys are the requested slot names. Use empty string for slots "
-    "you cannot determine from the sources. Do not invent values."
+    "Extract the requested report facts into a JSON object keyed by the requested slots. "
+    "Use only the provided sources and their declared precedence. Do not invent values. "
+    "Leave unsupported slots empty and follow the task's gap policy."
 )
-
 _SCOPE_EVOLUTION_SYSTEM_PROMPT = (
-    "You read the primary source document(s) for an engineering "
-    "engagement (typically an email thread between client and supplier) "
-    "and produce a short DESCRIPTIVE summary of what the client asked "
-    "for and what the parties committed to. You are a summariser, not a "
-    "scope author. Downstream drafters decide what is in/out of scope; "
-    "your job is to record what the source says, not to classify. "
-    "\n\n"
-    "Produce two sections: "
-    "(1) INITIAL ASK — a factual summary of the client's earliest scope "
-    "statement (1-3 sentences). "
-    "(2) NARROWING MOMENTS — ONLY include this section when the client "
-    "used explicit narrowing language in a LATER message. Qualifying "
-    "cues: 'rather than X', 'actually just X', 'maybe initially we just "
-    "need X', 'let's not do Y', 'drop Y'. You MUST quote the exact "
-    "narrowing phrase verbatim and cite which party said it. If no such "
-    "explicit narrowing language appears, write 'No explicit narrowing.' "
-    "and STOP — do not infer narrowing from tone, workflow, timing, or "
-    "other context. "
-    "(3) FINAL COMMITTED SCOPE — what the parties actually signed off on, "
-    "stated as what was included, not what was excluded (1-3 sentences). "
-    "\n\n"
-    "Hard rules: "
-    "- DO NOT author an 'exclusions' or 'out of scope' section. Items "
-    "  the client did not ask for are handled by downstream drafters "
-    "  reading the thread directly; do not infer exclusions on their "
-    "  behalf. "
-    "- DO NOT treat personnel substitution as scope change. If Party A "
-    "  is unavailable and nominates Party B to attend an event, the "
-    "  event is still in scope — only the attendee changed. "
-    "- DO NOT treat scheduling discussions, logistical clarifications, "
-    "  or availability questions as narrowing. Narrowing requires the "
-    "  client to explicitly reduce the ask. "
-    "- DO NOT fabricate exclusion signals (e.g. 'detailed vendor "
-    "  engagement is outside scope') that the client did not state. "
-    "- DO NOT infer what is in scope beyond what the final agreement "
-    "  named or requested. "
-    "\n\n"
-    "Be concise — 4-8 sentences total. Ground every claim in quoted "
-    "source text."
+    "Summarise how the report requirements changed across the supplied sources. "
+    "Identify explicit decisions, unresolved conflicts, and exclusions. Follow the declared "
+    "source precedence. Ground each conclusion in source text; do not infer agreement."
 )
-
 _BACK_BRIEF_SYSTEM_PROMPT = (
-    "You read engineering Statement-of-Work reference documents to extract "
-    "REUSABLE CLAUSE PHRASING and STRUCTURAL PATTERNS only — never scope "
-    "content. For each topic capture HOW these SoWs are WORDED: canonical "
-    "clause language (GST, mileage, variation, limitation-of-liability), "
-    "characteristic turns of phrase, tone, register, and structural "
-    "patterns (e.g. 'exclusions lists typically contain 2-3 engagement-"
-    "specific items, each a single noun phrase'). "
-    "\n\n"
-    "You MUST NOT list, paraphrase, or carry across: activities, scope "
-    "items, deliverables, equipment, personnel names, organisations, "
-    "dollar amounts, rates (including IRD mileage), dates, project names, "
-    "site names, standards, certifications, or any other project-specific "
-    "fact. Those belong to other engagements and must never be imported. "
-    "If a topic is inherently content-based (e.g. 'deliverables'), describe "
-    "only the FORMATTING and WORDING convention (e.g. 'lettered bullets "
-    "opening with imperative verbs; each item a single document title "
-    "followed by a noun-phrase description'), not the items themselves. "
-    "\n\n"
-    "Return ONLY a JSON object whose keys are the requested topics; each "
-    "value is a short digest of phrasing and structure (2-4 sentences). "
-    "Use empty string for topics with no characteristic pattern."
+    "Summarise reusable phrasing and structure from the reference documents by requested topic. "
+    "Do not transfer their case-specific facts into the active report. "
+    "Return a JSON object keyed by topic; use an empty string where no pattern is supported."
 )
 
 
@@ -127,7 +73,7 @@ class PlanExecutor:
         *,
         client: RlmClient,
         model: str,
-        template: ReportTemplate,
+        template: ReportSession,
         source_docs: dict[str, str],
         config: LambdaRlmConfig,
         trajectory_callback: Any | None = None,
@@ -147,17 +93,18 @@ class PlanExecutor:
         self._cb = trajectory_callback
         self._source_fidelity = source_fidelity
         self._information_minimality = information_minimality
-        self._rubric = rubric
+        self._rubric = rubric or template.rubric
         self._boilerplate_fragments = boilerplate_fragments or {}
         self._template_meta = template_meta
         self._sandbox = sandbox
         self._stderr = sys.stderr
         self._state_lock = __import__("threading").Lock()
         self._token_stats = RunningStats()
+        self._advisor_calls = 0
 
-    def execute(self, plan: ExecutionPlan) -> PlanState:
+    def execute(self, plan: ExecutionPlan, *, state: PlanState | None = None) -> PlanState:
         """Run the full plan and return final state."""
-        state = PlanState(estimated_calls=plan.total_estimated_calls)
+        state = state if state is not None else PlanState(estimated_calls=plan.total_estimated_calls)
 
         self._emit(
             "plan",
@@ -195,6 +142,22 @@ class PlanExecutor:
             state.phase = "generate"
             self._generate_section(section_id, state)
 
+        if self._config.review.enabled and self._config.review.trigger != "never" and self._rubric:
+            result, tokens = run_review(
+                client=self._client,
+                model=self._model,
+                section_title="Complete report",
+                writing_guidance=[self._criteria_text(section) for section in self._template.schema.sections],
+                input_sources=list(self._source_docs),
+                extracted_data=self._template.submit().sections,
+                dependency_summaries={},
+                source_fidelity=self._source_fidelity,
+            )
+            state.reviews["__report__"] = result
+            state.llm_calls += 1
+            state.tokens_used += sum(tokens)
+            if self._cb:
+                self._cb("report_review", None, None, state)
         state.phase = "complete"
         state.current_section = None
         self._emit(
@@ -279,8 +242,7 @@ class PlanExecutor:
 
     def _run_scope_evolution_phase(self, state: PlanState) -> None:
         """Planning pass that reads the primary source and produces an
-        authoritative scope-evolution summary (initial ask → narrowing →
-        final agreed scope → exclusion signals) on the scratchpad under
+        descriptive summary of requirement changes on the scratchpad under
         the reserved key `_scope_evolution`.
 
         Gated by config.compose.mode == 'agentic' AND
@@ -310,10 +272,10 @@ class PlanExecutor:
             return
 
         prompt = (
-            "Summarise how the client's ask evolved across the source(s) "
-            "below. Identify initial ask, narrowing moments, final agreed "
-            "scope, and exclusion signals. If scope was stable throughout, "
-            "state that explicitly. Return a plain-text summary (not JSON).\n\n" + "\n\n".join(source_bodies)
+            "Summarise changes in report requirements across these sources. "
+            "Identify explicit decisions, unresolved conflicts, and exclusions. "
+            "If the requirements did not change, state that explicitly. "
+            "Return a plain-text summary.\n\n" + "\n\n".join(source_bodies)
         )
 
         model = se_cfg.model or self._model
@@ -326,6 +288,7 @@ class PlanExecutor:
             model=model,
             messages=[RlmMessage(role="user", content=prompt)],
             system_prompt=scope_evolution_system_prompt,
+            max_output_tokens=se_cfg.max_output_tokens,
         )
         state.llm_calls += 1
         state.tokens_used += response.input_tokens + response.output_tokens
@@ -374,7 +337,7 @@ class PlanExecutor:
         topic_list = ", ".join(bb_cfg.topics)
         prompt = (
             f"Extract REUSABLE PHRASING PATTERNS by topic from these "
-            f"reference SoWs. Describe how the topic is typically worded "
+            f"reference reports. Describe how the topic is typically worded "
             f"(clauses, tone, register, formatting) — do NOT summarise or "
             f"carry across project-specific scope, deliverables, "
             f"personnel, dollar amounts, rates, dates, or standards.\n\n"
@@ -393,6 +356,7 @@ class PlanExecutor:
             model=model,
             messages=[RlmMessage(role="user", content=prompt)],
             system_prompt=back_brief_system_prompt,
+            max_output_tokens=bb_cfg.max_output_tokens,
         )
         state.llm_calls += 1
         state.tokens_used += response.input_tokens + response.output_tokens
@@ -429,17 +393,6 @@ class PlanExecutor:
         voice = self._template_meta.voice if self._template_meta else None
         domain = self._template_meta.domain if self._template_meta else None
 
-        # Construct a tool harness only when both sandbox and tool_use are enabled.
-        tool_harness = None
-        if self._sandbox is not None and self._config.sandbox.tool_use:
-            from aec_bench.adapters.lambda_rlm.sandbox_tools import SandboxToolHarness
-
-            tool_harness = SandboxToolHarness(
-                sandbox=self._sandbox,
-                enabled=True,
-                caps=self._config.sandbox.tool_use_caps,
-            )
-
         content, trace, stats = render_compose_section(
             blocks=blocks,
             fragments=self._boilerplate_fragments,
@@ -449,8 +402,8 @@ class PlanExecutor:
             scratchpad=(state.compose_scratchpad if self._config.compose.mode == "agentic" else None),
             voice_override=voice,
             domain_override=domain,
+            section_guidance=self._criteria_text(section),
             sandbox=self._sandbox,
-            tool_harness=tool_harness,
         )
 
         state.sections[section_id] = content
@@ -475,7 +428,17 @@ class PlanExecutor:
         state.llm_calls += stats.calls
         state.tokens_used += stats.input_tokens + stats.output_tokens
 
-        self._template.fill_section(section_id, {"content": content})
+        fields = self._template.schema.sections
+        section = next(s for s in fields if s.id == section_id)
+        values = _parse_json_response(content)
+        if not values or not set(values) & section.fields.keys():
+            if len(section.fields) == 1 and next(iter(section.fields.values())).dtype in {"str", "table"}:
+                values = {next(iter(section.fields)): content}
+            else:
+                values = {"content": content}
+        result = self._template.fill_section(section_id, values)
+        if not result.success:
+            state.validation_failures[section_id] = result.error
 
         status = self._template.get_status()
         self._emit(
@@ -1032,7 +995,7 @@ class PlanExecutor:
             model=self._model,
             messages=[RlmMessage(role="user", content=prompt)],
             system_prompt=None,
-            temperature=temperature,
+            temperature=temperature if temperature is not None else self._config.extract.temperature,
         )
         with self._state_lock:
             section_id = section_info["id"]
@@ -1152,35 +1115,84 @@ class PlanExecutor:
         if self._cb:
             self._cb("review", section_id, None, state)
 
-        # Handle review failure: re-extract flagged sources
-        if result.needs_action and result.reextract_sources:
-            retries = min(
-                len(result.reextract_sources),
-                self._config.review.max_retries_per_source,
-            )
-            dependency_context = self._get_dependency_context(section_id)
-            for source_label in result.reextract_sources[:retries]:
-                source_text = self._source_docs.get(source_label, "")
-                if not source_text:
+        # Each source has its own retry count; a supplement pass is bounded too.
+        source_attempts: dict[str, int] = {}
+        for _ in range(self._config.review.max_supplements_per_section):
+            if not result.needs_action:
+                break
+            changed = False
+            for source_label in dict.fromkeys(result.reextract_sources):
+                if source_label not in section_plan.sources:
                     continue
-                supplement_suffix = ""
-                if result.supplement_guidance:
-                    supplement_suffix = f"\n\nFocus especially on: {result.supplement_guidance}"
-
+                if source_attempts.get(source_label, 0) >= self._config.review.max_retries_per_source:
+                    continue
+                resolved = resolve_source_label(source_label, self._source_docs)
+                if resolved.resolved is None:
+                    continue
+                source_attempts[source_label] = source_attempts.get(source_label, 0) + 1
+                source_text = self._source_docs[resolved.resolved]
+                guidance = result.supplement_guidance or ""
                 extracted = self._leaf_extract(
                     section_info=section_info,
                     source_label=source_label,
-                    chunk_text=source_text + supplement_suffix,
-                    dependency_context=dependency_context,
+                    chunk_text=source_text + "\nReview guidance: " + guidance,
+                    dependency_context=self._get_dependency_context(section_id),
                     state=state,
                 )
-                # Merge with existing extraction
-                existing = state.extractions.get(section_id, {}).get(
-                    source_label,
-                    {},
-                )
-                existing.update(extracted)
-                state.extractions[section_id][source_label] = existing
+                state.extractions.setdefault(section_id, {}).setdefault(source_label, {}).update(extracted)
+                changed = True
+            if not changed:
+                break
+            result, tokens = run_review(
+                client=self._client,
+                model=self._model,
+                section_title=section_info["title"],
+                writing_guidance=section_info["writing_guidance"],
+                input_sources=section_plan.sources,
+                extracted_data=_merge_source_extractions(state.extractions.get(section_id, {})),
+                dependency_summaries=dependency_summaries,
+                source_fidelity=self._source_fidelity,
+                source_priority=source_priority,
+            )
+            state.llm_calls += 1
+            state.tokens_used += sum(tokens)
+            state.reviews[section_id] = result
+        config = self._config.advisor
+        if result.needs_action and config and config.enabled and self._advisor_calls < config.max_uses:
+            self._advisor_calls += 1
+            state.advisor_calls += 1
+            advice = default_advise(
+                request=AdvisorRequest(
+                    goal=f"Resolve report requirements for {section_info['title']}",
+                    problem=str(result.gaps + result.risks),
+                    attempt=str(source_attempts),
+                ),
+                context_messages=[
+                    {"content": f"{sid}: {content}"}
+                    for sid, content in list(state.sections.items())[-config.context_window :]
+                ]
+                + [
+                    {
+                        "content": self._criteria_text(
+                            next(section for section in self._template.schema.sections if section.id == section_id)
+                        )
+                    }
+                ],
+                client=self._client,
+                model=config.model,
+                max_response_tokens=config.max_response_tokens,
+                adapter_context=(
+                    "Advice is guidance, not evidence or a verifier decision. Follow the task's source policy."
+                ),
+            )
+            state.llm_calls += 1
+            state.tokens_used += advice.input_tokens + advice.output_tokens
+            state.advisor_input_tokens += advice.input_tokens
+            state.advisor_output_tokens += advice.output_tokens
+            if advice.response:
+                state.advice[section_id] = advice.response.advice
+            if self._cb:
+                self._cb("advisor", section_id, None, state)
 
     def _generate_section(
         self,
@@ -1336,8 +1348,15 @@ class PlanExecutor:
             source_priority=source_priority,
             required_fields=required_fields if required_fields else None,
         )
+        if section_info.get("fields"):
+            prompt += "\nReturn a JSON object with the declared field names and types: " + str(
+                {name: f.dtype for name, f in section_info["fields"].items()}
+            )
         if retry_addendum:
             prompt = f"{prompt}\n\n{retry_addendum}"
+
+        if section_id in state.advice:
+            prompt += "\nAdvisory suggestions (not source evidence):\n" + state.advice[section_id]
 
         if self._should_synthesise(section_id):
             return self._synthesise_section_content(
@@ -1372,8 +1391,18 @@ class PlanExecutor:
         """
         state.sections[section_id] = content
 
-        # fill_section expects a dict; wrap the generated prose under "content".
-        self._template.fill_section(section_id, {"content": content})
+        # Decode field maps, or bind prose to the sole declared text field.
+        fields = self._template.schema.sections
+        section = next(s for s in fields if s.id == section_id)
+        values = _parse_json_response(content)
+        if not values or not set(values) & section.fields.keys():
+            if len(section.fields) == 1 and next(iter(section.fields.values())).dtype in {"str", "table"}:
+                values = {next(iter(section.fields)): content}
+            else:
+                values = {"content": content}
+        result = self._template.fill_section(section_id, values)
+        if not result.success:
+            state.validation_failures[section_id] = result.error
 
         status = self._template.get_status()
         self._emit(
@@ -1410,11 +1439,11 @@ class PlanExecutor:
         """
         from concurrent.futures import ThreadPoolExecutor
 
-        from aec_bench.adapters.lambda_rlm.criteria import build_criteria_bundle
         from aec_bench.adapters.lambda_rlm.synthesis import (
             CandidateGeneration,
             synthesise_section,
         )
+        from aec_bench.templates.report.criteria import build_criteria_bundle
 
         fill_config = self._config.fill_section
         k = fill_config.k_candidates
@@ -1425,6 +1454,7 @@ class PlanExecutor:
                 model=self._model,
                 messages=[RlmMessage(role="user", content=prompt)],
                 system_prompt=None,
+                temperature=fill_config.temperature,
             )
             self._emit(
                 "synthesise",
@@ -1468,12 +1498,23 @@ class PlanExecutor:
             if source_data
         }
 
+        from aec_bench.templates.report.criteria import filter_references
+
+        permitted = filter_references(self._source_docs, bundle.eval_references)
+        references = {
+            key: value for key, value in references.items() if resolve_source_label(key, permitted).resolved is not None
+        }
+        for key, value in permitted.items():
+            if not any(resolve_source_label(label, {key: value}).resolved for label in references):
+                references[key] = value
+
         result = synthesise_section(
             section_id=section_id,
             candidates=candidates,
             bundle=bundle,
             references=references,
             config=fill_config.synthesis,
+            client=self._client,
         )
 
         # Synthesis LLM call (or fallback — still worth counting the attempt).
@@ -1505,6 +1546,17 @@ class PlanExecutor:
 
         return result.content
 
+    def _criteria_text(self, section: Any) -> str:
+        from aec_bench.templates.report.criteria import build_criteria_bundle
+
+        criteria = build_criteria_bundle(section=section, rubric=self._rubric).format_for_judge()
+        rules = [
+            rule.model_dump(mode="json")
+            for rule in self._template.rules
+            if not rule.sections or section.id in rule.sections
+        ]
+        return criteria + ("\nPublic writing checks: " + json.dumps(rules) if rules else "")
+
     def _get_section_info(self, section_id: str) -> dict[str, Any]:
         """Get section metadata from the template schema."""
         for sec in self._template._schema.sections:
@@ -1513,7 +1565,7 @@ class PlanExecutor:
                     "id": sec.id,
                     "title": sec.title,
                     "generation_mode": sec.generation_mode or "transform",
-                    "writing_guidance": list(sec.writing_guidance),
+                    "writing_guidance": list(sec.writing_guidance) + [self._criteria_text(sec)],
                     "input_mapping": list(sec.input_mapping),
                     "fields": dict(sec.fields),
                 }
@@ -1553,23 +1605,7 @@ class PlanExecutor:
             except KeyError:
                 return ""
 
-        # Exact match
-        if source_label in self._source_docs:
-            return self._source_docs[source_label]
-
-        # Split doc:section and try the doc part
-        if ":" in source_label:
-            doc_key = source_label.split(":")[0]
-            if doc_key in self._source_docs:
-                return self._source_docs[doc_key]
-
-        # Try partial match (e.g. "reference" matches "references/proposal")
-        for key, content in self._source_docs.items():
-            if key.startswith(source_label) or source_label.startswith(key):
-                return content
-
-        _log.debug("Source %r not found in discovered documents", source_label)
-        return ""
+        return resolve_source_label(source_label, self._source_docs).content
 
     def _get_dependency_context(self, section_id: str) -> dict[str, str]:
         """Get filled content from dependency sections (for extraction context)."""

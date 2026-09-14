@@ -3,13 +3,15 @@
 
 from __future__ import annotations
 
-from aec_bench.adapters.lambda_rlm.criteria import (
+import pytest
+
+from aec_bench.contracts.repl import DependencyTreeSchema, TreeSection
+from aec_bench.contracts.rubric import Rubric, RubricCriterion, RubricDimension
+from aec_bench.templates.report.criteria import (
     build_all_criteria_bundles,
     build_criteria_bundle,
     filter_references,
 )
-from aec_bench.contracts.repl import DependencyTreeSchema, TreeSection
-from aec_bench.contracts.rubric import Rubric, RubricCriterion, RubricDimension
 
 
 def _make_section(section_id: str, title: str, rules: list[str]) -> TreeSection:
@@ -76,7 +78,7 @@ def _make_rubric() -> Rubric:
     )
 
 
-def test_build_bundle_one_to_one_dimension():
+def test_build_bundle_one_to_one_dimension() -> None:
     section = _make_section("methodology", "Proposed Methodology", ["MANDATORY: cover both projects"])
     rubric = _make_rubric()
     bundle = build_criteria_bundle(section=section, rubric=rubric)
@@ -91,7 +93,7 @@ def test_build_bundle_one_to_one_dimension():
     assert len(bundle.rubric_criteria) == 3
 
 
-def test_build_bundle_unions_eval_references():
+def test_build_bundle_unions_eval_references() -> None:
     section = _make_section("methodology", "Methodology", [])
     rubric = _make_rubric()
     bundle = build_criteria_bundle(section=section, rubric=rubric)
@@ -100,7 +102,7 @@ def test_build_bundle_unions_eval_references():
     assert "references" in bundle.eval_references  # from cross_section dim
 
 
-def test_build_bundle_collects_personas():
+def test_build_bundle_collects_personas() -> None:
     section = _make_section("methodology", "Methodology", [])
     rubric = _make_rubric()
     bundle = build_criteria_bundle(section=section, rubric=rubric)
@@ -109,7 +111,7 @@ def test_build_bundle_collects_personas():
     assert "" not in bundle.expert_personas
 
 
-def test_build_bundle_with_no_rubric():
+def test_build_bundle_with_no_rubric() -> None:
     section = _make_section("intro", "Introduction", ["Be concise"])
     bundle = build_criteria_bundle(section=section, rubric=None)
     assert bundle.writing_rules == ("Be concise",)
@@ -118,7 +120,7 @@ def test_build_bundle_with_no_rubric():
     assert bundle.eval_references == ()
 
 
-def test_format_for_judge_includes_all_blocks():
+def test_format_for_judge_includes_all_blocks() -> None:
     section = _make_section("methodology", "Methodology", ["MANDATORY: rule one"])
     bundle = build_criteria_bundle(section=section, rubric=_make_rubric())
     rendered = bundle.format_for_judge()
@@ -130,7 +132,7 @@ def test_format_for_judge_includes_all_blocks():
     assert "EVALUATOR CONTEXT:" in rendered
 
 
-def test_build_all_bundles_covers_every_section():
+def test_build_all_bundles_covers_every_section() -> None:
     schema = DependencyTreeSchema(
         sections=[
             _make_section("methodology", "Methodology", ["a"]),
@@ -143,7 +145,7 @@ def test_build_all_bundles_covers_every_section():
     assert bundles["orphan"].rubric_dimensions == ()
 
 
-def test_filter_references_substring_match():
+def test_filter_references_substring_match() -> None:
     refs = {
         "scope_of_works": "scope content",
         "activity-brief-omapere": "omapere content",
@@ -155,11 +157,31 @@ def test_filter_references_substring_match():
     assert "team_profiles" not in filtered
 
 
-def test_filter_references_empty_returns_all():
+def test_filter_references_empty_returns_all() -> None:
     refs = {"a": "1", "b": "2"}
     assert filter_references(refs, ()) == refs
 
 
-def test_filter_references_no_match_returns_all_fallback():
+def test_filter_references_rejects_unmatched_selector() -> None:
     refs = {"a": "1", "b": "2"}
-    assert filter_references(refs, ["missing"]) == refs
+    with pytest.raises(ValueError, match="missing"):
+        filter_references(refs, ["missing"])
+
+
+def test_empty_section_scope_applies_to_every_section() -> None:
+    rubric = Rubric(
+        dimensions=[
+            RubricDimension(
+                id="accuracy",
+                name="Accuracy",
+                description="",
+                weight=1,
+                max_score=10,
+                eval_method="llm_judge",
+                criteria=[RubricCriterion(text="Trace claims", category="essential")],
+            )
+        ]
+    )
+    bundle = build_criteria_bundle(section=_make_section("intro", "Introduction", []), rubric=rubric)
+    assert bundle.rubric_dimensions == ("accuracy",)
+    assert bundle.rubric_criteria[0].text == "Trace claims"

@@ -20,9 +20,9 @@ from aec_bench.adapters.rlm.config import (
 from aec_bench.adapters.rlm.context_filter import ContextFilter
 from aec_bench.adapters.rlm.engine import ReplEnvironment
 from aec_bench.adapters.rlm.execution_lifecycle import (
-    GUARDRAIL_FAILURE_KINDS,
     run_rlm_execution,
 )
+from aec_bench.adapters.rlm.guardrails import GUARDRAIL_FAILURE_KINDS
 from aec_bench.adapters.rlm.prompt_surface import (
     build_constitution_section,
 )
@@ -53,9 +53,9 @@ from aec_bench.adapters.rlm.repl_runtime import (
 )
 from aec_bench.adapters.rlm.runtime_contracts import RlmRuntimeConfig
 from aec_bench.adapters.rlm.scaffolding import ScaffoldingState
-from aec_bench.adapters.rlm.template import ReportTemplate
 from aec_bench.contracts.advisor import AdvisorConfig
 from aec_bench.contracts.constitution import ConstitutionManifest
+from aec_bench.templates.report.session import ReportSession
 
 if TYPE_CHECKING:
     from aec_bench.contracts.constitution import StatePersistenceParams
@@ -100,7 +100,7 @@ class RlmAdapter:
         subcall_client: RlmClient | None = None,
         subcall_model: str | None = None,
         subcall_configs: dict[str, SubcallConfig] | None = None,
-        template: ReportTemplate | None = None,
+        template: ReportSession | None = None,
         compaction_client: RlmClient | None = None,
         trajectory_writer: Any | None = None,
         scratchpad_path: str | None = None,

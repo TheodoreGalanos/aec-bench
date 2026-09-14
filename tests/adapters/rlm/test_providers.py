@@ -334,3 +334,71 @@ class TestGenerateWithTools:
         assert "tool_name" in params
         assert "tool_description" in params
         assert "tool_parameters_schema" in params
+
+
+def test_secondary_model_uses_its_requested_route(monkeypatch: pytest.MonkeyPatch) -> None:
+    from typing import Any
+
+    from aec_bench.adapters.rlm import providers
+    from aec_bench.adapters.rlm.client import ReplayRlmClient, RlmCompletionResponse, RlmMessage
+
+    calls: list[tuple[str, dict[str, Any]]] = []
+    response = RlmCompletionResponse(output_text="secondary result", input_tokens=13, output_tokens=7)
+
+    def factory(model_name: str, **kwargs: Any) -> ReplayRlmClient:
+        calls.append((model_name, kwargs))
+        return ReplayRlmClient(responses=[response])
+
+    monkeypatch.setattr(providers, "make_rlm_client", factory)
+    client = object.__new__(providers.PydanticAiRlmClient)
+    client._model_name = "primary"
+    client._cache = False
+    client._stream_mode = "off"
+    client._model_settings = {"max_tokens": 100, "timeout": 3}
+    actual = client.generate(
+        model="secondary",
+        messages=[RlmMessage(role="user", content="Review")],
+        system_prompt="Policy",
+        max_output_tokens=50,
+    )
+    assert actual == response
+    assert calls == [("secondary", {"cache": False, "stream_mode": "off", "max_tokens": 100, "timeout_seconds": 3})]
+
+
+@pytest.mark.parametrize("requested,expected", [(40, 40), (300, 100)])
+def test_per_call_output_cap_cannot_loosen_client_cap(
+    monkeypatch: pytest.MonkeyPatch, requested: int, expected: int
+) -> None:
+    from types import SimpleNamespace
+    from typing import Any
+
+    from aec_bench.adapters.rlm import providers
+    from aec_bench.adapters.rlm.client import RlmMessage
+
+    calls: list[dict[str, Any]] = []
+    client = object.__new__(providers.PydanticAiRlmClient)
+    client._model_name = "primary"
+    monkeypatch.setattr(client, "_agent", SimpleNamespace(_system_prompts=()), raising=False)
+    client._model_settings = {"max_tokens": 100}
+    client._stream_mode = "off"
+
+    def run(agent: Any, prompt: str, **kwargs: Any) -> object:
+        assert agent is not client._agent
+        assert agent._system_prompts == ("Policy",)
+        assert prompt == "Review"
+        calls.append(kwargs)
+        return object()
+
+    monkeypatch.setattr(providers, "run_agent_sync_with_streaming_fallback", run)
+    monkeypatch.setattr(providers, "agent_run_output", lambda result: "done")
+    monkeypatch.setattr(providers, "agent_run_usage", lambda result: SimpleNamespace(input_tokens=2, output_tokens=1))
+    response = client.generate(
+        model="primary",
+        messages=[RlmMessage(role="user", content="Review")],
+        system_prompt="Policy",
+        max_output_tokens=requested,
+        temperature=0.4,
+    )
+    assert response.error_message is None
+    assert calls[0]["model_settings"] == {"max_tokens": expected, "temperature": 0.4}
+    assert client._agent._system_prompts == ()

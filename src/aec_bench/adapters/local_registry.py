@@ -60,15 +60,12 @@ def _build_rlm(
     If *client* is not provided, creates a ``PydanticAiRlmClient`` from
     the model name (requires pydantic-ai and provider credentials).
 
-    When the workspace's rlm.toml has a [constitution] section, a
-    constitutional_client is built and passed to build_rlm_adapter so
-    that constitutional parameters are inferred from task metadata.
-    The *constitutional_model* argument overrides the model from rlm.toml.
-
-    Task metadata is extracted from task.toml when present, providing
-    context (difficulty, tags, tools, timeout) to the inference call.
+    Explicit constitutional parameters are loaded without model inference.
     """
-    from aec_bench.adapters.rlm.adapter import RlmAdapter
+    from aec_bench.adapters.config import report_configuration
+
+    if constitutional_model is not None:
+        raise ValueError("constitutional inference is unsupported in metered report execution")
     from aec_bench.adapters.rlm.initialiser import build_rlm_adapter
 
     if client is None:
@@ -85,72 +82,16 @@ def _build_rlm(
             compaction_client = client
 
     rlm_toml = Path(workspace) / "rlm.toml"
-    if rlm_toml.exists():
-        from aec_bench.adapters.rlm.config import parse_rlm_config
-
-        _rlm_cfg = parse_rlm_config(rlm_toml.read_text())
-
-        # Build advisor client if config declares an [advisor] block
-        advisor_client = None
-        if _rlm_cfg.advisor and _rlm_cfg.advisor.enabled:
-            from aec_bench.adapters.rlm.providers import make_rlm_client as _make
-
-            advisor_client = _make(_rlm_cfg.advisor.model, cache=True)
-            logger.info("Advisor client: model=%s", _rlm_cfg.advisor.model)
-
-        # Build constitutional client if config declares a [constitution] block
-        constitutional_client = None
-        if _rlm_cfg.constitution_path or _rlm_cfg.constitution_inline:
-            from aec_bench.adapters.rlm.providers import make_rlm_client as _make
-
-            constitution_model_name = constitutional_model or _rlm_cfg.constitution_model or model_name
-            constitutional_client = _make(constitution_model_name, cache=True)
-            logger.info("Constitutional client: model=%s", constitution_model_name)
-
-        # Extract task metadata from task.toml when present (graceful fallback to empty).
-        # We read the TOML directly rather than load_task_definition() because the latter
-        # validates task-directory layout. Here we only need hint context for inference,
-        # so malformed metadata should not prevent local adapter construction.
-        task_metadata: dict[str, object] = {}
-        task_toml = rlm_toml.parent / "task.toml"
-        if task_toml.exists():
-            import tomllib as _tomllib
-
-            try:
-                task_data = _tomllib.loads(task_toml.read_text())
-                meta = task_data.get("metadata", {})
-                agent = task_data.get("agent", {})
-                task_metadata = {
-                    "difficulty": meta.get("difficulty"),
-                    "tags": list(meta.get("tags", [])),
-                    "category": meta.get("category"),
-                    "timeout_seconds": agent.get("timeout_sec"),
-                    "is_template_based": bool(_rlm_cfg.template_definition),
-                }
-            except Exception as exc:
-                logger.warning("Could not read task.toml for constitutional metadata: %s", exc)
-
-        return build_rlm_adapter(
-            rlm_config_path=rlm_toml,
-            client=client,
-            adapter_name="rlm",
-            model_name=model_name,
-            subcall_client=compaction_client,
-            compaction_client=compaction_client,
-            trajectory_writer=trajectory_writer,
-            workspace_path=workspace,
-            advisor_client=advisor_client,
-            constitutional_client=constitutional_client,
-            task_metadata=task_metadata,
-        )
-
-    return RlmAdapter(
+    return build_rlm_adapter(
+        rlm_config_path=rlm_toml if rlm_toml.exists() else None,
+        client=client,
         adapter_name="rlm",
         model_name=model_name,
-        client=client,
+        subcall_client=compaction_client,
         compaction_client=compaction_client,
         trajectory_writer=trajectory_writer,
-        scratchpad_path=str(Path(workspace) / ".scratchpad.json"),
+        workspace_path=workspace,
+        configuration=report_configuration(_kwargs),
     )
 
 
@@ -208,17 +149,12 @@ def _build_lambda_rlm(
     If *client* is not provided, creates a ``PydanticAiRlmClient`` from
     the model name (requires pydantic-ai and provider credentials).
 
-    When the workspace's lambda-rlm.toml has a [constitution] section, a
-    constitutional_client is built and passed to build_lambda_rlm_adapter
-    so that constitutional parameters are inferred from task metadata.
-    The *constitutional_model* argument overrides the model from
-    lambda-rlm.toml.
-
-    Task metadata is extracted from task.toml when present, providing
-    context (difficulty, tags, category, timeout) to the inference call.
-    λ-RLM always uses templates, so ``is_template_based`` is always True.
+    Explicit constitutional parameters are loaded without model inference.
     """
-    from aec_bench.adapters.lambda_rlm.config import parse_lambda_rlm_config
+    from aec_bench.adapters.config import report_configuration
+
+    if constitutional_model is not None:
+        raise ValueError("constitutional inference is unsupported in metered report execution")
     from aec_bench.adapters.lambda_rlm.initialiser import build_lambda_rlm_adapter
     from aec_bench.adapters.rlm.providers import make_rlm_client
 
@@ -236,43 +172,6 @@ def _build_lambda_rlm(
     if client is None:
         client = make_rlm_client(model_name)
 
-    # Build constitutional client if config declares a [constitution] block.
-    # Import make_rlm_client fresh inside the branch so tests that monkey-patch
-    # aec_bench.adapters.rlm.providers.make_rlm_client are honoured.
-    constitutional_client = None
-    if config_path is not None:
-        _cfg = parse_lambda_rlm_config(config_path.read_text())
-        if _cfg.constitution_path or _cfg.constitution_inline:
-            from aec_bench.adapters.rlm.providers import make_rlm_client as _make
-
-            constitution_model_name = constitutional_model or _cfg.constitution_model or model_name
-            constitutional_client = _make(constitution_model_name, cache=True)
-            logger.info("Lambda-RLM constitutional client: model=%s", constitution_model_name)
-
-    # Extract task metadata from task.toml when present (graceful fallback to empty).
-    # We read the TOML directly rather than load_task_definition() because the latter
-    # validates task-directory layout. Here we only need hint context for inference,
-    # so malformed metadata should not prevent local adapter construction.
-    task_metadata: dict[str, object] = {}
-    task_toml = ws / "task.toml"
-    if task_toml.exists():
-        import tomllib as _tomllib
-
-        try:
-            task_data = _tomllib.loads(task_toml.read_text())
-            meta = task_data.get("metadata", {})
-            agent = task_data.get("agent", {})
-            task_metadata = {
-                "difficulty": meta.get("difficulty"),
-                "tags": list(meta.get("tags", [])),
-                "category": meta.get("category"),
-                "timeout_seconds": agent.get("timeout_sec"),
-                # λ-RLM always uses templates
-                "is_template_based": True,
-            }
-        except Exception as exc:
-            logger.warning("Could not read task.toml for constitutional metadata: %s", exc)
-
     return build_lambda_rlm_adapter(
         config_path=config_path,
         client=client,
@@ -280,8 +179,7 @@ def _build_lambda_rlm(
         model_name=model_name,
         workspace=workspace,
         trajectory_writer=trajectory_writer,
-        constitutional_client=constitutional_client,
-        task_metadata=task_metadata,
+        configuration=report_configuration(_kwargs),
     )
 
 

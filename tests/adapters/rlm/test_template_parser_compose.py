@@ -3,12 +3,12 @@
 
 import pytest
 
-from aec_bench.adapters.rlm.template_parser import parse_report_template
 from aec_bench.contracts.report_template import (
     FillBlock,
     GeneratedBlock,
     VerbatimBlock,
 )
+from aec_bench.templates.report.parser import parse_report_template
 
 _COMPOSE_TOML = """\
 [[sections]]

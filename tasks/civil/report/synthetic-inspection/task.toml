@@ -1,0 +1,22 @@
+version = "1.0"
+[identity]
+id = "01a0956a-a249-7152-83a3-bac2a7929814"
+key = "civil/report/synthetic-inspection"
+version = 1
+[metadata]
+lifecycle = "proposed"
+visibility = "public"
+difficulty = "easy"
+category = "report"
+tags = ["synthetic", "report", "harness-example"]
+[agent]
+timeout_sec = 300.0
+[verifier]
+timeout_sec = 30.0
+[environment]
+extensions = []
+build_timeout_sec = 300.0
+cpus = 1
+memory_mb = 1024
+storage_mb = 1024
+allow_internet = false

@@ -14,6 +14,58 @@ from aec_bench.contracts.repl import (
 from aec_bench.contracts.report_template import Block, parse_block
 from aec_bench.contracts.rubric import Rubric, RubricCriterion, RubricDimension
 
+FIELD_TYPES: dict[str, type | tuple[type, ...]] = {
+    "str": str,
+    "int": int,
+    "float": (int, float),
+    "bool": bool,
+    "list": list,
+    "dict": dict,
+    "table": (str, list),
+}
+
+
+def validate_report_schema(schema: DependencyTreeSchema) -> None:
+    sections = {s.id: s for s in schema.sections}
+    if len(sections) != len(schema.sections):
+        raise ValueError("Duplicate report section IDs")
+    for section in schema.sections:
+        if not section.id:
+            raise ValueError("Report section ID cannot be empty")
+        if section.generation_mode not in {
+            None,
+            "transform",
+            "guided",
+            "prose",
+            "compose",
+            "verbatim",
+            "creative",
+            "boilerplate",
+            "external",
+        }:
+            raise ValueError(f"Unsupported generation mode: {section.generation_mode}")
+        for name, spec in section.fields.items():
+            if (
+                not isinstance(name, str)
+                or not name
+                or name != spec.name
+                or not isinstance(spec.dtype, str)
+                or spec.dtype not in FIELD_TYPES
+                or not isinstance(spec.required, bool)
+            ):
+                raise ValueError(f"Invalid field definition: {section.id}.{name} ({spec.dtype})")
+        for dep in section.depends_on:
+            if dep not in sections:
+                raise ValueError(f"Unknown dependency: {section.id} -> {dep}")
+        if set(section.source_priority) - set(section.input_mapping):
+            raise ValueError(f"Source priority refers to an unmapped source in {section.id}")
+    pending = set(sections)
+    while pending:
+        ready = {sid for sid in pending if not set(sections[sid].depends_on) & pending}
+        if not ready:
+            raise ValueError(f"Cyclic report dependencies: {', '.join(sorted(pending))}")
+        pending -= ready
+
 
 def _parse_fields(
     field_data: list[dict[str, Any]] | dict[str, Any],
@@ -36,34 +88,57 @@ def _parse_fields(
                     description="",
                 )
             elif isinstance(dtype, dict):
-                fields[name] = OutputField(
-                    name=name,
-                    dtype=dtype.get("dtype", "str"),
-                    description=dtype.get("description", ""),
-                    tolerance=dtype.get("tolerance"),
-                    unit=dtype.get("unit"),
-                    required=dtype.get("required", False),
-                )
-    else:
+                fields[name] = _parse_field(name, dtype)
+            else:
+                raise ValueError(f"Invalid report field definition: {name}")
+    elif isinstance(field_data, list):
         # List format: [{name: ..., dtype: ...}, ...]
         for fd in field_data:
+            if not isinstance(fd, dict) or not isinstance(fd.get("name"), str):
+                raise ValueError("Each report field requires a string name")
+            if "dtype" not in fd:
+                raise ValueError(f"Report field {fd['name']} requires a dtype")
             name = fd["name"]
-            fields[name] = OutputField(
-                name=name,
-                dtype=fd["dtype"],
-                description=fd.get("description", ""),
-                tolerance=fd.get("tolerance"),
-                unit=fd.get("unit"),
-                required=fd.get("required", False),
-            )
+            if name in fields:
+                raise ValueError(f"Duplicate report field: {name}")
+            fields[name] = _parse_field(name, {key: value for key, value in fd.items() if key != "name"})
+    else:
+        raise ValueError("Report fields must be a table or array of tables")
 
     return fields
+
+
+def _parse_field(name: str, data: dict[str, Any]) -> OutputField:
+    unknown = set(data) - {"dtype", "description", "tolerance", "unit", "required"}
+    if unknown:
+        raise ValueError(f"Unknown report field keys for {name}: {sorted(unknown)}")
+    return OutputField(
+        name=name,
+        dtype=data.get("dtype", "str"),
+        description=data.get("description", ""),
+        tolerance=data.get("tolerance"),
+        unit=data.get("unit"),
+        required=data.get("required", False),
+    )
 
 
 def _parse_sections(section_list: list[dict[str, Any]]) -> list[TreeSection]:
     """Parse a list of section dicts into TreeSection objects."""
     sections: list[TreeSection] = []
     for section_data in section_list:
+        unknown = set(section_data) - {
+            "id",
+            "title",
+            "fields",
+            "depends_on",
+            "generation_mode",
+            "per_discipline",
+            "writing_guidance",
+            "input_mapping",
+            "blocks",
+        }
+        if unknown:
+            raise ValueError(f"Unknown report section keys: {sorted(unknown)}")
         fields = _parse_fields(section_data.get("fields", []))
         input_mapping, source_priority = _parse_input_mapping(
             section_data.get("input_mapping", []),
@@ -144,6 +219,7 @@ def parse_report_template_with_rubric(
 
     sections = _parse_sections(data.get("sections", []))
     schema = DependencyTreeSchema(sections=sections)
+    validate_report_schema(schema)
 
     rubric = None
     rubric_data = data.get("rubric")

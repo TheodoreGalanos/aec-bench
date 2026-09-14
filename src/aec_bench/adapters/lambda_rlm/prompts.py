@@ -162,7 +162,11 @@ def build_review_prompt(
             '  "gaps": ["list of specific gaps"],',
             '  "risks": ["list of specific risks"],',
             '  "reextract_sources": ["source labels that need another pass, if any"],',
-            '  "supplement_guidance": "what additional extraction is needed, if any"',
+            '  "supplement_guidance": "what additional extraction is needed, if any",',
+            '  "criterion_findings": [{"dimension_id": "public dimension ID",'
+            ' "status": "satisfied | unsatisfied | unassessed",'
+            ' "evidence": "supporting report/source evidence"}]',
+            "Use only public dimensions. These are advisory findings, not verifier scores.",
             "}",
         ]
     )

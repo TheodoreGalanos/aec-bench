@@ -1,0 +1,9 @@
+[template]
+definition = "report.toml"
+source_mapping = "source-index.toml"
+[execution]
+scaffolding = true
+context_limit = 128000
+[guardrails]
+token_budget = 10000
+max_iterations = 10

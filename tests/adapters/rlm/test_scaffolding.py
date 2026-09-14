@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 from aec_bench.adapters.rlm.scaffolding import ScaffoldingState
-from aec_bench.adapters.rlm.template import TemplateStatus
+from aec_bench.templates.report.session import TemplateStatus
 
 
 def _status(

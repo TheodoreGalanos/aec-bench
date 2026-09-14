@@ -155,9 +155,13 @@ class PydanticAiRlmClient:
         model: Any,
         model_settings: Any | None = None,
         stream_mode: str = "auto",
+        model_name: str | None = None,
+        cache: bool = True,
     ) -> None:
         from pydantic_ai import Agent
 
+        self._model_name = model_name
+        self._cache = cache
         self._model_obj = model
         self._model_settings = model_settings
         self._stream_mode = stream_mode
@@ -175,8 +179,24 @@ class PydanticAiRlmClient:
         messages: list[RlmMessage],
         system_prompt: str | None,
         temperature: float | None = None,
+        max_output_tokens: int | None = None,
     ) -> RlmCompletionResponse:
         """Run a single LLM call and return an RlmCompletionResponse."""
+        if self._model_name is not None and model != self._model_name:
+            routed = make_rlm_client(
+                model,
+                cache=self._cache,
+                stream_mode=self._stream_mode,
+                max_tokens=(self._model_settings or {}).get("max_tokens"),
+                timeout_seconds=(self._model_settings or {}).get("timeout"),
+            )
+            return routed.generate(
+                model=model,
+                messages=messages,
+                system_prompt=system_prompt,
+                temperature=temperature,
+                max_output_tokens=max_output_tokens,
+            )
         # Build the user prompt from the last user message
         user_prompt = ""
         for msg in reversed(messages):
@@ -200,16 +220,25 @@ class PydanticAiRlmClient:
                 history.append(ModelResponse(parts=[TextPart(content=msg.content)]))
 
         # Override the system prompt for this call
-        self._agent._system_prompts = (system_prompt,) if system_prompt else ()  # noqa: SLF001
+        from copy import copy
+
+        agent = copy(self._agent)
+        agent._system_prompts = (system_prompt,) if system_prompt else ()  # noqa: SLF001
 
         try:
             model_settings = self._model_settings
             if temperature is not None:
                 base_settings = dict(self._model_settings or {})
                 model_settings = base_settings | {"temperature": temperature}
+            if max_output_tokens is not None:
+                model_settings = dict(model_settings or {})
+                configured_max = model_settings.get("max_tokens")
+                model_settings["max_tokens"] = (
+                    min(configured_max, max_output_tokens) if configured_max else max_output_tokens
+                )
 
             result = run_agent_sync_with_streaming_fallback(
-                self._agent,
+                agent,
                 user_prompt,
                 message_history=history if history else None,
                 model_settings=model_settings,
@@ -539,6 +568,8 @@ def make_rlm_client(
 
     return PydanticAiRlmClient(
         model=pydantic_model,
+        model_name=model_name,
+        cache=cache,
         model_settings=settings,
         stream_mode=stream_mode,
     )

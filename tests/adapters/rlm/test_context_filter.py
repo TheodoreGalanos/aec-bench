@@ -2,12 +2,12 @@
 # ABOUTME: Validates threshold-based filtering, grep detection, error passthrough, and code preview.
 
 from aec_bench.adapters.rlm.adapter import _format_code_preview
-from aec_bench.adapters.rlm.context_filter import (
-    ContextFilter,
-    build_context_message,
-    format_var_diff,
-)
+from aec_bench.adapters.rlm.context_filter import ContextFilter
 from aec_bench.contracts.constitution import InformationMinimalityParams
+
+_filter = ContextFilter(InformationMinimalityParams())
+build_context_message = _filter.build_context_message
+format_var_diff = _filter.format_var_diff
 
 
 class TestBuildContextMessage:
@@ -29,14 +29,16 @@ class TestBuildContextMessage:
         )
         assert result == "(no output)"
 
-    def test_error_always_passes_through_verbatim(self) -> None:
+    def test_error_output_is_bounded(self) -> None:
         long_error = "Traceback (most recent call last):\n" + "x" * 5000
         result = build_context_message(
             stdout="",
             error=long_error,
             code="bad_code()",
         )
-        assert result == long_error
+        assert len(result) < len(long_error)
+        assert "5,035" in result
+        assert "Traceback" in result
 
     def test_grep_output_under_10k_passes_through(self) -> None:
         grep_output = "3 match(es) for /voltage/:\n" + "x" * 8000
@@ -257,7 +259,7 @@ class TestContextFilterWithParams:
         # Grep output over the 50-char threshold should be truncated
         assert "truncated" in out
 
-    def test_error_always_verbatim(self) -> None:
+    def test_error_uses_display_limit(self) -> None:
         cf = ContextFilter(InformationMinimalityParams(default_threshold=10))
         out = cf.build_context_message(
             stdout=None,
@@ -265,4 +267,5 @@ class TestContextFilterWithParams:
             code="broken()",
         )
         assert "Traceback" in out
-        assert "line\n" * 100 in out
+        assert "Error truncated" in out
+        assert len(out) < 100

@@ -3,7 +3,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from enum import StrEnum
 from typing import Any, Protocol
 
@@ -27,18 +27,18 @@ from aec_bench.adapters.rlm.config import ExecutionConfig, GuardrailConfig, Subc
 from aec_bench.adapters.rlm.context_filter import ContextFilter
 from aec_bench.adapters.rlm.engine import ReplEnvironment
 from aec_bench.adapters.rlm.errors import ErrorTracker
-from aec_bench.adapters.rlm.guardrails import GuardrailState
+from aec_bench.adapters.rlm.guardrails import GUARDRAIL_FAILURE_KINDS, GuardrailState
 from aec_bench.adapters.rlm.output_commit import OutputCompletionState
 from aec_bench.adapters.rlm.request_runtime import ResolvedRlmRequest
 from aec_bench.adapters.rlm.scaffolding import ScaffoldingState
 from aec_bench.adapters.rlm.scratchpad import Scratchpad
-from aec_bench.adapters.rlm.template import ReportTemplate
 from aec_bench.adapters.rlm.tokens import TokenTracker, TurnMetrics
 from aec_bench.contracts.adapter_execution import TranscriptEntry
 from aec_bench.contracts.advisor import AdvisorConfig
 from aec_bench.contracts.agent_output import AgentOutput, AgentOutputStatus
 from aec_bench.contracts.constitution import ConstitutionManifest
 from aec_bench.contracts.output_completion import OutputCommitAttestation
+from aec_bench.templates.report.session import ReportSession
 
 
 class RlmTrajectory(Protocol):
@@ -86,7 +86,7 @@ class RlmRuntimeConfig:
     subcall_client: RlmClient | None = None
     subcall_model: str | None = None
     subcall_configs: dict[str, SubcallConfig] | None = None
-    template: ReportTemplate | None = None
+    template: ReportSession | None = None
     compaction_client: RlmClient | None = None
     trajectory: RlmTrajectory | None = None
     scratchpad_path: str | None = None
@@ -155,6 +155,7 @@ class RlmExecutionState:
     total_output_tokens: int = 0
     previous_variable_names: set[str] = field(default_factory=set)
     compaction_count: int = 0
+    last_compaction_iteration: int = -1
     iteration_budget_warning_sent: bool = False
 
     @property
@@ -200,6 +201,53 @@ class RlmExecutionState:
     ) -> AdapterResult:
         """Build the stable adapter result from the current execution state."""
         request = self.request
+        if (
+            status == AgentOutputStatus.COMPLETED
+            and self.runtime.template is not None
+            and self.runtime.execution.scaffolding
+        ):
+            submission = self.runtime.template.submit()
+            from aec_bench.templates.report.output import report_artifact_matches
+
+            if not submission.complete or not report_artifact_matches(
+                self.runtime.template,
+                request.output_path,
+                request.output_format,
+                workspace=self.runtime.workspace_path,
+            ):
+                status = AgentOutputStatus.PARTIAL
+                failure_kind = AdapterFailureKind.MISSING_OUTPUT
+                error_message = f"Report incomplete: {submission.gaps}; diagnostics={submission.diagnostics}"
+                completion_commit = None
+                completion_reason = None
+        if status == AgentOutputStatus.COMPLETED:
+            verdict = self.guardrails.check()
+            if self.guardrails.provider_error or (
+                not verdict.can_continue and verdict.stop_code != AdapterStopReason.ITERATION_CAP
+            ):
+                status = AgentOutputStatus.PARTIAL
+                error_message = self.guardrails.provider_error or verdict.stop_reason
+                if self.guardrails.provider_error:
+                    failure_kind = AdapterFailureKind.PROVIDER_ERROR
+                    stop_reason = None
+                else:
+                    if verdict.stop_code is None:
+                        raise RuntimeError("stopping RLM guardrail verdict omitted its typed stop code")
+                    failure_kind = GUARDRAIL_FAILURE_KINDS[verdict.stop_code]
+                    stop_reason = verdict.stop_code
+                completion_commit = None
+                completion_reason = None
+        if self.runtime.template is not None and self.runtime.execution.scaffolding:
+            from aec_bench.templates.report.output import render_report, write_report
+
+            if status != AgentOutputStatus.COMPLETED:
+                write_report(
+                    self.runtime.template,
+                    request.output_path,
+                    request.output_format,
+                    workspace=self.runtime.workspace_path,
+                )
+            _, raw_output_text = render_report(self.runtime.template, request.output_format)
         total_usage = self.tokens.depth_summary()["total"]
         advisor_calls: int | None = None
         advisor_input_tokens: int | None = None
@@ -211,7 +259,22 @@ class RlmExecutionState:
             resolved_model=self.runtime.model_name,
             configuration_record=record_effective_configuration(
                 resolved_model=self.runtime.model_name,
-                configuration=dict(request.configuration),
+                configuration=dict(request.configuration)
+                | {
+                    "guardrails": asdict(self.runtime.guardrails)
+                    | {
+                        "token_budget": self.resolved.token_budget,
+                        "max_iterations": self.resolved.max_iterations,
+                        "max_budget_usd": self.resolved.max_budget_usd,
+                    },
+                    "execution": asdict(self.runtime.execution) | {"context_limit": self.resolved.context_limit},
+                    "constitution": asdict(self.runtime.constitution) if self.runtime.constitution else None,
+                    "advisor": asdict(self.runtime.advisor_config) if self.runtime.advisor_config else None,
+                    "report_assets": self.runtime.template.configuration() if self.runtime.template else None,
+                    "tools": sorted(self.scaffolds),
+                    "subcall_model": self.runtime.subcall_model or self.runtime.model_name,
+                    "compaction_model": self.runtime.execution.compaction_model or self.runtime.model_name,
+                },
             ),
             agent_output=AgentOutput(
                 status=status,
@@ -230,8 +293,8 @@ class RlmExecutionState:
             raw_output_text=raw_output_text,
             provider_error=error_message,
             usage_model_calls=int(total_usage["calls"]),
-            usage_input_tokens=int(total_usage["input_tokens"]),
-            usage_output_tokens=int(total_usage["output_tokens"]),
+            usage_input_tokens=int(total_usage["input_tokens"]) if self.guardrails.usage_known else None,
+            usage_output_tokens=int(total_usage["output_tokens"]) if self.guardrails.usage_known else None,
             usage_cache_read_tokens=int(total_usage["cache_read_tokens"]),
             usage_cache_write_tokens=int(total_usage["cache_write_tokens"]),
             usage_advisor_calls=advisor_calls,

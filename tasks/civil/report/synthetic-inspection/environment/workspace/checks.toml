@@ -1,0 +1,16 @@
+visibility = "public"
+[[rules]]
+id = "observed-count"
+kind = "required_pattern"
+pattern = "12"
+message = "State the recorded count of 12."
+[[rules]]
+id = "avoid-emphasis"
+kind = "forbidden_pattern"
+pattern = "obviously"
+message = "Remove unsupported emphasis."
+severity = "warning"
+[[rules]]
+id = "explain-evidence"
+kind = "prose"
+message = "Explain how the evidence supports the conclusion."

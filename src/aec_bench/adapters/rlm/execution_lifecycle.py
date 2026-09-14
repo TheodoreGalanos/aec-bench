@@ -10,10 +10,10 @@ from aec_bench.adapters.base import (
     AdapterFailureKind,
     AdapterRequest,
     AdapterResult,
-    AdapterStopReason,
 )
-from aec_bench.adapters.rlm.client import RlmCompletionResponse
+from aec_bench.adapters.rlm.client import RlmCompletionResponse, RlmMessage
 from aec_bench.adapters.rlm.compaction_runtime import run_compaction_transition
+from aec_bench.adapters.rlm.guardrails import GUARDRAIL_FAILURE_KINDS
 from aec_bench.adapters.rlm.prompt_surface import REPL_TOOL_NAME, REPL_TOOL_SCHEMA
 from aec_bench.adapters.rlm.repl_runtime import (
     prepare_execution_state,
@@ -31,14 +31,6 @@ from aec_bench.contracts.agent_output import AgentOutputStatus
 from aec_bench.contracts.pricing import estimate_cost_usd
 
 logger = logging.getLogger(__name__)
-
-GUARDRAIL_FAILURE_KINDS = {
-    AdapterStopReason.ITERATION_CAP: AdapterFailureKind.TURN_LIMIT_REACHED,
-    AdapterStopReason.TOKEN_BUDGET: AdapterFailureKind.TOKEN_BUDGET_REACHED,
-    AdapterStopReason.SUBCALL_LIMIT: AdapterFailureKind.SUBCALL_LIMIT_REACHED,
-    AdapterStopReason.COST_BUDGET: AdapterFailureKind.COST_BUDGET_REACHED,
-    AdapterStopReason.BILLABLE_INPUT_BUDGET: AdapterFailureKind.BILLABLE_INPUT_BUDGET_REACHED,
-}
 
 
 def run_rlm_execution(
@@ -59,7 +51,10 @@ def run_rlm_execution(
         guarded_result = _guardrail_terminal(state)
         if guarded_result is not None:
             return guarded_result
-        response = _call_model(state, emit=emit)
+        try:
+            response = _call_model(state, emit=emit)
+        except Exception as error:
+            response = RlmCompletionResponse(error_message=str(error))
         metrics = state.record_response(response, cost_usd=_response_cost(state, response))
         provider_failure = _provider_failure(state, response)
         if provider_failure is not None:
@@ -70,10 +65,28 @@ def run_rlm_execution(
                 raise RuntimeError("terminal RLM transition omitted its adapter result")
             return transition.result
         if transition.action is LifecycleAction.COMPACT:
-            _compact(state, emit=emit)
+            guarded_result = _guardrail_terminal(state)
+            if guarded_result is not None:
+                return guarded_result
+            try:
+                _compact(state, emit=emit)
+            except Exception as error:
+                state.close_trajectory()
+                return state.build_result(
+                    status=AgentOutputStatus.PARTIAL,
+                    failure_kind=AdapterFailureKind.PROVIDER_ERROR,
+                    error_message=f"Compaction failed: {error}",
+                )
 
 
 def _guardrail_terminal(state: RlmExecutionState) -> AdapterResult | None:
+    if state.guardrails.provider_error:
+        state.close_trajectory()
+        return state.build_result(
+            status=AgentOutputStatus.PARTIAL,
+            failure_kind=AdapterFailureKind.PROVIDER_ERROR,
+            error_message=state.guardrails.provider_error,
+        )
     verdict = state.guardrails.check()
     if verdict.can_continue:
         return None
@@ -135,6 +148,8 @@ def _provider_failure(
 ) -> AdapterResult | None:
     if response.error_message is None:
         return None
+    state.guardrails.provider_error = response.error_message
+    state.guardrails.usage_known = False
     logger.warning("Provider error: %s", response.error_message)
     state.transcript.append(
         TranscriptEntry(
@@ -148,7 +163,11 @@ def _provider_failure(
     )
     state.close_trajectory()
     return state.build_result(
-        status=AgentOutputStatus.FAILED,
+        status=(
+            AgentOutputStatus.PARTIAL
+            if state.runtime.template is not None and state.runtime.execution.scaffolding
+            else AgentOutputStatus.FAILED
+        ),
         failure_kind=AdapterFailureKind.PROVIDER_ERROR,
         error_message=response.error_message,
         raw_output_text=response.output_text or None,
@@ -160,6 +179,8 @@ def _compact(
     *,
     emit: Callable[[str, str], None],
 ) -> None:
+    if state.last_compaction_iteration == state.guardrails.iteration_count - 1:
+        raise RuntimeError("Compaction did not reduce context below its threshold")
     execution = state.runtime.execution
     model = execution.compaction_model or state.runtime.model_name
     client = state.runtime.compaction_client or state.runtime.client
@@ -178,4 +199,5 @@ def _compact(
         emit=emit,
     )
     state.compaction_count = transition.number
-    state.conversation = list(transition.conversation)
+    state.conversation = [RlmMessage(role="user", content=state.request.instruction), *transition.conversation]
+    state.last_compaction_iteration = state.guardrails.iteration_count

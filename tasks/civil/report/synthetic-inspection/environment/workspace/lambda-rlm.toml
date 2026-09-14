@@ -1,0 +1,8 @@
+[template]
+definition = "report_template.toml"
+source_mapping = "sources.toml"
+validation_rules = "checks.toml"
+[guardrails]
+token_budget = 10000
+[review]
+trigger = "never"

@@ -18,9 +18,9 @@ from aec_bench.adapters.lambda_rlm.state import (
     SectionPlan,
 )
 from aec_bench.adapters.rlm.client import ReplayRlmClient, RlmCompletionResponse
-from aec_bench.adapters.rlm.template import ReportTemplate
 from aec_bench.contracts.repl import DependencyTreeSchema, OutputField, TreeSection
 from aec_bench.contracts.report_template import FillBlock
+from aec_bench.templates.report.session import ReportSession
 
 
 def _agentic_config(enabled: bool = True) -> LambdaRlmConfig:
@@ -34,7 +34,7 @@ def _agentic_config(enabled: bool = True) -> LambdaRlmConfig:
     )
 
 
-def _compose_template() -> ReportTemplate:
+def _compose_template() -> ReportSession:
     schema = DependencyTreeSchema(
         sections=(
             TreeSection(
@@ -47,7 +47,7 @@ def _compose_template() -> ReportTemplate:
             ),
         ),
     )
-    return ReportTemplate(schema)
+    return ReportSession(schema)
 
 
 def _empty_plan(section_id: str) -> ExecutionPlan:

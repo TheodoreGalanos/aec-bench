@@ -23,7 +23,7 @@ class CompactionResult:
 if TYPE_CHECKING:
     from aec_bench.adapters.rlm.engine import ReplEnvironment
     from aec_bench.adapters.rlm.scratchpad import Scratchpad
-    from aec_bench.adapters.rlm.template import ReportTemplate, TemplateStatus
+    from aec_bench.templates.report.session import ReportSession, TemplateStatus
 
 _COMPACTION_SYSTEM = "You summarise AI agent work sessions concisely."
 
@@ -149,7 +149,7 @@ def compact(
     model: str,
     repl: ReplEnvironment,
     scratchpad: Scratchpad | None,
-    template: ReportTemplate | None,
+    template: ReportSession | None,
     params: StatePersistenceParams | None = None,
 ) -> CompactionResult:
     """Run a compaction call driven by the constitutional state-persistence strategy."""
@@ -165,14 +165,18 @@ def compact(
         params=resolved_params,
     )
 
+    prompt = prompt[:32_000]
     response = client.generate(
         model=model,
         messages=[RlmMessage(role="user", content=prompt)],
         system_prompt=_COMPACTION_SYSTEM,
+        max_output_tokens=2000,
     )
 
+    if response.error_message:
+        raise RuntimeError(response.error_message)
     return CompactionResult(
-        summary=response.output_text,
+        summary=response.output_text[:8000],
         input_tokens=response.input_tokens,
         output_tokens=response.output_tokens,
     )

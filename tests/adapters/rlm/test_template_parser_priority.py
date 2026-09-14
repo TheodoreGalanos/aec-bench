@@ -1,7 +1,8 @@
+import pytest
+
 # ABOUTME: Tests parse_report_template handling of the dict-form input_mapping with optional priority.
 # ABOUTME: Verifies backwards-compat with list form and correctness of priority parsing.
-
-from aec_bench.adapters.rlm.template_parser import parse_report_template
+from aec_bench.templates.report.parser import parse_report_template
 
 
 def test_list_form_input_mapping_has_empty_source_priority():
@@ -76,9 +77,8 @@ sources = ["design_report:discipline"]
 "design_report:discipline" = 1
 "legacy:thing" = 9
 """
-    schema = parse_report_template(toml)
-    section = schema.sections[0]
-    assert section.source_priority["legacy:thing"] == 9
+    with pytest.raises(ValueError, match="unmapped source"):
+        parse_report_template(toml)
 
 
 def test_dict_form_supports_arbitrary_tier_counts():

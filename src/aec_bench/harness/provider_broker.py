@@ -116,6 +116,7 @@ class BrokeredRlmClient:
         messages: list[RlmMessage],
         system_prompt: str | None,
         temperature: float | None = None,
+        max_output_tokens: int | None = None,
     ) -> RlmCompletionResponse:
         payload: dict[str, Any] = {
             "operation": "generate",
@@ -126,6 +127,8 @@ class BrokeredRlmClient:
             "system_prompt": system_prompt,
             "temperature": temperature,
         }
+        if max_output_tokens is not None:
+            payload["max_output_tokens"] = max_output_tokens
         return _response_from_payload(self._request(payload))
 
     def generate_with_tools(

@@ -109,7 +109,7 @@ def test_slot_resolver_passes_source_text_to_the_model():
     captured: list[str] = []
 
     class CapturingClient:
-        def generate(self, *, model, messages, system_prompt, temperature=None):
+        def generate(self, *, model, messages, system_prompt, temperature=None, max_output_tokens=None):
             captured.append(messages[-1].content)
             return _response('{"x": "v"}')
 
@@ -149,7 +149,7 @@ def test_block_generator_includes_resolved_sources_in_prompt():
     captured: list[str] = []
 
     class CapturingClient:
-        def generate(self, *, model, messages, system_prompt, temperature=None):
+        def generate(self, *, model, messages, system_prompt, temperature=None, max_output_tokens=None):
             captured.append(messages[-1].content)
             return _response("ok")
 
@@ -617,7 +617,7 @@ def test_block_generator_default_voice_when_no_override():
 
     gen = LambdaRlmBlockGenerator(client=FakeClient(), model="x", source_resolver=lambda _label: "S")
     gen.generate("Write something.", ["email_thread"])
-    assert "Formal contract voice" in captured[0]
+    assert "clear, concise report prose" in captured[0]
 
 
 def test_slot_resolver_uses_domain_override_when_provided():
@@ -862,8 +862,8 @@ def test_block_generator_without_sandbox_preserves_today_behaviour():
 # ─── Task 14: tool-use harness wiring ─────────────────────────────────────────
 
 
-def test_block_generator_without_tool_harness_works_as_before():
-    """Sanity: omitting tool_harness leaves last_fetched_provenance empty."""
+def test_block_generator_records_declared_provenance_only():
+    """Declared source references do not claim extra tool-fetched evidence."""
     from aec_bench.adapters.lambda_rlm.compose_bridge import LambdaRlmBlockGenerator
     from aec_bench.adapters.lambda_rlm.sandbox import DocumentSandbox
 
@@ -890,105 +890,6 @@ def test_block_generator_without_tool_harness_works_as_before():
     gen.generate("Write.", ("brief.md#scope",))
     assert gen.last_fetched_provenance == ()
     assert gen.last_provenance == ("brief.md#scope",)
-
-
-def test_block_generator_captures_fetched_provenance_from_harness():
-    """When the harness is enabled and has recorded fetches, fetched_provenance reflects it."""
-    from aec_bench.adapters.lambda_rlm.compose_bridge import LambdaRlmBlockGenerator
-    from aec_bench.adapters.lambda_rlm.config import ToolUseCapsConfig
-    from aec_bench.adapters.lambda_rlm.sandbox import DocumentSandbox
-    from aec_bench.adapters.lambda_rlm.sandbox_tools import SandboxToolHarness
-
-    sandbox = DocumentSandbox.from_documents(
-        {"brief.md": "# T\n\n## Scope\nbody\n\n## Schedule\ndates"},
-        extractor_overrides={},
-    )
-    harness = SandboxToolHarness(
-        sandbox=sandbox,
-        enabled=True,
-        caps=ToolUseCapsConfig(max_fetches_per_block=5, max_total_fetches=30),
-    )
-
-    # Simulate the model having fetched a slice via tool-use during generation.
-    # In v1 this can't happen automatically (no loop driver) — but if a future
-    # caller calls harness.invoke() during generate(), the provenance must surface.
-    # We simulate by invoking the harness BEFORE generate() returns to verify
-    # the capture wiring.
-
-    class _Resp:
-        output_text = "ok"
-        input_tokens = 1
-        output_tokens = 1
-
-    invoked = {"called": False}
-
-    class _Client:
-        def generate(self, **kw):
-            # Simulate the model calling get_slice during the LLM call.
-            if not invoked["called"]:
-                harness.invoke("get_slice", {"label": "brief.md", "anchor": "#schedule"})
-                invoked["called"] = True
-            return _Resp()
-
-    gen = LambdaRlmBlockGenerator(
-        client=_Client(),
-        model="m",
-        source_resolver=lambda label: "",
-        sandbox=sandbox,
-        tool_harness=harness,
-    )
-    gen.generate("Write.", ("brief.md#scope",))
-    assert gen.last_declared_provenance == ("brief.md#scope",)
-    assert gen.last_fetched_provenance == ("brief.md#schedule",)
-    assert gen.last_provenance == ("brief.md#scope", "brief.md#schedule")
-
-
-def test_block_generator_resets_block_counter_per_call():
-    """Each generate() call starts with a fresh per-block fetch counter."""
-    from aec_bench.adapters.lambda_rlm.compose_bridge import LambdaRlmBlockGenerator
-    from aec_bench.adapters.lambda_rlm.config import ToolUseCapsConfig
-    from aec_bench.adapters.lambda_rlm.sandbox import DocumentSandbox
-    from aec_bench.adapters.lambda_rlm.sandbox_tools import SandboxToolHarness
-
-    sandbox = DocumentSandbox.from_documents(
-        {"brief.md": "# T\n\n## Scope\nbody"},
-        extractor_overrides={},
-    )
-    # per-block cap of 2 means each block can fetch at most 2 slices
-    harness = SandboxToolHarness(
-        sandbox=sandbox,
-        enabled=True,
-        caps=ToolUseCapsConfig(max_fetches_per_block=2, max_total_fetches=30),
-    )
-
-    class _Resp:
-        output_text = "ok"
-        input_tokens = 1
-        output_tokens = 1
-
-    class _Client:
-        def generate(self, **kw):
-            # Each block uses its 2-fetch quota
-            harness.invoke("get_slice", {"label": "brief.md", "anchor": "#scope"})
-            harness.invoke("get_slice", {"label": "brief.md", "anchor": ":p1"})
-            return _Resp()
-
-    gen = LambdaRlmBlockGenerator(
-        client=_Client(),
-        model="m",
-        source_resolver=lambda label: "",
-        sandbox=sandbox,
-        tool_harness=harness,
-    )
-    # Two consecutive blocks — both must succeed because the per-block counter
-    # resets each generate() call.
-    gen.generate("Block 1.", ("brief.md#scope",))
-    gen.generate("Block 2.", ("brief.md#scope",))
-    # Total fetches = 4 across 2 blocks; per-block cap not hit because reset
-    assert len(harness.fetched_anchors()) == 4
-
-
-# ─── North Plant regression: back-brief refs in the sandbox path ──────────────────
 
 
 def test_format_sandbox_sources_resolves_back_brief_topic_ref():

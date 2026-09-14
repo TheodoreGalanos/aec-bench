@@ -2,6 +2,8 @@
 # ABOUTME: Compose sections skip extraction/review and route directly to the renderer.
 
 import json
+from pathlib import Path
+from typing import Any
 
 from aec_bench.adapters.lambda_rlm.config import LambdaRlmConfig
 from aec_bench.adapters.lambda_rlm.executor import PlanExecutor
@@ -11,12 +13,12 @@ from aec_bench.adapters.lambda_rlm.state import (
     SectionPlan,
 )
 from aec_bench.adapters.rlm.client import ReplayRlmClient, RlmCompletionResponse
-from aec_bench.adapters.rlm.template import ReportTemplate
 from aec_bench.contracts.repl import DependencyTreeSchema, OutputField, TreeSection
 from aec_bench.contracts.report_template import FillBlock, VerbatimBlock
+from aec_bench.templates.report.session import ReportSession
 
 
-def _compose_template() -> ReportTemplate:
+def _compose_template() -> ReportSession:
     schema = DependencyTreeSchema(
         sections=(
             TreeSection(
@@ -35,7 +37,7 @@ def _compose_template() -> ReportTemplate:
             ),
         ),
     )
-    return ReportTemplate(schema)
+    return ReportSession(schema)
 
 
 def _empty_section_plan(section_id: str) -> SectionPlan:
@@ -52,7 +54,7 @@ def _empty_section_plan(section_id: str) -> SectionPlan:
     )
 
 
-def test_executor_renders_compose_section_via_bridge():
+def test_executor_renders_compose_section_via_bridge() -> None:
     """A compose section should produce assembled text without going through
     the standard extract → generate prompt pipeline."""
     client = ReplayRlmClient(
@@ -97,7 +99,7 @@ def test_executor_renders_compose_section_via_bridge():
     assert state.tokens_used == 135  # 120 in + 15 out
 
 
-def test_assembler_renders_consistent_numbered_headings():
+def test_assembler_renders_consistent_numbered_headings(tmp_path: Path) -> None:
     """The assembler owns the section numbering — every section gets `# {N}. {title}`
     where N is its 1-indexed position. LLM-supplied headings on transform/guided
     content are stripped before the assembler prepends its own."""
@@ -105,12 +107,12 @@ def test_assembler_renders_consistent_numbered_headings():
 
     from aec_bench.adapters.lambda_rlm.adapter import LambdaRlmAdapter
     from aec_bench.adapters.lambda_rlm.config import LambdaRlmConfig
-    from aec_bench.adapters.rlm.template import ReportTemplate
     from aec_bench.contracts.repl import (
         DependencyTreeSchema,
         OutputField,
         TreeSection,
     )
+    from aec_bench.templates.report.session import ReportSession
 
     schema = DependencyTreeSchema(
         sections=(
@@ -139,18 +141,20 @@ def test_assembler_renders_consistent_numbered_headings():
         adapter_name="lambda-rlm",
         model_name="m",
         client=MagicMock(),
-        template=ReportTemplate(schema),
+        template=ReportSession(schema),
         source_docs={},
         config=LambdaRlmConfig(),
         workspace="/tmp",
     )
 
-    rendered = adapter._assemble_output(
+    rendered = assemble_report(
+        adapter._template,
+        tmp_path,
         {
             # LLM hallucinated number "5" — assembler must overwrite to "1"
-            "intro": {"content": "# 5. Introduction\n\n## 1.1 Purpose\n\nProject brief."},
+            "intro": {"text": "# 5. Introduction\n\n## 1.1 Purpose\n\nProject brief."},
             # LLM omitted number — assembler must add proper one
-            "scope": {"content": "# Scope of Works\n\nThe Contractor shall..."},
+            "scope": {"text": "# Scope of Works\n\nThe Contractor shall..."},
             # Compose section: no LLM heading at all
             "grs": {"content": "## General\n\nThe Contractor shall ensure..."},
         },
@@ -163,18 +167,18 @@ def test_assembler_renders_consistent_numbered_headings():
     assert rendered == expected
 
 
-def test_assembler_leaves_content_alone_when_no_leading_heading():
+def test_assembler_leaves_content_alone_when_no_leading_heading(tmp_path: Path) -> None:
     """Content that doesn't start with a `#` line should be appended cleanly."""
     from unittest.mock import MagicMock
 
     from aec_bench.adapters.lambda_rlm.adapter import LambdaRlmAdapter
     from aec_bench.adapters.lambda_rlm.config import LambdaRlmConfig
-    from aec_bench.adapters.rlm.template import ReportTemplate
     from aec_bench.contracts.repl import (
         DependencyTreeSchema,
         OutputField,
         TreeSection,
     )
+    from aec_bench.templates.report.session import ReportSession
 
     schema = DependencyTreeSchema(
         sections=(
@@ -190,16 +194,16 @@ def test_assembler_leaves_content_alone_when_no_leading_heading():
         adapter_name="lambda-rlm",
         model_name="m",
         client=MagicMock(),
-        template=ReportTemplate(schema),
+        template=ReportSession(schema),
         source_docs={},
         config=LambdaRlmConfig(),
         workspace="/tmp",
     )
-    rendered = adapter._assemble_output({"x": {"content": "Plain prose with no heading."}})
+    rendered = assemble_report(adapter._template, tmp_path, {"x": {"text": "Plain prose with no heading."}})
     assert rendered == "# 1. Section X\n\nPlain prose with no heading."
 
 
-def test_compose_section_output_gets_section_title_heading():
+def test_compose_section_output_gets_section_title_heading(tmp_path: Path) -> None:
     """Compose sections don't have an LLM that adds '# Title' on its own,
     so the assembler must prepend the section title."""
     from unittest.mock import MagicMock
@@ -218,7 +222,9 @@ def test_compose_section_output_gets_section_title_heading():
         workspace="/tmp",
     )
 
-    rendered = adapter._assemble_output(
+    rendered = assemble_report(
+        adapter._template,
+        tmp_path,
         {"the_site": {"content": "## 8.1 Site Condition\n\nSite remains operational."}},
     )
     # Compose sections must carry their parent title with the canonical position
@@ -227,7 +233,7 @@ def test_compose_section_output_gets_section_title_heading():
     assert rendered.startswith("# 1. The Site\n\n## 8.1 Site Condition")
 
 
-def test_compose_section_passes_sandbox_through_to_resolver_and_generator(tmp_path):
+def test_compose_section_passes_sandbox_through_to_resolver_and_generator(tmp_path: Path) -> None:
     """Executor's _compose_section threads self._sandbox into render_compose_section."""
     from aec_bench.adapters.lambda_rlm.config import LambdaRlmConfig, SandboxConfig
     from aec_bench.adapters.lambda_rlm.sandbox import DocumentSandbox
@@ -268,7 +274,7 @@ def test_compose_section_passes_sandbox_through_to_resolver_and_generator(tmp_pa
             ),
         ),
     )
-    template = ReportTemplate(schema)
+    template = ReportSession(schema)
 
     boilerplate = {
         "the_site": {
@@ -301,7 +307,7 @@ def test_compose_section_passes_sandbox_through_to_resolver_and_generator(tmp_pa
     assert "Source: brief.md (anchor: #scope)" in captured_prompts[0]
 
 
-def test_compose_section_emits_provenance_in_composition_trace(tmp_path):
+def test_compose_section_emits_provenance_in_composition_trace(tmp_path: Path) -> None:
     """The composition_traces dict gains provenance, slot_provenance,
     declared_provenance, and fetched_provenance for generated-block entries."""
     from aec_bench.adapters.lambda_rlm.config import LambdaRlmConfig, SandboxConfig
@@ -337,7 +343,7 @@ def test_compose_section_emits_provenance_in_composition_trace(tmp_path):
             ),
         ),
     )
-    template = ReportTemplate(schema)
+    template = ReportSession(schema)
 
     boilerplate = {
         "the_site": {
@@ -381,7 +387,7 @@ def test_compose_section_emits_provenance_in_composition_trace(tmp_path):
     assert isinstance(entry["fetched_provenance"], list)
 
 
-def test_executor_skips_compose_sections_when_no_boilerplate_supplied():
+def test_executor_skips_compose_sections_when_no_boilerplate_supplied() -> None:
     """If a template declares compose blocks but the executor wasn't given
     fragments, the section should fail loudly rather than silently produce
     empty content or fall through to LLM generation."""
@@ -403,3 +409,12 @@ def test_executor_skips_compose_sections_when_no_boilerplate_supplied():
 
     with pytest.raises(LookupError, match="the_site"):
         executor.execute(plan)
+
+
+def assemble_report(session: ReportSession, root: Path, contents: dict[str, dict[str, Any]]) -> str:
+    from aec_bench.templates.report.output import write_report
+
+    for sid, values in contents.items():
+        assert session.fill_section(sid, values).success
+    write_report(session, str(root / "report.md"), "markdown", workspace=str(root))
+    return (root / "report.md").read_text().rstrip()

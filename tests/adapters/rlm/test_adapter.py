@@ -67,6 +67,7 @@ class _RecordingTextClient:
         messages: list[RlmMessage],
         system_prompt: str | None,
         temperature: float | None = None,
+        max_output_tokens: int | None = None,
     ) -> RlmCompletionResponse:
         self.calls.append((list(messages), system_prompt))
         return next(self._responses)
@@ -337,10 +338,10 @@ def test_adapter_injects_subcalls_into_repl() -> None:
     assert result.usage_output_tokens == 120
 
 
-def test_adapter_injects_template_into_repl() -> None:
+def test_adapter_injects_template_into_repl(tmp_path: Path) -> None:
     """Agent can interact with report template from REPL code."""
-    from aec_bench.adapters.rlm.template import ReportTemplate
     from aec_bench.contracts.repl import DependencyTreeSchema, OutputField, TreeSection
+    from aec_bench.templates.report.session import ReportSession
 
     schema = DependencyTreeSchema(
         sections=[
@@ -358,12 +359,12 @@ def test_adapter_injects_template_into_repl() -> None:
             ),
         ]
     )
-    template = ReportTemplate(schema)
+    template = ReportSession(schema)
 
     main_client = ReplayRlmClient(
         responses=[
             RlmCompletionResponse(
-                output_text=('```repl\nresult = report.fill_section("intro", {"summary": "Hello"})\n```'),
+                output_text=('```repl\nresult = report.fill_section("intro", {"summary": "Hello"})\nSUBMIT()\n```'),
                 input_tokens=200,
                 output_tokens=80,
             ),
@@ -381,9 +382,13 @@ def test_adapter_injects_template_into_repl() -> None:
         client=main_client,
         template=template,
     )
-    result = adapter.execute(AdapterRequest(instruction="Fill the template."))
+    result = adapter.execute(
+        AdapterRequest(
+            instruction="Fill the template.", output_path=str(tmp_path / "report.json"), output_format="json"
+        )
+    )
     assert result.agent_output.status == AgentOutputStatus.COMPLETED
-    assert template.get_status().completed_sections == 1
+    assert template.get_status().completed_sections == 0  # The supplied template is a clean session prototype.
 
 
 # ---- FINAL_VAR mechanism ----
@@ -1109,11 +1114,7 @@ def test_adapter_compaction_resets_conversation(tmp_path: Path) -> None:
 
 
 def test_adapter_hard_ceiling_forces_partial() -> None:
-    """When per-call context exceeds hard ceiling, adapter should stop.
-
-    Set compaction threshold very high (0.99) so the hard ceiling (0.95)
-    check fires first.
-    """
+    """The hard ceiling wins when both context thresholds are exceeded."""
     adapter = RlmAdapter(
         adapter_name="rlm-test",
         model_name="test-model",
@@ -1128,7 +1129,7 @@ def test_adapter_hard_ceiling_forces_partial() -> None:
         ),
         execution=ExecutionConfig(
             context_limit=10_000,
-            compaction_threshold_pct=0.99,
+            compaction_threshold_pct=0.85,
             hard_ceiling_pct=0.95,
         ),
     )
