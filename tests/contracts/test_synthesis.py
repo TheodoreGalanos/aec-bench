@@ -15,14 +15,14 @@ from aec_bench.contracts.synthesis import (
 
 
 class TestSynthesisConfig:
-    def test_defaults_match_amendment_decisions(self) -> None:
+    def test_defaults_use_generic_report_domain(self) -> None:
         cfg = SynthesisConfig()
         assert cfg.synthesiser_model == "anthropic:claude-sonnet-4-6"
         assert cfg.max_input_tokens == 80_000
         assert cfg.max_output_tokens == 16_000
         assert cfg.verify_sources is True
         assert cfg.fallback_on_failure is True
-        assert cfg.domain_hint == "engineering proposal"
+        assert cfg.domain_hint == "report"
         # Plain-synthesis remains the default; tool-loop is opt-in.
         assert cfg.synthesis_mode == "plain"
         assert cfg.tool_loop_max_turns == 20
