@@ -30,6 +30,8 @@ from aec_bench.adapters.deepseek_harness.commit_endpoint import (
 from aec_bench.adapters.deepseek_harness.config import (
     OUTPUT_COMMIT_PLUGIN_ID,
     OUTPUT_COMMIT_PLUGIN_VERSION,
+    SUBAGENT_TRACE_PLUGIN_ID,
+    SUBAGENT_TRACE_PLUGIN_VERSION,
     TOOL_GATEWAY_PLUGIN_ID,
     TOOL_GATEWAY_PLUGIN_VERSION,
     DeepSeekHarnessSettings,
@@ -39,7 +41,9 @@ from aec_bench.adapters.deepseek_harness.config import (
     harness_provider_route,
     output_commit_plugin_path,
     request_max_tokens,
+    request_subagents_enabled,
     request_timeout_seconds,
+    subagent_cordis_config,
     tool_gateway_cordis_template,
     tool_gateway_plugin_path,
     treatment_record,
@@ -80,10 +84,12 @@ from aec_bench.adapters.deepseek_harness.tool_gateway import (
     ToolGatewayEndpoint,
     native_tool_manifest,
 )
+from aec_bench.adapters.deepseek_harness.trajectory import write_deepseek_trajectory
 from aec_bench.adapters.output_commit import read_output_completion_content, validate_stable_output_commit
 from aec_bench.contracts.artifacts import ArtifactRef
 from aec_bench.contracts.output_completion import OutputCommitAttestation, OutputCompletionContract
 from aec_bench.contracts.provider_provenance import ProviderAdapterIdentity, ResolvedRuntimeIdentity
+from aec_bench.contracts.trajectory import MetaHarnessTrajectoryContext
 from aec_bench.contracts.validators import NonEmptyStr, StrictModel
 from aec_bench.providers.source_identity import resolve_provider_adapter_identity
 
@@ -145,6 +151,7 @@ class DeepSeekHarnessPaths:
     tool_gateway_evidence: Path
     output_commit_plugin: Path
     tool_gateway_plugin: Path
+    subagent_trace_plugin: Path
     plugin_package_lock: Path
     native_world_surface: Path
     actor_authority_evidence: Path
@@ -171,6 +178,7 @@ class DeepSeekHarnessRun:
     optional_plugins: tuple[DeepSeekPluginIdentityV3, ...] = ()
     native_tools: tuple[str, ...] = ()
     output_commit_mode: str = "disabled"
+    subagents_enabled: bool = False
     completion_commit: OutputCommitAttestation | None = None
     commit_error: str | None = None
     root_events_path: Path | None = None
@@ -216,6 +224,8 @@ class DeepSeekHarnessProcessRuntime:
         self.tool_gateway_close_timeout_seconds = tool_gateway_close_timeout_seconds
         self.paths = _deepseek_paths(self.workspace, trial_id=f"run-{uuid.uuid4().hex}")
         self._has_run = False
+        self.projection: DeepSeekRunProjection | None = None
+        self._trajectory_context: MetaHarnessTrajectoryContext | None = None
 
     def run(self, request: AdapterRequest) -> DeepSeekHarnessRun:
         if self._has_run:
@@ -223,6 +233,10 @@ class DeepSeekHarnessProcessRuntime:
         self._has_run = True
         native_tool_names = frozenset(self.native_tool_names)
         validate_deepseek_request(request, native_tool_names=native_tool_names)
+        if "meta_harness_context" in request.configuration:
+            self._trajectory_context = MetaHarnessTrajectoryContext.model_validate(
+                request.configuration["meta_harness_context"]
+            )
         contract, commit_required = deepseek_output_commit_configuration(request)
         timeout_seconds = request_timeout_seconds(request)
         max_tokens = request_max_tokens(request)
@@ -398,6 +412,13 @@ class DeepSeekHarnessProcessRuntime:
             raise DeepSeekHarnessRuntimeError(error) from exc
 
         projection = reduce_deepseek_notifications(worker_result.session_id, notifications)
+        self.projection = projection
+        write_deepseek_trajectory(
+            worker_result.session_id,
+            notifications,
+            self.workspace / "trajectory.jsonl",
+            meta_harness=self._trajectory_context,
+        )
         completion_commit, commit_error = self._finalize_output_commit(
             commit_endpoint,
             contract=contract,
@@ -431,6 +452,7 @@ class DeepSeekHarnessProcessRuntime:
             max_tokens=max_tokens,
             projection=projection,
             output_commit_mode="required" if commit_required else "disabled",
+            subagents_enabled=request_subagents_enabled(request),
             completion_commit=completion_commit,
             commit_error=commit_error,
             notifications_path=self.paths.notifications,
@@ -552,12 +574,13 @@ class DeepSeekHarnessProcessRuntime:
         if self.native_world_evidence is not None:
             _write_json(self.paths.native_world_surface, self.native_world_evidence.surface_record)
         plugins: list[DeepSeekPluginIdentityV3] = []
+        subagents_enabled = request_subagents_enabled(request)
         plugin_lock_source = Path(__file__).parent / "plugin" / "package-lock.json"
-        if (commit_required or self.native_tools) and (
+        if (commit_required or self.native_tools or subagents_enabled) and (
             plugin_lock_source.is_symlink() or not plugin_lock_source.is_file()
         ):
             raise DeepSeekHarnessRuntimeError(f"DeepSeek plugin package lock is missing: {plugin_lock_source}")
-        if commit_required or self.native_tools:
+        if commit_required or self.native_tools or subagents_enabled:
             self.paths.plugin_package_lock.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(plugin_lock_source, self.paths.plugin_package_lock)
         if commit_required:
@@ -603,6 +626,27 @@ class DeepSeekHarnessProcessRuntime:
                     ),
                 )
             )
+        if subagents_enabled:
+            source_plugin = Path(__file__).parent / "plugin" / "dist" / "subagent-trace.js"
+            if not source_plugin.is_file():
+                raise DeepSeekHarnessRuntimeError(f"DeepSeek subagent trace plugin is not built: {source_plugin}")
+            self.paths.subagent_trace_plugin.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(source_plugin, self.paths.subagent_trace_plugin)
+            with self.paths.cordis_input.open("a", encoding="utf-8") as stream:
+                stream.write(
+                    subagent_cordis_config(commit_required=commit_required, native_tools=self.native_tool_names)
+                )
+                stream.write(f"\n- name: {json.dumps(str(self.paths.subagent_trace_plugin.resolve()))}\n")
+            plugins.append(
+                DeepSeekPluginIdentityV3(
+                    plugin_id=SUBAGENT_TRACE_PLUGIN_ID,
+                    version=SUBAGENT_TRACE_PLUGIN_VERSION,
+                    role="subagent_trace",
+                    artifact=_artifact_ref(
+                        self.paths.subagent_trace_plugin, root=self.paths.root, media_type="text/javascript"
+                    ),
+                )
+            )
         return tuple(plugins)
 
     def _write_composition_record(
@@ -636,6 +680,7 @@ class DeepSeekHarnessProcessRuntime:
                     max_tokens=request_max_tokens(request),
                     output_commit_required=commit_required,
                     native_tools=self.native_tool_names,
+                    subagents_enabled=request_subagents_enabled(request),
                 ),
                 "environment": {
                     "owned_names": sorted(owned_names),
@@ -780,7 +825,11 @@ class DeepSeekHarnessProcessRuntime:
             notifications = []
         session_id = _first_session_id(notifications)
         projection = reduce_deepseek_notifications(session_id, notifications) if session_id is not None else None
+        self.projection = projection
         if session_id is not None:
+            write_deepseek_trajectory(
+                session_id, notifications, self.workspace / "trajectory.jsonl", meta_harness=self._trajectory_context
+            )
             _write_root_events(self.paths.root_events, session_id, notifications)
         _write_json(
             self.paths.runtime_record,
@@ -901,6 +950,7 @@ def _deepseek_paths(workspace: Path, *, trial_id: str) -> DeepSeekHarnessPaths:
         tool_gateway_evidence=root / "tool-gateway-evidence.jsonl",
         output_commit_plugin=root / "plugins" / "output-commit" / "index.js",
         tool_gateway_plugin=root / "plugins" / "tools" / "index.js",
+        subagent_trace_plugin=root / "plugins" / "subagent-trace" / "index.js",
         plugin_package_lock=root / "plugins" / "package-lock.json",
         native_world_surface=root / "native-world-tool-surface.json",
         actor_authority_evidence=root / "actor-invocation-evidence.jsonl",
@@ -1009,6 +1059,7 @@ def _write_evidence_manifest(
         paths.tool_gateway_evidence: "tool_gateway_evidence",
         paths.output_commit_plugin: "optional_plugin",
         paths.tool_gateway_plugin: "optional_plugin",
+        paths.subagent_trace_plugin: "optional_plugin",
         paths.plugin_package_lock: "plugin_package_lock",
         paths.native_world_surface: "native_world_tool_surface",
         paths.actor_authority_evidence: "actor_authority_evidence",
@@ -1080,6 +1131,7 @@ def _write_evidence_manifest(
         sdk=sdk_identity,
         runtime=runtime_identity,
         composition=DeepSeekCompositionIdentity(
+            subagents_enabled=any(plugin.role == "subagent_trace" for plugin in plugins),
             output_commit_mode="required" if commit_required else "disabled",
             native_tools=native_tools,
         ),
@@ -1126,6 +1178,9 @@ def _write_evidence_manifest(
             deepseek_root_turns=projection.root_turns if projection is not None else 0,
             tool_calls_started=projection.tool_calls_started if projection is not None else 0,
             tool_calls_completed=projection.tool_calls_completed if projection is not None else 0,
+            usage_model_calls=projection.usage_model_calls if projection is not None else None,
+            total_tool_calls_started=projection.total_tool_calls_started if projection is not None else None,
+            total_tool_calls_completed=projection.total_tool_calls_completed if projection is not None else None,
             timeout_sec=timeout_seconds,
             max_tokens=max_tokens,
             process_group_retired=True,

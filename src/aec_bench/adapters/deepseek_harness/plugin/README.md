@@ -8,7 +8,13 @@ The `tools` plugin registers only the AEC-owned native tool manifest for one run
 authenticated Unix socket. The AEC host keeps all tool state and effects. The plugin does not expose shell access,
 host controls, verification, or reward.
 
-Neither plugin evaluates or scores the task.
+The `subagent-trace` plugin is loaded only when `subagents_enabled` is true.
+It uses the public `tools/execute` and `session/created` hooks to append
+`aec/subagent-spawn` to the parent session. Async-local call context keeps
+concurrent children linked to their own spawning calls. Native DeepSeek
+plugins own child execution, depth limits, tool filters, and cancellation.
+
+These plugins do not evaluate or score the task, or modify the installed SDK.
 
 Build and test:
 

@@ -39,7 +39,10 @@ def test_wheel_build_targets_aec_bench_package() -> None:
     assert "/src/aec_bench/harness/pump_station_prime/skills/**" in wheel["artifacts"]
     assert "/src/aec_bench/adapters/deepseek_harness/plugin/dist/**" in wheel["artifacts"]
     assert "/src/aec_bench/adapters/deepseek_harness/plugin/src" in wheel["exclude"]
+    assert "/src/aec_bench/adapters/deepseek_harness/plugin/package-lock.json" not in wheel["exclude"]
     assert Path("src/aec_bench/prime_agent/skill_packages/__init__.py").is_file()
+    for name in ("spawn.py", "spawn.mjs"):
+        assert (Path("src/aec_bench/prime_agent/hook_assets") / name).is_file()
 
 
 def test_tui_mascot_asset_is_available_for_package_builds() -> None:

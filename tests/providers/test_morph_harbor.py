@@ -12,7 +12,9 @@ from threading import Event
 from typing import Any
 
 import pytest
+from harbor.environments.factory import EnvironmentFactory  # type: ignore[import-untyped]
 from harbor.models.task.config import EnvironmentConfig  # type: ignore[import-untyped]
+from harbor.models.trial.config import EnvironmentConfig as TrialEnvironmentConfig  # type: ignore[import-untyped]
 from harbor.models.trial.paths import TrialPaths  # type: ignore[import-untyped]
 
 from aec_bench.contracts.execution_environment import PYDANTIC_RUNTIME_VERSION, RUNTIME_PYTHON_PACKAGES
@@ -41,7 +43,11 @@ def test_morph_runtime_packages_are_exactly_pinned_to_the_kernel_environment() -
 def test_morph_harbor_environment_starts_runtime_snapshot(tmp_path: Path) -> None:
     environment_dir = _write_environment(tmp_path)
     operations = FakeMorphHarborOperations()
-    env = MorphHarborEnvironment(
+    env = EnvironmentFactory.create_environment_from_config(
+        config=TrialEnvironmentConfig(
+            import_path=MORPH_HARBOR_ENVIRONMENT_BINDING.import_path,
+            kwargs=MORPH_HARBOR_ENVIRONMENT_BINDING.kwargs,
+        ),
         environment_dir=environment_dir,
         environment_name="heat-load-alpha",
         session_id="trial-001",

@@ -19,7 +19,6 @@ from aec_bench.contracts.artifacts import ArtifactRef
 from aec_bench.contracts.authority_evidence import ACTOR_INVOCATION_EVIDENCE_PROTOCOL, AuthorityEvidenceKind
 from aec_bench.contracts.dataset import DatasetRef, RepositoryDatasetRef
 from aec_bench.contracts.evaluation_result import EvaluationResult
-from aec_bench.contracts.pricing import estimate_cost_usd
 from aec_bench.contracts.trial_record import (
     AgentConfiguration,
     AuthorityExpectation,
@@ -59,6 +58,7 @@ from aec_bench.harness.harbor_importing.contracts import (
     ImportEvidenceContext,
     ImportEvidenceIntent,
 )
+from aec_bench.harness.harbor_importing.costs import import_cost_record
 from aec_bench.harness.harbor_importing.output_commit import (
     verify_output_commit,
 )
@@ -74,21 +74,10 @@ class _CollectedTrialArtifacts:
     output_path: Path | None
     conversation_path: Path | None
     trajectory_path: Path | None
+    atif_trajectory_path: Path | None
     agent_result_path: Path | None
     reward_path: Path | None
     details_path: Path | None
-
-
-@dataclass(frozen=True)
-class _UsageEvidence:
-    model_calls: int | None
-    input_tokens: int | None
-    output_tokens: int | None
-    cache_read_tokens: int | None
-    cache_write_tokens: int | None
-    advisor_calls: int | None
-    advisor_input_tokens: int | None
-    advisor_output_tokens: int | None
 
 
 @dataclass(frozen=True)
@@ -100,8 +89,7 @@ class _PreparedAgentEvidence:
     resolved_model: str
     output_error: str | None
     completion_commit: dict[str, Any] | None
-    usage: _UsageEvidence
-    estimated_cost_usd: float | None
+    cost: CostRecord
 
 
 def import_harbor_job(
@@ -281,7 +269,7 @@ def import_harbor_trial(
         ),
         evaluation=evaluation,
         timing=timing,
-        cost=_cost_record(agent),
+        cost=agent.cost,
     )
     for index, (path, source) in enumerate(
         _input_file_paths(
@@ -295,6 +283,7 @@ def import_harbor_trial(
         ("raw_output", artifacts.output_path, _media_type(artifacts.output_path)),
         ("conversation", artifacts.conversation_path, "application/x-ndjson"),
         ("trajectory", artifacts.trajectory_path, "application/x-ndjson"),
+        ("atif_trajectory", artifacts.atif_trajectory_path, "application/json"),
     ):
         if artifact_path is not None:
             record.attach_artifact(role, artifact_path, media_type=media_type)
@@ -350,10 +339,16 @@ def _collect_trial_artifacts(
     output_path = agent_file("output.md")
     if output_path is None:
         output_path = agent_file("output.jsonl")
+    atif_path = agent_file("trajectory.json")
+    if atif_path is not None:
+        from harbor.models.trajectories.trajectory import Trajectory
+
+        Trajectory.model_validate_json(atif_path.read_text(encoding="utf-8"))
     return _CollectedTrialArtifacts(
         output_path=output_path,
         conversation_path=agent_file("conversation.jsonl"),
         trajectory_path=agent_file("trajectory.jsonl"),
+        atif_trajectory_path=atif_path,
         agent_result_path=agent_file("agent_result.json"),
         reward_path=_existing_path(
             trial_dir / "verifier" / "reward.json",
@@ -380,10 +375,6 @@ def _prepare_agent_evidence(
         **dict(harbor_result.agent_result.metadata),
         **artifact_payload,
     }
-    if not payload.get("input_tokens") and harbor_result.agent_result.n_input_tokens:
-        payload["input_tokens"] = harbor_result.agent_result.n_input_tokens
-    if not payload.get("output_tokens") and harbor_result.agent_result.n_output_tokens:
-        payload["output_tokens"] = harbor_result.agent_result.n_output_tokens
     output_text = _read_text_or_none(artifacts.output_path)
     status = _agent_status(
         harbor_result=harbor_result,
@@ -401,21 +392,6 @@ def _prepare_agent_evidence(
         execution_result=execution_result,
         provider_error=(payload.get("provider_error") or payload.get("error")),
     )
-    usage = _usage_evidence(
-        execution_result=execution_result,
-        payload=payload,
-    )
-    estimated_cost = _float_or_none(
-        harbor_result.agent_result.cost_usd,
-    )
-    if estimated_cost is None:
-        estimated_cost = estimate_cost_usd(
-            resolved_model,
-            input_tokens=usage.input_tokens or 0,
-            output_tokens=usage.output_tokens or 0,
-            cache_read_tokens=usage.cache_read_tokens or 0,
-            cache_write_tokens=usage.cache_write_tokens or 0,
-        )
     return _PreparedAgentEvidence(
         payload=payload,
         execution_result=execution_result,
@@ -430,68 +406,11 @@ def _prepare_agent_evidence(
             expected_output_path=expected_output_path,
             task_instance_dir=context.task_instance_dir,
         ),
-        usage=usage,
-        estimated_cost_usd=estimated_cost,
-    )
-
-
-def _usage_evidence(
-    *,
-    execution_result: AdapterResult | None,
-    payload: dict[str, Any],
-) -> _UsageEvidence:
-    return _UsageEvidence(
-        model_calls=_usage_value(
-            execution_result,
-            "usage_model_calls",
-            payload,
-            "usage_model_calls",
-        ),
-        input_tokens=_usage_value(
-            execution_result,
-            "usage_input_tokens",
-            payload,
-            "usage_input_tokens",
-            "input_tokens",
-        ),
-        output_tokens=_usage_value(
-            execution_result,
-            "usage_output_tokens",
-            payload,
-            "usage_output_tokens",
-            "output_tokens",
-        ),
-        cache_read_tokens=_usage_value(
-            execution_result,
-            "usage_cache_read_tokens",
-            payload,
-            "usage_cache_read_tokens",
-            "cache_read_input_tokens",
-        ),
-        cache_write_tokens=_usage_value(
-            execution_result,
-            "usage_cache_write_tokens",
-            payload,
-            "usage_cache_write_tokens",
-            "cache_creation_input_tokens",
-        ),
-        advisor_calls=_usage_value(
-            execution_result,
-            "usage_advisor_calls",
-            payload,
-            "usage_advisor_calls",
-        ),
-        advisor_input_tokens=_usage_value(
-            execution_result,
-            "usage_advisor_input_tokens",
-            payload,
-            "usage_advisor_input_tokens",
-        ),
-        advisor_output_tokens=_usage_value(
-            execution_result,
-            "usage_advisor_output_tokens",
-            payload,
-            "usage_advisor_output_tokens",
+        cost=import_cost_record(
+            harbor=harbor_result.agent_result,
+            execution_result=execution_result,
+            payload=payload,
+            resolved_model=resolved_model,
         ),
     )
 
@@ -681,24 +600,6 @@ def _timing_record(
         verification_seconds=_stage_duration_seconds(
             harbor_result.verifier,
         ),
-    )
-
-
-def _cost_record(agent: _PreparedAgentEvidence) -> CostRecord:
-    usage = agent.usage
-    total_input_tokens = (
-        usage.input_tokens if agent.execution_result is not None else _total_input_tokens(agent.payload)
-    )
-    return CostRecord(
-        model_calls=usage.model_calls,
-        tokens_in=total_input_tokens,
-        tokens_out=usage.output_tokens,
-        cache_read_tokens=usage.cache_read_tokens,
-        cache_write_tokens=usage.cache_write_tokens,
-        estimated_cost_usd=agent.estimated_cost_usd,
-        advisor_calls=usage.advisor_calls,
-        advisor_input_tokens=usage.advisor_input_tokens,
-        advisor_output_tokens=usage.advisor_output_tokens,
     )
 
 
@@ -1021,30 +922,6 @@ def _read_text_or_none(path: Path | None) -> str | None:
     return path.read_text(encoding="utf-8")
 
 
-def _total_input_tokens(
-    agent_result_payload: dict[str, Any],
-) -> int | None:
-    input_tokens = _int_or_none(agent_result_payload.get("input_tokens")) or 0
-    cache_read_tokens = (
-        _int_or_none(
-            agent_result_payload.get("cache_read_input_tokens"),
-        )
-        or 0
-    )
-    cache_write_tokens = (
-        _int_or_none(
-            agent_result_payload.get(
-                "cache_creation_input_tokens",
-            ),
-        )
-        or 0
-    )
-    total = input_tokens + cache_read_tokens + cache_write_tokens
-    if total == 0:
-        return None
-    return total
-
-
 def _read_harbor_result(path: Path) -> HarborTrialResult:
     try:
         return read_harbor_trial_result(path)
@@ -1088,25 +965,6 @@ def _current_execution_result(
         raise HarborImportError(
             f"invalid current execution result artifact: {error}",
         ) from error
-
-
-def _usage_value(
-    execution_result: AdapterResult | None,
-    attribute: str,
-    payload: dict[str, Any],
-    *keys: str,
-) -> int | None:
-    if execution_result is not None:
-        value = _int_or_none(
-            getattr(execution_result, attribute),
-        )
-        if value is not None:
-            return value
-    for key in keys:
-        value = _int_or_none(payload.get(key))
-        if value is not None:
-            return value
-    return None
 
 
 def _read_reviewer_summary(

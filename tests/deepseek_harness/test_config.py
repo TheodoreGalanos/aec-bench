@@ -134,6 +134,12 @@ def test_request_accepts_positive_safe_max_tokens() -> None:
     validate_deepseek_request(AdapterRequest(instruction="Work", configuration={"max_tokens": 512}))
 
 
+@pytest.mark.parametrize("value", [1, 0, "true", None, {}, []])
+def test_request_rejects_non_boolean_delegation(value: object) -> None:
+    with pytest.raises(DeepSeekHarnessConfigurationError, match="subagents_enabled must be a boolean"):
+        validate_deepseek_request(AdapterRequest(instruction="Work", configuration={"subagents_enabled": value}))
+
+
 @pytest.mark.parametrize("value", [True, 0, -1, 1.5, "512", 2**53])
 def test_request_rejects_invalid_max_tokens(value: object) -> None:
     with pytest.raises(DeepSeekHarnessConfigurationError, match="max_tokens must be a positive safe integer"):

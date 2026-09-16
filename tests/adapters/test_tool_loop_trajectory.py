@@ -183,7 +183,7 @@ class TestPydanticAiNativeTools:
             def __init__(self, *_args: Any, **kwargs: Any) -> None:
                 constructor_tools.extend(kwargs["tools"])
 
-            def tool_plain(self, func=None, /, *, name=None, **_kwargs):
+            def tool(self, func=None, /, *, name=None, **_kwargs):
                 def register(callback):
                     registered.append(name or callback.__name__)
                     return callback

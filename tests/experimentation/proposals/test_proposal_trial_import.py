@@ -70,7 +70,7 @@ class _ProposalTrialExecutor:
 
     def _execute(self, *, command: list[str], cwd: Path) -> int:
         assert cwd == self.project_root.resolve()
-        assert command[:5] == ["uv", "run", "harbor", "run", "-c"]
+        assert command[:-1] == ["uv", "run", "python", "-m", "aec_bench.harness.harbor_job", "-c"]
         trial_dir = self.project_root / "jobs" / "proposal" / "job.001" / "trial.001"
         _write_proposal_harbor_trial_artifacts(
             repo_root=self.project_root,

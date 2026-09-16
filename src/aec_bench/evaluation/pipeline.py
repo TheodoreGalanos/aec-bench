@@ -11,7 +11,7 @@ from typing import Any
 from aec_bench.contracts.evaluation_result import ConfidenceMetadata
 from aec_bench.contracts.trial_record import TrialRecord
 from aec_bench.evaluation.aggregation import BehavioralTraceClassifier, summarize_behavioral_records
-from aec_bench.evaluation.costs import summarize_costs
+from aec_bench.evaluation.costs import summarize_costs, summarize_model_usage
 from aec_bench.evaluation.stats import mean
 from aec_bench.evaluation.trace_summary import summarize_trial_traces
 
@@ -52,6 +52,7 @@ def summarize_evaluation_records(
         "n_unevaluated": n_trials - len(evaluated_records),
         "mean_reward": mean(rewards),
         **summarize_costs(records),
+        **summarize_model_usage(records),
         "by_adapter": _group_summary(records, key_fn=lambda record: record.agent.adapter),
         "by_task_prefix": _group_summary(
             records,

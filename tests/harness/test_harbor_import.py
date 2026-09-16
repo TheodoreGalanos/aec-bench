@@ -138,6 +138,32 @@ def test_import_current_entrypoint_result_preserves_failure_evidence(tmp_path: P
     assert record.outputs.final_reason == "provider_error"
 
 
+def test_import_retains_atif_as_a_derived_artifact(tmp_path: Path) -> None:
+    from aec_bench.harness.atif import export_atif
+
+    repo_root, trial_dir = _write_current_entrypoint_trial(tmp_path)
+    source = trial_dir / "artifacts" / "agent" / "trajectory.jsonl"
+    source.write_text('{"step":0,"role":"user","content":"Size cable"}\n')
+    destination = trial_dir / "agent" / "trajectory.json"
+    export_atif(source, destination, agent_name="tool_loop", agent_version="1")
+
+    record = import_harbor_trial(trial_dir=trial_dir, repo_root=repo_root)
+
+    assert record.outputs.trajectory_path == str(source)
+    assert record.pending_artifacts["atif_trajectory"][:2] == (destination, "application/json")
+    assert record.outputs.final_reason == "provider_error"
+
+
+def test_import_rejects_invalid_atif(tmp_path: Path) -> None:
+    from pydantic import ValidationError
+
+    repo_root, trial_dir = _write_current_entrypoint_trial(tmp_path)
+    destination = trial_dir / "artifacts" / "agent" / "trajectory.json"
+    destination.write_text('{"schema_version":"unsupported","steps":[]}')
+    with pytest.raises(ValidationError):
+        import_harbor_trial(trial_dir=trial_dir, repo_root=repo_root)
+
+
 def test_import_harbor_trial_requires_loader_for_explicit_execution_kind(tmp_path: Path) -> None:
     repo_root, trial_dir = _write_current_entrypoint_trial(tmp_path)
     result_path = trial_dir / "result.json"
@@ -610,10 +636,17 @@ def test_import_harbor_trial_includes_reviewer_summary_in_breakdown(tmp_path: Pa
     assert record.evaluation.breakdown["llm_reviewer"]["status"] == "complete"
 
 
+@pytest.mark.parametrize("serialized_extra_env", [False, True])
 def test_import_proposal_session_requires_complete_isolation_evidence(
     tmp_path: Path,
+    serialized_extra_env: bool,
 ) -> None:
     repo_root, trial_dir, expected = _write_proposal_harbor_trial(tmp_path)
+    if not serialized_extra_env:
+        result_path = trial_dir / "result.json"
+        payload = json.loads(result_path.read_text(encoding="utf-8"))
+        payload["config"]["agent"]["kwargs"].pop("extra_env")
+        result_path.write_text(json.dumps(payload), encoding="utf-8")
 
     record = import_proposal_harbor_trial(trial_dir=trial_dir, repo_root=repo_root)
     record_path = write_trial_record(ledger_root=tmp_path / "ledger", record=record)
@@ -648,6 +681,23 @@ def test_import_proposal_session_requires_complete_isolation_evidence(
     assert "bundle_path" not in serialized_configuration
     assert "runtime_archive_path" not in serialized_configuration
     assert str(tmp_path) not in serialized_configuration
+
+
+@pytest.mark.parametrize("environment_location", ["env", "extra_env"])
+def test_import_proposal_session_rejects_agent_environment_overrides(
+    tmp_path: Path,
+    environment_location: str,
+) -> None:
+    repo_root, trial_dir, _ = _write_proposal_harbor_trial(tmp_path)
+    result_path = trial_dir / "result.json"
+    payload = json.loads(result_path.read_text(encoding="utf-8"))
+    agent = payload["config"]["agent"]
+    target = agent if environment_location == "env" else agent["kwargs"]
+    target[environment_location] = {"MODEL_SETTING": "unauthorized"}
+    result_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises(HarborImportError, match="empty agent env"):
+        import_proposal_harbor_trial(trial_dir=trial_dir, repo_root=repo_root)
 
 
 @pytest.mark.parametrize(

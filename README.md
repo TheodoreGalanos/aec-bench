@@ -205,6 +205,200 @@ Remote runs use the same synchronous Harbor dispatch-and-import workflow and
 produce current `TrialRecord` ledger entries. `aec-bench run-local` remains the
 separate no-Harbor path for local execution.
 
+Harbor dispatch checks the job configuration, agent preflight, and declared
+environment resource policies before it writes dispatch files or starts Harbor.
+Dry runs make the same checks. Saved configurations are checked again before
+execution. These checks do not provision an environment or prove that provider
+credentials and network access work. Agent condition names must not select a
+different Harbor built-in agent from the configured import path.
+
+#### Harbor concurrency and completion callbacks
+
+Set the overall trial limit under `compute.resource_limits`. Each agent can
+also limit its concurrent agent phases. Give agents the same
+`concurrency_group` when they share a provider allowance:
+
+```yaml
+experiment_id: shared-provider-run
+name: Shared provider run
+tasks:
+  include_patterns: ["electrical/voltage-drop"]
+agents:
+  - name: baseline
+    adapter: tool_loop
+    model: "<model-id>"
+    n_concurrent: 2
+    concurrency_group: provider-account
+  - name: alternative
+    adapter: rlm
+    model: "<model-id>"
+    n_concurrent: 2
+    concurrency_group: provider-account
+compute:
+  backend: docker
+  resource_limits:
+    n_concurrent_trials: 8
+```
+
+This permits eight active trials, with at most two agent phases across both
+conditions. Environment setup and verification use the overall limit. A group
+requires an explicit `n_concurrent`, and every member must use the same value.
+Agent limits must be positive integers no greater than the overall limit.
+Without a group, Harbor applies the cap to each distinct agent configuration.
+These limits apply within one Harbor job. They do not limit provider requests,
+tokens, subagent calls within an agent phase, or work in other jobs.
+
+`aec-bench run` reports trial start, environment start, agent start and end,
+verification start, attempt end, and cancellation. An attempt can end with an
+error and then be retried. Progress events do not create ledger records.
+
+Python integrations can use the experimental workflow callbacks with the
+`execution` extra installed:
+
+```python
+from pathlib import Path
+
+from aec_bench.harness.harbor_workflow import HarborWorkflowResult, SynchronousHarborWorkflow
+
+def completed(result: HarborWorkflowResult) -> None:
+    print(result.job_dir)
+    print(result.import_result.ledger_paths)
+    print(result.import_result.execution_status_counts)
+
+workflow = SynchronousHarborWorkflow(
+    project_root=Path.cwd(), repo_root=Path.cwd(), tasks_root=Path("tasks"),
+    ledger_root=Path("artefacts/ledger"), jobs_root=Path("jobs"),
+)
+# manifest is the validated ExperimentManifest for this run.
+result = workflow.run(
+    manifest=manifest, config_path=Path("harbor-job.yaml"),
+    completion_callback=completed,
+)
+```
+
+The completion callback runs once after each successful final import call.
+It receives persisted record paths, import and duplicate counts, and final
+execution status counts. Execution failure is separate from a low reward.
+Dispatch or import errors propagate without a completion callback. Calling
+import again can invoke the callback again; this is not a durable notification
+service. Keep callbacks short. Ordinary callback errors produce warnings and
+do not change trial outcomes or imported records.
+
+Use `progress_callback` for `WorkflowProgressSnapshot` values. A `trial_event`
+snapshot contains `trial` metadata and an attempt UUID; other snapshots report
+dispatch and import stages. `HarborExperimentRuntime` accepts both callbacks.
+An injected command executor is responsible for its own live event delivery.
+
+#### Live Harbor stream and ATIF
+
+Use `--stream` with a public artifact task on Docker or Daytona:
+
+```bash
+uv run --extra execution --extra local-agents aec-bench run tasks/electrical/voltage-drop \
+  --model "<model-id>" --backend docker --stream
+
+# In a second terminal on the same machine
+uv run --extra execution harbor view jobs
+```
+
+Open the viewer URL printed by Harbor, select the active trial, then open its
+trajectory or **Stream** tab. The browser and viewer must run on the same
+machine. Daytona also needs Harbor's `daytona` extra and its credentials in
+the run and viewer environments.
+The Stream tab includes a writable editor and terminal. Use it for development;
+manual changes during a run affect the result.
+
+The tool-loop adapter is the default for `run`. It writes completed messages
+before the next model request and records calls before native bash or advisor
+execution. The host refreshes the ATIF view every two seconds after each file
+transfer. This shows complete messages, not individual tokens. RLM and Lambda
+RLM records also use the shared export when their writers flush data. Other
+agent paths do not gain a live trajectory producer from this change.
+
+Set `compute.stream: true` in an experiment YAML file to enable the same option.
+`--no-stream` overrides that setting. Stream is off by default. It currently
+rejects Modal, Morph, custom Harbor environments, world tasks, and non-public
+tasks. `run-local` does not start Harbor stream.
+
+The `execution` extra pins a published Harbor prerelease because the released
+0.22 and 0.23 packages do not contain the
+[stream implementation](https://github.com/harbor-framework/harbor/pull/3171).
+The exact dependency is in [pyproject.toml](pyproject.toml).
+
+AEC-Bench keeps `trajectory.jsonl` as its ordered interaction record. Harbor
+receives a derived `agent/trajectory.json` in **ATIF-v1.8**, validated with
+Harbor's models. The importer retains that file under the `atif_trajectory`
+artifact role. A completed run also attempts this export when stream is off.
+
+| Data | AEC-Bench JSONL | ATIF export |
+| --- | --- | --- |
+| Interaction order | Separate assistant, call, and result entries; local step numbers | Sequential steps; adjacent entries from one invocation grouped together |
+| Tool relationships | Optional `tool_call_id` | Explicit call and observation links when the source identifies them |
+| AEC metadata | Task metadata, execution context, errors, timing, media paths | Retained under `extra.aec_bench` |
+| Provider thinking | Separate `reasoning` entries for exposed text or summaries | `reasoning_content`, with provider and signature-presence metadata |
+| Per-response usage | `model_response` entries with model identity and available token counts | Step metrics and one observed model call per response |
+| Agent hierarchy | Child IDs and separate child entries; parent call IDs when available | Embedded child trajectories, with observation references when the calling tool is known |
+
+The tool-loop producer captures PydanticAI `ThinkingPart` values separately
+from normal assistant text. These can be provider summaries; they do not give
+access to hidden internal reasoning. Signature and encrypted payload bytes are
+not copied into the trace. Capture does not enable thinking or change provider
+settings. A model must already return thinking for text to appear in the viewer.
+
+Per-response input, output, and cache counts come from PydanticAI's normalised
+usage. Its default zero cannot distinguish missing usage from a reported zero,
+so the producer leaves those counts unspecified. Additional usage details,
+including reasoning-token counts when available, remain in ATIF metric
+extensions. These counts are not reconstructed from the displayed summary.
+
+Child relationships are recorded for the tool-loop advisor, RLM REPL subcalls
+and advisor calls, and Lambda-RLM model calls made during plan execution. Each
+admitted call has its own child ID, request, response, and available usage.
+Concurrent children keep separate steps. Rejected calls do not create children.
+Provider failures retain the request and an error record. These records do not
+change the canonical usage totals or parent behavioural analysis.
+
+Prime JSON and ACP runs convert their redacted session files after the process
+ends. JSON runs write `trajectory.jsonl` in the workspace; ACP runs write it in
+the host evidence directory. Prime's `parentSession` and `rlmDepth` establish
+the child tree. An explicit AEC-Bench extension and IPython startup hook record
+the spawning tool-call ID in `aec-spawn.json` beside each admitted child's
+session files. Async tasks retain the originating cell's ID across later cells.
+The hooks run from the isolated workspace and do not change the installed Prime
+package. Ambient extensions remain disabled. Older sessions without hook evidence
+keep an unspecified call link. Forks at the same depth, missing parents, invalid
+spawn links, and conflicting session IDs are rejected. This is a final export;
+Prime does not gain Harbor Stream support from it.
+
+Direct execution has no child calls. DeepSeek delegation is opt-in through
+`parameters.subagents_enabled: true`. Its final trajectory export retains child
+sessions, spawning tool-call IDs, exposed reasoning, and reported usage.
+Meta-harness execution uses the selected adapter's
+producer and keeps its existing program-node context; program nodes are not
+relabelled as subagents. RLM and Lambda-RLM child clients expose text and usage
+through `RlmCompletionResponse`; they do not yet expose provider thinking parts.
+
+The export does not convert untyped media paths into ATIF media objects.
+It does not replace scoring,
+aggregate usage, or task-owned replay evidence. See the
+[trajectory contract](docs/CONTRACTS.md#trajectory-and-atif) for conversion rules.
+
+To export an existing JSONL file with the `execution` extra installed:
+
+```python
+from importlib.metadata import version
+from pathlib import Path
+
+from aec_bench.harness.atif import export_atif
+
+export_atif(
+    Path("trajectory.jsonl"),
+    Path("trajectory.json"),
+    agent_name="aec-bench:tool_loop",
+    agent_version=version("aec-bench"),
+)
+```
+
 A published run package is one deterministic `tar.zst` archive. It contains
 the plain run plan, exact trial references, and all referenced artifact bytes.
 The ledger stores the archive once under one `ArtifactRef`. Export copies those
@@ -256,6 +450,19 @@ repetitions: 1
 ```
 
 Run it with `uv run aec-bench run --config experiment.yaml --tasks-root tasks`.
+To enable native DeepSeek delegation, add `subagents_enabled: true` under the
+agent's `parameters`. The default is `false`, which keeps the single-agent
+baseline. Each child runs in the same process and workspace with a fresh
+conversation, the parent model, and the parent's per-request `max_tokens` cap.
+The parent waits for the child. Children cannot start further children, commit
+the final output, or call AEC native world/lifecycle tools. Coding children keep
+the stock coding tools; native-tool children provide text analysis only.
+The whole-process timeout also stops children. Trial usage and cost inputs
+include child model calls and reported tokens. Root turn and completion
+counters retain their root-only meaning. Raw notifications and session files
+remain the evidence source; `trajectory.jsonl` and its ATIF view are derived
+after execution. This does not enable live Harbor Stream for DeepSeek.
+
 For local debugging, use the same adapter without Harbor or Docker:
 
 ```bash
@@ -341,8 +548,10 @@ The current support boundary is:
   per-model-request `max_tokens` limit;
 - raw session evidence, readable treatment evidence, and optional exact-byte
   output commitment;
+- opt-in foreground subagents with one child level, explicit spawn links, and
+  aggregate trial usage;
 - no general task-tool translation, arbitrary interactive-world bridge,
-  subagents, workflows, or code mode;
+  background subagents, workflows, or code mode;
 - no exact `max_turns`, `max_tool_calls`, or `max_context_tokens` enforcement;
 - no network-isolation guarantee from the adapter. Use the selected disposable
   Harbor environment as the external security boundary.
@@ -860,6 +1069,72 @@ uv run aec-bench import jobs/2026-03-04__17-57-43
 
 ### Evaluate
 
+#### Regrade recorded trials
+
+Use `evaluation regrade` to run a revised verifier against a finished local
+Harbor trial. Install the `execution` extra. This command supports public,
+single-step artifact tasks and does not run the original agent.
+
+```bash
+uv run aec-bench evaluation regrade jobs/<job>/<trial> \
+  --task path/to/revised-task --output runs/regrades/<assessment> --dry-run
+
+# Remove --dry-run to start the separate verifier environment.
+uv run aec-bench evaluation regrade jobs/<job>/<trial> \
+  --task path/to/revised-task --output runs/regrades/<assessment> --backend docker
+```
+
+The source needs `result.json`, `artifacts/manifest.json`, and the recorded
+files that the revised verifier requires. Older trials without a collection
+manifest cannot be regraded by this command. The revised task must keep the
+original Harbor task name and declare its verifier inputs. For the output
+collected by `aec-bench run`, put the artifact declaration at the top level of
+`task.toml`, before any section headers:
+
+```toml
+artifacts = [{source = "/workspace/output.md", destination = "agent/output.md"}]
+
+[metadata]
+visibility = "public"
+
+[verifier]
+environment_mode = "separate"
+```
+
+Keep the task's other metadata and settings. Harbor restores each declared
+file at its original container path, so a verifier can still read
+`/workspace/output.md`. Files originally published under `/logs/artifacts`
+return there. The `destination` field locates the recorded file on the host;
+it does not change the path inside the verifier environment.
+
+The separate verifier uses `tests/` as its build context. Provide a
+`tests/Dockerfile` that includes the verifier and its dependencies. For a
+self-contained Python verifier:
+
+```dockerfile
+FROM python:3.13-slim
+COPY . /tests
+```
+
+The dry run checks task identity, verifier mode, manifest structure, and safe
+input paths. It does not start an environment or run verification. Harbor
+checks complete artifact coverage before starting the verifier. Only the
+revised task's declared artifacts and Harbor's conventional artifact directory
+are required; optional logs from the original execution are not required.
+
+Each assessment needs a new output directory. It retains `source/`, the revised
+`task/`, their SHA-256 digests in `inputs.json`, and Harbor's result, lock, and
+verifier evidence under `verification/`. The original trial and ledger remain
+unchanged. Failed verification returns a nonzero exit status and retains its
+failure evidence. `aec-bench import` rejects regrade results: Harbor carries
+the original agent usage into them, and importing that usage would count the
+same execution twice. Verifier infrastructure can still incur a backend cost.
+
+This command does not provide world or lifecycle replay. It does not accept
+multi-step trials or regrade directly from a ledger record.
+
+#### Summarise recorded evaluations
+
 ```bash
 # Evaluate an experiment (table output)
 uv run aec-bench evaluate -e experiment-001
@@ -879,6 +1154,19 @@ summaries keep unknown costs separate from free trials.
 If any trial lacks an estimated cost, `total_cost_usd` is null. The summary also
 reports `known_cost_usd`, `n_costed`, and `n_uncosted`. Text and HTML reports
 show the unknown total with its known subtotal.
+
+Harbor imports also retain usage and costs for each model, including child
+models. `aec-bench report summary` displays this breakdown. JSON output adds
+`by_model_usage` and `n_trials_without_model_usage`. Model rows count reported,
+estimated, and unknown costs separately. Input totals already include cached
+input. A model breakdown is not added to the trial total a second time.
+
+Reported costs take precedence. Per-model estimates use the repository pricing
+table; unknown prices stay unknown. Harbor does not expose per-model cache-write
+counts, so estimates exclude any separate cache-write premium. Rates are not
+fetched during import. A partial breakdown does not replace a known trial total.
+Older records and execution paths without a breakdown remain readable and are
+counted as trials without model usage. See the [cost contract](docs/CONTRACTS.md#trial-and-episode-records).
 
 Published evaluation regimes use one artifact reference as their compatibility
 identity. Inspect one regime or compare two regimes with semantic field paths:

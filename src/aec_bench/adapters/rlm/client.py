@@ -11,6 +11,7 @@ if TYPE_CHECKING:
 
     from aec_bench.adapters.rlm.guardrails import GuardrailState
     from aec_bench.adapters.rlm.tokens import TokenTracker
+    from aec_bench.trajectory.writer import TrajectoryWriter
 
 
 @dataclass(frozen=True)
@@ -120,6 +121,7 @@ class AuxiliaryRlmClient:
         token_tracker: TokenTracker,
         category: Literal["subcall", "compaction", "advisor"],
         lock: LockType,
+        trajectory_writer: TrajectoryWriter | None = None,
     ) -> None:
         self.inner = inner
         self.guardrails = guardrails
@@ -128,6 +130,8 @@ class AuxiliaryRlmClient:
         self.token_tracker = token_tracker
         self.category = category
         self.lock = lock
+        self.trajectory_writer = trajectory_writer
+        self.parent_tool_call_id: str | None = None
 
     def generate(
         self,
@@ -140,6 +144,7 @@ class AuxiliaryRlmClient:
     ) -> RlmCompletionResponse:
         from aec_bench.adapters.base import AdapterStopReason
         from aec_bench.adapters.runtime_limits import AdapterRuntimeLimitError
+        from aec_bench.adapters.subagent_trajectory import record_subagent_call
         from aec_bench.contracts.pricing import estimate_cost_usd
 
         with self.lock:
@@ -153,12 +158,22 @@ class AuxiliaryRlmClient:
                 self.guardrails.reserve_subcall()
         try:
             settings = {"max_output_tokens": max_output_tokens} if max_output_tokens is not None else {}
-            response = self.inner.generate(
+            child_messages = [RlmMessage(role="user", content=self.instruction), *messages]
+            child_system = "\n\n".join(p for p in (self.system_prompt, system_prompt) if p)
+            response = record_subagent_call(
+                lambda: self.inner.generate(
+                    model=model,
+                    messages=child_messages,
+                    system_prompt=child_system,
+                    temperature=temperature,
+                    **settings,
+                ),
+                writer=self.trajectory_writer,
+                parent_tool_call_id=self.parent_tool_call_id,
+                agent_name=f"rlm:{self.category}",
                 model=model,
-                messages=[RlmMessage(role="user", content=self.instruction), *messages],
-                system_prompt="\n\n".join(p for p in (self.system_prompt, system_prompt) if p),
-                temperature=temperature,
-                **settings,
+                messages=child_messages,
+                system_prompt=child_system,
             )
         except Exception as exc:
             self.guardrails.provider_error = str(exc)

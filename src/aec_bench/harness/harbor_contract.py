@@ -6,9 +6,9 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from pydantic import Field, ValidationError, field_validator, model_validator
+from pydantic import Field, NonNegativeFloat, NonNegativeInt, ValidationError, field_validator, model_validator
 
-from aec_bench.contracts.validators import LenientModel, ensure_non_empty_string
+from aec_bench.contracts.validators import LenientModel, NonEmptyStr, ensure_non_empty_string
 
 
 class HarborArtifactContractError(Exception):
@@ -29,6 +29,7 @@ class HarborAgentConfig(LenientModel):
     model_name: str
     import_path: str | None = None
     kwargs: dict[str, Any] = Field(default_factory=dict)
+    env: dict[str, str] = Field(default_factory=dict)
 
     @field_validator("name", "model_name")
     @classmethod
@@ -85,11 +86,15 @@ class HarborAgentInfo(LenientModel):
         return ensure_non_empty_string(value)
 
 
-class HarborAgentResult(LenientModel):
-    n_input_tokens: int | None = None
-    n_cache_tokens: int | None = None
-    n_output_tokens: int | None = None
-    cost_usd: float | None = None
+class HarborModelUsage(LenientModel):
+    n_input_tokens: NonNegativeInt | None = None
+    n_cache_tokens: NonNegativeInt | None = None
+    n_output_tokens: NonNegativeInt | None = None
+    cost_usd: NonNegativeFloat | None = Field(default=None, allow_inf_nan=False)
+
+
+class HarborAgentResult(HarborModelUsage):
+    model_usage: dict[NonEmptyStr, HarborModelUsage] | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
 
     @field_validator("metadata", mode="before")
@@ -132,6 +137,13 @@ def read_harbor_trial_result(path: Path | str) -> HarborTrialResult:
     resolved = Path(path)
     try:
         payload = json.loads(resolved.read_text(encoding="utf-8"))
+        config = payload.get("config") if isinstance(payload, dict) else None
+        source_trial = config.get("source_trial") if isinstance(config, dict) else None
+        if source_trial is not None:
+            raise HarborArtifactContractError(
+                "A Harbor regrade is an assessment, not a new execution; "
+                "keep its result separate from the trial ledger and execution costs."
+            )
         return HarborTrialResult.model_validate(payload)
     except ValidationError as exc:
         raise HarborArtifactContractError(str(exc)) from exc

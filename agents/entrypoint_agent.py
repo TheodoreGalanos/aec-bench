@@ -57,6 +57,7 @@ from aec_bench.harness.harbor_task_export import (
     load_harbor_lifecycle_bridge,
     write_harbor_lifecycle_attestation,
 )
+from aec_bench.harness.harbor_trajectory import publish_harbor_trajectory
 from aec_bench.harness.lifecycle_local import (
     DEFAULT_DEEPSEEK_LIFECYCLE_MAX_TOKENS,
     run_local_lifecycle,
@@ -178,6 +179,21 @@ class EntrypointAgent(BaseAgent):
 
     def version(self) -> str | None:
         return "1.0.0"
+
+    @classmethod
+    def preflight(
+        cls,
+        kwargs: dict[str, Any] | None = None,
+        env: Mapping[str, str] | None = None,
+    ) -> None:
+        super().preflight(kwargs=kwargs, env=env)
+        parameters = kwargs or {}
+        validate_runtime_limit_contract(
+            adapter_kind=str(parameters.get("adapter", "rlm")),
+            configuration=parameters,
+        )
+        configured_positive_int(parameters, "max_tokens")
+        _reject_serialized_provider_secrets(parameters)
 
     async def setup(self, environment: Any) -> None:
         if "world_session" in self._params:
@@ -429,7 +445,17 @@ class EntrypointAgent(BaseAgent):
         if provider_environment:
             exec_kwargs["env"] = provider_environment
         try:
-            exec_result = await environment.exec(cmd, **exec_kwargs)
+            async with publish_harbor_trajectory(
+                environment,
+                logs_dir=self.logs_dir,
+                agent_name=f"{self.name()}:{adapter_kind}",
+                agent_version=self.version() or "unknown",
+                model_name=self.model_name,
+                session_id=self.session_id,
+                live=getattr(environment, "stream_enabled", False) is True,
+                logger=self.logger,
+            ):
+                exec_result = await environment.exec(cmd, **exec_kwargs)
         finally:
             if adapter_kind == "deepseek_harness":
                 try:

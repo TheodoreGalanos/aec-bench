@@ -69,7 +69,7 @@ def test_dependency_groups_have_one_named_feature_owner() -> None:
         "evolution": {"numpy", "ribs"},
         "prime-agent": {"agent-client-protocol"},
     }
-    assert project["optional-dependencies"]["execution"] == ["harbor[modal]>=0.15,<0.16"]
+    assert project["optional-dependencies"]["execution"] == ["harbor[modal]==0.23.1.dev202609140527"]
     assert project["optional-dependencies"]["deepseek-harness"] == [
         f"deepseek-harness-sdk=={DEEPSEEK_HARNESS_VERSION}",
         "jsonschema>=4.26,<5",
@@ -124,9 +124,11 @@ def test_extra_check_does_not_import_an_available_module(tmp_path: Path, monkeyp
     assert not marker.exists()
 
 
+@pytest.mark.parametrize("flags", [[], ["--stream", "--backend", "docker"]])
 def test_run_dry_run_reports_missing_execution_extra_before_importing_harbor(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    flags: list[str],
 ) -> None:
     tasks_root = tmp_path / "tasks"
     task_dir = tasks_root / "electrical" / "demo"
@@ -154,6 +156,7 @@ def test_run_dry_run_reports_missing_execution_extra_before_importing_harbor(
             "--tasks-root",
             str(tasks_root),
             "--dry-run",
+            *flags,
         ],
     )
 

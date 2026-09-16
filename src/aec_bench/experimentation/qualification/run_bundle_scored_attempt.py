@@ -740,7 +740,8 @@ def _reconcile_dispatch(
     return HarborDispatchOnlyResult(
         dispatch=HarborDispatchResult(
             config_path=inputs.config_path,
-            command=["uv", "run", "harbor", "run", "-c", str(inputs.config_path)],
+            # Recovered artifacts do not establish which process command ran.
+            command=[],
             selected_task_count=len(lowered.tasks),
             planned_trial_count=len(
                 plan_trials(

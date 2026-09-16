@@ -62,6 +62,19 @@ def test_experiment_manifest_accepts_valid_payload() -> None:
     assert manifest.tasks.visibility_filter == [Visibility.PUBLIC]
 
 
+def test_manifest_accepts_shared_agent_concurrency_without_adapter_parameters() -> None:
+    agents = [
+        AgentConfig(name=name, adapter="tool_loop", model="test-model", n_concurrent=2, concurrency_group="provider")
+        for name in ("baseline", "alternative")
+    ]
+    manifest = _build_manifest(
+        agents=agents, compute=ComputeConfig(backend="docker", resource_limits={"n_concurrent_trials": 4})
+    )
+    assert manifest.agents[0].n_concurrent == 2
+    assert manifest.agents[0].parameters == {}
+    assert ExperimentManifest.model_validate_json(manifest.model_dump_json()) == manifest
+
+
 def test_agent_config_accepts_explicit_client_config() -> None:
     config = AgentConfig(
         name="direct-anthropic",
@@ -257,3 +270,46 @@ def test_experiment_manifest_roundtrip_serialization() -> None:
     assert len(restored.agents) == 1
     assert restored.agents[0].client is not None
     assert restored.compute.timeout_override == 1200
+
+
+@pytest.mark.parametrize("cap", [0, -1, True, 1.5, "2"])
+def test_agent_concurrency_requires_a_positive_integer(cap: object) -> None:
+    with pytest.raises(ValidationError):
+        AgentConfig.model_validate({"name": "agent", "adapter": "direct", "model": "test", "n_concurrent": cap})
+
+
+@pytest.mark.parametrize(
+    "options",
+    [
+        {"concurrency_group": "provider"},
+        {"n_concurrent": 1, "concurrency_group": " "},
+        {"parameters": {"n_concurrent": 1}},
+        {"parameters": {"concurrency_group": "provider"}},
+    ],
+)
+def test_agent_rejects_incomplete_or_misplaced_concurrency(options: dict[str, object]) -> None:
+    with pytest.raises(ValidationError):
+        AgentConfig.model_validate({"name": "agent", "adapter": "direct", "model": "test", **options})
+
+
+def test_manifest_rejects_agent_cap_above_job_limit() -> None:
+    agent = AgentConfig(name="agent", adapter="direct", model="test", n_concurrent=2)
+    with pytest.raises(ValidationError, match="cannot exceed"):
+        _build_manifest(agents=[agent])
+
+
+def test_manifest_rejects_different_caps_within_shared_group() -> None:
+    agents = [
+        AgentConfig(name=f"agent-{cap}", adapter="direct", model="test", n_concurrent=cap, concurrency_group="provider")
+        for cap in (1, 2)
+    ]
+    with pytest.raises(ValidationError, match="same n_concurrent"):
+        _build_manifest(
+            agents=agents, compute=ComputeConfig(backend="docker", resource_limits={"n_concurrent_trials": 4})
+        )
+
+
+def test_unset_agent_concurrency_is_omitted_from_config() -> None:
+    agent = AgentConfig(name="agent", adapter="direct", model="test")
+    assert "n_concurrent" not in agent.model_dump()
+    assert "concurrency_group" not in agent.model_dump()

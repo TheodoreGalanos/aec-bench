@@ -28,6 +28,7 @@ class HarborExperimentRuntime:
     config_path: Path
     executor: HarborCommandExecutor | None = None
     progress_callback: Callable[[WorkflowProgressSnapshot], None] | None = None
+    completion_callback: Callable[[HarborWorkflowResult], None] | None = None
     environment_binding: HarborEnvironmentBinding | None = None
     task_path_overrides: Mapping[str, Path] | None = None
     last_result: HarborWorkflowResult | None = field(default=None, init=False)
@@ -62,6 +63,7 @@ class HarborExperimentRuntime:
             config_path=self.config_path,
             executor=self.executor,
             progress_callback=self.progress_callback,
+            completion_callback=self.completion_callback,
             reviewer_config=reviewer,
             resolved_tasks=resolved_tasks,
             task_path_overrides=overrides,

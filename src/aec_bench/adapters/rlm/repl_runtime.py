@@ -132,6 +132,7 @@ def prepare_execution_state(
             token_tracker=token_tracker,
             category=category,
             lock=lock,
+            trajectory_writer=runtime.trajectory if category != "compaction" else None,
         )
 
     runtime = replace(

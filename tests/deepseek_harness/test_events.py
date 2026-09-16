@@ -77,3 +77,36 @@ def test_reducer_does_not_flatten_child_session_messages() -> None:
 
     assert [entry.content for entry in projection.transcript] == ["SDK snapshot OK"]
     assert projection.child_session_ids == ("child-session",)
+
+
+def test_reducer_counts_child_work_once_without_changing_root_completion() -> None:
+    notifications = _notifications()
+    for event in (
+        {"type": "step/start", "data": {"step": 1}},
+        {"type": "tool/call", "data": {"callId": "child-call", "name": "read", "arguments": "{}"}},
+        {"type": "tool/result", "data": {}},
+        {
+            "type": "assistant/message",
+            "data": {
+                "message": {"content": [{"type": "text", "text": "Child answer"}]},
+                "usage": {"inputTokens": 2000, "outputTokens": 31, "cacheReadTokens": 100, "cacheWriteTokens": 8},
+            },
+        },
+        {"type": "turn/end", "data": {"reason": {"kind": "max-tokens"}}},
+    ):
+        notifications.append({"method": "session.event", "params": {"sessionId": "child", "event": event}})
+
+    projection = reduce_deepseek_notifications("root-session", notifications)
+
+    assert projection.root_model_calls == 1
+    assert projection.usage_model_calls == 2
+    assert projection.total_tool_calls_started == 1
+    assert projection.total_tool_calls_completed == 1
+    assert projection.usage_input_tokens == 3769
+    assert projection.usage_output_tokens == 55
+    assert projection.usage_cache_read_tokens == 100
+    assert projection.usage_cache_write_tokens == 8
+    assert projection.maximum_input_tokens_in_one_call == 2000
+    assert projection.maximum_output_tokens_in_one_call == 31
+    assert projection.last_turn_end_reason == "completed"
+    assert projection.final_response == "SDK snapshot OK"

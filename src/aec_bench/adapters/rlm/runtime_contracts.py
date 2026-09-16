@@ -5,7 +5,6 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
 from enum import StrEnum
-from typing import Any, Protocol
 
 from aec_bench.adapters.advisor_usage import AdvisorUsageAccumulator
 from aec_bench.adapters.base import (
@@ -39,37 +38,7 @@ from aec_bench.contracts.agent_output import AgentOutput, AgentOutputStatus
 from aec_bench.contracts.constitution import ConstitutionManifest
 from aec_bench.contracts.output_completion import OutputCommitAttestation
 from aec_bench.templates.report.session import ReportSession
-
-
-class RlmTrajectory(Protocol):
-    """Trajectory operations used by the RLM execution runtime."""
-
-    def system(self, content: str) -> None: ...
-
-    def user(self, content: str) -> None: ...
-
-    def new_step(self, call_type: str | None = None) -> int: ...
-
-    def tool_call(
-        self,
-        tool_name: str,
-        command: str,
-        arguments: dict[str, Any] | None = None,
-    ) -> None: ...
-
-    def tool_result(
-        self,
-        tool_name: str,
-        stdout: str,
-        stderr: str = "",
-        exit_code: int = 0,
-        duration_ms: int | None = None,
-        media: list[str] | None = None,
-        metadata: dict[str, Any] | None = None,
-        output_summary: str | None = None,
-    ) -> None: ...
-
-    def close(self) -> None: ...
+from aec_bench.trajectory.writer import TrajectoryWriter
 
 
 @dataclass(frozen=True, slots=True)
@@ -88,7 +57,7 @@ class RlmRuntimeConfig:
     subcall_configs: dict[str, SubcallConfig] | None = None
     template: ReportSession | None = None
     compaction_client: RlmClient | None = None
-    trajectory: RlmTrajectory | None = None
+    trajectory: TrajectoryWriter | None = None
     scratchpad_path: str | None = None
     external_system_prompt: str = ""
     workspace_path: str | None = None
@@ -163,7 +132,7 @@ class RlmExecutionState:
         return self.resolved.request
 
     @property
-    def trajectory(self) -> RlmTrajectory | None:
+    def trajectory(self) -> TrajectoryWriter | None:
         return self.runtime.trajectory
 
     def record_response(self, response: RlmCompletionResponse, *, cost_usd: float) -> TurnMetrics:

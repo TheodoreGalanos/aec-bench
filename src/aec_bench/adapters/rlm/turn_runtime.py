@@ -8,9 +8,10 @@ import logging
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
+from uuid import uuid4
 
 from aec_bench.adapters.base import AdapterFailureKind, AdapterStopReason
-from aec_bench.adapters.rlm.client import RlmCompletionResponse, RlmMessage
+from aec_bench.adapters.rlm.client import AuxiliaryRlmClient, RlmCompletionResponse, RlmMessage
 from aec_bench.adapters.rlm.engine import ExecutionResult
 from aec_bench.adapters.rlm.errors import ErrorLevel
 from aec_bench.adapters.rlm.metadata import format_iteration_metadata
@@ -179,12 +180,27 @@ class TurnProcessor:
     ) -> ReplTurn:
         state = self._state
         state.output.begin_turn(state.repl, self._iteration)
-        result = state.repl.execute(code)
+        call_id = response.tool_call.call_id if response.tool_call is not None else str(uuid4())
+        if state.trajectory is not None:
+            state.trajectory.new_step()
+            state.trajectory.tool_call("repl", code, tool_call_id=call_id)
+        auxiliary_clients = [
+            client
+            for client in (state.runtime.subcall_client, state.runtime.advisor_client)
+            if isinstance(client, AuxiliaryRlmClient)
+        ]
+        for client in auxiliary_clients:
+            client.parent_tool_call_id = call_id
+        try:
+            result = state.repl.execute(code)
+        finally:
+            for client in auxiliary_clients:
+                client.parent_tool_call_id = None
         state.repl.restore_protected(state.scaffolds)
         result = state.output.finish_turn(state.repl, result)
         self._record_repl_error(code, result)
         new_variables, removed_variables = self._variable_changes()
-        self._record_trajectory(code, result, metrics, new_variables, removed_variables)
+        self._record_trajectory(call_id, result, metrics, new_variables, removed_variables)
         self._emit_code_progress(
             code,
             result,
@@ -225,7 +241,7 @@ class TurnProcessor:
 
     def _record_trajectory(
         self,
-        code: str,
+        call_id: str,
         result: ExecutionResult,
         metrics: TurnMetrics,
         new_variables: list[str],
@@ -234,11 +250,10 @@ class TurnProcessor:
         trajectory = self._state.trajectory
         if trajectory is None:
             return
-        trajectory.new_step()
-        trajectory.tool_call("repl", code)
         trajectory.tool_result(
             "repl",
             stdout=result.error or result.stdout or "(no output)",
+            tool_call_id=call_id,
             metadata=self._build_step_metadata(
                 metrics,
                 new_variables,

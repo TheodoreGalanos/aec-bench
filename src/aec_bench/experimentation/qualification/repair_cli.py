@@ -9,12 +9,11 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 from aec_bench.experimentation.qualification.harness_program_study_cli import (
-    HarnessProgramStudySubprocessHarborExecutor,
     _preflight_harness_runtime,
 )
 from aec_bench.experimentation.qualification.repair_run import RepairRunSpec, run_repair
 from aec_bench.experimentation.qualification.repair_runtime import RepairRuntimeExecution
-from aec_bench.harness.harbor_dispatch import HarborCommandExecutor
+from aec_bench.harness.harbor_dispatch import HarborCommandExecutor, SubprocessHarborExecutor
 from aec_bench.harness.harbor_workflow import SynchronousHarborWorkflow
 from aec_bench.harness.kernel_catalogue import default_kernel_registry
 
@@ -41,7 +40,7 @@ def run_cli(
             repo_root=repo_root,
             tasks_root=tasks_root,
         )
-        selected_executor = HarnessProgramStudySubprocessHarborExecutor()
+        selected_executor = SubprocessHarborExecutor()
     workflow = SynchronousHarborWorkflow(
         project_root=project_root,
         repo_root=repo_root,

@@ -39,6 +39,19 @@ def test_write_trial_record_persists_json_and_supports_roundtrip(tmp_path: Path)
     ).is_file()
 
 
+def test_read_trial_record_without_model_usage_remains_supported(tmp_path: Path) -> None:
+    record = make_trial_record(cost={"tokens_in": 100, "estimated_cost_usd": 0.1})
+    path = write_trial_record(ledger_root=tmp_path, record=record)
+    payload = json.loads(path.read_text())
+    payload["cost"].pop("model_usage")
+    path.chmod(stat.S_IWUSR | stat.S_IRUSR)
+    path.write_text(json.dumps(payload))
+    loaded = read_trial_record(path, ledger_root=tmp_path)
+    assert loaded.cost is not None
+    assert loaded.cost.model_usage is None
+    assert loaded.cost.estimated_cost_usd == 0.1
+
+
 def test_write_trial_record_round_trips_verifier_execution_receipt(tmp_path: Path) -> None:
     started_at = datetime(2026, 1, 1, tzinfo=UTC)
     receipt = VerifierExecutionReceipt(

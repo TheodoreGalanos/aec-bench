@@ -41,6 +41,55 @@ def test_empty_cost_total_is_zero_and_complete_cost_total_includes_free_trials()
     assert summary["n_uncosted"] == 0
 
 
+def test_model_summary_keeps_partial_usage_cost_sources_and_coverage_explicit() -> None:
+    records = [
+        make_trial_record(
+            trial_id="first",
+            cost={
+                "estimated_cost_usd": 10.0,
+                "model_usage": {
+                    "root": {"tokens_in": 100, "tokens_out": 20, "cache_read_tokens": 10, "reported_cost_usd": 0.5},
+                    "child": {"tokens_in": 50, "tokens_out": 10, "estimated_cost_usd": 0.2},
+                },
+            },
+        ),
+        make_trial_record(
+            trial_id="second",
+            cost={
+                "model_usage": {
+                    "root": {"tokens_in": 200, "tokens_out": 40, "cache_read_tokens": 0, "reported_cost_usd": 0.0},
+                    "child": {"tokens_in": 30},
+                }
+            },
+        ),
+        make_trial_record(trial_id="no-breakdown", cost={"estimated_cost_usd": 1.0}),
+    ]
+    summary = summarize_evaluation_records(records)
+    assert summary["known_cost_usd"] == 11.0  # Do not add the model subtotals to trial costs.
+    assert summary["total_cost_usd"] is None
+    assert summary["n_trials_without_model_usage"] == 1
+    root = summary["by_model_usage"]["root"]
+    assert (root["tokens_in"], root["tokens_out"], root["cache_read_tokens"]) == (300, 60, 10)
+    assert root["total_cost_usd"] == 0.5
+    assert root["n_reported_cost"] == 2
+    assert root["n_estimated_cost"] == 0
+    child = summary["by_model_usage"]["child"]
+    assert child["tokens_in"] == 80
+    assert child["tokens_out"] is None
+    assert child["cache_read_tokens"] is None
+    assert child["known_cost_usd"] == 0.2
+    assert child["total_cost_usd"] is None
+    assert child["n_uncosted"] == 1
+    assert child["n_estimated_cost"] == 1
+    assert child["n_trials"] == 2
+
+
+def test_absent_model_usage_does_not_create_attribution_to_the_root_model() -> None:
+    summary = summarize_evaluation_records([make_trial_record()])
+    assert summary["by_model_usage"] == {}
+    assert summary["n_trials_without_model_usage"] == 1
+
+
 class StubClassifier:
     def classify_trace(self, trace: BehavioralTrace) -> ClassifiedTrace:
         classifications: list[TurnClassification] = []

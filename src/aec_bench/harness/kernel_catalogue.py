@@ -157,6 +157,7 @@ DEFAULT_KERNEL_EXECUTOR_SOURCE_PATHS: tuple[str, ...] = (
     "aec_bench/adapters/deepseek_harness/qualification.py",
     "aec_bench/adapters/deepseek_harness/runtime.py",
     "aec_bench/adapters/deepseek_harness/tool_gateway.py",
+    "aec_bench/adapters/deepseek_harness/trajectory.py",
     "aec_bench/adapters/direct.py",
     "aec_bench/adapters/direct_providers.py",
     "aec_bench/adapters/lambda_rlm/__init__.py",
@@ -213,6 +214,7 @@ DEFAULT_KERNEL_EXECUTOR_SOURCE_PATHS: tuple[str, ...] = (
     "aec_bench/adapters/rlm/turn_execution.py",
     "aec_bench/adapters/rlm/turn_runtime.py",
     "aec_bench/adapters/runtime_limits.py",
+    "aec_bench/adapters/subagent_trajectory.py",
     "aec_bench/adapters/tool_loop.py",
     "aec_bench/adapters/tool_loop_local.py",
     "aec_bench/adapters/tools/__init__.py",
@@ -415,6 +417,7 @@ DEFAULT_KERNEL_EXECUTOR_SOURCE_PATHS: tuple[str, ...] = (
     "aec_bench/experimentation/qualification/run_bundle_scored_plan.py",
     "aec_bench/experimentation/qualification/run_bundle_stage_attempt.py",
     "aec_bench/harness/__init__.py",
+    "aec_bench/harness/atif.py",
     "aec_bench/harness/budget.py",
     "aec_bench/harness/compilation/__init__.py",
     "aec_bench/harness/compilation/bindings.py",
@@ -457,6 +460,7 @@ DEFAULT_KERNEL_EXECUTOR_SOURCE_PATHS: tuple[str, ...] = (
     "aec_bench/harness/harbor_task_exporting/runtime_wheel.py",
     "aec_bench/harness/harbor_task_exporting/stable_io.py",
     "aec_bench/harness/harbor_task_exporting/surfaces.py",
+    "aec_bench/harness/harbor_trajectory.py",
     "aec_bench/harness/harbor_workflow.py",
     "aec_bench/harness/kernel_catalogue.py",
     "aec_bench/harness/lifecycle_local.py",
@@ -559,6 +563,11 @@ DEFAULT_KERNEL_EXECUTOR_SOURCE_PATHS: tuple[str, ...] = (
     "aec_bench/prime_agent/__init__.py",
     "aec_bench/prime_agent/batch.py",
     "aec_bench/prime_agent/events.py",
+    "aec_bench/prime_agent/hook_assets/spawn.mjs",
+    "aec_bench/prime_agent/hook_assets/spawn.py",
+    "aec_bench/prime_agent/session_evidence.py",
+    "aec_bench/prime_agent/spawn_hook.py",
+    "aec_bench/prime_agent/trajectory.py",
     "aec_bench/providers/__init__.py",
     "aec_bench/providers/behavioral_llm.py",
     "aec_bench/providers/morph_cloud.py",
@@ -1102,6 +1111,7 @@ def _package_source_inventory() -> tuple[KernelSourceDigest, ...]:
     """Hash the complete package separately for build and replay diagnostics."""
     package_root = Path(__file__).resolve().parents[1]
     source_paths = list(package_root.rglob("*.py"))
+    source_paths.extend((package_root / "prime_agent" / "hook_assets").glob("*.mjs"))
     project_root = package_root.parents[1]
     agents_root = project_root / "agents"
     if agents_root.is_dir():

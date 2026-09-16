@@ -2,6 +2,7 @@
 # ABOUTME: Mirrors the subclass contract consumed by bundled aec-bench agent entrypoints.
 
 import logging
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
@@ -9,6 +10,7 @@ class BaseAgent:
     logs_dir: Path
     model_name: str | None
     logger: logging.Logger
+    session_id: str | None
 
     def __init__(
         self,
@@ -24,5 +26,11 @@ class BaseAgent:
     def version(self) -> str | None: ...
     @classmethod
     def import_path(cls) -> str: ...
+    @classmethod
+    def preflight(
+        cls,
+        kwargs: dict[str, Any] | None = None,
+        env: Mapping[str, str] | None = None,
+    ) -> None: ...
     async def setup(self, environment: Any) -> None: ...
     async def run(self, instruction: str, environment: Any, context: Any) -> None: ...

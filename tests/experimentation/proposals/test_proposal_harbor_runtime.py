@@ -87,10 +87,10 @@ def test_runs_only_the_authorized_canonical_job_and_replays_without_redispatch(
     assert result.replayed is False
     assert len(executor.calls) == 1
     command, cwd = executor.calls[0]
-    assert command[:4] == ("uv", "run", "harbor", "run")
-    assert command[4] == "-c"
+    assert command[:5] == ("uv", "run", "python", "-m", "aec_bench.harness.harbor_job")
+    assert command[5] == "-c"
     assert cwd == tmp_path.resolve()
-    config_path = Path(command[5])
+    config_path = Path(command[6])
     assert yaml.safe_load(config_path.read_text(encoding="utf-8")) == json.loads(
         authorization.dispatch.harbor_job_config_json,
     )
@@ -372,3 +372,28 @@ def _operation_coordinate(
         provider_dispatch_event_id=authorization.provider_dispatch_event.event_id,
         provider_dispatch_event_sha256=(authorization.provider_dispatch_event.content_sha256),
     )
+
+
+def test_retained_native_cli_receipts_remain_readable(tmp_path: Path) -> None:
+    from aec_bench.experimentation.proposals.proposal_harbor_runtime import ProposalHarborExecutionReceipt
+
+    fixture = _dispatch_fixture(tmp_path / "fixture")
+    result = run_governed_proposal_harbor(
+        ledger=fixture.ledger,
+        authorization=_authorize(fixture),
+        project_root=tmp_path,
+        jobs_root=tmp_path / "jobs" / "proposal",
+        artifacts_root=tmp_path / "artifacts",
+        executor=_RecordingHarborExecutor(),
+    )
+    payload = result.receipt.model_dump(mode="json", exclude={"content_sha256"})
+    payload["command"] = ["uv", "run", "harbor", "run", "-c", payload["config_path"]]
+    retained = ProposalHarborExecutionReceipt.model_validate(payload)
+    assert ProposalHarborExecutionReceipt.model_validate_json(retained.model_dump_json()) == retained
+    for command in (
+        ["uv", "run", "python", "-m", "other.module", "-c", payload["config_path"]],
+        ["uv", "run", "harbor", "run", "-c", "other.yaml"],
+        [*payload["command"], "--extra-flag"],
+    ):
+        with pytest.raises(ValueError, match="command|exact persisted config"):
+            ProposalHarborExecutionReceipt.model_validate({**payload, "command": command})

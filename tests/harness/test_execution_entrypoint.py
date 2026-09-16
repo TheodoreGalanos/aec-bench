@@ -355,7 +355,7 @@ def test_execution_entrypoint_runs_pydantic_ai_bundle_without_serialized_client(
     monkeypatch.setattr(
         execution_entrypoint_module,
         "_default_tool_loop_client_for_model",
-        lambda model_name, workspace_dir, *, tools: replay_client,
+        lambda model_name, workspace_dir, *, tools, trajectory_writer: replay_client,
     )
 
     bundle_path = write_execution_bundle(
@@ -420,12 +420,14 @@ def test_default_tool_loop_client_exposes_only_the_selected_task_tool_surface(
             workspace: str,
             *,
             enable_bash: bool,
+            trajectory_writer: object,
         ) -> None:
             captured.update(
                 {
                     "model_name": model_name,
                     "workspace": workspace,
                     "enable_bash": enable_bash,
+                    "trajectory_writer": trajectory_writer,
                 }
             )
 
@@ -434,16 +436,24 @@ def test_default_tool_loop_client_exposes_only_the_selected_task_tool_surface(
         _CapturedClient,
     )
 
-    execution_entrypoint_module._default_tool_loop_client_for_model(
-        "claude-test-model",
-        tmp_path,
-        tools=list(selected_tools),
-    )
+    from aec_bench.trajectory.writer import TrajectoryWriter
+
+    writer = TrajectoryWriter(str(tmp_path / "trajectory.jsonl"))
+    try:
+        execution_entrypoint_module._default_tool_loop_client_for_model(
+            "claude-test-model",
+            tmp_path,
+            tools=list(selected_tools),
+            trajectory_writer=writer,
+        )
+    finally:
+        writer.close()
 
     assert captured == {
         "model_name": "claude-test-model",
         "workspace": str(tmp_path),
         "enable_bash": expected_bash,
+        "trajectory_writer": writer,
     }
 
 
@@ -864,7 +874,7 @@ def test_recursive_execution_writer_preserves_legacy_events_without_lineage(tmp_
         configuration={},
     )
     writer.new_step()
-    writer.thinking("Execute a legacy run without a compiled meta-harness bundle.")
+    writer.assistant("Execute a legacy run without a compiled meta-harness bundle.")
     writer.close()
 
     entries = read_trajectory(tmp_path / "trajectory.jsonl")

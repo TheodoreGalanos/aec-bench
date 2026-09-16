@@ -12,7 +12,7 @@ from aec_bench.communication.job_report import (
     trial_report_from_record,
 )
 from aec_bench.contracts.agent_output import AgentOutput, AgentOutputStatus
-from aec_bench.contracts.trial_record import OutputRecord
+from aec_bench.contracts.trial_record import EvaluationStatus, ExecutionStatus, OutputRecord
 from aec_bench.evaluation.behavioral import (
     BehavioralTrace,
     BondType,
@@ -30,6 +30,76 @@ _skip_no_job_data = pytest.mark.skipif(
     not HARBOR_JOB_DIR.exists(),
     reason="requires archived Harbor job data in jobs/",
 )
+
+
+def test_report_preserves_unknown_cost_without_root_model_repricing() -> None:
+    record = make_trial_record(cost={"tokens_in": 1000, "tokens_out": 100})
+    assert trial_report_from_record(record).cost_usd is None
+    report = build_experiment_report([record])
+    payload = experiment_report_to_dict(report)
+    assert payload["total_cost_usd"] is None
+    assert payload["trials"][0]["cost_usd"] is None
+    assert all(value["total_cost_usd"] is None for value in payload["by_task_type"].values())
+
+
+def test_report_accepts_output_without_agent_metadata() -> None:
+    report = trial_report_from_record(make_trial_record(output=OutputRecord()))
+    assert report.reward == 1.0
+    assert report.has_error is False
+
+
+@pytest.mark.parametrize("status", [ExecutionStatus.COMPLETED, ExecutionStatus.FAILED, ExecutionStatus.CANCELLED])
+def test_report_preserves_unevaluated_trials_and_their_costs(status: ExecutionStatus) -> None:
+    record = make_trial_record(
+        execution_status=status,
+        evaluation_status=EvaluationStatus.NOT_REQUESTED
+        if status is ExecutionStatus.COMPLETED
+        else EvaluationStatus.FAILED,
+        evaluation=None,
+        output=make_trial_record().output if status is ExecutionStatus.COMPLETED else None,
+        cost={"estimated_cost_usd": 0.25},
+    )
+    report = build_experiment_report([record], behavioral_classifier=StubClassifier())
+    payload = experiment_report_to_dict(report)
+    assert payload["trials"][0]["reward"] is None
+    assert payload["trials"][0]["has_error"] is (status is not ExecutionStatus.COMPLETED)
+    assert payload["overall_mean_reward"] is None
+    assert payload["n_evaluated"] == 0
+    assert payload["n_unevaluated"] == 1
+    assert payload["total_cost_usd"] == 0.25
+    group = next(iter(payload["by_task_type"].values()))
+    assert group["mean_reward"] is None
+    assert group["n_evaluated"] == 0
+    assert group["n_unevaluated"] == 1
+    assert group["n_zero"] == 0
+    assert group["total_cost_usd"] == 0.25
+
+
+def test_report_reward_statistics_include_only_observed_evaluations() -> None:
+    success = make_trial_record(trial_id="success", cost={"estimated_cost_usd": 0.25})
+    assert success.evaluation is not None
+    scored_failure = make_trial_record(
+        trial_id="scored-failure",
+        execution_status=ExecutionStatus.FAILED,
+        output=None,
+        evaluation=success.evaluation.model_copy(update={"reward": 0.0}),
+        cost={"estimated_cost_usd": 0.5},
+    )
+    pending = make_trial_record(trial_id="pending", evaluation=None, cost={"estimated_cost_usd": 0.75})
+    payload = experiment_report_to_dict(
+        build_experiment_report(
+            [success, scored_failure, pending],
+            behavioral_classifier=StubClassifier(),
+        )
+    )
+    assert [trial["reward"] for trial in payload["trials"]] == [1.0, 0.0, None]
+    assert payload["overall_mean_reward"] == 0.5
+    assert (payload["n_evaluated"], payload["n_unevaluated"]) == (2, 1)
+    assert payload["total_cost_usd"] == 1.5
+    group = next(iter(payload["by_task_type"].values()))
+    assert group["mean_reward"] == 0.5
+    assert (group["n_evaluated"], group["n_unevaluated"]) == (2, 1)
+    assert (group["n_perfect"], group["n_partial"], group["n_zero"]) == (1, 0, 1)
 
 
 class StubClassifier:
@@ -78,8 +148,8 @@ def test_build_experiment_report_groups_real_job_by_task_type() -> None:
     assert len(report.trials) == 60
     assert set(report.by_task_type) == {"audit-mixed-use", "audit-office-building"}
     assert sum(summary.n_trials for summary in report.by_task_type.values()) == 60
-    assert report.total_cost_usd > 0.0
-    assert report.overall_mean_reward > 0.0
+    assert report.total_cost_usd is not None and report.total_cost_usd > 0.0
+    assert report.overall_mean_reward is not None and report.overall_mean_reward > 0.0
 
 
 def test_build_experiment_report_optionally_includes_behavioral_json_fields(

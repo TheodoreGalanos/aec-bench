@@ -97,7 +97,7 @@ class DeepSeekAdapterIdentity(LenientModel):
 class DeepSeekCompositionIdentity(LenientModel):
     sandbox_mode: Literal["workspace-write"] = "workspace-write"
     sandbox_enforcement: Literal["partial"] = "partial"
-    subagents_enabled: Literal[False] = False
+    subagents_enabled: bool = False
     workflows_enabled: Literal[False] = False
     code_mode_enabled: Literal[False] = False
     output_commit_mode: Literal["disabled", "required"]
@@ -276,7 +276,7 @@ class DeepSeekEvidenceArtifactV3(LenientModel):
 class DeepSeekPluginIdentityV3(LenientModel):
     plugin_id: NonEmptyStr
     version: NonEmptyStr
-    role: Literal["output_commit", "native_tools"]
+    role: Literal["output_commit", "native_tools", "subagent_trace"]
     artifact: ArtifactRef
 
 
@@ -321,6 +321,9 @@ class DeepSeekExecutionIdentityV3(LenientModel):
     deepseek_root_turns: int = Field(ge=0)
     tool_calls_started: int = Field(ge=0)
     tool_calls_completed: int = Field(ge=0)
+    usage_model_calls: int | None = Field(default=None, ge=0)
+    total_tool_calls_started: int | None = Field(default=None, ge=0)
+    total_tool_calls_completed: int | None = Field(default=None, ge=0)
     timeout_sec: int = Field(ge=1)
     max_tokens: int | None = Field(default=None, ge=1)
     process_group_retired: bool
@@ -390,6 +393,9 @@ class DeepSeekEvidenceManifestV3(LenientModel):
                 raise ValueError("plugin evidence requires one package-lock artifact")
         elif self.plugin_package_lock is not None:
             raise ValueError("plugin-free evidence cannot reference a package lock")
+        trace_plugins = [plugin for plugin in self.plugins if plugin.role == "subagent_trace"]
+        if len(trace_plugins) != (1 if self.composition.subagents_enabled else 0):
+            raise ValueError("subagent composition must match its trace plugin artifact")
         output_commit_plugins = [plugin for plugin in self.plugins if plugin.role == "output_commit"]
         tool_plugins = [plugin for plugin in self.plugins if plugin.role == "native_tools"]
         if self.composition.output_commit_mode == "required" and len(output_commit_plugins) != 1:

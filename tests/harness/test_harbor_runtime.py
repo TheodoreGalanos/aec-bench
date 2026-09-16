@@ -110,3 +110,15 @@ def test_imported_runtime_requires_serializable_recipe_spec(tmp_path: Path) -> N
             trials=trials,
             recipe=lambda _run_once: None,  # type: ignore[arg-type,return-value]
         )
+
+
+def test_runtime_forwards_progress_and_completion_callbacks(tmp_path: Path) -> None:
+    from dataclasses import replace
+
+    task, trials, _expected, workflow, runtime = _inputs(tmp_path)
+    progress: list[object] = []
+    completions: list[object] = []
+    runtime = replace(runtime, progress_callback=progress.append, completion_callback=completions.append)
+    run_experiment(runtime=runtime, tasks=[task], trials=trials, recipe=SingleAttemptRecipe())
+    assert workflow.calls[0]["progress_callback"] == progress.append
+    assert workflow.calls[0]["completion_callback"] == completions.append

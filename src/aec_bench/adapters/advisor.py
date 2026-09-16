@@ -9,7 +9,9 @@ from dataclasses import dataclass
 from typing import Any
 
 from aec_bench.adapters.rlm.client import RlmClient, RlmMessage
+from aec_bench.adapters.subagent_trajectory import record_subagent_call
 from aec_bench.contracts.advisor import AdvisorRequest, AdvisorResponse
+from aec_bench.trajectory.writer import TrajectoryWriter
 
 _ADVISOR_SYSTEM_PROMPT = """\
 You are advising an AI agent working on AEC (Architecture, Engineering, Construction) tasks.
@@ -85,6 +87,8 @@ def default_advise(
     model: str,
     max_response_tokens: int = 500,
     adapter_context: str = "",
+    trajectory_writer: TrajectoryWriter | None = None,
+    parent_tool_call_id: str | None = None,
 ) -> AdvisorResult:
     """Call the advisor model and return a structured AdvisorResult.
 
@@ -110,8 +114,16 @@ def default_advise(
 
     messages = [RlmMessage(role="user", content="\n".join(user_parts))]
 
-    response = client.generate(
-        model=model, messages=messages, system_prompt=system, max_output_tokens=max_response_tokens
+    response = record_subagent_call(
+        lambda: client.generate(
+            model=model, messages=messages, system_prompt=system, max_output_tokens=max_response_tokens
+        ),
+        writer=trajectory_writer,
+        parent_tool_call_id=parent_tool_call_id,
+        agent_name="advisor",
+        model=model,
+        messages=messages,
+        system_prompt=system,
     )
 
     if response.error_message:

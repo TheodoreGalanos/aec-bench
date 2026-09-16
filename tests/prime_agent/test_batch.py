@@ -11,6 +11,7 @@ from pathlib import Path
 
 import pytest
 
+from aec_bench.contracts.trajectory import read_trajectory
 from aec_bench.prime_agent.batch import (
     PRIME_AGENT_TESTED_VERSION,
     PrimeExecutableNotFoundError,
@@ -82,6 +83,20 @@ if scenario == "direct":
     Path("output.md").write_text("Direct artifact\\n", encoding="utf-8")
 if scenario == "missing":
     message["content"] = []
+if scenario == "children":
+    message["content"].append({{"type": "toolCall", "id": "spawn-call", "name": "ipython",
+                                "arguments": {{"code": "await rlm.run('child')"}}}})
+    session_file = session_dir / "session-record.jsonl"
+    session_file.write_text(json.dumps({{**header, "rlmDepth": 0}}) + "\\n" +
+        json.dumps({{"type": "message", "id": "root-msg", "message": message}}) + "\\n")
+    child_header = {{"type": "session", "version": 3, "id": "child", "rlmDepth": 1,
+                    "parentSession": str(session_file)}}
+    child_dir = session_dir / "child"
+    child_dir.mkdir()
+    (child_dir / "child.jsonl").write_text(json.dumps(child_header) + "\\n" +
+        json.dumps({{"type": "message", "id": "child-msg", "message": message}}) + "\\n")
+    (child_dir / "aec-spawn.json").write_text(json.dumps({{"parent_session_id": "fake-session",
+        "parent_tool_call_id": "spawn-call", "rlm_child_id": "child"}}))
 print(json.dumps({{"type": "turn_start"}}), flush=True)
 print(json.dumps({{"type": "message_end", "message": message}}), flush=True)
 print(json.dumps({{"type": "turn_end", "message": message, "toolResults": []}}), flush=True)
@@ -124,6 +139,8 @@ def test_builds_documented_json_command_as_an_argument_list(tmp_path: Path) -> N
         str(paths.session_dir),
         "--no-skills",
         "--no-extensions",
+        "--extension",
+        str(paths.session_dir.parent / "spawn-hook" / "spawn.mjs"),
         "--no-prompt-templates",
         "--no-themes",
         "--no-context-files",
@@ -274,3 +291,22 @@ def test_missing_executable_is_a_clear_setup_error(tmp_path: Path) -> None:
             timeout_seconds=1,
             executable="definitely-not-installed-prime-agent",
         )
+
+
+def test_batch_publishes_native_child_trajectories(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    result = run_prime_agent(
+        workspace=workspace,
+        instruction="Check the design.",
+        model="anthropic/requested",
+        timeout_seconds=5,
+        executable=str(_fake_prime_agent(tmp_path)),
+        environment={**os.environ, "FAKE_PRIME_SCENARIO": "children"},
+    )
+    assert result.completion == "completed"
+    entries = read_trajectory(workspace / "trajectory.jsonl")
+    children = [entry.subagent for entry in entries if entry.subagent is not None]
+    assert {entry.trajectory_id for entry in children} == {"child"}
+    assert any(entry.entry.content == "Fallback answer" for entry in children)
+    assert all(entry.parent_tool_call_id == "spawn-call" for entry in children)

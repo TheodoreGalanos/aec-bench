@@ -10,9 +10,9 @@ from typing import Any
 
 from aec_bench.communication.metrics import coerce_int, resolve_agent_name, split_task_id
 from aec_bench.contracts.agent_output import AgentOutputStatus
-from aec_bench.contracts.pricing import estimate_cost_usd
-from aec_bench.contracts.trial_record import TrialRecord
+from aec_bench.contracts.trial_record import ExecutionStatus, TrialRecord
 from aec_bench.evaluation.aggregation import BehavioralTraceClassifier, summarize_behavioral_records
+from aec_bench.evaluation.costs import summarize_cost_values
 
 
 @dataclass(frozen=True)
@@ -28,9 +28,9 @@ class TrialReport:
     trial_name: str
     task_name: str
     task_type: str
-    reward: float
+    reward: float | None
     tokens: TokenUsage
-    cost_usd: float
+    cost_usd: float | None
     turns_used: int
     max_turns: int
     duration_sec: float
@@ -46,13 +46,15 @@ class TaskTypeSummary:
     task_type: str
     n_trials: int
     n_completed: int
-    mean_reward: float
+    n_evaluated: int
+    n_unevaluated: int
+    mean_reward: float | None
     n_perfect: int
     n_partial: int
     n_zero: int
     mean_turns: float
     pct_hit_max: float
-    total_cost_usd: float
+    total_cost_usd: float | None
     mean_input_tokens: float
     mean_output_tokens: float
     mean_cache_read_tokens: float
@@ -67,14 +69,16 @@ class ExperimentReport:
     finished_at: str
     trials: list[TrialReport] = field(default_factory=list)
     by_task_type: dict[str, TaskTypeSummary] = field(default_factory=dict)
-    overall_mean_reward: float = 0.0
-    total_cost_usd: float = 0.0
+    n_evaluated: int = 0
+    n_unevaluated: int = 0
+    overall_mean_reward: float | None = None
+    total_cost_usd: float | None = 0.0
     behavioral: dict[str, Any] | None = None
 
 
 def trial_report_from_record(record: TrialRecord) -> TrialReport:
     task_type, task_name = split_task_id(record.task.task_id)
-    agent_result = record.outputs.agent_result or {}
+    agent_result = (record.output.agent_result or {}) if record.output is not None else {}
     cost = record.cost
     tokens = TokenUsage(
         input_tokens=0 if cost is None else coerce_int(cost.tokens_in),
@@ -83,22 +87,14 @@ def trial_report_from_record(record: TrialRecord) -> TrialReport:
         cache_write_tokens=0 if cost is None else coerce_int(cost.cache_write_tokens),
     )
     cost_usd = None if cost is None else cost.estimated_cost_usd
-    if cost_usd is None:
-        cost_usd = estimate_cost_usd(
-            record.agent.model,
-            input_tokens=tokens.input_tokens,
-            output_tokens=tokens.output_tokens,
-            cache_read_tokens=tokens.cache_read_tokens,
-            cache_write_tokens=tokens.cache_write_tokens,
-        )
 
     return TrialReport(
         trial_name=record.trial_id,
         task_name=task_name,
         task_type=task_type,
-        reward=record.evaluation.reward,
+        reward=None if record.evaluation is None else record.evaluation.reward,
         tokens=tokens,
-        cost_usd=cost_usd or 0.0,
+        cost_usd=cost_usd,
         turns_used=coerce_int(agent_result.get("turns_used")),
         max_turns=coerce_int(agent_result.get("max_turns")),
         duration_sec=record.timing.agent_seconds or record.timing.total_seconds,
@@ -135,7 +131,7 @@ def build_experiment_report(
     summaries = {
         task_type: _summarize_task_type(task_type, task_trials) for task_type, task_trials in sorted(by_type.items())
     }
-    completed_trials = [trial for trial in trials if not trial.has_error]
+    rewards = [trial.reward for trial in trials if trial.reward is not None]
     started_at = min(record.timestamp for record in records)
     finished_at = max(record.timestamp + timedelta(seconds=record.timing.total_seconds) for record in records)
     first_record = records[0]
@@ -148,10 +144,10 @@ def build_experiment_report(
         finished_at=finished_at.isoformat(),
         trials=trials,
         by_task_type=summaries,
-        overall_mean_reward=(
-            sum(trial.reward for trial in completed_trials) / len(completed_trials) if completed_trials else 0.0
-        ),
-        total_cost_usd=sum(trial.cost_usd for trial in trials),
+        n_evaluated=len(rewards),
+        n_unevaluated=len(trials) - len(rewards),
+        overall_mean_reward=sum(rewards) / len(rewards) if rewards else None,
+        total_cost_usd=summarize_cost_values([trial.cost_usd for trial in trials])["total_cost_usd"],
         behavioral=behavioral,
     )
 
@@ -163,8 +159,10 @@ def experiment_report_to_dict(report: ExperimentReport) -> dict[str, Any]:
         "model_name": report.model_name,
         "started_at": report.started_at,
         "finished_at": report.finished_at,
-        "overall_mean_reward": round(report.overall_mean_reward, 4),
-        "total_cost_usd": round(report.total_cost_usd, 4),
+        "n_evaluated": report.n_evaluated,
+        "n_unevaluated": report.n_unevaluated,
+        "overall_mean_reward": round(report.overall_mean_reward, 4) if report.overall_mean_reward is not None else None,
+        "total_cost_usd": round(report.total_cost_usd, 4) if report.total_cost_usd is not None else None,
         "by_task_type": {task_type: asdict(summary) for task_type, summary in report.by_task_type.items()},
         "trials": [_trial_to_flat_dict(trial) for trial in report.trials],
     }
@@ -176,42 +174,29 @@ def experiment_report_to_dict(report: ExperimentReport) -> dict[str, Any]:
 def _summarize_task_type(task_type: str, trials: Sequence[TrialReport]) -> TaskTypeSummary:
     completed = [trial for trial in trials if not trial.has_error]
     n_completed = len(completed)
-    if n_completed == 0:
-        return TaskTypeSummary(
-            task_type=task_type,
-            n_trials=len(trials),
-            n_completed=0,
-            mean_reward=0.0,
-            n_perfect=0,
-            n_partial=0,
-            n_zero=0,
-            mean_turns=0.0,
-            pct_hit_max=0.0,
-            total_cost_usd=sum(trial.cost_usd for trial in trials),
-            mean_input_tokens=0.0,
-            mean_output_tokens=0.0,
-            mean_cache_read_tokens=0.0,
-        )
-
-    rewards = [trial.reward for trial in completed]
+    rewards = [trial.reward for trial in trials if trial.reward is not None]
     n_perfect = sum(1 for reward in rewards if reward >= 1.0)
     n_zero = sum(1 for reward in rewards if reward <= 0.0)
-    n_partial = n_completed - n_perfect - n_zero
+    n_partial = len(rewards) - n_perfect - n_zero
     n_hit_max = sum(1 for trial in completed if trial.max_turns > 0 and trial.turns_used >= trial.max_turns)
     return TaskTypeSummary(
         task_type=task_type,
         n_trials=len(trials),
         n_completed=n_completed,
-        mean_reward=sum(rewards) / n_completed,
+        n_evaluated=len(rewards),
+        n_unevaluated=len(trials) - len(rewards),
+        mean_reward=sum(rewards) / len(rewards) if rewards else None,
         n_perfect=n_perfect,
         n_partial=n_partial,
         n_zero=n_zero,
-        mean_turns=sum(trial.turns_used for trial in completed) / n_completed,
-        pct_hit_max=n_hit_max / n_completed * 100,
-        total_cost_usd=sum(trial.cost_usd for trial in trials),
-        mean_input_tokens=(sum(trial.tokens.input_tokens for trial in completed) / n_completed),
-        mean_output_tokens=(sum(trial.tokens.output_tokens for trial in completed) / n_completed),
-        mean_cache_read_tokens=(sum(trial.tokens.cache_read_tokens for trial in completed) / n_completed),
+        mean_turns=sum(trial.turns_used for trial in completed) / n_completed if completed else 0.0,
+        pct_hit_max=n_hit_max / n_completed * 100 if completed else 0.0,
+        total_cost_usd=summarize_cost_values([trial.cost_usd for trial in trials])["total_cost_usd"],
+        mean_input_tokens=sum(trial.tokens.input_tokens for trial in completed) / n_completed if completed else 0.0,
+        mean_output_tokens=sum(trial.tokens.output_tokens for trial in completed) / n_completed if completed else 0.0,
+        mean_cache_read_tokens=sum(trial.tokens.cache_read_tokens for trial in completed) / n_completed
+        if completed
+        else 0.0,
     )
 
 
@@ -229,7 +214,7 @@ def _trial_to_flat_dict(
         "output_tokens": trial.tokens.output_tokens,
         "cache_read_tokens": trial.tokens.cache_read_tokens,
         "cache_write_tokens": trial.tokens.cache_write_tokens,
-        "cost_usd": round(trial.cost_usd, 6),
+        "cost_usd": round(trial.cost_usd, 6) if trial.cost_usd is not None else None,
         "turns_used": trial.turns_used,
         "max_turns": trial.max_turns,
         "duration_sec": round(trial.duration_sec, 2),
@@ -299,10 +284,14 @@ def _behavioral_str(payload: object, key: str) -> str | None:
 
 
 def _has_error(record: TrialRecord) -> bool:
-    agent_output = record.outputs.agent_output
+    if record.execution_status in {ExecutionStatus.FAILED, ExecutionStatus.CANCELLED, ExecutionStatus.INVALID}:
+        return True
+    if record.output is None:
+        return False
+    agent_output = record.output.agent_output
     if agent_output is not None and agent_output.status is AgentOutputStatus.FAILED:
         return True
-    agent_result = record.outputs.agent_result or {}
+    agent_result = record.output.agent_result or {}
     if agent_result.get("provider_error"):
         return True
     harbor_status = agent_result.get("harbor_status")

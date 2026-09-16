@@ -19,6 +19,8 @@ from pathlib import Path
 from typing import BinaryIO
 
 from aec_bench.prime_agent.events import PrimeEvents, PrimeEventStreamError, parse_prime_events
+from aec_bench.prime_agent.spawn_hook import install_prime_spawn_hook, prime_spawn_extension
+from aec_bench.prime_agent.trajectory import write_prime_trajectory
 
 PRIME_AGENT_TESTED_VERSION = "0.7.0"
 _VERSION_PATTERN = re.compile(r"(?<!\d)(\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?)")
@@ -108,6 +110,8 @@ def build_prime_command(
         str(session_dir),
         "--no-skills",
         "--no-extensions",
+        "--extension",
+        str(prime_spawn_extension(session_dir)),
         "--no-prompt-templates",
         "--no-themes",
         "--no-context-files",
@@ -327,6 +331,7 @@ def run_prime_agent(
     paths.state_dir.mkdir(parents=True, exist_ok=True)
     paths.session_dir.mkdir(parents=True, exist_ok=True)
     env = _prime_environment(paths, environment)
+    install_prime_spawn_hook(paths.session_dir, env)
     prime_version = _prime_version(resolved_executable, workspace=resolved_workspace, environment=env)
     command = build_prime_command(
         executable=resolved_executable,
@@ -405,6 +410,7 @@ def run_prime_agent(
     finished_at = datetime.now(UTC)
     elapsed_seconds = time.monotonic() - started_monotonic
     redact_prime_session_artifacts(paths, env)
+    write_prime_trajectory(paths.session_dir, resolved_workspace / "trajectory.jsonl")
 
     parsed_events: PrimeEvents | None = None
     parser_error: str | None = None

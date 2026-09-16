@@ -5,7 +5,10 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import Callable
 from datetime import UTC, datetime
+from threading import Lock
+from uuid import uuid4
 
 type JsonObject = dict[str, object]
 
@@ -22,13 +25,64 @@ class TrajectoryWriter:
     agent process is killed before close() is called.
     """
 
-    def __init__(self, path: str = "/workspace/trajectory.jsonl") -> None:
-        self._path = path
+    def __init__(
+        self,
+        path: str = "/workspace/trajectory.jsonl",
+        *,
+        _sink: Callable[[JsonObject], None] | None = None,
+    ) -> None:
         self._step: int = 0
         self._call_type: str | None = None
         self._meta_harness_context: JsonObject | None = None
         self._seen_system_hash: str | None = None
-        self._file = open(path, "w", encoding="utf-8")  # noqa: SIM115
+        self._file = open(path, "w", encoding="utf-8") if _sink is None else None  # noqa: SIM115
+        self._lock = Lock()
+        self._sink = self._append if _sink is None else _sink
+
+    def subagent(
+        self,
+        *,
+        parent_tool_call_id: str | None,
+        agent_name: str,
+        model_name: str | None,
+        trajectory_id: str | None = None,
+    ) -> TrajectoryWriter:
+        """Bind a child trace to its calling tool, with independent steps and shared storage.
+
+        Capture the parent context now so concurrent children cannot replace
+        each other's attribution. The file lock protects complete JSONL writes.
+        """
+        if not agent_name or parent_tool_call_id == "" or model_name == "" or trajectory_id == "":
+            raise ValueError("subagent identity values must not be empty")
+        trajectory_id = trajectory_id or str(uuid4())
+        context: JsonObject = {"role": "subagent", "step": self._step}
+        if self._call_type is not None:
+            context["call_type"] = self._call_type
+        if self._meta_harness_context is not None:
+            context["meta_harness"] = dict(self._meta_harness_context)
+
+        def record(entry: JsonObject) -> None:
+            self._sink(
+                {
+                    **context,
+                    "timestamp": entry["timestamp"],
+                    "subagent": {
+                        "trajectory_id": trajectory_id,
+                        "parent_tool_call_id": parent_tool_call_id,
+                        "agent_name": agent_name,
+                        "model_name": model_name,
+                        "entry": entry,
+                    },
+                }
+            )
+
+        return TrajectoryWriter(_sink=record)
+
+    def append_entry(self, entry: JsonObject) -> None:
+        """Append a normalised external entry, retaining its source step and timestamp."""
+        preserved = dict(entry)
+        preserved.setdefault("timestamp", None)
+        self._write(preserved)
 
     # ------------------------------------------------------------------
     # Step management
@@ -65,15 +119,47 @@ class TrajectoryWriter:
         """Write a user-role entry at step 0."""
         self._write({"role": "user", "step": 0, "content": content})
 
-    def thinking(self, content: str) -> None:
-        """Write an assistant (thinking) entry at the current step."""
+    def assistant(self, content: str) -> None:
+        """Write ordinary assistant text at the current step."""
         self._write({"role": "assistant", "step": self._step, "content": content})
+
+    def reasoning(
+        self,
+        content: str,
+        *,
+        provider_name: str | None = None,
+        part_id: str | None = None,
+        has_signature: bool = False,
+    ) -> None:
+        """Record exposed thinking and the presence of opaque data, without copying that data."""
+        self._write(
+            {
+                "role": "reasoning",
+                "step": self._step,
+                "reasoning": {
+                    "content": content,
+                    "provider_name": provider_name,
+                    "part_id": part_id,
+                    "has_signature": has_signature,
+                },
+            }
+        )
+
+    def model_response(self, response: JsonObject) -> None:
+        """Record the model identity and available usage once for this response."""
+        self._write({"role": "model_response", "step": self._step, "model_response": response})
+
+    def error(self, content: str) -> None:
+        """Record a failed invocation without inventing a model response."""
+        self._write({"role": "error", "step": self._step, "content": content})
 
     def tool_call(
         self,
         tool_name: str,
         command: str,
         arguments: JsonObject | None = None,
+        tool_call_id: str | None = None,
+        metadata: JsonObject | None = None,
     ) -> None:
         """Write a tool_call entry at the current step."""
         entry: JsonObject = {
@@ -84,6 +170,10 @@ class TrajectoryWriter:
         }
         if arguments is not None:
             entry["arguments"] = arguments
+        if tool_call_id is not None:
+            entry["tool_call_id"] = tool_call_id
+        if metadata is not None:
+            entry["metadata"] = metadata
         self._write(entry)
 
     _SUMMARY_LIMIT: int = 200
@@ -98,6 +188,7 @@ class TrajectoryWriter:
         media: list[str] | None = None,
         metadata: JsonObject | None = None,
         output_summary: str | None = None,
+        tool_call_id: str | None = None,
     ) -> None:
         """Write a tool_result entry at the current step."""
         entry: JsonObject = {
@@ -110,6 +201,8 @@ class TrajectoryWriter:
         }
         if duration_ms is not None:
             entry["duration_ms"] = duration_ms
+        if tool_call_id is not None:
+            entry["tool_call_id"] = tool_call_id
         if media is not None:
             entry["media"] = media
         if metadata is not None:
@@ -126,9 +219,11 @@ class TrajectoryWriter:
     # ------------------------------------------------------------------
 
     def close(self) -> None:
-        """Flush and close the underlying file handle."""
-        self._file.flush()
-        self._file.close()
+        """Close the owned file; child writers share the parent's file lifecycle."""
+        if self._file is not None:
+            with self._lock:
+                self._file.flush()
+                self._file.close()
 
     # ------------------------------------------------------------------
     # Internal
@@ -142,6 +237,12 @@ class TrajectoryWriter:
             entry["call_type"] = self._call_type
         if self._meta_harness_context is not None and is_active_step:
             entry["meta_harness"] = dict(self._meta_harness_context)
-        entry["timestamp"] = _now_utc_iso()
-        self._file.write(json.dumps(entry, ensure_ascii=False) + "\n")
-        self._file.flush()
+        entry.setdefault("timestamp", _now_utc_iso())
+        self._sink(entry)
+
+    def _append(self, entry: JsonObject) -> None:
+        assert self._file is not None
+        line = json.dumps(entry, ensure_ascii=False) + "\n"
+        with self._lock:
+            self._file.write(line)
+            self._file.flush()

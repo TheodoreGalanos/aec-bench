@@ -1,13 +1,15 @@
-# ABOUTME: Provides semantic inspection commands for published evaluation regimes.
-# ABOUTME: Resolves exact regime artifacts and reports policy changes by field path.
+# ABOUTME: Provides evaluation regime inspection and recorded-trial regrading commands.
+# ABOUTME: Keeps verifier-only assessments separate from execution records and costs.
 
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
 from typing import Any
 
 import typer
 
+from aec_bench.cli.optional_dependencies import require_optional_extra
 from aec_bench.cli.output import console, emit
 from aec_bench.evaluation.regime import (
     diff_evaluation_regimes,
@@ -16,9 +18,78 @@ from aec_bench.evaluation.regime import (
 )
 from aec_bench.ledger.artifact_repository import ArtifactRepository
 
-app = typer.Typer(help="Inspect evaluation contracts.", no_args_is_help=True)
+app = typer.Typer(help="Inspect evaluation contracts and regrade recorded trials.", no_args_is_help=True)
 regime_app = typer.Typer(help="Inspect published evaluation regimes.", no_args_is_help=True)
 app.add_typer(regime_app, name="regime")
+
+
+@app.command("regrade")
+def regrade(
+    source_trial: Path = typer.Argument(..., help="Finished local Harbor trial directory."),
+    task: Path = typer.Option(..., "--task", help="Revised public task with a separate artifact-only verifier."),
+    output: Path = typer.Option(..., "--output", "-o", help="New directory for the assessment and retained inputs."),
+    backend: str = typer.Option(
+        "docker", "--backend", help="Harbor verifier environment type, for example docker or modal."
+    ),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Check input structure without starting an environment."),
+) -> None:
+    """Run a revised verifier against recorded artifacts without rerunning the agent."""
+    require_optional_extra("Harbor regrading", "execution", ("harbor",))
+    from harbor.models.trial.config import EnvironmentConfig  # type: ignore[import-untyped]
+    from harbor.models.trial.result import TrialResult  # type: ignore[import-untyped]
+    from harbor.trial.regrade import RegradeError  # type: ignore[import-untyped]
+
+    from aec_bench.harness.harbor_regrade import plan_regrade, run_regrade
+
+    try:
+        config = plan_regrade(
+            source_trial=source_trial,
+            task_dir=task,
+            output_dir=output,
+            environment=EnvironmentConfig(type=backend),
+        )
+        if dry_run:
+            emit(
+                "evaluation regrade",
+                {
+                    "dry_run": True,
+                    "source_trial": str(source_trial.resolve()),
+                    "task": str(task.resolve()),
+                    "output": str(config.trials_dir),
+                    "backend": backend,
+                    "agent_rerun": False,
+                    "validation": "Input structure checked. Harbor checks artifact coverage before verification.",
+                },
+            )
+            return
+        result = asyncio.run(run_regrade(config))
+        original = TrialResult.model_validate_json(
+            (config.trials_dir / "source" / "result.json").read_text(encoding="utf-8")
+        )
+    except (OSError, ValueError, RegradeError) as error:
+        raise typer.BadParameter(str(error)) from error
+
+    failed = result.exception_info is not None or result.verifier_result is None
+    error_message = (
+        result.exception_info.exception_message
+        if result.exception_info
+        else "Harbor returned no verifier result."
+        if failed
+        else None
+    )
+    emit(
+        "evaluation regrade",
+        {
+            "status": "failed" if failed else "completed",
+            "source_trial_id": str(original.id),
+            "result": str(config.trials_dir / "verification" / "result.json"),
+            "original_rewards": original.verifier_result.rewards if original.verifier_result else None,
+            "rewards": result.verifier_result.rewards if result.verifier_result and not failed else None,
+            "agent_rerun": False,
+            "error": error_message,
+        },
+        errors=[error_message] if error_message else None,
+    )
 
 
 @regime_app.command("show")

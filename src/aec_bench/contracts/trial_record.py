@@ -339,6 +339,20 @@ class TimingRecord(FrozenStrictModel):
     verification_seconds: NonNegativeFloat | None = None
 
 
+class ModelUsageRecord(FrozenStrictModel):
+    """Usage attributed to one exact model identity; absent values remain unknown."""
+
+    tokens_in: NonNegativeInt | None = None
+    tokens_out: NonNegativeInt | None = None
+    cache_read_tokens: NonNegativeInt | None = None
+    reported_cost_usd: NonNegativeFloat | None = Field(default=None, allow_inf_nan=False)
+    estimated_cost_usd: NonNegativeFloat | None = Field(default=None, allow_inf_nan=False)
+
+    @property
+    def cost_usd(self) -> float | None:
+        return self.reported_cost_usd if self.reported_cost_usd is not None else self.estimated_cost_usd
+
+
 class CostRecord(FrozenStrictModel):
     model_calls: NonNegativeInt | None = None
     tokens_in: NonNegativeInt | None = None
@@ -346,6 +360,7 @@ class CostRecord(FrozenStrictModel):
     cache_read_tokens: NonNegativeInt | None = None
     cache_write_tokens: NonNegativeInt | None = None
     estimated_cost_usd: NonNegativeFloat | None = None
+    model_usage: dict[NonEmptyStr, ModelUsageRecord] | None = None
     advisor_calls: NonNegativeInt | None = None
     advisor_input_tokens: NonNegativeInt | None = None
     advisor_output_tokens: NonNegativeInt | None = None

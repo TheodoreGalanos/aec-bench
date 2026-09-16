@@ -28,9 +28,21 @@ inventory names them.
 | `aec_bench.evolution` | Supported | `CandidateChecks`, `CandidateProposal`, `CandidateProposalRequest`, `ProposalStatus`, `ReportWriter`, `build_avo`, `build_local_checks`, `gate_candidate`, `next_evolution_state`, `run_evolution`, `run_evolution_from_config` | `tests/test_public_api_inventory.py`, `tests/evolution/test_core.py` |
 | `aec_bench.experimentation.meta_harness` | Supported | `run_harness_study` | `tests/test_public_api_inventory.py`, `tests/experimentation/test_meta_harness.py` |
 | `aec_bench.adapters.deepseek_harness` | Experimental | `DeepSeekHarnessAdapter` | `tests/test_public_api_inventory.py`, `tests/deepseek_harness/test_sdk_integration.py` |
+| `aec_bench.harness.harbor_workflow` | Experimental | `SynchronousHarborWorkflow`, `HarborWorkflowResult` | `tests/test_public_api_inventory.py`, `tests/harness/test_harbor_workflow.py` |
+| `aec_bench.harness.harbor_runtime` | Experimental | `HarborExperimentRuntime` | `tests/test_public_api_inventory.py`, `tests/harness/test_harbor_runtime.py` |
+| `aec_bench.harness.progress_tracker` | Experimental | `HarborTrialProgress`, `WorkflowProgressSnapshot` | `tests/test_public_api_inventory.py`, `tests/harness/test_harbor_job.py` |
 
 The experimental entries are documented and tested, but their interfaces may
 change with a clear changelog entry.
+
+The Harbor workflow and runtime imports require the `execution` extra. Their
+callbacks support trial progress and completion after ledger import; see the
+[usage example](../README.md#harbor-concurrency-and-completion-callbacks).
+
+Evolution runner exports, including `run_evolution`, require the `evolution`
+extra. Importing `aec_bench.evolution` alone does not load those optional
+dependencies. Inventory checks verify the declared export targets when the
+extra is absent and resolve the exports at runtime when it is installed.
 
 The `aec_bench.experimentation.meta_harness` entry is the runtime-neutral
 functional composition API used by the documented candidate study workflow.

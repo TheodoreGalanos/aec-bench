@@ -9,6 +9,16 @@ from pathlib import Path
 from aec_bench.trajectory.writer import TrajectoryWriter
 
 
+def test_imported_entry_does_not_invent_a_source_timestamp(tmp_path: Path) -> None:
+    path = tmp_path / "trajectory.jsonl"
+    original: dict[str, object] = {"role": "user", "step": 0, "content": "Question"}
+    writer = TrajectoryWriter(str(path))
+    writer.append_entry(original)
+    writer.close()
+    assert json.loads(path.read_text())["timestamp"] is None
+    assert "timestamp" not in original
+
+
 def read_jsonl(path: Path) -> list[dict]:
     """Parse all JSONL lines from the given path."""
     lines = path.read_text(encoding="utf-8").strip().splitlines()
@@ -93,34 +103,34 @@ def test_system_and_user_both_write_at_step_zero_before_new_step(tmp_path: Path)
 
 
 # ---------------------------------------------------------------------------
-# thinking()
+# assistant()
 # ---------------------------------------------------------------------------
 
 
-def test_thinking_writes_assistant_role_at_current_step(tmp_path: Path) -> None:
+def test_assistant_writes_assistant_role_at_current_step(tmp_path: Path) -> None:
     out = tmp_path / "t.jsonl"
     writer = TrajectoryWriter(str(out))
     writer.new_step()
-    writer.thinking("I need to look up the cable table.")
+    writer.assistant("I need to look up the cable table.")
     writer.close()
 
     entries = read_jsonl(out)
-    thinking_entry = next(e for e in entries if e.get("role") == "assistant")
-    assert thinking_entry["step"] == 1
-    assert thinking_entry["content"] == "I need to look up the cable table."
+    assistant_entry = next(e for e in entries if e.get("role") == "assistant")
+    assert assistant_entry["step"] == 1
+    assert assistant_entry["content"] == "I need to look up the cable table."
 
 
-def test_thinking_at_step_two(tmp_path: Path) -> None:
+def test_assistant_at_step_two(tmp_path: Path) -> None:
     out = tmp_path / "t.jsonl"
     writer = TrajectoryWriter(str(out))
     writer.new_step()
     writer.new_step()
-    writer.thinking("Second turn reasoning.")
+    writer.assistant("Second turn reasoning.")
     writer.close()
 
     entries = read_jsonl(out)
-    thinking_entry = next(e for e in entries if e.get("role") == "assistant")
-    assert thinking_entry["step"] == 2
+    assistant_entry = next(e for e in entries if e.get("role") == "assistant")
+    assert assistant_entry["step"] == 2
 
 
 # ---------------------------------------------------------------------------
@@ -230,7 +240,7 @@ def test_full_turn_sequence_ordering(tmp_path: Path) -> None:
     writer.system("You are an engineer.")
     writer.user("Size the cable for 20 A at 100 m.")
     writer.new_step()
-    writer.thinking("I will use the voltage-drop formula.")
+    writer.assistant("I will use the voltage-drop formula.")
     writer.tool_call("bash", "run_command", {"cmd": "python size_cable.py"})
     writer.tool_result("bash", stdout="4 mm²\n", exit_code=0, duration_ms=130)
     writer.close()
@@ -262,7 +272,7 @@ def test_all_entries_have_utc_iso8601_z_timestamp(tmp_path: Path) -> None:
     writer.system("sys")
     writer.user("usr")
     writer.new_step()
-    writer.thinking("think")
+    writer.assistant("think")
     writer.tool_call("bash", "cmd")
     writer.tool_result("bash", stdout="out")
     writer.close()
@@ -296,7 +306,7 @@ def test_multiple_writes_flushed_before_close(tmp_path: Path) -> None:
     writer.system("sys")
     writer.user("usr")
     writer.new_step()
-    writer.thinking("think")
+    writer.assistant("think")
 
     # Read without closing
     entries = read_jsonl(out)
@@ -312,13 +322,13 @@ def test_meta_harness_context_tracks_current_program_node(tmp_path: Path) -> Non
     writer = TrajectoryWriter(str(out))
     writer.set_meta_harness_context({"program_node_id": "node.first"})
     writer.new_step()
-    writer.thinking("first")
+    writer.assistant("first")
     writer.set_meta_harness_context({"program_node_id": "node.second"})
     writer.new_step()
-    writer.thinking("second")
+    writer.assistant("second")
     writer.set_meta_harness_context(None)
     writer.new_step()
-    writer.thinking("outside program")
+    writer.assistant("outside program")
     writer.close()
 
     entries = [entry for entry in read_jsonl(out) if entry.get("role") == "assistant"]
@@ -393,7 +403,7 @@ def test_new_step_with_call_type_tags_entries(tmp_path: Path) -> None:
     out = tmp_path / "t.jsonl"
     writer = TrajectoryWriter(str(out))
     writer.new_step(call_type="warmup")
-    writer.thinking("Cache priming.")
+    writer.assistant("Cache priming.")
     writer.tool_call("bash", "echo hi")
     writer.tool_result("bash", stdout="hi")
     writer.close()
@@ -408,7 +418,7 @@ def test_new_step_without_call_type_omits_field(tmp_path: Path) -> None:
     out = tmp_path / "t.jsonl"
     writer = TrajectoryWriter(str(out))
     writer.new_step()
-    writer.thinking("Normal reasoning.")
+    writer.assistant("Normal reasoning.")
     writer.close()
 
     entries = read_jsonl(out)
@@ -420,9 +430,9 @@ def test_call_type_resets_between_steps(tmp_path: Path) -> None:
     out = tmp_path / "t.jsonl"
     writer = TrajectoryWriter(str(out))
     writer.new_step(call_type="warmup")
-    writer.thinking("Warmup thinking.")
+    writer.assistant("Warmup thinking.")
     writer.new_step()  # no call_type
-    writer.thinking("Normal thinking.")
+    writer.assistant("Normal thinking.")
     writer.close()
 
     entries = read_jsonl(out)

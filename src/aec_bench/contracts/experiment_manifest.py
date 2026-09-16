@@ -49,6 +49,16 @@ class AgentConfig(StrictModel):
     parameters: dict[str, Any] = Field(default_factory=dict)
     system_prompt: str | None = None
     system_prompt_file: str | None = None
+    n_concurrent: int | None = Field(default=None, ge=1, strict=True, exclude_if=lambda value: value is None)
+    concurrency_group: NonEmptyStr | None = Field(default=None, exclude_if=lambda value: value is None)
+
+    @model_validator(mode="after")
+    def validate_concurrency(self) -> "AgentConfig":
+        if self.concurrency_group is not None and self.n_concurrent is None:
+            raise ValueError("concurrency_group requires n_concurrent")
+        if {"n_concurrent", "concurrency_group"} & self.parameters.keys():
+            raise ValueError("n_concurrent and concurrency_group belong on the agent configuration, not parameters")
+        return self
 
     @model_validator(mode="after")
     def validate_system_prompt_source(self) -> "AgentConfig":
@@ -108,6 +118,7 @@ class AgentCondition(FrozenStrictModel):
 
 class ComputeConfig(StrictModel):
     backend: NonEmptyStr
+    stream: bool = False
     resource_limits: dict[str, Any] = Field(default_factory=dict)
     timeout_override: PositiveInt | None = None
 
@@ -146,6 +157,21 @@ class ExperimentManifest(StrictModel):
     repetitions: PositiveInt = 1
     disable_verification: bool = False
     reviewer: ReviewerConfig | None = None
+
+    @model_validator(mode="after")
+    def validate_agent_concurrency(self) -> "ExperimentManifest":
+        job_limit = int(self.compute.resource_limits.get("n_concurrent_trials", 1))
+        groups: dict[str, int] = {}
+        for agent in self.agents:
+            if agent.n_concurrent is None:
+                continue
+            if agent.n_concurrent > job_limit:
+                raise ValueError("agent n_concurrent cannot exceed compute.resource_limits.n_concurrent_trials")
+            if agent.concurrency_group is not None:
+                previous = groups.setdefault(agent.concurrency_group, agent.n_concurrent)
+                if previous != agent.n_concurrent:
+                    raise ValueError("agents in a concurrency_group must use the same n_concurrent")
+        return self
 
     @field_validator("agents")
     @classmethod
