@@ -1,12 +1,14 @@
 # ABOUTME: Harbor dispatch boundary for manifest-driven experiment execution.
-# ABOUTME: Builds precise Harbor configs and can execute the Harbor CLI via an injected executor.
+# ABOUTME: Builds precise Harbor configs and executes the SDK runner via an injected executor.
 
 from __future__ import annotations
 
 import json
+import logging
 import os
 import subprocess
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
+from copy import deepcopy
 from dataclasses import dataclass, replace
 from datetime import datetime
 from pathlib import Path
@@ -14,8 +16,13 @@ from typing import Any, Protocol
 from uuid import UUID
 
 import yaml
+from harbor.agents.base import BaseAgent
+from harbor.agents.factory import AgentFactory  # type: ignore[import-untyped]
+from harbor.environments.factory import EnvironmentFactory  # type: ignore[import-untyped]
 from harbor.models.job.config import JobConfig  # type: ignore[import-untyped]
+from pydantic import ValidationError
 
+from aec_bench.adapters.runtime_limits import AdapterRuntimeLimitError
 from aec_bench.contracts.execution_environment import HarborEnvironmentBinding
 from aec_bench.contracts.experiment_manifest import AgentConfig, ExperimentManifest
 from aec_bench.contracts.identity import EntityIdentity
@@ -25,6 +32,7 @@ from aec_bench.contracts.task_definition import TaskDefinition
 from aec_bench.harness.compilation.task_snapshot import TaskSnapshotError, assert_task_snapshot_matches_directory
 from aec_bench.harness.execution_payload import ExecutionBundle, build_entrypoint_execution_bundle
 from aec_bench.harness.harbor_reconciliation import HarborTrialTransport, build_harbor_trial_transport
+from aec_bench.harness.progress_tracker import HarborTrialProgress, notify_observer
 from aec_bench.ledger.evidence_run_store import EvidenceRunStore
 from aec_bench.tasks.instance import ResolvedTaskInstance
 from aec_bench.tasks.selector import validate_execution_tasks
@@ -38,9 +46,44 @@ class HarborDispatchError(Exception):
 
 
 def validate_harbor_job_config(config: dict[str, Any]) -> dict[str, Any]:
-    """Validate one concrete config at the Harbor SDK boundary."""
+    """Check the SDK config, agent options, and resource policies without provisioning."""
 
-    JobConfig.model_validate(config)
+    try:
+        # Harbor's input validators can migrate fields in place. The caller owns
+        # the exact configuration that will be written and used for provenance.
+        job = JobConfig.model_validate(deepcopy(config))
+        if not job.agents or not (job.tasks or job.datasets or job.source_jobs):
+            raise ValueError("Harbor jobs require agents and tasks, datasets, or source jobs")
+        agents = [*job.agents, *([job.user_agent] if job.user_agent is not None else [])]
+        for agent in agents:
+            agent_class = AgentFactory.get_agent_class_from_config(agent)
+            if not issubclass(agent_class, BaseAgent):
+                raise ValueError("Harbor agent import_path must select a BaseAgent subclass")
+            if agent.import_path is not None:
+                imported_class = AgentFactory.get_agent_class_from_config(agent.model_copy(update={"name": None}))
+                if agent_class is not imported_class:
+                    raise ValueError(
+                        f"agent name {agent.name!r} overrides import_path {agent.import_path!r}; "
+                        "choose a condition name that does not select a Harbor built-in agent"
+                    )
+            duplicates = sorted({"logs_dir", "model_name", "logger", "extra_env"} & agent.kwargs.keys())
+            if duplicates:
+                raise ValueError("agent kwargs duplicate Harbor constructor arguments: " + ", ".join(duplicates))
+            AgentFactory.run_preflight(agent)
+        environment = job.environment
+        if environment.stream and (
+            environment.import_path is not None or environment.type not in {"docker", "daytona"}
+        ):
+            raise ValueError("Harbor stream requires the built-in docker or daytona environment")
+        EnvironmentFactory.validate_resource_policies(environment)
+    except ValidationError as error:
+        details = "; ".join(
+            f"{'.'.join(str(part) for part in item['loc']) or 'job'}: {item['msg']}"
+            for item in error.errors(include_url=False, include_input=False)
+        )
+        raise HarborDispatchError(f"invalid Harbor job configuration: {details}") from None
+    except (ValueError, TypeError, ImportError, AdapterRuntimeLimitError) as error:
+        raise HarborDispatchError(f"invalid Harbor job configuration: {error}") from error
     return config
 
 
@@ -68,13 +111,26 @@ class HarborCommandExecutor(Protocol):
     def execute(self, *, command: list[str], cwd: Path) -> int: ...
 
 
+@dataclass
 class SubprocessHarborExecutor:
+    progress_callback: Callable[[HarborTrialProgress], None] | None = None
+
     def execute(self, *, command: list[str], cwd: Path) -> int:
         env = dict(os.environ)
         existing_pythonpath = env.get("PYTHONPATH", "")
         env["PYTHONPATH"] = str(cwd) if not existing_pythonpath else f"{cwd}{os.pathsep}{existing_pythonpath}"
-        completed = subprocess.run(command, cwd=cwd, check=False, env=env)
-        return int(completed.returncode)
+        with subprocess.Popen(
+            command, cwd=cwd, env=env, stdout=subprocess.PIPE, text=True, encoding="utf-8"
+        ) as process:
+            assert process.stdout is not None
+            for line in process.stdout:
+                try:
+                    event = HarborTrialProgress.model_validate_json(line)
+                except ValueError:
+                    logging.getLogger(__name__).warning("Ignored invalid Harbor progress event")
+                    continue
+                notify_observer(self.progress_callback, event, label="Harbor progress")
+            return int(process.wait())
 
 
 def execute_harbor_config(
@@ -86,7 +142,17 @@ def execute_harbor_config(
 ) -> tuple[list[str], int | None]:
     """Execute one already-written Harbor configuration through the current effect boundary."""
 
-    command = ["uv", "run", "harbor", "run", "-c", str(config_path)]
+    source = Path(config_path)
+    if not source.is_absolute():
+        source = Path(project_root) / source
+    try:
+        config = yaml.safe_load(source.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, yaml.YAMLError) as error:
+        raise HarborDispatchError(f"cannot read Harbor job configuration: {config_path}") from error
+    if not isinstance(config, dict):
+        raise HarborDispatchError("Harbor job configuration must be a mapping")
+    validate_harbor_job_config(config)
+    command = ["uv", "run", "python", "-m", "aec_bench.harness.harbor_job", "-c", str(config_path)]
     if not execute:
         return command, None
     exit_code = (executor or SubprocessHarborExecutor()).execute(
@@ -110,6 +176,7 @@ def dispatch_harbor_config(
 ) -> HarborDispatchResult:
     """Write and optionally execute one validated Harbor configuration."""
 
+    validate_harbor_job_config(config)
     destination = Path(config_path)
     destination.parent.mkdir(parents=True, exist_ok=True)
     destination.write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
@@ -365,6 +432,8 @@ def build_harbor_job_config(
     environment_binding: HarborEnvironmentBinding | None = None,
     job_name: str | None = None,
 ) -> dict[str, Any]:
+    if manifest.compute.stream:
+        validate_execution_tasks(tasks)
     agents = [_harbor_agent_config(agent) for agent in manifest.agents]
     if manifest.compute.timeout_override is not None:
         for agent in agents:
@@ -379,6 +448,7 @@ def build_harbor_job_config(
         "environment": harbor_environment_config(
             manifest.compute.backend,
             environment_binding=environment_binding,
+            stream=manifest.compute.stream,
         ),
         "agents": agents,
         "datasets": [],
@@ -433,7 +503,10 @@ def harbor_environment_config(
     backend: str,
     *,
     environment_binding: HarborEnvironmentBinding | None = None,
+    stream: bool = False,
 ) -> dict[str, Any]:
+    if stream and (backend not in {"docker", "daytona"} or environment_binding is not None):
+        raise HarborDispatchError("Harbor stream requires the built-in docker or daytona environment")
     if environment_binding is not None:
         if environment_binding.backend != backend:
             raise HarborDispatchError(
@@ -449,6 +522,7 @@ def harbor_environment_config(
         raise HarborDispatchError(f"custom Harbor backend {backend!r} requires an environment binding")
     return {
         "type": backend,
+        **({"stream": True} if stream else {}),
         "force_build": False,
         "delete": True,
         "kwargs": {},
@@ -473,6 +547,8 @@ def _harbor_agent_config(agent: AgentConfig) -> dict[str, Any]:
         "name": agent.name,
         "import_path": _resolve_import_path(agent),
         "model_name": agent.model,
+        **({"n_concurrent": agent.n_concurrent} if agent.n_concurrent is not None else {}),
+        **({"concurrency_group": agent.concurrency_group} if agent.concurrency_group is not None else {}),
         "kwargs": kwargs,
     }
 

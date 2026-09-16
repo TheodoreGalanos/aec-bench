@@ -598,6 +598,12 @@ adapter runs. It contains validated entries only and has no version header or
 historical reader. Provider transcripts remain only where an external or
 sealed evidence workflow requires their exact representation.
 
+`trajectory` owns the dependency-free writer. Adapters and `prime_agent` use it
+to record explicit child invocations. The shared contract keeps each child's
+entries separate from the parent transcript. `harness/atif.py` owns conversion
+to Harbor's external format. This conversion does not own provider execution
+or canonical usage accounting.
+
 Immutability is a property of accepted evidence, published datasets, and other
 named records. It is not a requirement that every internal object, service, or
 source file become a ledger event.
@@ -626,13 +632,17 @@ provider-neutral execution model or a Prime-specific record authority.
 Provider errors, timeouts, missing output, and incomplete execution remain
 explicit failures. A transport cannot turn them into successful trials.
 
-DeepSeek Harness subagents are disabled. Before they can be enabled, the
-adapter must maintain one trial-scoped aggregate across the root session and
-all descendant sessions. This aggregate must cover model and tool calls,
-input, output, and cache tokens, and cost. The runtime must enforce a limit
-before the next affected operation, propagate cancellation to descendants,
-and retain complete child evidence. Root-session counters are not aggregate
-trial evidence.
+DeepSeek Harness delegation is an explicit adapter request parameter. The
+adapter composes the native in-process provider and foreground tool with a
+one-level depth limit. Children inherit the model and output-token cap. Tool
+filters reserve output commitment and AEC native actions for the root and
+remove further delegation. The worker process group owns timeout cleanup.
+An AEC-owned Cordis plugin uses public tool-execution and session-creation
+hooks to record the spawning call ID. It does not modify the installed SDK.
+The adapter retains the full session tree, exports child trajectories, and
+aggregates model/tool calls and reported input, output, and cache tokens.
+Shared cost calculation consumes those aggregate token counts. Root turn and
+completion counters remain separate. Unsupported limits are still rejected.
 
 The DeepSeek adapter owns its trial manifest, runtime-file redaction, and
 optional plugin copy. The execution entrypoint does not interpret that
@@ -677,7 +687,10 @@ exact bytes, not verifier success or reward.
 The separate `prime_agent` integration runs the upstream Prime Agent executable
 directly. JSON mode adapts staged artifact tasks on the existing local path.
 ACP mode owns the Prime process, protocol, isolation, explicit generic skills,
-and session evidence. `harness/world_actor` owns the provider-neutral,
+and session evidence. Both modes explicitly install AEC-Bench's Prime extension
+and IPython startup hook for spawn attribution inside the run workspace. The
+provider integration owns these hooks; the installed upstream package remains
+separate. `harness/world_actor` owns the provider-neutral,
 capability-scoped `aec-bench/world-actor/1` transport, semantic invocation
 authority, and standalone staged client. The endpoint routes only installed
 world actor calls and does not interpret world state. Prime owns only its skill

@@ -9,10 +9,12 @@ import subprocess
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
+from threading import Lock
 from typing import Any
 
 from pydantic_ai import RunContext
 from pydantic_ai.exceptions import UsageLimitExceeded
+from pydantic_ai.messages import ModelResponse
 from pydantic_ai.usage import RunUsage
 
 from aec_bench.adapters.advisor import AdvisorResult, default_advise
@@ -31,6 +33,7 @@ from aec_bench.adapters.tool_loop import (
     ToolLoopRequest,
 )
 from aec_bench.contracts.advisor import AdvisorConfig, AdvisorRequest
+from aec_bench.contracts.trajectory import TrajectoryModelResponse, TrajectoryUsage
 
 logger = logging.getLogger(__name__)
 
@@ -83,7 +86,13 @@ class PydanticAiAdvisorTool:
         """Return (calls_made, input_tokens, output_tokens)."""
         return self._usage.snapshot()
 
-    def call_with_messages(self, context_messages: list[dict[str, str]]) -> str:
+    def call_with_messages(
+        self,
+        context_messages: list[dict[str, str]],
+        *,
+        trajectory_writer: Any | None = None,
+        parent_tool_call_id: str | None = None,
+    ) -> str:
         """Invoke the advisor using an explicit transcript slice (Anthropic-style).
 
         Unlike ``__call__(goal, problem)``, this path mirrors Anthropic's native
@@ -93,6 +102,8 @@ class PydanticAiAdvisorTool:
         return self._invoke(
             request=AdvisorRequest(goal="", problem=""),
             context_messages=context_messages,
+            trajectory_writer=trajectory_writer,
+            parent_tool_call_id=parent_tool_call_id,
             adapter_context=(
                 "You are the advisor for an AI agent using bash tool calls to solve "
                 "an engineering task. Read the transcript above and give concise "
@@ -106,6 +117,8 @@ class PydanticAiAdvisorTool:
         request: AdvisorRequest,
         context_messages: list[dict[str, str]],
         adapter_context: str,
+        trajectory_writer: Any | None = None,
+        parent_tool_call_id: str | None = None,
     ) -> str:
         if self._usage.calls >= self._config.max_uses:
             return self._exhausted_response()
@@ -118,6 +131,8 @@ class PydanticAiAdvisorTool:
                 model=self._config.model,
                 max_response_tokens=self._config.max_response_tokens,
                 adapter_context=adapter_context,
+                trajectory_writer=trajectory_writer,
+                parent_tool_call_id=parent_tool_call_id,
             )
         except Exception:
             self._usage.mark_tokens_unknown()
@@ -238,7 +253,7 @@ def emit_pydantic_ai_messages_to_trajectory(
         if isinstance(message, ModelRequest):
             _emit_pydantic_ai_request(message.parts, writer)
         elif isinstance(message, ModelResponse):
-            _emit_pydantic_ai_response(message.parts, writer)
+            _emit_pydantic_ai_response(message, writer)
 
 
 def _emit_pydantic_ai_request(parts: Sequence[Any], writer: Any) -> None:
@@ -252,24 +267,59 @@ def _emit_pydantic_ai_request(parts: Sequence[Any], writer: Any) -> None:
             writer.user(str(part.content))
         elif isinstance(part, ToolReturnPart):
             output = "" if part.content is None else str(part.content)
-            writer.tool_result(tool_name=part.tool_name, stdout=output)
+            writer.tool_result(tool_name=part.tool_name, stdout=output, tool_call_id=part.tool_call_id)
 
 
-def _emit_pydantic_ai_response(parts: Sequence[Any], writer: Any) -> None:
+def _emit_pydantic_ai_response(message: ModelResponse, writer: Any) -> None:
     """Emit one PydanticAI response as a distinct trajectory step."""
-    from pydantic_ai.messages import TextPart, ToolCallPart
+    from pydantic_ai.messages import TextPart, ThinkingPart, ToolCallPart
 
     writer.new_step()
-    for part in parts:
+    # RequestUsage uses zero both for an absent count and for a reported zero.
+    # Preserve nonzero normalised counts; do not turn missing values into zeros.
+    usage = message.usage
+    response = TrajectoryModelResponse(
+        source="pydantic_ai",
+        model_name=message.model_name,
+        provider_name=message.provider_name,
+        response_id=message.provider_response_id,
+        usage=TrajectoryUsage(
+            input_tokens=usage.input_tokens or None,
+            output_tokens=usage.output_tokens or None,
+            cache_read_tokens=usage.cache_read_tokens or None,
+            cache_write_tokens=usage.cache_write_tokens or None,
+            details=dict(usage.details),
+        )
+        if usage.has_values()
+        else None,
+    )
+    writer.model_response(response.model_dump(mode="json", exclude_none=True))
+    for part in message.parts:
         if isinstance(part, TextPart) and part.content:
-            writer.thinking(part.content)
+            writer.assistant(part.content)
+        elif isinstance(part, ThinkingPart):
+            writer.reasoning(
+                part.content,
+                provider_name=part.provider_name or message.provider_name,
+                part_id=part.id,
+                has_signature=bool(part.signature),
+            )
         elif isinstance(part, ToolCallPart):
-            args = part.args if isinstance(part.args, dict) else {}
+            metadata = None
+            try:
+                args = part.args_as_dict()
+            except (ValueError, AssertionError):
+                # PydanticAI can retry malformed calls. Retain their payload
+                # without making trajectory emission abort that recovery.
+                args = {}
+                metadata = {"raw_arguments": part.args}
             command = args.get("command", "") if args else ""
             writer.tool_call(
                 tool_name=part.tool_name,
                 command=str(command),
-                arguments=args or None,
+                arguments=args,
+                tool_call_id=part.tool_call_id,
+                metadata=metadata,
             )
 
 
@@ -357,6 +407,8 @@ class PydanticAiToolLoopClient:
         self._model_name = model_name
         self._workspace = workspace
         self._trajectory_writer = trajectory_writer
+        self._trajectory_messages_seen = 0
+        self._trajectory_lock = Lock()
         self._stream_mode = stream_mode
 
         provider = resolve_pydantic_provider(model_name)
@@ -370,15 +422,17 @@ class PydanticAiToolLoopClient:
             retries=2,
             model_settings=model_settings,
             tools=list(native_tools or ()),
+            history_processors=[self._record_trajectory] if trajectory_writer is not None else [],
         )
         self._last_request_usages: tuple[tuple[int, int], ...] = ()
 
         if enable_bash:
             executor = BashToolExecutor(workspace=workspace)
 
-            @self._agent.tool_plain
-            def bash(command: str) -> str:
+            @self._agent.tool
+            def bash(ctx: RunContext[None], command: str) -> str:
                 """Execute a bash command in the workspace and return stdout/stderr."""
+                self._record_trajectory(list(ctx.messages))
                 result = executor.execute("bash", {"command": command})
                 if result.error_message:
                     return f"Error: {result.error_message}"
@@ -404,8 +458,11 @@ class PydanticAiToolLoopClient:
                 advice, suggested_action, confidence, reasoning.
                 """
                 assert self._advisor_tool is not None
+                self._record_trajectory(list(ctx.messages))
                 context = pydantic_ai_messages_to_advisor_context(list(ctx.messages))
-                return self._advisor_tool.call_with_messages(context)
+                return self._advisor_tool.call_with_messages(
+                    context, trajectory_writer=self._trajectory_writer, parent_tool_call_id=ctx.tool_call_id
+                )
 
         logger.info(
             "PydanticAI tool loop client: model=%s provider=%s cache=%s workspace=%s advisor=%s",
@@ -456,6 +513,8 @@ class PydanticAiToolLoopClient:
     def _run_agent(self, request: ToolLoopRequest) -> ToolLoopCompletionResponse:
         """Run the full agent loop — PydanticAI handles tool calls internally."""
         from pydantic_ai.usage import UsageLimits
+
+        self._trajectory_messages_seen = 0
 
         # Set system prompt
         self._agent._system_prompts = (request.system_prompt,) if request.system_prompt else ()  # noqa: SLF001
@@ -518,14 +577,7 @@ class PydanticAiToolLoopClient:
         self._last_request_usages = _pydantic_request_usages(result_messages)
         output_text = output if isinstance(output, str) else str(output)
 
-        if self._trajectory_writer is not None:
-            try:
-                emit_pydantic_ai_messages_to_trajectory(
-                    result_messages,
-                    self._trajectory_writer,
-                )
-            except Exception:
-                logger.warning("Failed to emit pydantic-ai messages to trajectory", exc_info=True)
+        self._record_trajectory(result_messages)
 
         return ToolLoopCompletionResponse(
             output_text=output_text,
@@ -544,6 +596,18 @@ class PydanticAiToolLoopClient:
                 default=0,
             ),
         )
+
+    def _record_trajectory(self, messages: list[Any]) -> list[Any]:
+        """Publish completed messages before requests and tool execution, without changing history."""
+        if self._trajectory_writer is not None:
+            # PydanticAI can run synchronous tools in parallel worker threads.
+            with self._trajectory_lock:
+                emit_pydantic_ai_messages_to_trajectory(
+                    messages[self._trajectory_messages_seen :],
+                    self._trajectory_writer,
+                )
+                self._trajectory_messages_seen = max(self._trajectory_messages_seen, len(messages))
+        return messages
 
 
 def _pydantic_request_usages(

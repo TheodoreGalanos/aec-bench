@@ -27,8 +27,8 @@ def summary(
 ) -> None:
     """Summarize experiment results.
 
-    Returns: n_trials, mean_reward, total_cost_usd, by_adapter breakdown
-    (n_trials, mean_reward per adapter).
+    Returns: n_trials, mean_reward, total_cost_usd, by_adapter, by_model_usage,
+    and n_trials_without_model_usage. Model costs distinguish reported and estimated values.
 
     Examples:
       aec-bench report summary --experiment-id exp-001
@@ -70,6 +70,27 @@ def summary(
                 )
 
             console.print(table)
+
+        by_model = d["by_model_usage"]
+        if by_model:
+            from rich.table import Table
+
+            table = Table(title="Model Usage (attributed usage only)")
+            for label in ("Model", "Trials", "Input", "Output", "Cache read", "Cost USD", "Reported / estimated"):
+                table.add_column(label)
+            for model, usage in by_model.items():
+                table.add_row(
+                    model,
+                    str(usage["n_trials"]),
+                    *(
+                        str(usage[key]) if usage[key] is not None else "Unknown"
+                        for key in ("tokens_in", "tokens_out", "cache_read_tokens")
+                    ),
+                    format_summary_cost(usage),
+                    f"{usage['n_reported_cost']} / {usage['n_estimated_cost']}",
+                )
+            console.print(table)
+        console.print(f"  Trials without model usage: {d['n_trials_without_model_usage']}")
 
     emit("report summary", result, start_time=start, human_renderer=_render)
 

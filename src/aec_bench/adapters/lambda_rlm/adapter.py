@@ -10,6 +10,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
+from uuid import uuid4
 
 if TYPE_CHECKING:
     from aec_bench.adapters.lambda_rlm.config import TemplateMeta
@@ -31,6 +32,7 @@ from aec_bench.adapters.lambda_rlm.state import PlanState
 from aec_bench.adapters.output_commit import configured_output_completion_commit, configured_output_completion_contract
 from aec_bench.adapters.rlm.client import RlmClient, RlmCompletionResponse, RlmMessage
 from aec_bench.adapters.runtime_limits import AdapterRuntimeLimitError, configured_positive_int
+from aec_bench.adapters.subagent_trajectory import record_subagent_call
 from aec_bench.contracts.adapter_execution import (
     TokenUsage,
     TranscriptEntry,
@@ -46,6 +48,7 @@ from aec_bench.templates.report.criteria import validate_rubric
 from aec_bench.templates.report.output import REPORT_OUTPUT_FORMATS, write_report
 from aec_bench.templates.report.session import ReportSession
 from aec_bench.templates.report.sources import contained_path
+from aec_bench.trajectory.writer import TrajectoryWriter
 
 _log = logging.getLogger(__name__)
 
@@ -68,12 +71,18 @@ class _TokenCountingClient:
         token_budget: int | None = None,
         instruction: str = "",
         system_prompt: str | None = None,
+        trajectory_writer: TrajectoryWriter | None = None,
+        parent_tool_call_id: str | None = None,
+        trajectory_agent_name: Callable[[], str] | None = None,
     ) -> None:
         self.model_clients: dict[str, RlmClient] = {}
         self._inner = inner
         self.token_budget = token_budget
         self.instruction = instruction
         self.system_prompt = system_prompt
+        self._trajectory_writer = trajectory_writer
+        self._parent_tool_call_id = parent_tool_call_id
+        self._trajectory_agent_name = trajectory_agent_name
         self.stop_error: Exception | None = None
         self.usage_known = True
         self.per_model: dict[str, dict[str, int]] = {}
@@ -118,12 +127,22 @@ class _TokenCountingClient:
         task_messages = [RlmMessage(role="user", content=self.instruction)] if self.instruction else []
         try:
             output_settings = {"max_output_tokens": max_output_tokens} if max_output_tokens is not None else {}
-            response = self.model_clients.get(model, self._inner).generate(
+            response = record_subagent_call(
+                lambda: self.model_clients.get(model, self._inner).generate(
+                    model=model,
+                    messages=task_messages + messages,
+                    system_prompt=policy or None,
+                    temperature=temperature,
+                    **output_settings,
+                ),
+                writer=self._trajectory_writer,
+                parent_tool_call_id=self._parent_tool_call_id,
+                agent_name=(
+                    self._trajectory_agent_name() if self._trajectory_agent_name is not None else "lambda_rlm:subcall"
+                ),
                 model=model,
                 messages=task_messages + messages,
                 system_prompt=policy or None,
-                temperature=temperature,
-                **output_settings,
             )
         except Exception as exc:
             with self._lock:
@@ -294,12 +313,17 @@ class LambdaRlmAdapter:
             self._config.token_budget,
             configured_positive_int(request.configuration, "token_budget") or self._config.token_budget,
         )
+        state = PlanState(estimated_calls=plan.total_estimated_calls)
+        plan_call_id = str(uuid4())
         counting_client = _TokenCountingClient(
             self._client,
             max_calls=max_turns,
             token_budget=token_budget,
             instruction=request.instruction,
             system_prompt=request.system_prompt,
+            trajectory_writer=self._traj,
+            parent_tool_call_id=plan_call_id,
+            trajectory_agent_name=lambda: f"lambda_rlm:{state.phase}",
         )
         if self._advisor_client is not None and self._advisor_config is not None:
             counting_client.model_clients[self._advisor_config.model] = self._advisor_client
@@ -319,13 +343,24 @@ class LambdaRlmAdapter:
             template_meta=self._template_meta,
             sandbox=self._sandbox,
         )
-        state = PlanState(estimated_calls=plan.total_estimated_calls)
         run_error: Exception | None = None
+        if self._traj is not None:
+            self._traj.new_step(call_type="main")
+            self._traj.tool_call("execute_plan", plan_summary, tool_call_id=plan_call_id)
         try:
             executor.execute(plan, state=state)
         except Exception as exc:
             run_error = exc
         run_error = counting_client.stop_error or run_error
+        if self._traj is not None:
+            self._traj.tool_result(
+                "execute_plan",
+                stdout=f"Executed {counting_client.calls_started} model calls",
+                stderr=type(run_error).__name__ if run_error is not None else "",
+                exit_code=1 if run_error is not None else 0,
+                tool_call_id=plan_call_id,
+                metadata={"phase": "execute_plan", "plan_state": state.snapshot()},
+            )
 
         state.llm_calls = counting_client.calls_started
         state.tokens_used = counting_client.total_input + counting_client.total_output

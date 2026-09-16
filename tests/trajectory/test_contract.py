@@ -34,6 +34,22 @@ def test_parse_assistant_entry() -> None:
     assert entry.timestamp == "2026-03-21T10:00:00.000Z"
 
 
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"role": "reasoning"},
+        {"role": "model_response"},
+        {"role": "assistant", "reasoning": {"content": "Mislabelled reasoning"}},
+        {"role": "model_response", "model_response": {"source": "pydantic_ai", "usage": {"input_tokens": -1}}},
+    ],
+)
+def test_response_entries_require_the_matching_valid_payload(payload: dict[str, object]) -> None:
+    from aec_bench.contracts.trajectory import TrajectoryEntry
+
+    with pytest.raises(ValidationError):
+        TrajectoryEntry.model_validate({"step": 1, **payload})
+
+
 def test_parse_tool_call_entry_all_fields() -> None:
     from aec_bench.contracts.trajectory import TrajectoryEntry
 
@@ -175,7 +191,7 @@ def test_round_trip_writer_to_read_trajectory(tmp_path: Path) -> None:
     writer.system("You are an engineer.")
     writer.user("Size the cable for 20 A at 100 m.")
     writer.new_step()
-    writer.thinking("I will use the voltage-drop formula.")
+    writer.assistant("I will use the voltage-drop formula.")
     writer.tool_call("bash", "run_command", {"cmd": "python size_cable.py"})
     writer.tool_result("bash", stdout="4 mm²\n", stderr="", exit_code=0, duration_ms=130)
     writer.close()
@@ -414,7 +430,7 @@ def test_trajectory_round_trip_preserves_typed_meta_harness_node_lineage(tmp_pat
     writer = TrajectoryWriter(str(out))
     writer.set_meta_harness_context(context.model_dump(mode="json"))
     writer.new_step()
-    writer.thinking("Execute the compiled calculation node.")
+    writer.assistant("Execute the compiled calculation node.")
     writer.close()
 
     entries = read_trajectory(out)

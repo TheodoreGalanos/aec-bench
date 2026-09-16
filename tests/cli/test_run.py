@@ -6,6 +6,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
 from typer.testing import CliRunner
 
 from aec_bench import worlds
@@ -95,6 +96,131 @@ def test_run_dry_run_reports_selected_backend(tmp_path: Path) -> None:
     assert result.exit_code == 0, result.output
     envelope = json.loads(result.output)
     assert envelope["data"]["backend"] == "modal"
+    assert envelope["data"]["stream"] is False
+
+
+@pytest.mark.parametrize("parameters", [{"max_turns": 0}, {"extra_env": {}}])
+@pytest.mark.parametrize("dry_run", [False, True])
+def test_run_rejects_invalid_agent_config_before_dispatch(
+    tmp_path: Path,
+    parameters: dict[str, object],
+    dry_run: bool,
+) -> None:
+    tasks_root = tmp_path / "tasks"
+    _write_minimal_task(tasks_root)
+    manifest_path = tmp_path / "experiment.json"
+    manifest_path.write_text(
+        json.dumps(
+            {
+                "experiment_id": "invalid-preflight",
+                "name": "Invalid preflight",
+                "tasks": {"include_patterns": ["electrical/*"]},
+                "agents": [
+                    {
+                        "name": "configured-agent",
+                        "adapter": "tool_loop",
+                        "model": "test-model",
+                        "parameters": parameters,
+                    }
+                ],
+                "compute": {"backend": "docker"},
+            }
+        ),
+        encoding="utf-8",
+    )
+    result = runner.invoke(
+        app,
+        [
+            "--json",
+            "run",
+            "--config",
+            str(manifest_path),
+            "--tasks-root",
+            str(tasks_root),
+            *(["--dry-run"] if dry_run else []),
+        ],
+    )
+
+    assert result.exit_code == 1, result.output
+    envelope = json.loads(result.output)
+    assert next(iter(parameters)) in str(envelope["errors"])
+    assert not (tmp_path / "jobs").exists()
+    assert not tuple(tmp_path.glob(".aec-bench-*.yaml"))
+
+
+@pytest.mark.parametrize("backend", ["docker", "daytona"])
+def test_run_stream_dry_run_selects_supported_backend(tmp_path: Path, backend: str) -> None:
+    tasks_root = tmp_path / "tasks"
+    task_dir = _write_minimal_task(tasks_root)
+    result = runner.invoke(
+        app,
+        [
+            "--json",
+            "run",
+            str(task_dir),
+            "--model",
+            "test-model",
+            "--tasks-root",
+            str(tasks_root),
+            "--backend",
+            backend,
+            "--stream",
+            "--dry-run",
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    assert json.loads(result.output)["data"]["stream"] is True
+
+
+@pytest.mark.parametrize("backend", ["modal", "morph"])
+def test_run_stream_rejects_unsupported_backend(tmp_path: Path, backend: str) -> None:
+    tasks_root = tmp_path / "tasks"
+    task_dir = _write_minimal_task(tasks_root)
+    result = runner.invoke(
+        app,
+        [
+            "--json",
+            "run",
+            str(task_dir),
+            "--model",
+            "test-model",
+            "--tasks-root",
+            str(tasks_root),
+            "--backend",
+            backend,
+            "--stream",
+            "--dry-run",
+        ],
+    )
+    assert "requires the built-in docker or daytona environment" in result.output
+    assert json.loads(result.output)["data"] is None
+
+
+@pytest.mark.parametrize(("flags", "expected"), [([], True), (["--no-stream"], False)])
+def test_run_config_stream_can_be_disabled(tmp_path: Path, flags: list[str], expected: bool) -> None:
+    tasks_root = tmp_path / "tasks"
+    _write_minimal_task(tasks_root)
+    config = tmp_path / "experiment.yaml"
+    config.write_text(
+        "experiment_id: live-trace\nname: Live trace\ntasks: {}\n"
+        "agents:\n  - name: test-agent\n    adapter: tool_loop\n    model: test-model\n"
+        "compute:\n  backend: docker\n  stream: true\n",
+    )
+    result = runner.invoke(
+        app,
+        [
+            "--json",
+            "run",
+            "--config",
+            str(config),
+            "--tasks-root",
+            str(tasks_root),
+            "--dry-run",
+            *flags,
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    assert json.loads(result.output)["data"]["stream"] is expected
 
 
 def test_run_dry_run_accepts_morph_backend(tmp_path: Path) -> None:
@@ -215,7 +341,8 @@ compute:
     assert envelope["data"]["selected_tasks"] == 1
 
 
-def test_run_dry_run_loads_world_task_from_dataset_entry(tmp_path: Path) -> None:
+@pytest.mark.parametrize("stream", [False, True])
+def test_run_dry_run_loads_world_task_from_dataset_entry(tmp_path: Path, stream: bool) -> None:
     tasks_root = tmp_path / "tasks"
     task_dir, task = _write_world_task(tasks_root)
     manifest = DatasetManifest(
@@ -253,9 +380,22 @@ compute:
 
     result = runner.invoke(
         app,
-        ["--json", "run", "--config", str(config), "--tasks-root", str(tasks_root), "--dry-run"],
+        [
+            "--json",
+            "run",
+            "--config",
+            str(config),
+            "--tasks-root",
+            str(tasks_root),
+            "--dry-run",
+            *(["--stream"] if stream else []),
+        ],
     )
 
+    if stream:
+        assert result.exit_code == 1
+        assert "Harbor stream currently supports artifact tasks only" in result.output
+        return
     assert result.exit_code == 0, result.output
     envelope = json.loads(result.output)
     assert envelope["data"]["selected_tasks"] == 1

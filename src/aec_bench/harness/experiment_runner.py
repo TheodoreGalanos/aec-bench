@@ -1,6 +1,7 @@
 # ABOUTME: Manifest-aware Harbor import orchestration for the Python harness boundary.
 # ABOUTME: Validates Harbor job artefacts against the planning contracts before ledger persistence.
 
+from collections import Counter
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -41,6 +42,7 @@ class ExperimentImportResult:
     unexpected_backends: list[str] = field(default_factory=list)
     output_paths: list[Path] = field(default_factory=list)
     ledger_paths: list[Path] = field(default_factory=list)
+    execution_status_counts: dict[str, int] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -203,6 +205,7 @@ class HarborImportExperimentRunner:
             unexpected_backends=unexpected_backends,
             output_paths=output_paths,
             ledger_paths=ledger_paths,
+            execution_status_counts=dict(Counter(record.execution_status.value for record in records)),
         )
 
     def _selected_tasks(self, manifest: ExperimentManifest) -> list[TaskDefinition]:

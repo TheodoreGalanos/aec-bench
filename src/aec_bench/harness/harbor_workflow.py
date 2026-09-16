@@ -18,6 +18,7 @@ from aec_bench.harness.harbor_dispatch import (
     HarborCommandExecutor,
     HarborDispatchResult,
     HarborExperimentDispatcher,
+    SubprocessHarborExecutor,
 )
 from aec_bench.harness.model_execution.llm_reviewer import (
     ReviewerJobResult,
@@ -25,7 +26,7 @@ from aec_bench.harness.model_execution.llm_reviewer import (
     reviewer_config_from_manifest,
     run_harbor_job_reviewer,
 )
-from aec_bench.harness.progress_tracker import WorkflowProgressSnapshot, WorkflowProgressTracker
+from aec_bench.harness.progress_tracker import WorkflowProgressSnapshot, WorkflowProgressTracker, notify_observer
 from aec_bench.harness.scheduler import select_manifest_tasks
 from aec_bench.tasks.registry import TaskRegistry
 from aec_bench.trials import plan_trials
@@ -67,6 +68,7 @@ class SynchronousHarborWorkflow:
         config_path: Path,
         executor: HarborCommandExecutor | None = None,
         progress_callback: Callable[[WorkflowProgressSnapshot], None] | None = None,
+        completion_callback: Callable[[HarborWorkflowResult], None] | None = None,
         reviewer_config: ReviewerRunConfig | None = None,
         record_transform: Callable[[TrialRecord], TrialRecord] | None = None,
         resolved_tasks: tuple[TaskDefinition, ...] | None = None,
@@ -86,6 +88,7 @@ class SynchronousHarborWorkflow:
             manifest=manifest,
             dispatched=dispatch,
             progress_callback=progress_callback,
+            completion_callback=completion_callback,
             reviewer_config=reviewer_config,
             record_transform=record_transform,
         )
@@ -96,6 +99,7 @@ class SynchronousHarborWorkflow:
         manifest: ExperimentManifest,
         dispatched: HarborDispatchOnlyResult,
         progress_callback: Callable[[WorkflowProgressSnapshot], None] | None = None,
+        completion_callback: Callable[[HarborWorkflowResult], None] | None = None,
         reviewer_config: ReviewerRunConfig | None = None,
         record_transform: Callable[[TrialRecord], TrialRecord] | None = None,
     ) -> HarborWorkflowResult:
@@ -148,12 +152,14 @@ class SynchronousHarborWorkflow:
                 invalid_trials=import_result.invalid_trials,
             ),
         )
-        return HarborWorkflowResult(
+        result = HarborWorkflowResult(
             dispatch=dispatched.dispatch,
             job_dir=job_dir,
             import_result=import_result,
             reviewer_result=reviewer_result,
         )
+        notify_observer(completion_callback, result, label="Harbor completion")
+        return result
 
     def dispatch_only(
         self,
@@ -213,7 +219,10 @@ class SynchronousHarborWorkflow:
             config_path=config_path,
             task_path_overrides=task_path_overrides,
             environment_binding=environment_binding,
-            executor=executor,
+            executor=executor
+            or SubprocessHarborExecutor(
+                progress_callback=lambda event: self._emit(progress_callback, progress_tracker.trial_event(event))
+            ),
             execute=True,
         )
         self._emit(
@@ -281,5 +290,4 @@ class SynchronousHarborWorkflow:
         progress_callback: Callable[[WorkflowProgressSnapshot], None] | None,
         snapshot: WorkflowProgressSnapshot,
     ) -> None:
-        if progress_callback is not None:
-            progress_callback(snapshot)
+        notify_observer(progress_callback, snapshot, label="Workflow progress")

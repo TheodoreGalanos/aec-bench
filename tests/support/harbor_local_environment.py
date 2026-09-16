@@ -56,6 +56,9 @@ class LocalFilesystemHarborEnvironment(BaseEnvironment):  # type: ignore[misc]
         context = self.environment_dir / "context"
         if context.is_dir():
             shutil.copytree(context, self._root / "workspace" / "context")
+        if (self.environment_dir / "test.sh").is_file():
+            # Separate verifier images contain the tests from their build context.
+            shutil.copytree(self.environment_dir, self._root / "tests")
         self._record("start", source=str(self.environment_dir), target=str(self._root))
 
     async def stop(self, delete: bool) -> None:

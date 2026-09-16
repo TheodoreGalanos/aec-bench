@@ -12,6 +12,7 @@ from pathlib import Path
 
 import pytest
 
+from aec_bench.contracts.trajectory import read_trajectory
 from aec_bench.harness.world_actor import WORLD_ACTOR_CAPABILITY_ENV, WORLD_ACTOR_SOCKET_ENV
 from aec_bench.prime_agent.acp import (
     PrimeAcpIsolation,
@@ -76,6 +77,9 @@ def record_assistant():
         "id": "fake-assistant-1",
         "message": {{
             "role": "assistant",
+            "content": ([{{"type": "toolCall", "id": "spawn-call", "name": "ipython",
+                            "arguments": {{"code": "await rlm.run('child')"}}}}]
+                        if scenario == "topology-refinement" else []),
             "usage": {{
                 "input": 10,
                 "output": 5,
@@ -174,10 +178,15 @@ for line in sys.stdin:
             with session_file.open("a") as sink:
                 sink.write("not-json\\n")
         if scenario == "topology-refinement":
-            child_file = session_dir / "child.jsonl"
+            child_dir = session_dir / "child"
+            child_dir.mkdir()
+            child_file = child_dir / "child.jsonl"
             child_file.write_text(json.dumps({{
-                "type": "session", "version": 3, "id": "prime-child", "rlmDepth": 1
+                "type": "session", "version": 3, "id": "prime-child", "rlmDepth": 1,
+                "parentSession": str(session_file)
             }}) + "\\n")
+            (child_dir / "aec-spawn.json").write_text(json.dumps({{"parent_session_id": "prime-root",
+                "parent_tool_call_id": "spawn-call", "rlm_child_id": "child"}}))
         if scenario == "world":
             import asyncio
             sys.path.insert(0, os.getcwd())
@@ -279,6 +288,8 @@ def test_builds_acp_command_with_only_the_explicit_skill(tmp_path: Path) -> None
         "--skill",
         str(skill),
         "--no-extensions",
+        "--extension",
+        str(actor_workspace / "spawn-hook" / "spawn.mjs"),
         "--no-prompt-templates",
         "--no-themes",
         "--no-context-files",
@@ -343,6 +354,7 @@ async def test_runs_one_acp_session_and_preserves_unknown_metadata(tmp_path: Pat
     assert result.usage.cost_usd == Decimal("0.25")
     assert result.topology.root_sessions == 1
     assert result.topology.child_sessions == 0
+    assert read_trajectory(evidence / "trajectory.jsonl")[0].metadata["session_id"] == "prime-root"
     assert not result.benchmark_valid
     inbound = result.paths.inbound_file.read_text(encoding="utf-8")
     outbound = result.paths.outbound_file.read_text(encoding="utf-8")
@@ -457,6 +469,12 @@ async def test_normalizes_child_topology_and_refinement_metadata(tmp_path: Path)
 
     assert result.topology.root_sessions == 1
     assert result.topology.child_sessions == 1
+    child_entries = [entry.subagent for entry in read_trajectory(evidence / "trajectory.jsonl") if entry.subagent]
+    assert {entry.trajectory_id for entry in child_entries} == {"prime-child"}
+    assert all(entry.parent_tool_call_id == "spawn-call" for entry in child_entries)
+    spawn_files = list(evidence.glob("prime-session*.spawn.json"))
+    assert len(spawn_files) == 1
+    assert json.loads(spawn_files[0].read_text())["parent_tool_call_id"] == "spawn-call"
     assert result.refinement.events == 1
     assert result.refinement.completed == 1
     assert result.refinement.failed == 0

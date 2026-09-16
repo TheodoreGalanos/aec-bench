@@ -125,7 +125,6 @@ def build_proposal_harbor_job_config(
                 "model_name": fixed_agent.model,
                 "kwargs": {
                     "adapter": "proposal_session",
-                    "extra_env": {},
                     "proposal_session": host_payload,
                 },
             }
@@ -147,13 +146,7 @@ def build_proposal_harbor_job_config(
             },
         ],
     }
-    try:
-        validate_harbor_job_config(config)
-    except ValueError as error:
-        raise HarborDispatchError(
-            f"proposal Harbor JobConfig is invalid: {error}",
-        ) from error
-    return config
+    return validate_harbor_job_config(config)
 
 
 def _exact_proposal_task_path(path: Path) -> Path:

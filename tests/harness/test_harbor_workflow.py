@@ -372,7 +372,7 @@ def test_synchronous_workflow_dispatches_and_imports_real_job(tmp_path: Path) ->
     )
 
     assert result.job_dir.name == "run-001"
-    assert result.dispatch.command[:4] == ["uv", "run", "harbor", "run"]
+    assert result.dispatch.command[:5] == ["uv", "run", "python", "-m", "aec_bench.harness.harbor_job"]
     assert result.import_result.imported_trials == 60
     assert result.import_result.duplicate_trials == 0
     assert [event.stage for event in progress_events] == [
@@ -504,3 +504,179 @@ def _rewrite_job_result_id(job_dir: Path, new_id: str) -> None:
     payload = json.loads(result_path.read_text(encoding="utf-8"))
     payload["id"] = new_id
     result_path.write_text(json.dumps(payload), encoding="utf-8")
+
+
+@pytest.mark.parametrize("observer_fails", [False, True])
+def test_completion_observes_persisted_final_records_and_isolates_callback_errors(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture, observer_fails: bool
+) -> None:
+    from aec_bench.harness.harbor_workflow import HarborDispatchOnlyResult, HarborWorkflowResult
+    from tests.support.trial_record_factories import make_trial_record
+
+    task = make_task_definition()
+    record = make_trial_record(task={"task_id": task.task_id, "task_revision": "test"})
+    failed = make_trial_record(
+        trial_id="trial-002",
+        task={"task_id": task.task_id, "task_revision": "test"},
+        execution_status="failed",
+        evaluation=None,
+    )
+    manifest = ExperimentManifest(
+        experiment_id=record.experiment_id,
+        name="Completion callback",
+        tasks=TaskSelector(include_patterns=[task.task_id]),
+        agents=[AgentConfig(name="agent", adapter=record.agent.adapter, model=record.agent.model)],
+        compute=ComputeConfig(backend=record.environment.compute_backend),
+        repetitions=2,
+    )
+    monkeypatch.setattr("aec_bench.harness.experiment_runner.import_harbor_job", lambda **kwargs: [record, failed])
+    workflow = SynchronousHarborWorkflow(
+        project_root=tmp_path,
+        repo_root=REPO_ROOT,
+        tasks_root=tmp_path / "tasks",
+        ledger_root=tmp_path / "ledger",
+        jobs_root=tmp_path / "jobs",
+    )
+    dispatched = HarborDispatchOnlyResult(
+        dispatch=HarborDispatchResult(
+            config_path=tmp_path / "job.yaml", command=[], selected_task_count=1, planned_trial_count=2, exit_code=0
+        ),
+        job_dir=tmp_path / "jobs" / "job",
+        resolved_tasks=(task,),
+    )
+    snapshots: list[WorkflowProgressSnapshot] = []
+    completions: list[HarborWorkflowResult] = []
+    observed_records: list[dict[str, object]] = []
+    stages_at_completion: list[str] = []
+
+    def observe_progress(snapshot: WorkflowProgressSnapshot) -> None:
+        snapshots.append(snapshot)
+        if observer_fails:
+            raise RuntimeError("progress consumer failed")
+
+    def on_complete(result: HarborWorkflowResult) -> None:
+        completions.append(result)
+        observed_records.extend(json.loads(path.read_text()) for path in result.import_result.ledger_paths)
+        stages_at_completion.append(snapshots[-1].stage)
+        if observer_fails:
+            raise RuntimeError("completion consumer failed")
+
+    result = workflow.import_dispatched(
+        manifest=manifest, dispatched=dispatched, progress_callback=observe_progress, completion_callback=on_complete
+    )
+    assert completions == [result]
+    assert observed_records == [record.model_dump(mode="json"), failed.model_dump(mode="json")]
+    assert stages_at_completion == ["import_completed"]
+    assert result.import_result.execution_status_counts == {"completed": 1, "failed": 1}
+    assert result.import_result.imported_trials == 2
+    assert result.import_result.invalid_trials == 0
+    if observer_fails:
+        assert "Harbor completion callback failed (RuntimeError)" in caplog.text
+        assert "Workflow progress callback failed (RuntimeError)" in caplog.text
+
+    duplicate = workflow.import_dispatched(manifest=manifest, dispatched=dispatched)
+    assert duplicate.import_result.imported_trials == 0
+    assert duplicate.import_result.duplicate_trials == 2
+    assert duplicate.import_result.execution_status_counts == result.import_result.execution_status_counts
+    assert duplicate.import_result.ledger_paths == result.import_result.ledger_paths
+
+
+def test_completion_is_not_called_when_import_fails(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from aec_bench.harness.harbor_workflow import HarborDispatchOnlyResult, HarborWorkflowResult
+
+    task = make_task_definition()
+    manifest = ExperimentManifest(
+        experiment_id="import-failure",
+        name="Import failure",
+        tasks=TaskSelector(include_patterns=[task.task_id]),
+        agents=[AgentConfig(name="agent", adapter="direct", model="test")],
+        compute=ComputeConfig(backend="docker"),
+    )
+
+    def fail_import(**kwargs: object) -> None:
+        raise ValueError("invalid source trial")
+
+    monkeypatch.setattr("aec_bench.harness.experiment_runner.import_harbor_job", fail_import)
+    workflow = SynchronousHarborWorkflow(
+        project_root=tmp_path,
+        repo_root=REPO_ROOT,
+        tasks_root=tmp_path / "tasks",
+        ledger_root=tmp_path / "ledger",
+        jobs_root=tmp_path / "jobs",
+    )
+    dispatched = HarborDispatchOnlyResult(
+        dispatch=HarborDispatchResult(
+            config_path=tmp_path / "job.yaml", command=[], selected_task_count=1, planned_trial_count=1, exit_code=0
+        ),
+        job_dir=tmp_path / "jobs" / "job",
+        resolved_tasks=(task,),
+    )
+    completions: list[HarborWorkflowResult] = []
+    with pytest.raises(ValueError, match="invalid source trial"):
+        workflow.import_dispatched(manifest=manifest, dispatched=dispatched, completion_callback=completions.append)
+    assert completions == []
+    assert not workflow.ledger_root.exists()
+
+
+def test_trial_progress_does_not_import_attempts_or_complete_a_failed_dispatch(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from datetime import UTC, datetime
+    from uuid import uuid4
+
+    from aec_bench.harness.harbor_dispatch import SubprocessHarborExecutor
+    from aec_bench.harness.harbor_workflow import HarborWorkflowResult
+    from aec_bench.harness.progress_tracker import HarborTrialProgress
+
+    task = make_task_definition()
+    manifest = ExperimentManifest(
+        experiment_id="failed-dispatch",
+        name="Failed dispatch",
+        tasks=TaskSelector(include_patterns=[task.task_id]),
+        agents=[AgentConfig(name="agent", adapter="direct", model="test")],
+        compute=ComputeConfig(backend="docker"),
+    )
+    event = HarborTrialProgress(
+        event="end",
+        timestamp=datetime.now(UTC),
+        harbor_trial_id=uuid4(),
+        trial_name="attempt",
+        task_name=task.task_id,
+        agent_name="agent",
+        model_name="test",
+        trial_dir=tmp_path / "jobs/job/attempt",
+        exception_type="RuntimeError",
+    )
+
+    def dispatch(self: object, **kwargs: object) -> HarborDispatchResult:
+        executor = kwargs["executor"]
+        assert isinstance(executor, SubprocessHarborExecutor)
+        assert executor.progress_callback is not None
+        executor.progress_callback(event)
+        return HarborDispatchResult(
+            config_path=tmp_path / "job.yaml", command=[], selected_task_count=1, planned_trial_count=1, exit_code=7
+        )
+
+    monkeypatch.setattr(HarborExperimentDispatcher, "dispatch", dispatch)
+    workflow = SynchronousHarborWorkflow(
+        project_root=tmp_path,
+        repo_root=REPO_ROOT,
+        tasks_root=tmp_path / "tasks",
+        ledger_root=tmp_path / "ledger",
+        jobs_root=tmp_path / "jobs",
+    )
+    snapshots: list[WorkflowProgressSnapshot] = []
+    completions: list[HarborWorkflowResult] = []
+    with pytest.raises(HarborWorkflowError, match="exit code 7"):
+        workflow.run(
+            manifest=manifest,
+            config_path=tmp_path / "job.yaml",
+            resolved_tasks=(task,),
+            progress_callback=snapshots.append,
+            completion_callback=completions.append,
+        )
+    assert [snapshot.stage for snapshot in snapshots] == ["dispatch_started", "trial_event", "dispatch_completed"]
+    assert snapshots[1].trial == event
+    assert snapshots[1].imported_trials == snapshots[1].discovered_trials == 0
+    assert completions == []
+    assert not workflow.ledger_root.exists()

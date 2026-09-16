@@ -34,7 +34,7 @@ dev = [
 ]
 
 [project.optional-dependencies]
-execution = ["harbor[modal]>=0.15,<0.16"]
+execution = ["harbor[modal]==0.23.1.dev202609140527"]
 deepseek-harness = [
     "deepseek-harness-sdk==0.1.0rc6",
     "jsonschema>=4.26,<5",
@@ -123,7 +123,6 @@ artifacts = [
 packages = ["src/aec_bench"]
 exclude = [
     "/src/aec_bench/adapters/deepseek_harness/plugin/README.md",
-    "/src/aec_bench/adapters/deepseek_harness/plugin/package-lock.json",
     "/src/aec_bench/adapters/deepseek_harness/plugin/package.json",
     "/src/aec_bench/adapters/deepseek_harness/plugin/src",
     "/src/aec_bench/adapters/deepseek_harness/plugin/test",
@@ -165,3 +164,8 @@ python_version = "3.13"
 files = ["src", "tests"]
 mypy_path = "typings"
 strict = true
+
+[[tool.mypy.overrides]]
+# Harbor ships annotated models, trajectory utilities, and a viewer API without a py.typed marker.
+module = ["harbor.models.trajectories.*", "harbor.utils.trajectory_utils", "harbor.viewer.server"]
+follow_untyped_imports = true

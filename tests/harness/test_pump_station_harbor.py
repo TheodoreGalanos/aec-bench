@@ -575,6 +575,6 @@ def test_registered_profile_runs_through_the_real_local_harbor_entrypoint(
     assert result.exception_info is None
     assert result.agent_result is not None
     assert result.agent_result.metadata["world_session_status"] == "completed"
-    assert result.agent_result.metadata["world_session_id"] == "episode.registered-pump-world"
+    assert result.agent_result.metadata["world_session_id"] == f"episode.{trial_name}__env"
     assert result.verifier_result is not None
     assert result.verifier_result.rewards == {"reward": 1.0}

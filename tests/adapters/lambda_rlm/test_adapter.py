@@ -13,6 +13,8 @@ from aec_bench.adapters.lambda_rlm.config import (
 )
 from aec_bench.adapters.rlm.client import ReplayRlmClient, RlmCompletionResponse
 from aec_bench.contracts.agent_output import AgentOutputStatus
+from aec_bench.contracts.trajectory import read_trajectory
+from aec_bench.harness.atif import to_atif
 from aec_bench.templates.report.parser import parse_report_template
 from aec_bench.templates.report.session import ReportSession
 from aec_bench.trajectory.writer import TrajectoryWriter
@@ -346,6 +348,25 @@ def test_adapter_writes_trajectory_entries(tmp_path: Path):
     for entry in result_entries:
         assert "metadata" in entry
         assert "plan_state" in entry["metadata"]
+
+    trajectory = to_atif(read_trajectory(traj_path), agent_name="lambda_rlm", agent_version="1")
+    assert trajectory.subagent_trajectories is not None
+    assert len(trajectory.subagent_trajectories) == 6
+    execution = next(
+        step for step in trajectory.steps if any(call.function_name == "execute_plan" for call in step.tool_calls or [])
+    )
+    assert execution.observation is not None
+    assert len(execution.observation.results) == 1
+    references = execution.observation.results[0].subagent_trajectory_ref
+    assert references is not None
+    assert {reference.trajectory_id for reference in references} == {
+        child.trajectory_id for child in trajectory.subagent_trajectories
+    }
+    assert {child.agent.name for child in trajectory.subagent_trajectories} == {
+        "lambda_rlm:extract",
+        "lambda_rlm:review",
+        "lambda_rlm:generate",
+    }
 
 
 def test_adapter_writes_extraction_candidates_artifact(tmp_path: Path):

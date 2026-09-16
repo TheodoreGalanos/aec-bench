@@ -82,7 +82,7 @@ def test_repair_cli_default_path_loads_dotenv_preflights_and_uses_subprocess_exe
         lambda **kwargs: preflight_specs.append(kwargs["spec"].content_sha256),
     )
     monkeypatch.setattr(
-        "aec_bench.experimentation.qualification.repair_cli.HarnessProgramStudySubprocessHarborExecutor",
+        "aec_bench.experimentation.qualification.repair_cli.SubprocessHarborExecutor",
         lambda: executor,
     )
 

@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from typing import Any
 
@@ -16,6 +16,7 @@ from aec_bench.contracts.adapter_execution import (
 )
 
 _KNOWN_EVENT_TYPES = {
+    "aec/subagent-spawn",
     "agent/inbox/spliced",
     "assistant/chunk",
     "assistant/message",
@@ -29,6 +30,7 @@ _KNOWN_EVENT_TYPES = {
     "turn/end",
     "turn/start",
     "user/message",
+    "subagent/descriptor",
 }
 
 
@@ -51,12 +53,56 @@ class DeepSeekRunProjection:
     child_session_ids: tuple[str, ...]
     unknown_event_types: tuple[str, ...]
     idle_seen: bool
+    child_model_calls: int = 0
+    child_tool_calls_started: int = 0
+    child_tool_calls_completed: int = 0
+    usage_cache_write_tokens: int = 0
+
+    @property
+    def usage_model_calls(self) -> int:
+        return self.root_model_calls + self.child_model_calls
+
+    @property
+    def total_tool_calls_started(self) -> int:
+        return self.tool_calls_started + self.child_tool_calls_started
+
+    @property
+    def total_tool_calls_completed(self) -> int:
+        return self.tool_calls_completed + self.child_tool_calls_completed
 
 
 def reduce_deepseek_notifications(
     root_session_id: str,
     notifications: list[dict[str, Any]],
 ) -> DeepSeekRunProjection:
+    """Keep root behavior separate from usage across all SDK-subscribed child sessions."""
+    root = _reduce_session(root_session_id, notifications)
+    child_ids = set(root.child_session_ids)
+    for notification in notifications:
+        envelope = notification_envelope_parts(notification)
+        if envelope is not None and envelope[0] == "subagent.started":
+            child_id = envelope[1].get("childSessionId")
+            if isinstance(child_id, str) and child_id != root_session_id:
+                child_ids.add(child_id)
+    children = [_reduce_session(child_id, notifications) for child_id in sorted(child_ids)]
+    sessions = [root, *children]
+    return replace(
+        root,
+        child_session_ids=tuple(sorted(child_ids)),
+        child_model_calls=sum(child.root_model_calls for child in children),
+        child_tool_calls_started=sum(child.tool_calls_started for child in children),
+        child_tool_calls_completed=sum(child.tool_calls_completed for child in children),
+        usage_input_tokens=sum(session.usage_input_tokens for session in sessions),
+        usage_output_tokens=sum(session.usage_output_tokens for session in sessions),
+        usage_cache_read_tokens=sum(session.usage_cache_read_tokens for session in sessions),
+        usage_cache_write_tokens=sum(session.usage_cache_write_tokens for session in sessions),
+        maximum_input_tokens_in_one_call=max(session.maximum_input_tokens_in_one_call for session in sessions),
+        maximum_output_tokens_in_one_call=max(session.maximum_output_tokens_in_one_call for session in sessions),
+        unknown_event_types=tuple(sorted({kind for session in sessions for kind in session.unknown_event_types})),
+    )
+
+
+def _reduce_session(root_session_id: str, notifications: list[dict[str, Any]]) -> DeepSeekRunProjection:
     """Build one deterministic root-session projection from captured wire notifications."""
     root_steps = 0
     root_turns = 0
@@ -68,6 +114,7 @@ def reduce_deepseek_notifications(
     usage_input_tokens = 0
     usage_output_tokens = 0
     usage_cache_read_tokens = 0
+    usage_cache_write_tokens = 0
     maximum_input_tokens_in_one_call = 0
     maximum_output_tokens_in_one_call = 0
     child_session_ids: set[str] = set()
@@ -115,6 +162,7 @@ def reduce_deepseek_notifications(
             usage_input_tokens += usage.input_tokens or 0
             usage_output_tokens += usage.output_tokens or 0
             usage_cache_read_tokens += _usage_value(data, "cacheReadTokens")
+            usage_cache_write_tokens += _usage_value(data, "cacheWriteTokens")
             maximum_input_tokens_in_one_call = max(maximum_input_tokens_in_one_call, usage.input_tokens or 0)
             maximum_output_tokens_in_one_call = max(maximum_output_tokens_in_one_call, usage.output_tokens or 0)
         elif event_type == "tool/call":
@@ -137,6 +185,7 @@ def reduce_deepseek_notifications(
         usage_input_tokens=usage_input_tokens,
         usage_output_tokens=usage_output_tokens,
         usage_cache_read_tokens=usage_cache_read_tokens,
+        usage_cache_write_tokens=usage_cache_write_tokens,
         maximum_input_tokens_in_one_call=maximum_input_tokens_in_one_call,
         maximum_output_tokens_in_one_call=maximum_output_tokens_in_one_call,
         child_session_ids=tuple(sorted(child_session_ids)),

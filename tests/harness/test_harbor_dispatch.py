@@ -3,7 +3,8 @@
 
 import ast
 import importlib
-import subprocess
+import os
+import sys
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any, cast
@@ -41,6 +42,7 @@ from aec_bench.harness.harbor_dispatch import (
     SubprocessHarborExecutor,
     build_harbor_entrypoint_execution_bundle,
     build_harbor_job_config,
+    harbor_environment_config,
 )
 from aec_bench.tasks.loader import load_task_definition
 from tests.support.task_factories import make_task_definition
@@ -64,6 +66,48 @@ class FakeExecutor:
         self.command = command
         self.cwd = cwd
         return 0
+
+
+@pytest.mark.parametrize("backend", ["docker", "daytona"])
+def test_stream_config_validates_with_installed_harbor(backend: str) -> None:
+    manifest = ExperimentManifest(
+        experiment_id="stream-test",
+        name="Stream test",
+        tasks=TaskSelector(),
+        agents=[AgentConfig(name="tool-loop", adapter="tool_loop", model="test-model")],
+        compute=ComputeConfig(backend=backend, stream=True),
+    )
+    config = build_harbor_job_config(manifest=manifest, tasks=[make_task_definition()])
+    assert JobConfig.model_validate(config).environment.stream is True
+
+
+@pytest.mark.parametrize("backend", ["modal", "morph"])
+def test_stream_rejects_unsupported_environment(backend: str) -> None:
+    with pytest.raises(HarborDispatchError, match="built-in docker or daytona"):
+        harbor_environment_config(backend, stream=True)
+
+
+def test_stream_rejects_custom_environment_binding() -> None:
+    with pytest.raises(HarborDispatchError, match="built-in docker or daytona"):
+        harbor_environment_config(
+            "docker",
+            stream=True,
+            environment_binding=HarborEnvironmentBinding(backend="docker", import_path="custom:Environment"),
+        )
+
+
+def test_stream_rejects_non_public_tasks_even_with_explicit_visibility_context() -> None:
+    from aec_bench.contracts.task_definition import Visibility
+
+    manifest = ExperimentManifest(
+        experiment_id="stream-test",
+        name="Stream test",
+        tasks=TaskSelector(visibility_filter=[Visibility.HOLDOUT]),
+        agents=[AgentConfig(name="tool-loop", adapter="tool_loop", model="test-model")],
+        compute=ComputeConfig(backend="docker", stream=True),
+    )
+    with pytest.raises(ValueError, match="visibility 'holdout'"):
+        build_harbor_job_config(manifest=manifest, tasks=[make_task_definition(visibility=Visibility.HOLDOUT)])
 
 
 def test_task_worlds_and_episode_shell_do_not_import_execution_sdks() -> None:
@@ -250,7 +294,6 @@ def test_build_proposal_harbor_job_config_binds_exact_host_runtime_and_fixed_h0(
     assert agent["model_name"] == _fixed_h0_model(bundle)
     assert agent["kwargs"] == {
         "adapter": "proposal_session",
-        "extra_env": {},
         "proposal_session": dispatch.host_config.model_dump(mode="json"),
     }
     assert environment["import_path"] == (_PROPOSAL_MORPH_ENVIRONMENT_IMPORT_PATH)
@@ -541,8 +584,9 @@ def test_dispatcher_writes_yaml_and_executes_harbor_command(tmp_path: Path) -> N
     assert result.command == [
         "uv",
         "run",
-        "harbor",
-        "run",
+        "python",
+        "-m",
+        "aec_bench.harness.harbor_job",
         "-c",
         str(result.config_path),
     ]
@@ -607,22 +651,20 @@ def test_subprocess_executor_adds_project_root_to_pythonpath(
     monkeypatch: Any,
 ) -> None:
     """Harbor subprocesses must be able to import project-local agents."""
-    captured: dict[str, Any] = {}
-
-    def fake_run(command: list[str], *, cwd: Path, check: bool, env: dict[str, str]) -> Any:
-        captured["command"] = command
-        captured["cwd"] = cwd
-        captured["check"] = check
-        captured["env"] = env
-        return subprocess.CompletedProcess(command, 0)
-
-    monkeypatch.setattr(subprocess, "run", fake_run)
-
-    exit_code = SubprocessHarborExecutor().execute(command=["uv", "run", "harbor"], cwd=tmp_path)
+    module = tmp_path / "project_agent.py"
+    module.write_text("MARKER = 'project-local'\n")
+    probe = tmp_path / "observed.txt"
+    monkeypatch.setenv("PYTHONPATH", "existing-entry")
+    script = (
+        "import os; import project_agent; from pathlib import Path; "
+        f"Path({str(probe)!r}).write_text(project_agent.MARKER + '\\n' + os.environ['PYTHONPATH'])"
+    )
+    exit_code = SubprocessHarborExecutor().execute(command=[sys.executable, "-c", script], cwd=tmp_path)
 
     assert exit_code == 0
-    assert captured["cwd"] == tmp_path
-    assert captured["env"]["PYTHONPATH"].split(":")[0] == str(tmp_path)
+    marker, pythonpath = probe.read_text().splitlines()
+    assert marker == "project-local"
+    assert pythonpath.split(os.pathsep) == [str(tmp_path), "existing-entry"]
 
 
 def test_resolve_import_path_returns_entrypoint_agent_for_all_adapters() -> None:
@@ -724,3 +766,29 @@ def _fixed_h0_model(bundle: ProposalRunSessionBundle) -> str:
     )
     assert len(bindings) == 1
     return bindings[0].model
+
+
+def test_dispatcher_places_agent_concurrency_at_the_native_harbor_boundary(tmp_path: Path) -> None:
+    manifest = ExperimentManifest(
+        experiment_id="shared-concurrency",
+        name="Shared concurrency",
+        tasks=TaskSelector(include_patterns=["mechanical/heat-load/*"]),
+        agents=[
+            AgentConfig(name=name, adapter="tool_loop", model="test", n_concurrent=2, concurrency_group="provider")
+            for name in ("baseline", "alternative")
+        ],
+        compute=ComputeConfig(backend="docker", resource_limits={"n_concurrent_trials": 4}),
+    )
+    result = HarborExperimentDispatcher(project_root=tmp_path).dispatch(
+        manifest=manifest,
+        tasks=[make_task_definition(task_id="mechanical/heat-load/alpha")],
+        config_path=tmp_path / "job.yaml",
+        execute=False,
+    )
+    config = yaml.safe_load(result.config_path.read_text())
+    assert config["n_concurrent_trials"] == 4
+    for agent in config["agents"]:
+        assert agent["n_concurrent"] == 2
+        assert agent["concurrency_group"] == "provider"
+        assert "n_concurrent" not in agent["kwargs"]
+        assert "concurrency_group" not in agent["kwargs"]

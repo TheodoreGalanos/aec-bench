@@ -23,6 +23,7 @@ from aec_bench.adapters.deepseek_harness.tool_gateway import (
 )
 from aec_bench.contracts.agent_output import AgentOutputStatus
 from aec_bench.contracts.task_definition import ToolSpec
+from aec_bench.contracts.trajectory import read_trajectory
 from aec_bench.harness.deepseek_harness_driver import DeepSeekHarnessExecutionDriver
 from aec_bench.harness.execution_entrypoint import default_execution_driver_registry, run_execution_bundle
 from aec_bench.harness.execution_payload import (
@@ -36,6 +37,7 @@ from aec_bench.harness.execution_payload import (
 class _KeylessDeepSeekHandler(BaseHTTPRequestHandler):
     requests: ClassVar[list[dict[str, Any]]] = []
     mode: ClassVar[str] = "text"
+    release_child: ClassVar[threading.Event] = threading.Event()
 
     def do_POST(self) -> None:
         content_length = int(self.headers.get("content-length", "0"))
@@ -54,6 +56,29 @@ class _KeylessDeepSeekHandler(BaseHTTPRequestHandler):
         request_number = len(self.requests)
         if self.mode == "max-tokens":
             chunks = _text_chunks("cut", finish_reason="length", completion_tokens=3)
+        elif self.mode.startswith("delegate") and request_number == 1:
+            chunks = _tool_call_chunks(
+                "spawn-child",
+                "subagent",
+                {
+                    "description": "Check one item",
+                    "prompt": "Child task",
+                    **({"run_in_background": True} if self.mode == "delegate-background" else {}),
+                },
+            )
+        elif self.mode == "delegate-truncate" and request_number == 2:
+            chunks = _text_chunks("Child partial answer", finish_reason="length", completion_tokens=3)
+        elif self.mode == "delegate-timeout" and request_number == 2:
+            self.release_child.wait(timeout=30)
+            return
+        elif self.mode == "delegate-recursion" and request_number == 2:
+            chunks = _tool_call_chunks(
+                "forbidden-spawn", "subagent", {"description": "Nested work", "prompt": "Grandchild task"}
+            )
+        elif self.mode == "delegate-commit" and request_number == 2:
+            chunks = _tool_call_chunks("forbidden-commit", "aec_commit_output", {})
+        elif self.mode == "delegate-native" and request_number == 2:
+            chunks = _tool_call_chunks("forbidden-action", "test_action", {})
         elif self.mode == "write" and messages[-1]["role"] != "tool":
             chunks = _tool_call_chunks(
                 "write-output",
@@ -183,6 +208,153 @@ def _azure_settings(model: str = "deepseek-v4-flash") -> DeepSeekHarnessSettings
         model_name=f"azure:{model}",
         payload={"provider": "azure"},
     )
+
+
+@pytest.mark.parametrize("provider", ["azure", "deepseek"])
+def test_real_sdk_foreground_delegation_captures_spawn_and_child_usage(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    provider: str,
+) -> None:
+    pytest.importorskip("deepseek_harness")
+    server, thread = _start_server(monkeypatch, mode="delegate", provider=provider)
+    settings = _azure_settings() if provider == "azure" else _deepseek_settings()
+    try:
+        result = DeepSeekHarnessAdapter(settings=settings, workspace=tmp_path).execute(
+            AdapterRequest(
+                instruction="Delegate one check.",
+                configuration={"timeout_sec": 30, "max_tokens": 512, "subagents_enabled": True},
+            )
+        )
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+    assert result.agent_output.status is AgentOutputStatus.COMPLETED, result.agent_output.error_message
+    assert result.turns_used == 2
+    assert result.usage_model_calls == 3
+    assert result.usage_input_tokens == 19
+    assert result.usage_output_tokens == 22
+    calls = _KeylessDeepSeekHandler.requests
+    assert len(calls) == 3
+    assert all(call["body"].get("max_tokens", call["body"].get("max_completion_tokens")) == 512 for call in calls)
+    assert "subagent" in {tool["function"]["name"] for tool in calls[0]["body"]["tools"]}
+    assert "subagent" not in {tool["function"]["name"] for tool in calls[1]["body"].get("tools", [])}
+    notifications = [
+        json.loads(line) for line in Path(result.configuration_record["notifications_path"]).read_text().splitlines()
+    ]
+    spawn = [
+        n["payload"]["event"]["data"]
+        for n in notifications
+        if n["notification_method"] == "session.event" and n["payload"]["event"]["type"] == "aec/subagent-spawn"
+    ]
+    assert len(spawn) == 1
+    assert spawn[0]["parent_tool_call_id"] == "spawn-child"
+    assert result.configuration_record["child_session_ids"] == [spawn[0]["child_session_id"]]
+    entries = read_trajectory(tmp_path / "trajectory.jsonl")
+    pytest.importorskip("harbor")
+    from aec_bench.harness.atif import to_atif
+
+    trajectory = to_atif(entries, agent_name="deepseek_harness", agent_version="test")
+    assert trajectory.subagent_trajectories is not None
+    child = trajectory.subagent_trajectories[0]
+    assert child.trajectory_id == spawn[0]["child_session_id"]
+    observations = [result for step in trajectory.steps if step.observation for result in step.observation.results]
+    assert observations[0].source_call_id == "spawn-child"
+    assert observations[0].subagent_trajectory_ref[0].trajectory_id == child.trajectory_id
+    manifest = json.loads(Path(result.configuration_record["manifest_path"]).read_text())
+    assert manifest["composition"]["subagents_enabled"] is True
+    assert manifest["execution"]["usage_model_calls"] == 3
+    sessions = list(Path(result.configuration_record["sessions_path"]).rglob("*.jsonl"))
+    assert len(sessions) == 2
+
+
+@pytest.mark.parametrize("mode", ["truncate", "recursion", "commit", "native", "background", "timeout"])
+def test_real_sdk_delegation_failure_boundaries(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    mode: str,
+) -> None:
+    pytest.importorskip("deepseek_harness")
+    _KeylessDeepSeekHandler.release_child.clear()
+    server, thread = _start_server(monkeypatch, mode=f"delegate-{mode}")
+    actions: list[object] = []
+
+    def action() -> str:
+        actions.append("called")
+        return '{"ok": true}'
+
+    native_tools = (
+        [
+            json_native_tool_definition(
+                name="test_action",
+                description="Change test state",
+                parameters_schema={"type": "object", "properties": {}},
+                function=action,
+            )
+        ]
+        if mode == "native"
+        else None
+    )
+    configuration = {"timeout_sec": 10 if mode == "timeout" else 30, "max_tokens": 512, "subagents_enabled": True}
+    if mode == "commit":
+        configuration.update(_commit_configuration())
+    try:
+        result = DeepSeekHarnessAdapter(
+            settings=_azure_settings(), workspace=tmp_path, native_tools=native_tools
+        ).execute(
+            AdapterRequest(
+                instruction="Delegate one check.",
+                configuration=configuration,
+                output_path="output.md",
+                output_format="markdown",
+                tools=[ToolSpec(name="test_action", source="builtin", description="Change test state")]
+                if native_tools
+                else [],
+            )
+        )
+    finally:
+        _KeylessDeepSeekHandler.release_child.set()
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+    assert actions == []
+    entries = read_trajectory(tmp_path / "trajectory.jsonl")
+    children = [entry.subagent for entry in entries if entry.subagent is not None]
+    if mode == "background":
+        assert children == []
+        assert result.usage_model_calls == 2
+        assert any(
+            entry.role == "tool_result" and "run_in_background is disabled" in (entry.content or "")
+            for entry in entries
+        )
+    else:
+        assert {child.parent_tool_call_id for child in children} == {"spawn-child"}
+        assert len({child.trajectory_id for child in children}) == 1
+        if mode == "truncate":
+            assert any(child.entry.role == "error" and "max-tokens" in child.entry.content for child in children)
+            assert result.usage_model_calls == 3
+            assert result.usage_output_tokens == 16
+            assert any(entry.role == "tool_result" and entry.metadata["is_error"] for entry in entries)
+        elif mode == "timeout":
+            assert result.failure_kind.value == "timeout"
+            assert result.usage_model_calls == 2
+            assert result.usage_input_tokens == 5
+            assert result.usage_output_tokens == 4
+            manifest = json.loads(Path(result.configuration_record["manifest_path"]).read_text())
+            assert manifest["execution"]["process_group_retired"] is True
+            assert manifest["execution"]["usage_model_calls"] == 2
+        else:
+            assert result.usage_model_calls == 4
+            assert any(child.entry.role == "tool_result" and child.entry.metadata["is_error"] for child in children)
+            child_names = {
+                tool["function"]["name"] for tool in _KeylessDeepSeekHandler.requests[1]["body"].get("tools", [])
+            }
+            assert not child_names.intersection({"subagent", "aec_commit_output", "test_action"})
+    if mode not in {"commit", "timeout"}:
+        assert result.agent_output.status is AgentOutputStatus.COMPLETED
 
 
 def _deepseek_settings(model: str = "deepseek-v4-flash") -> DeepSeekHarnessSettings:
@@ -467,17 +639,19 @@ def test_real_sdk_lifecycle_composition_exposes_only_the_gateway_tools(
     assert "@deepseek-ai/dsh-tool-bash-persistent" not in cordis
 
 
+@pytest.mark.parametrize("delegate", [False, True])
 def test_real_sdk_runs_through_the_serialized_harbor_entrypoint(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
+    delegate: bool,
 ) -> None:
     pytest.importorskip("deepseek_harness")
-    server, thread = _start_server(monkeypatch, mode="write")
+    server, thread = _start_server(monkeypatch, mode="delegate" if delegate else "write")
     bundle = build_entrypoint_execution_bundle(
         instruction="Write the requested output file, then confirm completion.",
         adapter_name="entrypoint",
         model_name="azure:deepseek-chat",
-        harbor_kwargs={"adapter": "deepseek_harness", "timeout_sec": 30},
+        harbor_kwargs={"adapter": "deepseek_harness", "timeout_sec": 30, "subagents_enabled": delegate},
     )
     bundle_path = write_execution_bundle(path=tmp_path / "execution-bundle.json", bundle=bundle)
     result_path = tmp_path / "agent-result.json"
@@ -494,9 +668,13 @@ def test_real_sdk_runs_through_the_serialized_harbor_entrypoint(
         thread.join(timeout=5)
 
     payload = json.loads(result_path.read_text(encoding="utf-8"))
-    assert (tmp_path / "output.md").read_text(encoding="utf-8") == (
-        "# DeepSeek artifact\n\nCreated through the write tool.\n"
-    )
+    if not delegate:
+        assert (tmp_path / "output.md").read_text(encoding="utf-8") == (
+            "# DeepSeek artifact\n\nCreated through the write tool.\n"
+        )
+    assert payload["configuration_record"]["subagents_enabled"] is delegate
+    assert bool(payload["configuration_record"]["child_session_ids"]) is delegate
+    assert any(entry.subagent for entry in read_trajectory(tmp_path / "trajectory.jsonl")) is delegate
     assert payload["agent_output"]["status"] == "completed"
     assert payload["adapter_name"] == "entrypoint"
     assert payload["runtime_execution_attestation"]["adapter_kind"] == "deepseek_harness"

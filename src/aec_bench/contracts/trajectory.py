@@ -7,7 +7,7 @@ import json
 from pathlib import Path
 from typing import Any, Literal
 
-from pydantic import NonNegativeInt, PositiveInt, field_validator, model_validator
+from pydantic import Field, NonNegativeInt, PositiveInt, field_validator, model_validator
 
 from aec_bench.contracts.execution_program import ExecutionProgramRef
 from aec_bench.contracts.harness_instance import HarnessInstanceRef
@@ -44,13 +44,46 @@ class MetaHarnessTrajectoryContext(StrictModel):
         return self
 
 
+class TrajectoryReasoning(StrictModel):
+    """Thinking text exposed by a provider, which can be a summary of hidden reasoning."""
+
+    content: str
+    provider_name: str | None = None
+    part_id: str | None = None
+    has_signature: bool = False
+
+
+class TrajectoryUsage(StrictModel):
+    """Per-response token counts; missing counts have no numeric value."""
+
+    input_tokens: NonNegativeInt | None = None
+    output_tokens: NonNegativeInt | None = None
+    cache_read_tokens: NonNegativeInt | None = None
+    cache_write_tokens: NonNegativeInt | None = None
+    details: dict[str, NonNegativeInt] = Field(default_factory=dict)
+
+
+class TrajectoryModelResponse(StrictModel):
+    """One observed model response and usage normalised by its producing SDK."""
+
+    source: NonEmptyStr
+    model_name: str | None = None
+    provider_name: str | None = None
+    response_id: str | None = None
+    usage: TrajectoryUsage | None = None
+
+
 class TrajectoryEntry(StrictModel):
     """A single structured entry from an agent trajectory JSONL file."""
 
     step: NonNegativeInt
     role: str
     content: str | None = None
+    reasoning: TrajectoryReasoning | None = None
+    model_response: TrajectoryModelResponse | None = None
+    subagent: TrajectorySubagentEntry | None = None
     tool_name: str | None = None
+    tool_call_id: str | None = None
     command: str | None = None
     arguments: dict[str, Any] | None = None
     stdout: str | None = None
@@ -63,6 +96,27 @@ class TrajectoryEntry(StrictModel):
     call_type: str | None = None  # warmup, main, or subagent
     output_summary: str | None = None  # truncated preview of stdout
     timestamp: str | None = None
+
+    @model_validator(mode="after")
+    def validate_response_payloads(self) -> TrajectoryEntry:
+        for role, payload in (
+            ("reasoning", self.reasoning),
+            ("model_response", self.model_response),
+            ("subagent", self.subagent),
+        ):
+            if (self.role == role) != (payload is not None):
+                raise ValueError(f"{role} payload is required only for role={role!r}")
+        return self
+
+
+class TrajectorySubagentEntry(StrictModel):
+    """One child record, attributed to an explicit parent tool call."""
+
+    trajectory_id: NonEmptyStr
+    parent_tool_call_id: NonEmptyStr | None = None
+    agent_name: NonEmptyStr
+    model_name: NonEmptyStr | None = None
+    entry: TrajectoryEntry
 
 
 def read_trajectory(path: Path) -> list[TrajectoryEntry]:

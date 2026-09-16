@@ -42,9 +42,9 @@ def load_proposal_import_evidence(
 
     harbor_result = context.harbor_result
     agent_kwargs = harbor_result.config.agent.kwargs
-    if agent_kwargs.get("extra_env") != {}:
+    if agent_kwargs.get("extra_env", {}) != {} or harbor_result.config.agent.env:
         raise HarborImportError(
-            "proposal import requires an empty serialized extra_env",
+            "proposal import requires empty agent env and serialized extra_env",
         )
     host_inputs = _load_host_inputs(context)
     validate_proposal_harbor_configuration(

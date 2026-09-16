@@ -2,7 +2,7 @@
 # Keep each owner name equal to its top-level aec_bench module owner.
 
 [owners.adapters]
-may_depend_on = ["contracts", "model_routing", "prime_agent", "providers", "synthesis", "templates"]
+may_depend_on = ["contracts", "model_routing", "prime_agent", "providers", "synthesis", "templates", "trajectory"]
 
 [owners.agents]
 may_depend_on = []
@@ -62,7 +62,7 @@ may_depend_on = ["contracts", "evaluation", "ledger", "model_routing", "template
 may_depend_on = []
 
 [owners.prime_agent]
-may_depend_on = ["contracts"]
+may_depend_on = ["contracts", "trajectory"]
 
 [owners.prime_lab]
 may_depend_on = ["contracts", "dataset", "harness", "ledger", "lifecycles", "providers", "tasks"]

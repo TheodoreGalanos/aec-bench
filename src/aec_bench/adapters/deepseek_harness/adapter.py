@@ -21,6 +21,7 @@ from aec_bench.adapters.deepseek_harness.config import (
     deepseek_output_commit_configuration,
     deepseek_system_prompt,
     request_max_tokens,
+    request_subagents_enabled,
     request_timeout_seconds,
     treatment_record,
     validate_deepseek_request,
@@ -113,10 +114,11 @@ class DeepSeekHarnessAdapter:
             turns_used=run.projection.root_model_calls,
             raw_output_text=raw_output_text,
             provider_error=error if failure_kind is AdapterFailureKind.PROVIDER_ERROR else None,
-            usage_model_calls=run.projection.root_model_calls,
+            usage_model_calls=run.projection.usage_model_calls,
             usage_input_tokens=run.projection.usage_input_tokens,
             usage_output_tokens=run.projection.usage_output_tokens,
             usage_cache_read_tokens=run.projection.usage_cache_read_tokens,
+            usage_cache_write_tokens=run.projection.usage_cache_write_tokens,
             maximum_input_tokens_in_one_call=run.projection.maximum_input_tokens_in_one_call,
             maximum_output_tokens_in_one_call=run.projection.maximum_output_tokens_in_one_call,
         )
@@ -144,8 +146,11 @@ class DeepSeekHarnessAdapter:
             max_tokens=request_max_tokens(request),
             output_commit_required=commit_required,
             native_tools=tuple(sorted(self._native_tool_names)),
+            subagents_enabled=request_subagents_enabled(request),
         )
+        projection = None
         if isinstance(self._runtime, DeepSeekHarnessProcessRuntime):
+            projection = self._runtime.projection
             configuration_record.update(
                 {
                     "manifest_path": str(self._runtime.paths.manifest),
@@ -172,6 +177,18 @@ class DeepSeekHarnessAdapter:
             ),
             transcript=initialize_transcript(request),
             failure_kind=failure_kind,
+            turns_used=projection.root_model_calls if projection is not None else 0,
+            usage_model_calls=projection.usage_model_calls if projection is not None else None,
+            usage_input_tokens=projection.usage_input_tokens if projection is not None else None,
+            usage_output_tokens=projection.usage_output_tokens if projection is not None else None,
+            usage_cache_read_tokens=projection.usage_cache_read_tokens if projection is not None else None,
+            usage_cache_write_tokens=projection.usage_cache_write_tokens if projection is not None else None,
+            maximum_input_tokens_in_one_call=(
+                projection.maximum_input_tokens_in_one_call if projection is not None else None
+            ),
+            maximum_output_tokens_in_one_call=(
+                projection.maximum_output_tokens_in_one_call if projection is not None else None
+            ),
             provider_error=error if failure_kind is AdapterFailureKind.PROVIDER_ERROR else None,
         )
 
@@ -223,6 +240,7 @@ def _configuration_record(settings: DeepSeekHarnessSettings, run: DeepSeekHarnes
             max_tokens=run.max_tokens,
             output_commit_required=run.output_commit_mode == "required",
             native_tools=run.native_tools,
+            subagents_enabled=run.subagents_enabled,
         ),
         "sdk_version": run.sdk_version,
         "runtime_distribution_version": run.runtime_distribution_version,
@@ -232,6 +250,9 @@ def _configuration_record(settings: DeepSeekHarnessSettings, run: DeepSeekHarnes
         "root_turns": run.projection.root_turns,
         "tool_calls_started": run.projection.tool_calls_started,
         "tool_calls_completed": run.projection.tool_calls_completed,
+        "usage_model_calls": run.projection.usage_model_calls,
+        "total_tool_calls_started": run.projection.total_tool_calls_started,
+        "total_tool_calls_completed": run.projection.total_tool_calls_completed,
         "child_session_ids": list(run.projection.child_session_ids),
         "unknown_event_types": list(run.projection.unknown_event_types),
         "optional_plugins": [plugin.model_dump(mode="json") for plugin in run.optional_plugins],

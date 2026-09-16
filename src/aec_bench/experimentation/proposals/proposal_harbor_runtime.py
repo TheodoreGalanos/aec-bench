@@ -46,6 +46,14 @@ from aec_bench.harness.harbor_dispatch import (
 )
 
 
+def _is_closed_harbor_command(command: tuple[str, ...]) -> bool:
+    # Retained receipts can contain the native CLI command used before SDK hooks.
+    return command[:-1] in {
+        ("uv", "run", "harbor", "run", "-c"),
+        ("uv", "run", "python", "-m", "aec_bench.harness.harbor_job", "-c"),
+    }
+
+
 class ProposalHarborExecutionStatus(StrEnum):
     """Terminal host observation for one authorized Harbor process attempt."""
 
@@ -149,10 +157,9 @@ class ProposalHarborExecutionReceipt(ContentAddressedModel):
 
     @model_validator(mode="after")
     def validate_terminal_shape(self) -> Self:
-        expected_command_prefix = ("uv", "run", "harbor", "run", "-c")
-        if self.command[:5] != expected_command_prefix or len(self.command) != 6:
+        if not _is_closed_harbor_command(self.command):
             raise ValueError("proposal Harbor receipt requires the closed Harbor command")
-        if self.command[5] != self.config_path:
+        if self.command[-1] != self.config_path:
             raise ValueError("proposal Harbor command must use the exact persisted config")
         if self.finished_at < self.started_at:
             raise ValueError("proposal Harbor execution cannot finish before it starts")
@@ -271,11 +278,7 @@ class ProposalProviderOperationStart(ContentAddressedModel):
             or receipt_path != execution_root / "proposal-harbor-execution.json"
         ):
             raise ValueError("proposal provider operation paths are not canonically related")
-        if (
-            self.command[:5] != ("uv", "run", "harbor", "run", "-c")
-            or len(self.command) != 6
-            or self.command[5] != self.config_path
-        ):
+        if not _is_closed_harbor_command(self.command) or self.command[-1] != self.config_path:
             raise ValueError("proposal provider operation start requires the closed Harbor command")
         return self
 
@@ -413,8 +416,9 @@ def run_governed_proposal_harbor(
     command = (
         "uv",
         "run",
-        "harbor",
-        "run",
+        "python",
+        "-m",
+        "aec_bench.harness.harbor_job",
         "-c",
         str(config_path.resolve()),
     )

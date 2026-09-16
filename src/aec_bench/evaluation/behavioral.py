@@ -156,6 +156,8 @@ _BOND_INDEX = {bond: index for index, bond in enumerate(_BOND_LIST)}
 
 
 def load_behavioral_trace(record: TrialRecord) -> BehavioralTrace:
+    if record.output is None:
+        raise BehavioralTraceError("trial record is missing execution output")
     # Try trajectory first — prefer structured trajectory.jsonl over conversation.jsonl
     trajectory_path = record.outputs.trajectory_path
     if trajectory_path is not None:

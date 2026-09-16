@@ -98,6 +98,11 @@ def run_experiment(
     ),
     repetitions: int = typer.Option(1, "--repetitions", "-n", help="Repetitions"),
     dry_run: bool = typer.Option(False, "--dry-run", help="Show plan without executing"),
+    stream: bool | None = typer.Option(
+        None,
+        "--stream/--no-stream",
+        help="Show live Harbor trajectories and sandbox files (Docker or Daytona).",
+    ),
     no_verify: bool = typer.Option(False, "--no-verify", help="Skip verification (agent-only run)"),
     reviewer: bool = typer.Option(False, "--reviewer", help="Run the post-verifier LLM reviewer stage"),
     reviewer_model: str | None = typer.Option(None, "--reviewer-model", help="Single reviewer model name"),
@@ -210,6 +215,7 @@ def run_experiment(
             start=start,
             no_verify=no_verify,
             reviewer_config=reviewer_config,
+            stream=stream,
         )
     elif tasks_path is not None and model is not None:
         _run_inline(
@@ -223,6 +229,7 @@ def run_experiment(
             start=start,
             no_verify=no_verify,
             reviewer_config=reviewer_config,
+            stream=bool(stream),
         )
     else:
         emit(
@@ -707,6 +714,7 @@ def _run_from_config(
     start: float,
     no_verify: bool = False,
     reviewer_config: ReviewerRunConfig | None = None,
+    stream: bool | None = None,
 ) -> None:
     if not config_path.exists():
         emit("run", data=None, errors=[f"config file not found: {config_path}"], start_time=start)
@@ -720,6 +728,8 @@ def _run_from_config(
     from aec_bench.contracts.experiment_manifest import ExperimentManifest
 
     manifest = ExperimentManifest.model_validate(raw)
+    if stream is not None:
+        manifest = manifest.model_copy(update={"compute": manifest.compute.model_copy(update={"stream": stream})})
     if no_verify:
         manifest = manifest.model_copy(update={"disable_verification": True})
 
@@ -765,6 +775,7 @@ def _run_inline(
     start: float,
     no_verify: bool = False,
     reviewer_config: ReviewerRunConfig | None = None,
+    stream: bool = False,
 ) -> None:
     from aec_bench.contracts.experiment_manifest import (
         AgentConfig,
@@ -793,7 +804,7 @@ def _run_inline(
                 model=model,
             )
         ],
-        compute=ComputeConfig(backend=backend),
+        compute=ComputeConfig(backend=backend, stream=stream),
         repetitions=repetitions,
         disable_verification=no_verify,
     )
@@ -857,6 +868,19 @@ def _execute_manifest(
 
     world_tasks = [task for task in selected_tasks if isinstance(task, WorldTask)]
     artifact_tasks = [task for task in selected_tasks if isinstance(task, TaskDefinition)]
+    if manifest.compute.stream:
+        require_optional_extra("Experiment execution support", "execution", ("harbor",))
+        from aec_bench.harness.harbor_dispatch import HarborDispatchError, harbor_environment_config
+        from aec_bench.tasks.selector import validate_execution_tasks
+
+        try:
+            if world_tasks:
+                raise ValueError("Harbor stream currently supports artifact tasks only")
+            harbor_environment_config(manifest.compute.backend, stream=True)
+            validate_execution_tasks(artifact_tasks)
+        except (HarborDispatchError, ValueError) as exc:
+            emit("run", data=None, errors=[str(exc)], start_time=start)
+            return
     world_trials = [trial for trial in plan if trial.task_id in {task.task_id for task in world_tasks}]
     if world_tasks:
         validate_world_routes(world_tasks, world_trials)
@@ -881,10 +905,33 @@ def _execute_manifest(
             )
             return
 
+    if artifact_tasks:
+        from aec_bench.cli.harbor_environment import resolve_harbor_environment_binding
+        from aec_bench.harness.harbor_dispatch import (
+            HarborDispatchError,
+            build_harbor_job_config,
+            validate_harbor_job_config,
+        )
+
+        try:
+            validate_harbor_job_config(
+                build_harbor_job_config(
+                    manifest=manifest,
+                    tasks=artifact_tasks,
+                    jobs_dir=project_root / "jobs",
+                    task_path_overrides={task.task_id: tasks_root / task.task_id for task in artifact_tasks},
+                    environment_binding=resolve_harbor_environment_binding(manifest.compute.backend),
+                )
+            )
+        except HarborDispatchError as error:
+            emit("run", data=None, errors=[str(error)], start_time=start)
+            return
+
     if dry_run:
         plan_data = {
             "experiment_id": manifest.experiment_id,
             "backend": manifest.compute.backend,
+            "stream": manifest.compute.stream,
             "selected_tasks": len(selected_tasks),
             "planned_trials": len(plan),
             "agents": [a.name for a in manifest.agents],
@@ -896,6 +943,7 @@ def _execute_manifest(
         def _render_dry_run(d: dict[str, Any]) -> None:
             console.print(f"[bold]Dry Run: {d['experiment_id']}[/bold]")
             console.print(f"  Backend:    {d['backend']}")
+            console.print(f"  Stream:     {d['stream']}")
             console.print(f"  Tasks:      {d['selected_tasks']}")
             console.print(f"  Agents:     {', '.join(d['agents'])}")
             console.print(f"  Repetitions: {d['repetitions']}")
@@ -942,6 +990,7 @@ def _execute_manifest(
     from aec_bench.harness.artifact_tasks import run_experiment as run_task_experiment
     from aec_bench.harness.harbor_runtime import HarborExperimentRuntime
     from aec_bench.harness.harbor_workflow import SynchronousHarborWorkflow
+    from aec_bench.harness.progress_tracker import WorkflowProgressSnapshot
     from aec_bench.tasks.instance import resolve_instance_paths
 
     resolved_ledger = resolve_path("ledger_root")
@@ -965,8 +1014,14 @@ def _execute_manifest(
             environment_binding=resolve_harbor_environment_binding(manifest.compute.backend),
         )
 
-        def _progress(snapshot: object) -> None:
-            console.print(f"  [dim]{snapshot}[/dim]")
+        def _progress(snapshot: WorkflowProgressSnapshot) -> None:
+            if snapshot.trial is not None:
+                event = snapshot.trial
+                phase = "attempt ended" if event.event == "end" else event.event
+                failure = f" ({event.exception_type})" if event.exception_type else ""
+                console.print(f"  {event.trial_name}: {phase}{failure}", markup=False)
+            else:
+                console.print(f"  [dim]{snapshot}[/dim]")
 
         runtime.progress_callback = _progress
         artifact_ids = {task.task_id for task in artifact_tasks}

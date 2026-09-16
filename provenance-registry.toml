@@ -4170,6 +4170,26 @@ compatibility_behavior = "the canonical Harbor importer accepts schema 1 only"
 compatibility_kind = "external_schema"
 
 [[field]]
+symbol = "aec_bench.harness.progress_tracker.HarborTrialProgress.timestamp"
+surface = "pydantic_model"
+wire_name = "timestamp"
+category = "event_time"
+domain_owner = "harness"
+authority = "harbor_trial_hook"
+authoritative = false
+exposure = "subprocess_protocol"
+status = "current"
+payload_contract = "one observed Harbor trial lifecycle event"
+canonicalization = "Harbor event datetime serialized as ISO 8601 JSON"
+consumer = "Harbor subprocess progress reader and workflow observers"
+validation_behavior = "HarborTrialProgress validates datetime input and preserves the timestamp supplied by TrialHookEvent"
+mismatch_behavior = "reject malformed event metadata"
+retention = "observer event lifetime"
+rationale = "Observers need the source event time to follow trial progress. Final results remain governed by Harbor completion and import."
+duplication = "projection"
+event = "Harbor trial lifecycle hook emitted"
+
+[[field]]
 symbol = "aec_bench.harness.run_progress.RunProgressSurface.last_activity_at"
 surface = "pydantic_model"
 wire_name = "last_activity_at"
@@ -5926,6 +5946,52 @@ mismatch_behavior = "A missing closeout decision fails result extraction; a chan
 retention = "experiment_trial_evidence_lifetime"
 rationale = "This is a task-domain decision label, not a source revision or qualification version."
 duplication = "projection"
+
+[[field]]
+symbol = "mapping:aec_bench.harness.harbor_regrade.run_regrade.source_sha256"
+surface = "mapping"
+wire_name = "source_sha256"
+category = "artifact_integrity"
+domain_owner = "harness"
+authority = "harbor_regrade_input_retention"
+authoritative = true
+exposure = "persisted"
+status = "current"
+payload_contract = "regrade inputs.json retained input digests"
+canonicalization = "SHA-256 of sorted compact JSON mapping relative names to permission modes and regular-file SHA-256 values; directories have null content digests"
+consumer = "regrade input retention checks and assessment reviewers"
+validation_behavior = "_copy_input hashes the source before and after copying and compares it with the retained copy; _input_digest rejects links and special files"
+mismatch_behavior = "raise ValueError before verifier execution if retained inputs differ"
+retention = "regrade assessment lifetime"
+rationale = "Bind the assessment to the retained evidence from the original execution."
+duplication = "unique"
+algorithm = "sha256"
+fail_closed = true
+artifact_boundary = "each retained original trial metadata file or evidence directory"
+read_verification = "_input_digest reads file bytes and directory entries during retention; _copy_input verifies both source and retained copy"
+
+[[field]]
+symbol = "mapping:aec_bench.harness.harbor_regrade.run_regrade.task_sha256"
+surface = "mapping"
+wire_name = "task_sha256"
+category = "artifact_integrity"
+domain_owner = "harness"
+authority = "harbor_regrade_input_retention"
+authoritative = true
+exposure = "persisted"
+status = "current"
+payload_contract = "regrade inputs.json retained input digests"
+canonicalization = "SHA-256 of sorted compact JSON mapping relative names to permission modes and regular-file SHA-256 values; directories have null content digests"
+consumer = "regrade input retention checks and assessment reviewers"
+validation_behavior = "_copy_input hashes the source before and after copying and compares it with the retained copy; _input_digest rejects links and special files"
+mismatch_behavior = "raise ValueError before verifier execution if retained inputs differ"
+retention = "regrade assessment lifetime"
+rationale = "Bind the assessment to the revised verifier task that was executed."
+duplication = "unique"
+algorithm = "sha256"
+fail_closed = true
+artifact_boundary = "the complete retained revised public task directory"
+read_verification = "_input_digest reads file bytes and directory entries during retention; _copy_input verifies both source and retained copy"
 
 [[field]]
 symbol = "mapping:aec_bench.lifecycles.stormwater_design.drainage_learning.drainage_staged_review_feedback.terminal_outcome.validity.schema_valid"

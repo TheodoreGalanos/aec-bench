@@ -162,6 +162,32 @@ def test_persisted_dispatch_rejects_task_drift_before_effect(tmp_path: Path) -> 
     assert store.read_run(spec.run_identity).state.state == "ready"
 
 
+def test_persisted_dispatch_preflights_later_jobs_before_starting_run(tmp_path: Path) -> None:
+    task = _task(tmp_path)
+    spec = _spec(task, condition_count=2)
+    first, second = spec.agent_conditions
+    spec = spec.model_copy(
+        update={"agent_conditions": (first, second.model_copy(update={"parameters": {"max_turns": 0}}))}
+    )
+    store, plan = _ready_store(tmp_path, spec)
+    executor = _InspectingExecutor(tmp_path / "configs", expected_count=2)
+
+    with pytest.raises(HarborDispatchError, match="max_turns"):
+        HarborExperimentDispatcher(project_root=tmp_path).dispatch_persisted_plan(
+            store=store,
+            run_identity=spec.run_identity,
+            manifest=_manifest(spec, plan),
+            tasks=[task],
+            config_dir=tmp_path / "configs",
+            started_at=datetime(2026, 8, 30, 12, 2, tzinfo=UTC),
+            environment_binding=_LOCAL_ENVIRONMENT,
+            executor=executor,
+        )
+
+    assert executor.calls == []
+    assert store.read_run(spec.run_identity).state.state == "ready"
+
+
 def test_transport_uses_safe_names_and_exact_planned_uuids() -> None:
     _, plan = _plan()
 

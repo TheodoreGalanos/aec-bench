@@ -17,6 +17,36 @@ _skip_no_job_data = pytest.mark.skipif(
 )
 
 
+@pytest.mark.parametrize("with_execution_fields", [False, True])
+def test_execution_import_rejects_regrade_before_reading_execution_fields(
+    tmp_path: Path, with_execution_fields: bool
+) -> None:
+    result_path = tmp_path / "result.json"
+    payload = (
+        {
+            "trial_name": "regrade",
+            "task_checksum": "revised-task",
+            "config": {
+                "task": {"path": "revised/task"},
+                "agent": {"name": "recorded-agent", "model_name": "recorded-model"},
+                "environment": {"type": "docker"},
+                "job_id": "original-job",
+                "source_trial": {"action": "regrade"},
+            },
+            "agent_info": {"name": "recorded-agent"},
+            "agent_result": {"cost_usd": 0.5, "n_input_tokens": 100},
+            "started_at": "2026-09-15T00:00:00Z",
+            "finished_at": "2026-09-15T00:01:00Z",
+        }
+        if with_execution_fields
+        else {"config": {"source_trial": {"action": "regrade"}}}
+    )
+    result_path.write_text(json.dumps(payload))
+
+    with pytest.raises(HarborArtifactContractError, match="regrade is an assessment, not a new execution"):
+        read_harbor_trial_result(result_path)
+
+
 @_skip_no_job_data
 def test_read_harbor_trial_result_accepts_real_trial_result() -> None:
     result = read_harbor_trial_result(HARBOR_TRIAL_RESULT)

@@ -7,8 +7,6 @@ import argparse
 import asyncio
 import os
 import shutil
-import subprocess
-import sys
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -20,26 +18,9 @@ from aec_bench.experimentation.qualification.harness_program_study import (
     HarnessProgramStudySpec,
     run_harness_program_study,
 )
-from aec_bench.harness.harbor_dispatch import HarborCommandExecutor
+from aec_bench.harness.harbor_dispatch import HarborCommandExecutor, SubprocessHarborExecutor
 from aec_bench.harness.harbor_workflow import SynchronousHarborWorkflow
 from aec_bench.harness.kernel_catalogue import AgentAdapterRuntime, default_kernel_registry
-
-
-class HarnessProgramStudySubprocessHarborExecutor:
-    """Execute real Harbor while keeping machine-readable success output isolated on stdout."""
-
-    def execute(self, *, command: list[str], cwd: Path) -> int:
-        env = dict(os.environ)
-        existing_pythonpath = env.get("PYTHONPATH", "")
-        env["PYTHONPATH"] = str(cwd) if not existing_pythonpath else f"{cwd}{os.pathsep}{existing_pythonpath}"
-        completed = subprocess.run(
-            command,
-            cwd=cwd,
-            check=False,
-            env=env,
-            stdout=sys.stderr,
-        )
-        return int(completed.returncode)
 
 
 def run_harness_program_study_cli(
@@ -73,7 +54,7 @@ def run_harness_program_study_cli(
             registry=default_kernel_registry(),
             workflow=workflow,
             artifacts_root=Path(arguments.artifacts_root).resolve(),
-            executor=(executor if executor is not None else HarnessProgramStudySubprocessHarborExecutor()),
+            executor=(executor if executor is not None else SubprocessHarborExecutor()),
         )
     )
     print(result.path)

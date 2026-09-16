@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Any, Literal, cast
 
@@ -24,6 +25,8 @@ OUTPUT_COMMIT_PLUGIN_ID = "@aec-bench/dsh-output-commit"
 OUTPUT_COMMIT_PLUGIN_VERSION = "0.1.0"
 TOOL_GATEWAY_PLUGIN_ID = "@aec-bench/dsh-tools"
 TOOL_GATEWAY_PLUGIN_VERSION = "0.2.0"
+SUBAGENT_TRACE_PLUGIN_ID = "@aec-bench/dsh-subagent-trace"
+SUBAGENT_TRACE_PLUGIN_VERSION = "0.1.0"
 _MAX_SAFE_INTEGER = 2**53 - 1
 _HARNESS_PROVIDER_ROUTES: dict[str, HarnessProviderRoute] = {
     "azure": "azure",
@@ -104,6 +107,7 @@ def validate_deepseek_request(
 
     request_timeout_seconds(request)
     request_max_tokens(request)
+    request_subagents_enabled(request)
     _contract, commit_required = deepseek_output_commit_configuration(request)
     if native_tool_names and commit_required:
         raise DeepSeekHarnessConfigurationError(
@@ -161,6 +165,7 @@ def treatment_record(
     max_tokens: int | None = None,
     output_commit_required: bool = False,
     native_tools: tuple[str, ...] = (),
+    subagents_enabled: bool = False,
 ) -> dict[str, object]:
     """Describe the fixed treatment applied to every DeepSeek trial."""
     return {
@@ -169,11 +174,13 @@ def treatment_record(
         "model": settings.model,
         "timeout_sec": timeout_seconds,
         "max_tokens": max_tokens,
-        "plugin_free_baseline": not output_commit_required and not native_tools,
+        "plugin_free_baseline": not output_commit_required and not native_tools and not subagents_enabled,
         "sandbox_mode": "workspace-write",
         "sandbox_enforcement": "partial",
         "network_isolation": False,
-        "subagents_enabled": False,
+        "subagents_enabled": subagents_enabled,
+        "subagent_max_depth": 1 if subagents_enabled else 0,
+        "subagent_mode": "foreground" if subagents_enabled else "disabled",
         "workflows_enabled": False,
         "code_mode_enabled": False,
         "output_commit_mode": "required" if output_commit_required else "disabled",
@@ -182,6 +189,32 @@ def treatment_record(
         "notifications_retained": True,
         "session_jsonl_retained": True,
     }
+
+
+def request_subagents_enabled(request: AdapterRequest) -> bool:
+    """Enable the fixed foreground delegation treatment only with an explicit boolean."""
+    value = request.configuration.get("subagents_enabled", False)
+    if not isinstance(value, bool):
+        raise DeepSeekHarnessConfigurationError("subagents_enabled must be a boolean")
+    return value
+
+
+def subagent_cordis_config(*, commit_required: bool, native_tools: tuple[str, ...]) -> str:
+    """Children use the parent model and cap, without root-only authority or further delegation."""
+    denied = ["subagent", *native_tools]
+    if commit_required:
+        denied.append("aec_commit_output")
+    return (
+        "\n- name: '@deepseek-ai/dsh-subagent'\n"
+        "- name: '@deepseek-ai/dsh-subagent-spawn-in-process'\n"
+        "- name: '@deepseek-ai/dsh-tool-subagent'\n"
+        "  config:\n"
+        "    provider: spawn\n"
+        "    enableRunInBackground: false\n"
+        "    maxDepth: 1\n"
+        "    toolFilter:\n"
+        f"      deny: {json.dumps(sorted(denied))}\n"
+    )
 
 
 def baseline_cordis_template(provider: str) -> Path:

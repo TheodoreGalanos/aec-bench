@@ -49,6 +49,7 @@ from aec_bench.prime_agent.session_evidence import (
     usage_limit_reason,
     wait_for_usage_limit,
 )
+from aec_bench.prime_agent.spawn_hook import install_prime_spawn_hook, prime_spawn_extension
 
 _VERSION_PATTERN = re.compile(r"(?<!\d)(\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?)")
 _MAX_ACP_MESSAGE_BYTES = 16 * 1024 * 1024
@@ -161,6 +162,8 @@ def build_prime_acp_command(
         "--no-skills",
         *skill_arguments,
         "--no-extensions",
+        "--extension",
+        str(prime_spawn_extension(session_dir)),
         "--no-prompt-templates",
         "--no-themes",
         "--no-context-files",
@@ -290,6 +293,7 @@ async def run_prime_acp_session(
             "PI_SKIP_VERSION_CHECK": "1",
         }
     )
+    install_prime_spawn_hook(paths.session_dir, env)
     base_command = build_prime_acp_command(
         executable=resolved_executable,
         model=model,
@@ -464,6 +468,9 @@ async def run_prime_acp_session(
                 await stderr_task
         _redact_session_artifacts(paths.session_dir, env, redact_values)
         _preserve_session_artifacts(paths.session_dir, evidence_directory)
+        from aec_bench.prime_agent.trajectory import write_prime_trajectory
+
+        write_prime_trajectory(paths.session_dir, evidence_directory / "trajectory.jsonl")
         if sandbox_profile is not None:
             sandbox_profile.unlink(missing_ok=True)
 
@@ -804,6 +811,7 @@ def _write_run_provenance(
     replacements = {
         str(actor_workspace): "<actor-workspace>",
         str(run.paths.session_dir): "<prime-session-dir>",
+        str(prime_spawn_extension(run.paths.session_dir)): "<aec-bench-spawn-hook>",
     }
     replacements.update(
         {
@@ -924,6 +932,11 @@ def _preserve_session_artifacts(session_directory: Path, evidence_directory: Pat
         if destination.exists():
             raise FileExistsError(f"Prime session evidence destination already exists: {destination.name}")
         shutil.copyfile(session_file, destination)
+        spawn_evidence = session_file.parent / "aec-spawn.json"
+        if spawn_evidence.is_symlink():
+            raise PrimeAcpIsolationError("Prime spawn evidence must not be a symbolic link")
+        if spawn_evidence.is_file():
+            shutil.copyfile(spawn_evidence, destination.with_suffix(".spawn.json"))
 
 
 def _directory_digest(directory: Path) -> str:

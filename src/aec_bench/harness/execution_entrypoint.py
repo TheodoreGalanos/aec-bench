@@ -126,24 +126,32 @@ class ToolLoopExecutionDriver:
 
     def execute(self, bundle: ExecutionBundle) -> AdapterResult:
         tools = [ToolSpec.model_validate(tool_payload) for tool_payload in bundle.request.tools]
-        if _payload_has_client(bundle.execution.payload):
-            client = self.client_registry.build_tool_loop_client(_client_spec(bundle.execution.payload))
-        else:
-            client = _default_tool_loop_client_for_model(
-                bundle.execution.resolved_model,
-                self.workspace_dir,
-                tools=tools,
-            )
-        adapter = ToolLoopAdapter(
-            adapter_name=bundle.execution.adapter_name,
-            model_name=bundle.execution.resolved_model,
-            client=client,
-            tool_executor=TaskToolExecutor(
-                registry=ToolExecutorRegistry(workspace_dir=self.workspace_dir),
-                tools=tools,
-            ),
+        trajectory_writer = _build_trajectory_writer(
+            workspace_dir=self.workspace_dir,
+            configuration=bundle.request.configuration,
         )
-        return adapter.execute(_adapter_request(bundle, tools=tools))
+        try:
+            if _payload_has_client(bundle.execution.payload):
+                client = self.client_registry.build_tool_loop_client(_client_spec(bundle.execution.payload))
+            else:
+                client = _default_tool_loop_client_for_model(
+                    bundle.execution.resolved_model,
+                    self.workspace_dir,
+                    tools=tools,
+                    trajectory_writer=trajectory_writer,
+                )
+            adapter = ToolLoopAdapter(
+                adapter_name=bundle.execution.adapter_name,
+                model_name=bundle.execution.resolved_model,
+                client=client,
+                tool_executor=TaskToolExecutor(
+                    registry=ToolExecutorRegistry(workspace_dir=self.workspace_dir),
+                    tools=tools,
+                ),
+            )
+            return adapter.execute(_adapter_request(bundle, tools=tools))
+        finally:
+            trajectory_writer.close()
 
 
 @dataclass(frozen=True)
@@ -356,7 +364,7 @@ def _ensure_kernel_invocation_trajectory(bundle: ExecutionBundle) -> None:
         configuration=bundle.request.configuration,
     )
     writer.new_step(call_type="main")
-    writer.thinking(f"Kernel invocation completed through {bundle.execution.adapter_kind}.")
+    writer.assistant(f"Kernel invocation completed through {bundle.execution.adapter_kind}.")
     writer.close()
 
 
@@ -439,6 +447,7 @@ def _default_tool_loop_client_for_model(
     workspace_dir: Path,
     *,
     tools: list[ToolSpec],
+    trajectory_writer: TrajectoryWriter,
 ) -> ToolLoopClient:
     from aec_bench.adapters.tool_loop_local import PydanticAiToolLoopClient
 
@@ -451,6 +460,7 @@ def _default_tool_loop_client_for_model(
         model_name,
         workspace=str(workspace_dir),
         enable_bash=any(tool.name == "bash" for tool in tools),
+        trajectory_writer=trajectory_writer,
     )
 
 

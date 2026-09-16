@@ -138,9 +138,38 @@ adapter writes one receipt, one stable final `TrialRecord`, and one
 `TrialFinalization`; a completed execution with a failed evaluation remains a
 successful execution result.
 
+Harbor dispatch validates configurations with the pinned SDK's job model,
+agent preflight, and declared environment resource policies before writing
+dispatch files. Agent kwargs cannot duplicate framework constructor arguments.
+An agent name cannot override a different explicit import path. Saved job files
+pass the same checks before execution, including dry runs. Configuration checks
+do not construct agents or environments and do not establish provider readiness.
+
+`AgentConfig.n_concurrent` and `concurrency_group` are Harbor scheduling
+settings, separate from adapter `parameters`. A group requires an explicit
+positive cap, shared by all its members and bounded by
+`compute.resource_limits.n_concurrent_trials`. Harbor owns the semaphores:
+the overall limit covers active trials, and agent caps cover agent execution
+phases. Caps are local to one job; they do not account for individual model
+requests, tokens, or nested subagent calls.
+
+The subprocess SDK runner forwards `HarborTrialProgress` metadata through
+the synchronous workflow's progress callback. The Harbor trial UUID identifies
+an attempt. An `end` event does not establish a final result because Harbor can
+retry that trial. These callbacks do not import evidence or choose retry policy.
+`SynchronousHarborWorkflow` invokes its completion callback after the final
+ledger import returns. `ExperimentImportResult.execution_status_counts` counts
+the accepted source records, including exact duplicates already in the ledger.
+It reports execution status independently of evaluation reward and import
+errors. Callback exceptions produce warnings without changing execution or
+ledger results. Completion is once per successful import invocation, not an
+exactly-once external delivery guarantee. Dispatch and import failures remain
+errors and do not invoke completion.
+
 Canonical Harbor dispatch validates the persisted ready plan and writes all
 one-trial job configurations and transport sidecars before the first Harbor
-effect. Each job contains one task, one agent, and one attempt.
+effect. Every job passes preflight before the run changes to `started`.
+Each job contains one task, one agent, and one attempt.
 `HarborTrialTransport` carries a transport-safe Harbor job name with the exact
 planned trial UUID. Import does not treat a
 Harbor job ID or generated trial name as an AEC-Bench trial identity. The
@@ -543,6 +572,43 @@ records the current completion, stop, or failure reason when one exists.
 material uses `TrialExtensionRef`; its absence does not change a structurally
 valid execution from `completed` to partial.
 
+Experiment report artifacts retain unevaluated trials with `reward: null`.
+Reward statistics use available evaluations, including a retained evaluation
+from a failed execution. Overall and task-type reports expose `n_evaluated`
+and `n_unevaluated`; their mean reward is null when no evaluation is available.
+Costs include all trials. Missing output does not prevent a failed or cancelled
+trial from appearing in a report.
+
+`CostRecord.model_usage` optionally maps each exact model identity to a
+`ModelUsageRecord`. Input tokens include cached input. Cache-read tokens are a
+subset of input tokens and are not added to them. Reported and estimated USD
+costs have separate fields; a reported cost takes precedence. Missing values
+remain unknown. A reported zero is a known cost.
+
+Harbor imports retain its `agent_result.model_usage`, including child-model
+usage. The importer does not add this breakdown to aggregate usage. It keeps
+the current agent result's aggregate usage, then uses Harbor aggregates or
+model sums when those values are absent. Harbor's reported aggregate cost
+takes precedence. Otherwise, a model breakdown supplies an aggregate cost
+only when every model has a cost and its token sums agree with known aggregate
+usage. An absent breakdown permits the existing root-model estimate; an empty
+or incomplete breakdown does not.
+The existing `CostRecord.estimated_cost_usd` field retains this selected
+aggregate amount, including a reported Harbor total when available.
+
+Per-model estimates use the repository pricing table and require input,
+output, and cache-read counts. Harbor does not supply per-model cache-write
+counts, so these estimates exclude any separate cache-write premium. They
+are not billing records. Unknown model prices remain unknown.
+
+Evaluation summaries expose `by_model_usage` and
+`n_trials_without_model_usage`. Each model summary reports token totals,
+known and unknown cost counts, and reported versus estimated cost counts.
+These are summaries of attributed usage. Missing model attribution is not
+assigned to the root model. The breakdown can be partial and does not replace
+the aggregate trial cost. Existing trial records without this optional field
+remain readable.
+
 An artifact-task recipe receives only the tracked `AttemptRunner`. It cannot
 receive the task package, runtime, official verifier, or verifier result. Each
 fresh attempt has a separate workspace. A child copies its parent workspace
@@ -575,6 +641,30 @@ world.
 Trial records are append-only evidence once accepted. Internal builders and
 temporary run directories remain replaceable implementation.
 
+`aec-bench evaluation regrade` creates a separate Harbor assessment of a
+finished local single-step artifact trial. It uses the revised public task's
+separate verifier and declared artifact inputs. It does not rerun the agent,
+replace the original evaluation, or write another execution `TrialRecord`.
+The source collection manifest must cover the verifier inputs. The command
+does not reconstruct missing recorded state from an agent transcript.
+
+The assessment retains the source result, available config and lock, agent
+logs, and artifacts under `source/`, plus the revised task under `task/`.
+`inputs.json` records their source paths, source trial UUID, and SHA-256 tree
+digests. A tree digest hashes the sorted JSON map of relative paths to
+`[permission_mode, file_sha256]`; directory entries use null for the file
+digest. Paths use forward slashes, including `.` for the root. JSON uses
+compact separators. Links and special files are rejected. Harbor's native
+assessment result, lock, and verifier evidence live under `verification/`.
+An existing assessment directory cannot be overwritten.
+
+Regrade rewards describe the revised verifier's assessment of the recorded
+output. A failed assessment does not supply a replacement reward. Harbor's
+copied agent usage remains a fact about the source execution. Execution
+import rejects results with `config.source_trial` to prevent duplicate trials
+and costs. Ordinary evaluation summaries continue to use the accepted ledger
+records; they do not substitute regrade assessments automatically.
+
 A world action and a provider session are not trials. The dam, pump, and pump
 Harbor trial functions each return one `TrialRecord` with `task_kind="world"`.
 The record keeps provider, actor-authority, world, usage, timing, output, and
@@ -584,11 +674,112 @@ artifact that cleanup removed.
 The reader requires `schema_version = 2`. It rejects missing or unsupported
 versions. It does not guess the shape of historical records.
 
+### Trajectory and ATIF
+
 The current trajectory is entry-only JSONL. The writer does not emit a format
 header, and the reader does not select or decode historical versions. Ordinary
 adapter runs use it as the ordered interaction authority. Exact provider or
 sealed transcripts remain separate only when their producing boundary needs
 them.
+
+`TrajectoryEntry.tool_call_id` is optional. Producers retain the provider's call
+ID when it is known. The tool-loop producer uses the same ID for a call and its
+result. The writer flushes each complete JSONL record.
+
+`reasoning` entries contain a `TrajectoryReasoning` payload. Its `content` is
+text exposed as thinking by the provider; it can be a summary. `provider_name`
+and `part_id` retain available attribution. `has_signature` records the presence
+of a signature or encrypted thinking payload. The payload bytes are not copied.
+Ordinary assistant text uses `TrajectoryWriter.assistant()` and is not labelled
+as provider reasoning.
+
+`model_response` entries contain one `TrajectoryModelResponse` payload per
+observed response. It identifies the SDK source, model, provider, response ID,
+and available `TrajectoryUsage`. PydanticAI supplies normalised token counts.
+Its default zero cannot establish whether a scalar count was reported, so this
+producer omits zero counts. SDK usage details are retained as supplied. These
+records do not establish billable cost or usage from other agents.
+
+`subagent` entries contain a `TrajectorySubagentEntry` envelope. It identifies
+one child trajectory, its agent and model, an optional parent tool-call ID, and
+one child `TrajectoryEntry`. All records for a child retain the same identity.
+Children can contain further children. The writer captures parent context at
+launch and serialises complete writes under a file lock. Child steps are local
+to the child. The parent behavioural projection does not read child contents.
+
+Tool loop records advisor children. RLM records admitted subcall and advisor
+requests under the executing REPL call; compaction is not delegation.
+Lambda-RLM records admitted model calls under `execute_plan`. These producers
+capture requests before provider execution, then responses and available usage.
+A provider exception records its type without transport details and without a
+model-response marker. An unsuccessful provider response can carry both usage
+and an error record. No trace record changes canonical accounting.
+
+Prime derives the same child envelopes from redacted version 3 session files.
+An explicit `parentSession` and a depth increase of one establish ancestry.
+The converter resolves references only among files in the supplied directory;
+it does not read an external parent path. Session IDs must be unique. Same-depth
+forks, absent parents, cycles, and disconnected sessions are rejected. `session`
+entries retain observed identity metadata, including for children with no
+messages. An explicit AEC-Bench Prime extension tags each `ipython` call with
+its session and tool-call IDs. A trial-local IPython startup hook removes the
+transport comment before parsing and retains the IDs in the cell's async
+context. It observes successful `rlm.run` replies through the public
+`rlm.host_request` function and writes `aec-spawn.json` in the returned child
+directory. It does not change the upstream package, request, response, or model
+tools. Capture failures leave the spawn result intact and emit a diagnostic.
+
+Spawn evidence contains `parent_session_id`, `parent_tool_call_id`, and
+`rlm_child_id`. The converter checks the parent against the session header,
+the child against its directory, and the call against one parent `ipython`
+call. Invalid or symbolic-link evidence is rejected. Missing evidence leaves
+the call link unknown; the converter does not infer it. A spawn interrupted
+before its reply is observed can therefore retain ancestry without a call link.
+ACP retains each sidecar beside its copied `prime-session*.jsonl` evidence as
+`prime-session*.spawn.json`. Source event
+timestamps remain intact. Prime input usage includes input, cache-read, and
+cache-write counts when all three are supplied. Unknown counts remain absent.
+This derived file is written after process exit. Raw session evidence remains
+authoritative; export failures are logged and do not change the Prime outcome.
+
+ATIF is a derived external view. The exporter uses Harbor's ATIF-v1.8 models and
+validates the assembled document. File order defines ATIF step order. It groups
+only adjacent agent entries with the same native step, `call_type`, and
+`meta_harness` context. System and user entries each form a separate step.
+Native step numbers remain in `extra.aec_bench`.
+
+A tool result links to an explicit call ID in the trajectory, including a call
+from an earlier step. The ATIF observation is stored with its calling step.
+Without an explicit ID, it links only to the single unmatched call with the
+same tool name in the current step. Ambiguous results have no
+`source_call_id`. Calls without an ID receive an ID based on their entry
+position. Duplicate call IDs are rejected. The export retains source metadata,
+errors, timing, and media paths under `extra.aec_bench`. Exposed reasoning text
+maps to `reasoning_content`; opaque-only parts leave that field absent. A model
+response sets the step's `llm_call_count` to one. Available input, output, and
+cache-read counts map to step metrics; cache-write counts and SDK details use
+metric extensions. Two model-response records in one step are rejected.
+Child entries form independently valid embedded ATIF trajectories. Explicit
+parent call IDs produce `subagent_trajectory_ref` values on the matching
+observation. Before a result arrives, the observation carries the reference
+with no result content. A child with known session ancestry but no calling-tool
+identity is embedded without an observation reference. Conflicting child
+identity or an unknown explicit parent call is rejected. The exporter does not
+infer cost, aggregate usage, multimodal content types, or missing relationships.
+Capturing these records does not change model settings.
+
+During Harbor artifact execution, the host writes `agent/trajectory.json`
+atomically. Live exports use only newline-terminated source records. Their
+`extra.aec_bench.export_stage` is `preview`. At agent exit, one final export
+attempt reads the complete source and uses `export_stage: final`. This value
+describes the export attempt, not agent success. A failed final export leaves
+the last preview intact. Export errors do not replace the agent outcome, and
+polling stops before verification.
+
+The Harbor importer validates a supplied ATIF document and retains it with the
+`atif_trajectory` artifact role and `application/json` media type. The native
+JSONL remains the `TrialOutput.trajectory_path` authority. An ATIF file cannot
+establish scoring, aggregate cost, or replay results.
 
 ## Evaluation regimes
 
@@ -900,6 +1091,30 @@ group. A positive `max_tokens` value caps output for each conversation-model
 request through the official SDK. A provider `max-tokens` terminal reason maps
 to partial output and a token-budget stop; it cannot map to success. The
 composition and runtime evidence record both configured values.
+
+`subagents_enabled` is a boolean request parameter, default `false`. When
+enabled, native foreground children use a fresh conversation, the same model,
+and the same per-request output-token cap. A one-level depth cap and child tool
+filters prevent recursive delegation. Children cannot use output commitment
+or AEC native tool gateways. Background runs are rejected. The whole-trial
+timeout covers the root and children in the same worker process group.
+
+The SDK's `subagent.started` notifications identify parent and child sessions.
+The AEC-owned trace plugin records `aec/subagent-spawn` in the parent session
+through public Cordis hooks. It binds the native child ID to the active
+`subagent` tool-call ID, including concurrent calls and children that fail.
+The derived `trajectory.jsonl` retains those relationships, observed reasoning,
+per-response usage, and child error outcomes. Unknown call links stay absent;
+invalid explicit links are rejected. Export occurs after runtime redaction.
+
+`turns_used`, `root_steps`, and root tool counters describe root behavior.
+`usage_model_calls`, `total_tool_calls_started`, `total_tool_calls_completed`,
+and reported token totals include all captured child sessions. Child usage
+feeds the existing trial cost inputs. Counts already captured before timeout
+remain available on the failed result. Unreported usage cannot be recovered.
+The evidence-v3 manifest adds aggregate call counters and the trace-plugin
+reference; retained manifests without these fields remain readable. Local
+keyless delegation checks do not promote live-provider qualification status.
 
 The adapter rejects `max_turns`, `max_tool_calls`, and `max_context_tokens`.
 The current public Harness hooks cannot both stop these operations at the exact

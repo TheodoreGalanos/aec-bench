@@ -1,9 +1,38 @@
 # ABOUTME: Progress accounting helpers for Harbor-backed experiment import workflows.
 # ABOUTME: Tracks deterministic import counters without coupling the harness to any UI surface.
 
+import logging
+from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Literal
+from uuid import UUID
+
+from aec_bench.contracts.validators import FrozenStrictModel
+
+
+class HarborTrialProgress(FrozenStrictModel):
+    """One Harbor attempt event; END does not establish the queue's final result."""
+
+    event: Literal["start", "environment-start", "agent-start", "agent-end", "verification-start", "end", "cancel"]
+    timestamp: datetime
+    harbor_trial_id: UUID
+    trial_name: str
+    task_name: str
+    agent_name: str
+    model_name: str | None
+    trial_dir: Path
+    exception_type: str | None = None
+
+
+def notify_observer[T](callback: Callable[[T], None] | None, value: T, *, label: str) -> None:
+    """Report observer errors without changing execution, import, or retry outcomes."""
+    if callback is not None:
+        try:
+            callback(value)
+        except Exception as error:
+            logging.getLogger(__name__).warning("%s callback failed (%s)", label, type(error).__name__)
 
 
 @dataclass(frozen=True)
@@ -17,6 +46,7 @@ class ImportProgressSnapshot:
 
 
 WorkflowStage = Literal[
+    "trial_event",
     "dispatch_started",
     "dispatch_completed",
     "job_dir_identified",
@@ -37,6 +67,7 @@ class WorkflowProgressSnapshot:
     imported_trials: int = 0
     duplicate_trials: int = 0
     invalid_trials: int = 0
+    trial: HarborTrialProgress | None = None
 
 
 class ImportProgressTracker:
@@ -85,6 +116,16 @@ class WorkflowProgressTracker:
 
     def dispatch_started(self) -> WorkflowProgressSnapshot:
         return self._snapshot(stage="dispatch_started")
+
+    def trial_event(self, event: HarborTrialProgress) -> WorkflowProgressSnapshot:
+        return WorkflowProgressSnapshot(
+            experiment_id=self._experiment_id,
+            stage="trial_event",
+            selected_task_count=self._selected_task_count,
+            planned_trial_count=self._planned_trial_count,
+            job_dir=str(event.trial_dir.parent),
+            trial=event,
+        )
 
     def dispatch_completed(self, *, exit_code: int | None) -> WorkflowProgressSnapshot:
         return self._snapshot(stage="dispatch_completed", dispatch_exit_code=exit_code)
