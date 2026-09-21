@@ -616,9 +616,8 @@ Do not assume later evidence exists. Preserve stable finding, request, and accep
 only when the current or prior released evidence satisfies its recorded closure requirement. A response assertion
 without the required artifact is not closure evidence.
 
-Write the cumulative JSON review state to `submissions/{checkpoint_id}.json`. It must contain:
+Write the cumulative JSON review state to `submissions/{checkpoint_id}.json`. The host supplies `checkpoint_id`. Supply:
 
-- `checkpoint_id`
 - `evidence_refs`
 - `review_matrix` for PRV-01 through PRV-09
 - `transition_decision` for model run, model report, and design claim

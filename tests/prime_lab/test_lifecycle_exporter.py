@@ -305,11 +305,10 @@ def test_generated_lifecycle_rollout_advances_all_checkpoints_in_one_persistent_
                 {
                     "name": "write_checkpoint_submission",
                     "arguments": {
-                        "checkpoint_id": checkpoint_id,
                         "content": json.dumps(gold[checkpoint_id]),
                     },
                 },
-                {"name": "submit_checkpoint", "arguments": {"checkpoint_id": checkpoint_id}},
+                {"name": "submit_checkpoint", "arguments": {}},
             ]
         )
     probe = _run_generated_probe(
@@ -369,7 +368,6 @@ def test_generated_lifecycle_rollout_exposes_conditional_evidence_only_for_capab
         {
             "name": "request_evidence",
             "arguments": {
-                "checkpoint_id": checkpoint_ids[0],
                 "request_id": "survey_revision",
                 "reason": "Resolve the source revision discrepancy.",
             },
@@ -381,11 +379,10 @@ def test_generated_lifecycle_rollout_exposes_conditional_evidence_only_for_capab
                 {
                     "name": "write_checkpoint_submission",
                     "arguments": {
-                        "checkpoint_id": checkpoint_id,
                         "content": json.dumps(gold[checkpoint_id]),
                     },
                 },
-                {"name": "submit_checkpoint", "arguments": {"checkpoint_id": checkpoint_id}},
+                {"name": "submit_checkpoint", "arguments": {}},
             ]
         )
 
@@ -419,7 +416,7 @@ def test_generated_lifecycle_rollout_exposes_conditional_evidence_only_for_capab
     action = cast(dict[str, Any], probe["lifecycle"])["checkpoint_runs"][0]["evidence_request_actions"][0]
     assert action["session_id"] == "conditional-rollout"
     request_parameters = probe["tool_parameters"][probe["tool_names"].index("request_evidence")]
-    assert set(request_parameters["properties"]) == {"checkpoint_id", "request_id", "reason"}
+    assert set(request_parameters["properties"]) == {"request_id", "reason"}
 
 
 def test_generated_lifecycle_rollout_executes_hydraulic_operation_with_public_schema(
@@ -436,7 +433,6 @@ def test_generated_lifecycle_rollout_executes_hydraulic_operation_with_public_sc
         identity_run,
         operation_resolver=lifecycle_operation_resolver(package, identity_run),
     )
-    current_source = _read_json(identity_run / "workspace" / "operations" / "current-source.json")
     result = export_prime_lifecycle_environment(
         PrimeLifecycleExportConfig(
             name="stormwater-hydraulic-operation-lifecycle",
@@ -453,9 +449,7 @@ def test_generated_lifecycle_rollout_executes_hydraulic_operation_with_public_sc
         {
             "name": "execute_operation",
             "arguments": {
-                "checkpoint_id": "baseline_analysis",
                 "operation_id": "hydrology.design-10yr",
-                "visible_source_state_sha256": current_source["visible_source_state_sha256"],
                 "reason": "Calculate the declared baseline design hydrology.",
             },
         },
@@ -491,9 +485,7 @@ def test_generated_lifecycle_rollout_executes_hydraulic_operation_with_public_sc
     assert "attempt_id" not in json.dumps(operation)
     parameters = probe["tool_parameters"][probe["tool_names"].index("execute_operation")]
     assert set(parameters["properties"]) == {
-        "checkpoint_id",
         "operation_id",
-        "visible_source_state_sha256",
         "reason",
     }
     assert "workspace/operations/current-source.json" in probe["run_files"]
@@ -535,11 +527,10 @@ def test_lifecycle_reward_is_task_owned_and_only_runs_at_terminal_state(tmp_path
                 {
                     "name": "write_checkpoint_submission",
                     "arguments": {
-                        "checkpoint_id": checkpoint_id,
                         "content": json.dumps(gold[checkpoint_id]),
                     },
                 },
-                {"name": "submit_checkpoint", "arguments": {"checkpoint_id": checkpoint_id}},
+                {"name": "submit_checkpoint", "arguments": {}},
             ]
         )
     complete = _run_generated_probe(
@@ -584,7 +575,7 @@ def test_generated_lifecycle_environment_rejects_path_escape_and_archive_drift(t
                 },
                 {
                     "name": "write_checkpoint_submission",
-                    "arguments": {"checkpoint_id": "initial_review", "content": "[]"},
+                    "arguments": {"content": "[]"},
                 },
             ],
         },

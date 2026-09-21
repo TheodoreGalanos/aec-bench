@@ -744,7 +744,7 @@ class _GoldSessionRegistry:
                         registry.run_dir / "workspace" / "submissions" / f"{checkpoint_id}.json",
                         gold[checkpoint_id],
                     )
-                    response = json.loads(submit_checkpoint(checkpoint_id))
+                    response = json.loads(submit_checkpoint())
                     assert response["status"] in {"awaiting_checkpoint_submission", "complete"}
                 return SimpleNamespace(
                     agent_output=SimpleNamespace(status=SimpleNamespace(value="completed")),

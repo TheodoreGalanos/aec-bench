@@ -106,9 +106,7 @@ def test_control_tool_executes_one_source_bound_operation_without_host_identity_
 
     blank = json.loads(
         control.execute_operation(
-            "baseline_analysis",
             "hydrology.design-10yr",
-            source_payload["visible_source_state_sha256"],
             " ",
         )
     )
@@ -125,9 +123,7 @@ def test_control_tool_executes_one_source_bound_operation_without_host_identity_
 
     response = json.loads(
         control.execute_operation(
-            "baseline_analysis",
             "hydrology.design-10yr",
-            source_payload["visible_source_state_sha256"],
             "Calculate the declared baseline design hydrology.",
         )
     )
@@ -175,9 +171,7 @@ def test_control_tool_executes_one_source_bound_operation_without_host_identity_
 
     reused = json.loads(
         control.execute_operation(
-            "baseline_analysis",
             "hydrology.design-10yr",
-            source_payload["visible_source_state_sha256"],
             "Reuse the current design hydrology if its source projection still matches.",
         )
     )
@@ -187,23 +181,6 @@ def test_control_tool_executes_one_source_bound_operation_without_host_identity_
     assert reused["budget_consumed"] == 0
     assert reused["remaining_budget"] == 5
     assert reused["artifacts"] == response["artifacts"]
-
-    stale = json.loads(
-        control.execute_operation(
-            "baseline_analysis",
-            "hydrology.design-10yr",
-            "f" * 64,
-            "Calculate using this supplied visible source identity.",
-        )
-    )
-    assert stale["status"] == "rejected"
-    assert stale["action_id"] == "operation-000003"
-    assert stale["rejection"] == "stale_visible_source"
-    assert stale["budget_consumed"] == 0
-    assert stale["remaining_budget"] == 5
-    assert stale["artifacts"] == []
-    assert "session_id" not in json.dumps(stale)
-    assert "attempt_id" not in json.dumps(stale)
 
 
 def test_workspace_tool_rejects_undeclared_hydraulic_submission_fields(tmp_path: Path) -> None:
@@ -223,7 +200,6 @@ def test_workspace_tool_rejects_undeclared_hydraulic_submission_fields(tmp_path:
 
     response = json.loads(
         workspace.write_checkpoint_submission(
-            checkpoint.checkpoint_id,
             json.dumps(submission),
         )
     )
@@ -262,9 +238,9 @@ def test_local_tool_schema_captures_operation_capability_in_both_execution_modes
         "execute_operation",
     ]
     operation = next(tool for tool in persistent if tool["name"] == "execute_operation")
-    assert "checkpoint_id" in operation["signature"]
+    assert "checkpoint_id" not in operation["signature"]
     assert "operation_id" in operation["signature"]
-    assert "visible_source_state_sha256" in operation["signature"]
+    assert "visible_source_state_sha256" not in operation["signature"]
     assert "reason" in operation["signature"]
     assert "session_id" not in operation["signature"]
 
@@ -355,13 +331,9 @@ class _OperationExercisingRegistry:
                     )
                     checkpoint_id = str(lifecycle["active_checkpoint_id"])
                 if registry.operation_response is None:
-                    source_response = json.loads(tool_map["read_workspace_file"]("operations/current-source.json"))
-                    source = json.loads(source_response["content"])
                     registry.operation_response = json.loads(
                         tool_map["execute_operation"](
-                            checkpoint_id,
                             "hydrology.design-10yr",
-                            source["visible_source_state_sha256"],
                             "Calculate the declared baseline design hydrology.",
                         )
                     )
@@ -373,14 +345,13 @@ class _OperationExercisingRegistry:
                 )
                 written = json.loads(
                     tool_map["write_checkpoint_submission"](
-                        checkpoint_id,
                         json.dumps(submission),
                     )
                 )
                 assert written["status"] == "written"
                 if "submit_checkpoint" in tool_map:
                     while True:
-                        submitted = json.loads(tool_map["submit_checkpoint"](checkpoint_id))
+                        submitted = json.loads(tool_map["submit_checkpoint"]())
                         if submitted["status"] == "complete":
                             break
                         checkpoint_id = submitted["checkpoint_id"]
@@ -390,7 +361,6 @@ class _OperationExercisingRegistry:
                             {field: {} for field in checkpoint.required_submission_fields if field != "checkpoint_id"}
                         )
                         tool_map["write_checkpoint_submission"](
-                            checkpoint_id,
                             json.dumps(submission),
                         )
                 return SimpleNamespace(

@@ -44,7 +44,7 @@ if TYPE_CHECKING:
 
 PUMP_STATION_GUIDANCE_INSTRUCTION = (
     "Before your first world action, load and follow the full `pump-station-guidance` skill. "
-    "Keep its compact state and exact action ledger throughout the episode. "
+    "Keep compact engineering state throughout the episode. "
     "Use its references when they help the current decision."
 )
 

@@ -227,31 +227,6 @@ def test_malformed_visible_source_hash_is_rejected_before_state_lock(
     assert not (run / "lifecycle_operations").exists()
 
 
-def test_control_tool_rejects_malformed_hash_without_creating_action(tmp_path: Path) -> None:
-    package, run, _visible_source_sha256 = _prepare(tmp_path)
-    tool = EvidenceLifecycleControlTool(
-        package_dir=package,
-        run_dir=run,
-        operation_resolver=_resolver(package, run),
-        session_id="baseline.session-001",
-    )
-
-    response = json.loads(
-        tool.execute_operation(
-            "baseline_analysis",
-            "hydrology.design-10yr",
-            "A" * 64,
-            "Reject a malformed model-supplied source identity.",
-        )
-    )
-
-    assert response == {
-        "status": "rejected",
-        "error": "visible source state sha256 must contain 64 lowercase hexadecimal characters",
-    }
-    assert not (run / "lifecycle_operations").exists()
-
-
 def test_control_tool_rejects_blank_arguments_without_creating_action(tmp_path: Path) -> None:
     package, run, visible_source_sha256 = _prepare(tmp_path)
     tool = EvidenceLifecycleControlTool(
@@ -263,9 +238,7 @@ def test_control_tool_rejects_blank_arguments_without_creating_action(tmp_path: 
 
     response = json.loads(
         tool.execute_operation(
-            "baseline_analysis",
             " ",
-            visible_source_sha256,
             "Reject a blank model-supplied operation identity.",
         )
     )
@@ -288,9 +261,7 @@ def test_control_tool_propagates_session_infrastructure_failure(tmp_path: Path) 
 
     with pytest.raises(EvidenceLifecycleError, match="active attempt belongs"):
         tool.execute_operation(
-            "baseline_analysis",
             "hydrology.design-10yr",
-            visible_source_sha256,
             "Do not mask an invalid host session as a model rejection.",
         )
 
@@ -400,3 +371,61 @@ def test_read_only_current_source_resolver_matches_published_projection(tmp_path
     assert source.visible_source_state_sha256 == before["visible_source_state_sha256"]
     assert source.physical_source_state_sha256 == before["physical_source_state_sha256"]
     assert _read_json(run / "workspace" / "operations" / "current-source.json") == before
+
+
+def test_actor_operation_binds_current_source_without_model_bookkeeping(tmp_path: Path) -> None:
+    package, run, source_hash = _prepare(tmp_path)
+    tool = EvidenceLifecycleControlTool(
+        package_dir=package,
+        run_dir=run,
+        operation_resolver=_resolver(package, run),
+        session_id="baseline.session-001",
+    )
+    result = json.loads(tool.execute_operation("hydrology.design-10yr", "Calculate design hydrology."))
+    assert result["status"] == "completed"
+    action = json.loads((run / "lifecycle_operations/operation-000001/action.json").read_text())
+    assert action["visible_source_state_before_sha256"] == source_hash
+    assert action["checkpoint_id"] == "baseline_analysis"
+    assert action["session_id"] == "baseline.session-001"
+
+
+def test_source_binding_ignores_a_modified_workspace_projection(tmp_path: Path) -> None:
+    package, run, source_hash = _prepare(tmp_path)
+    projection = run / "workspace/operations/current-source.json"
+    source = json.loads(projection.read_text())
+    source["visible_source_state_sha256"] = "0" * 64
+    projection.write_text(json.dumps(source))
+    tool = EvidenceLifecycleControlTool(
+        package_dir=package,
+        run_dir=run,
+        operation_resolver=_resolver(package, run),
+        session_id="baseline.session-001",
+    )
+    assert json.loads(tool.execute_operation("hydrology.design-10yr", "Calculate hydrology."))["status"] == "completed"
+    action = json.loads((run / "lifecycle_operations/operation-000001/action.json").read_text())
+    assert action["visible_source_state_before_sha256"] == source_hash
+
+
+def test_native_tool_arguments_separate_task_choices_from_host_identity(tmp_path: Path) -> None:
+    from aec_bench.harness.lifecycle_local import EvidenceLifecycleWorkspaceTool, _deepseek_lifecycle_tool_definitions
+
+    package, run, _ = _prepare(tmp_path)
+    control = EvidenceLifecycleControlTool(
+        package_dir=package,
+        run_dir=run,
+        operation_resolver=_resolver(package, run),
+        session_id="baseline.session-001",
+    )
+    workspace = EvidenceLifecycleWorkspaceTool(package_dir=package, run_dir=run)
+    definitions = _deepseek_lifecycle_tool_definitions(
+        control=control,
+        workspace=workspace,
+        supports_evidence_requests=True,
+        supports_lifecycle_operations=True,
+        include_completion_tools=True,
+    )
+    schemas = {definition.name: definition.parameters_schema for definition in definitions}
+    assert set(schemas["execute_operation"]["properties"]) == {"operation_id", "reason"}
+    assert set(schemas["request_evidence"]["properties"]) == {"request_id", "reason"}
+    assert set(schemas["write_checkpoint_submission"]["properties"]) == {"content"}
+    assert schemas["submit_checkpoint"]["properties"] == {}

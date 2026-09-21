@@ -112,9 +112,9 @@ class EvidenceLifecycleControlTool:
     operation_resolver: LifecycleOperationResolver | None = None
     session_id: str = "manual"
 
-    def request_evidence(self, checkpoint_id: str, request_id: str, reason: str) -> str:
+    def request_evidence(self, request_id: str, reason: str) -> str:
         """Request one declared evidence packet using the active checkpoint budget."""
-        if not checkpoint_id.strip() or not request_id.strip() or not reason.strip():
+        if not request_id.strip() or not reason.strip():
             return json.dumps(
                 {
                     "status": "rejected",
@@ -125,7 +125,6 @@ class EvidenceLifecycleControlTool:
             self.package_dir,
             self.run_dir,
             operation_resolver=self.operation_resolver,
-            checkpoint_id=checkpoint_id,
             request_id=request_id,
             reason=reason,
             session_id=self.session_id,
@@ -142,63 +141,22 @@ class EvidenceLifecycleControlTool:
             payload["rejection"] = result["rejection"]
         return json.dumps(payload)
 
-    def execute_operation(
-        self,
-        checkpoint_id: str,
-        operation_id: str,
-        visible_source_state_sha256: str,
-        reason: str,
-    ) -> str:
-        """Execute one declared operation against the named visible source state."""
-        arguments = (checkpoint_id, operation_id, visible_source_state_sha256, reason)
-        if any(not isinstance(argument, str) or not argument.strip() for argument in arguments):
-            return json.dumps(
-                {
-                    "status": "rejected",
-                    "error": "operation arguments must not be blank",
-                }
-            )
-        if len(visible_source_state_sha256) != 64 or any(
-            character not in "0123456789abcdef" for character in visible_source_state_sha256
-        ):
-            return json.dumps(
-                {
-                    "status": "rejected",
-                    "error": "visible source state sha256 must contain 64 lowercase hexadecimal characters",
-                }
-            )
+    def execute_operation(self, operation_id: str, reason: str) -> str:
+        """Execute one declared operation on the active checkpoint and source."""
+        if any(not isinstance(value, str) or not value.strip() for value in (operation_id, reason)):
+            return json.dumps({"status": "rejected", "error": "operation arguments must not be blank"})
         result = execute_lifecycle_operation(
             self.package_dir,
             self.run_dir,
             operation_resolver=cast(LifecycleOperationResolver, self.operation_resolver),
-            checkpoint_id=checkpoint_id,
             operation_id=operation_id,
-            visible_source_state_sha256=visible_source_state_sha256,
             reason=reason,
             session_id=self.session_id,
         )
         return json.dumps(_operation_tool_response(result))
 
-    def submit_checkpoint(self, checkpoint_id: str) -> str:
-        """Submit the named checkpoint and release the next evidence packet.
-
-        Write the current checkpoint JSON to its required submission path before
-        calling this tool. A valid submission is archived immutably. If another
-        checkpoint remains, the response contains its instruction and paths.
-        """
-        state = read_lifecycle(
-            self.package_dir,
-            self.run_dir,
-            operation_resolver=self.operation_resolver,
-        )
-        active_checkpoint_id = state.get("active_checkpoint_id")
-        if checkpoint_id != active_checkpoint_id:
-            return json.dumps(
-                {
-                    "status": "rejected",
-                    "error": (f"active checkpoint is {active_checkpoint_id!r}; cannot submit {checkpoint_id!r}"),
-                }
-            )
+    def submit_checkpoint(self) -> str:
+        """Archive the active checkpoint submission and release the next evidence packet."""
         try:
             result = submit_checkpoint(
                 self.package_dir,
@@ -281,7 +239,7 @@ class EvidenceLifecycleWorkspaceTool:
             return json.dumps({"status": "rejected", "error": f"workspace file is not readable UTF-8: {path}"})
         return json.dumps({"status": "ok", "path": relative, "content": content})
 
-    def write_checkpoint_submission(self, checkpoint_id: str, content: str) -> str:
+    def write_checkpoint_submission(self, content: str) -> str:
         """Write JSON only to the active checkpoint's declared submission path."""
         try:
             state = read_lifecycle(
@@ -289,15 +247,15 @@ class EvidenceLifecycleWorkspaceTool:
                 self.run_dir,
                 operation_resolver=self.operation_resolver,
             )
-            if state["active_checkpoint_id"] != checkpoint_id:
-                raise EvidenceLifecycleError(
-                    f"active checkpoint is {state['active_checkpoint_id']!r}; cannot write {checkpoint_id!r}"
-                )
+            checkpoint_id = state["active_checkpoint_id"]
+            if checkpoint_id is None:
+                raise EvidenceLifecycleError("no checkpoint is awaiting submission")
             payload = json.loads(content)
             if not isinstance(payload, dict):
                 raise EvidenceLifecycleError("checkpoint submission must contain a JSON object")
             spec = load_evidence_lifecycle_spec(self.package_dir)
             checkpoint = next(item for item in spec.checkpoints if item.checkpoint_id == checkpoint_id)
+            payload = {"checkpoint_id": checkpoint_id, **payload}
             validate_evidence_checkpoint_submission(checkpoint, payload)
             destination = Path(state["workspace"]) / checkpoint.submission_path
             _write_json(destination, payload)
@@ -410,8 +368,8 @@ def _deepseek_lifecycle_tool_definitions(
             name="write_checkpoint_submission",
             description="Write the active checkpoint JSON submission.",
             parameters_schema=_tool_parameters(
-                {"checkpoint_id": {"type": "string"}, "content": {"type": "string"}},
-                required=("checkpoint_id", "content"),
+                {"content": {"type": "string"}},
+                required=("content",),
             ),
             function=workspace.write_checkpoint_submission,
         ),
@@ -422,11 +380,10 @@ def _deepseek_lifecycle_tool_definitions(
                 name="request_evidence",
                 description="Request one declared evidence packet within the active checkpoint budget.",
                 parameters_schema=_tool_parameters(
-                    {"checkpoint_id": {"type": "string"}, "reason": {"type": "string"}},
-                    required=("checkpoint_id", "reason"),
+                    {"request_id": {"type": "string"}, "reason": {"type": "string"}},
+                    required=("request_id", "reason"),
                 ),
                 function=control.request_evidence,
-                trusted_request_argument="request_id",
             )
         )
     if supports_lifecycle_operations:
@@ -436,12 +393,10 @@ def _deepseek_lifecycle_tool_definitions(
                 description="Execute one declared operation against the current visible source state.",
                 parameters_schema=_tool_parameters(
                     {
-                        "checkpoint_id": {"type": "string"},
                         "operation_id": {"type": "string"},
-                        "visible_source_state_sha256": {"type": "string"},
                         "reason": {"type": "string"},
                     },
-                    required=("checkpoint_id", "operation_id", "visible_source_state_sha256", "reason"),
+                    required=("operation_id", "reason"),
                 ),
                 function=control.execute_operation,
             )
@@ -452,10 +407,7 @@ def _deepseek_lifecycle_tool_definitions(
                 json_native_tool_definition(
                     name="submit_checkpoint",
                     description="Archive the active checkpoint and release the next evidence packet.",
-                    parameters_schema=_tool_parameters(
-                        {"checkpoint_id": {"type": "string"}},
-                        required=("checkpoint_id",),
-                    ),
+                    parameters_schema=_tool_parameters({}),
                     function=control.submit_checkpoint,
                     disposition=_checkpoint_disposition,
                 ),
@@ -1372,9 +1324,8 @@ def _persistent_session_instruction(
     if supports_lifecycle_operations:
         conditional_guidance += (
             "Before submitting, check whether checkpoints/<checkpoint_id>/operations.json exists. When it does, "
-            f"read it with {CURRENT_SOURCE_WORKSPACE_PATH.as_posix()}. Use execute_operation with the current "
-            "visible source "
-            "hash for declared calculations or source activation; the remaining budget is finite. Read the "
+            f"read it with {CURRENT_SOURCE_WORKSPACE_PATH.as_posix()}. Use execute_operation with an operation ID "
+            "and a reason. The host binds the current source; the remaining budget is finite. Read the "
             "returned workspace artifacts before deciding.\n"
         )
     return (
@@ -1382,8 +1333,8 @@ def _persistent_session_instruction(
         "For each checkpoint:\n"
         "1. Use list_workspace and read_workspace_file to inspect the active instruction and released evidence.\n"
         f"{conditional_guidance}"
-        "2. Call write_checkpoint_submission with the active checkpoint_id and required JSON content.\n"
-        "3. Call submit_checkpoint with the active checkpoint_id.\n"
+        "2. Call write_checkpoint_submission with the required JSON content. The host supplies checkpoint_id.\n"
+        "3. Call submit_checkpoint with no arguments.\n"
         "4. If the tool releases another checkpoint, read its returned instruction and continue.\n"
         "5. Stop only after submit_checkpoint returns status=complete.\n\n"
         "At a later checkpoint, you may call revisit_checkpoint with a prior checkpoint_id and a reason when you "

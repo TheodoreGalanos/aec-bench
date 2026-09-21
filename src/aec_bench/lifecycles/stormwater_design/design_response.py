@@ -23,6 +23,7 @@ from aec_bench.lifecycles.runtime.definition import (
     shared_executable_source_roots,
 )
 from aec_bench.lifecycles.runtime.episode import LifecycleEpisodeEnvironment
+from aec_bench.lifecycles.stormwater_design.hydraulic_submissions import hydraulic_submission_contract
 from aec_bench.lifecycles.stormwater_design.hydraulics.interventions import (
     build_hydraulic_intervention_source_state,
     build_hydraulic_problem_source_state,
@@ -109,8 +110,7 @@ LIFECYCLE = EvidenceLifecycleSpec(
             submission_path="submissions/problem_analysis.json",
             required_submission_fields=[
                 "checkpoint_id",
-                "visible_source_state_sha256",
-                "selected_operations",
+                "source_revision",
                 "accepted_decisions",
                 "readiness_decision",
                 "claim_boundary",
@@ -130,7 +130,7 @@ LIFECYCLE = EvidenceLifecycleSpec(
             depends_on=["problem_analysis"],
             required_submission_fields=[
                 "checkpoint_id",
-                "visible_source_state_sha256",
+                "source_revision",
                 "selected_intervention_id",
                 "selection_basis",
                 "claim_boundary",
@@ -147,10 +147,9 @@ LIFECYCLE = EvidenceLifecycleSpec(
             required_submission_fields=[
                 "checkpoint_id",
                 "selected_intervention_id",
-                "visible_source_state_sha256",
-                "selected_operations",
+                "source_revision",
                 "accepted_decisions",
-                "supersession_lineage",
+                "superseded_scenarios",
                 "readiness_decision",
                 "claim_boundary",
             ],
@@ -167,13 +166,10 @@ LIFECYCLE = EvidenceLifecycleSpec(
             required_submission_fields=[
                 "checkpoint_id",
                 "selected_intervention_id",
-                "visible_source_state_sha256",
-                "selected_operations",
-                "run_reference",
-                "report_reference",
-                "memo",
+                "source_revision",
+                "evidence_checkpoint",
                 "accepted_decisions",
-                "supersession_lineage",
+                "superseded_scenarios",
                 "readiness_decision",
                 "claim_boundary",
             ],
@@ -356,7 +352,7 @@ def _instructions() -> dict[str, str]:
         ),
         "intervention_selection": (
             "# Bounded intervention selection\n\nRead `interventions.json` and select exactly one intervention before "
-            "its calculated outcomes are available. Preserve the current source hash and give a concise engineering "
+            "its calculated outcomes are available. Name the current source revision and give a concise engineering "
             f"basis for the selection. {claim}\n\n{_submission_contract(checkpoints['intervention_selection'])}"
         ),
         "intervention_analysis": (
@@ -374,18 +370,7 @@ def _instructions() -> dict[str, str]:
 
 
 def _submission_contract(checkpoint: EvidenceCheckpointSpec) -> str:
-    fields = "\n".join(f"- `{field}`" for field in checkpoint.required_submission_fields)
-    return f"""## Structured submission contract
-
-Use exactly these top-level keys and no others:
-
-{fields}
-
-Use the exact IDs and source hashes exposed by the host. `selection_basis` is a non-empty concise explanation, not
-an authority claim. `accepted_decisions` contains exactly the design and major scenarios. Use `screening_ready` only
-when all current criteria pass; otherwise use `not_screening_ready`. The closeout `memo` must repeat the selected
-intervention, source, run and report references, decision IDs, supersession lineage, readiness, and claim boundary.
-"""
+    return hydraulic_submission_contract(checkpoint.required_submission_fields)
 
 
 def _release_notices() -> dict[str, str]:
@@ -450,6 +435,7 @@ LIFECYCLE_DESCRIPTOR = LifecycleOwnerDescriptor(
             Path(__file__).resolve().parent / "design_response_operations.py",
             Path(__file__).resolve().parent / "design_response_verifier.py",
             Path(__file__).resolve().parent / "hydraulic_evidence.py",
+            Path(__file__).resolve().parent / "hydraulic_submissions.py",
             Path(__file__).resolve().parent / "hydraulic_operations.py",
             Path(__file__).resolve().parent / "hydraulics",
         ),

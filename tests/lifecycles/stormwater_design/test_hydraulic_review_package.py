@@ -116,12 +116,14 @@ def test_public_instructions_define_the_structured_submission_without_topology_a
         instruction = (package / "instructions" / f"{checkpoint_id}.md").read_text(encoding="utf-8")
         checkpoint = checkpoints[checkpoint_id]
         assert checkpoint["allow_additional_submission_fields"] is False
-        assert "Use exactly these top-level keys and no others:" in instruction
+        assert "Supply these top-level keys." in instruction
         for field in checkpoint["required_submission_fields"]:
+            if field == "checkpoint_id":
+                continue
             assert f"- `{field}`" in instruction
         for required in (
-            "visible_source_state_sha256",
-            "selected_operations",
+            "source_revision",
+            "evidence_checkpoint",
             "accepted_decisions",
             "screening_ready",
             "not_screening_ready",
@@ -140,7 +142,7 @@ def test_public_instructions_define_the_structured_submission_without_topology_a
         assert f"- `{closeout_only}`" not in revision_instruction
 
     closeout_instruction = (package / "instructions" / "closeout_review.md").read_text(encoding="utf-8")
-    assert "`decision_ids`" in closeout_instruction
+    assert "`evidence_checkpoint`" in closeout_instruction
     assert "`readiness_decision`" in closeout_instruction
     assert "scenario-to-decision-ID" not in closeout_instruction
 

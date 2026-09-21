@@ -61,7 +61,6 @@ class _ReadFileRequest(StrictModel):
 class _ExecuteOperationRequest(StrictModel):
     operation: Literal["execute_operation"]
     operation_id: NonEmptyStr
-    visible_source_state_sha256: NonEmptyStr
     reason: NonEmptyStr
 
 
@@ -292,7 +291,6 @@ class HydraulicReviewPrimeLifecycleEndpoint:
                 operation_resolver=self._resolver,
                 checkpoint_id=self._request.checkpoint_id,
                 operation_id=request.operation_id,
-                visible_source_state_sha256=request.visible_source_state_sha256,
                 reason=request.reason,
                 session_id=self._request.session_id,
             )
@@ -313,7 +311,9 @@ class HydraulicReviewPrimeLifecycleEndpoint:
             "instruction": self._request.instruction,
             "completed_checkpoint_ids": list(self._request.completed_checkpoint_ids),
             "released_files": released_files,
-            "required_submission_fields": list(self._checkpoint.required_submission_fields),
+            "required_submission_fields": [
+                field for field in self._checkpoint.required_submission_fields if field != "checkpoint_id"
+            ],
             "allow_additional_submission_fields": self._checkpoint.allow_additional_submission_fields,
             "operation_catalog": (
                 None
@@ -391,6 +391,7 @@ class HydraulicReviewPrimeLifecycleEndpoint:
         return False
 
     def _offer(self, submission: dict[str, JsonValue]) -> dict[str, Any]:
+        submission = {"checkpoint_id": self._request.checkpoint_id, **submission}
         validate_evidence_checkpoint_submission(self._checkpoint, submission)
         encoded = _canonical_json(submission)
         with self._lock:
@@ -433,7 +434,6 @@ class HydraulicReviewPrimeLifecycleEndpoint:
             return {
                 "operation": request.operation,
                 "operation_id": request.operation_id,
-                "visible_source_state_sha256": request.visible_source_state_sha256,
                 "reason_sha256": hashlib.sha256(request.reason.encode("utf-8")).hexdigest(),
             }
         if isinstance(request, _OfferSubmissionRequest):

@@ -764,7 +764,6 @@ observation = await aec_world.observe()
 await aec_world.invoke(
     "continue_operation",
     {"reason": "Advance the current world."},
-    decision_id=observation["decision_id"],
 )
 ```
 
@@ -781,11 +780,14 @@ client also has a JSON command interface:
 ```text
 python -m aec_world capabilities
 python -m aec_world observe
-python -m aec_world invoke --action <name> --decision-id <id> --arguments-json '<json>'
+python -m aec_world invoke --action <name> --arguments-json '<json>'
 ```
 
 The Prime root session and all descendants share one capability and are one
-composite AECBench actor principal. `ActorInvocationAuthority` owns request
+composite AECBench actor principal. The client generates request IDs, and the
+host binds the current decision. The model supplies the action and engineering
+arguments. Programmatic callers can still pin a decision ID for concurrency
+checks or reuse a request ID for an exact retry. `ActorInvocationAuthority` owns request
 identity, exact retries, action order, the action budget, terminal state, and
 semantic actor evidence. An exact retry uses the same request ID and does not
 consume another allowance. If the client reports an `unknown` outcome, do not
@@ -892,6 +894,12 @@ See the [report harness protocol](docs/protocols/report-agent-harness.md) and
 [synthetic inspection task](tasks/civil/report/synthetic-inspection/instruction.md).
 
 ### Finite Lifecycles
+
+Lifecycle actor tools bind the active checkpoint and source in the host. Models
+choose calculations and readable evidence revisions; they do not copy source
+hashes, action IDs, run IDs, or artifact hashes into hydraulic submissions. See
+the [lifecycle contract](docs/CONTRACTS.md#finite-lifecycle-execution). Regenerate
+hydraulic task packages when adopting the current submission format.
 
 All finite lifecycle commands are under `aec-bench task lifecycle`:
 

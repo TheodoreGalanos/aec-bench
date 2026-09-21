@@ -45,7 +45,6 @@ async def read_file(path: str) -> dict[str, Any]:
 
 async def execute_operation(
     operation_id: str,
-    visible_source_state_sha256: str,
     reason: str,
 ) -> dict[str, Any]:
     """Execute one declared operation for the active checkpoint and session."""
@@ -53,7 +52,6 @@ async def execute_operation(
         {
             "operation": "execute_operation",
             "operation_id": operation_id,
-            "visible_source_state_sha256": visible_source_state_sha256,
             "reason": reason,
         }
     )

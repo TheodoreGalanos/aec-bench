@@ -75,6 +75,26 @@ lifecycle action. Unknown request IDs, unmet prerequisites, and exhausted
 budgets create typed rejections. Missing or changed hidden source material is a
 host failure, not a scored model rejection.
 
+## Actor input and host bookkeeping
+
+`execute_operation(operation_id, reason)` binds the current source and checkpoint
+under the lifecycle state lock. The persisted request still records the exact
+source hash. The host API can supply an expected source hash for concurrency
+checks; the model-facing tool has no hash argument.
+
+`request_evidence(request_id, reason)` takes a public catalogue choice. That
+`request_id` is not a transport correlation ID. `write_checkpoint_submission(content)`
+and `submit_checkpoint()` use the active checkpoint. The host supplies an omitted
+submission `checkpoint_id` and rejects a conflicting value.
+
+Hydraulic assessments name a source revision and an analysis checkpoint for each
+scenario decision. `superseded_scenarios` records the actor's replacement choices.
+At closeout, `evidence_checkpoint` selects the runs and reports. The verifier
+resolves these readable references from immutable host actions. Hashes, canonical
+action references, run identities, and repeated memo fields remain host bookkeeping.
+The actor still supplies screening outcomes, failed criteria, readiness, intervention
+choice, and claim limits. Missing evidence and stale choices remain failures.
+
 ## Episode modes
 
 The host supports two distinct modes:

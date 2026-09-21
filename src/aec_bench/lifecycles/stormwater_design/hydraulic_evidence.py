@@ -44,6 +44,17 @@ class ClaimBoundary(StrictModel):
     learning_status: Literal["no_post_training_or_continual_learning_result"]
 
 
+CLAIM_BOUNDARY = ClaimBoundary(
+    evidence_class="benchmark_owned_synthetic_screening",
+    solver_fidelity="not_swmm_equivalent",
+    authority_status="no_authority_approval",
+    standards_status="no_standards_compliance_claim",
+    project_evidence_status="not_project_design_evidence",
+    model_evidence_status="no_model_performance_holdout_or_transfer_result",
+    learning_status="no_post_training_or_continual_learning_result",
+).model_dump(mode="json")
+
+
 class ScenarioDecision(StrictModel):
     decision_id: NonEmptyStr
     scenario_id: ScenarioId

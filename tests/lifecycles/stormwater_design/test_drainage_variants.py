@@ -106,8 +106,12 @@ def test_default_variant_preserves_agent_visible_package_bytes(tmp_path: Path) -
         tmp_path / "package",
     )
 
-    assert _visible_tree_hash(package) == "4d5609b6dec09dd003d54accd085a2a0e8597a43a4ae6b535c27013504effd3a"
+    assert _visible_tree_hash(package) == "c68b541edc5fffdbb253a023018ca7eb49ba730db730fcc5278253e0fda3f449"
     assert _load_json(package / "hidden" / "variant.json")["variant_id"] == DEFAULT_DRAINAGE_LIFECYCLE_VARIANT_ID
+    for checkpoint_id in CHECKPOINT_IDS:
+        instruction = (package / "instructions" / f"{checkpoint_id}.md").read_text(encoding="utf-8")
+        assert "The host supplies `checkpoint_id`" in instruction
+        assert "- `checkpoint_id`" not in instruction
 
 
 def test_rematerializing_into_non_empty_package_is_rejected_without_mutation(tmp_path: Path) -> None:

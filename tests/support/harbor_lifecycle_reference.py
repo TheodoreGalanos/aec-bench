@@ -97,9 +97,7 @@ class _PublicToolLifecycleAdapter:
         operations = self._execute_declared_operations(checkpoint_id)
         decisions = self._decisions(checkpoint_id, operations, phase="baseline")
         submission = {
-            "checkpoint_id": checkpoint_id,
-            "visible_source_state_sha256": self._visible_source_sha256(),
-            "selected_operations": _selected_operations(operations),
+            "source_revision": self._source_revision(),
             "accepted_decisions": decisions,
             "readiness_decision": _readiness(decisions),
             "claim_boundary": claim_boundary,
@@ -117,28 +115,21 @@ class _PublicToolLifecycleAdapter:
             str(item["scenario_id"]): item for item in cast(list[dict[str, Any]], baseline["accepted_decisions"])
         }
         decisions: list[dict[str, Any]] = []
-        supersession: list[dict[str, str]] = []
+        supersession: list[str] = []
         for candidate in candidates:
             scenario_id = str(candidate["scenario_id"])
             previous = baseline_by_scenario[scenario_id]
-            changed = _decision_action_ids(candidate) != _decision_action_ids(previous)
+            changed = any(
+                result["status"] != "already_current" for key, result in operations.items() if scenario_id in key
+            )
             decisions.append(candidate if changed else previous)
             if changed:
-                supersession.append(
-                    {
-                        "scenario_id": scenario_id,
-                        "superseded_decision_id": str(previous["decision_id"]),
-                        "replacement_decision_id": str(candidate["decision_id"]),
-                    }
-                )
+                supersession.append(scenario_id)
         current_source = self._read_json("operations/current-source.json")
         submission = {
-            "checkpoint_id": checkpoint_id,
-            "revision_id": current_source["revision_id"],
-            "visible_source_state_sha256": current_source["visible_source_state_sha256"],
-            "selected_operations": _selected_operations(operations),
+            "source_revision": current_source["revision_id"],
             "accepted_decisions": decisions,
-            "supersession_lineage": supersession,
+            "superseded_scenarios": supersession,
             "readiness_decision": _readiness(decisions),
             "claim_boundary": claim_boundary,
         }
@@ -149,57 +140,8 @@ class _PublicToolLifecycleAdapter:
         instruction = self._read_text("instruction.md")
         claim_boundary = _claim_boundary(instruction)
         revision = self._read_json("submissions/revision_analysis.json")
-        selected = cast(dict[str, str], revision["selected_operations"])
-        decisions = cast(list[dict[str, Any]], revision["accepted_decisions"])
-        run_reference: dict[str, dict[str, str]] = {}
-        report_reference: dict[str, dict[str, str]] = {}
-        for scenario_id in _scenario_ids(selected):
-            detention_operation = f"detention-outlet.{scenario_id}.declared-outlet"
-            hgl_operation = f"network-hgl.{scenario_id}.declared-tailwater"
-            detention_action = self._operation_results[detention_operation]
-            hgl_action = self._operation_results[hgl_operation]
-            detention = cast(
-                dict[str, Any],
-                self._operation_artifacts[detention_operation]["detention-outlet.json"],
-            )
-            hgl = cast(dict[str, Any], self._operation_artifacts[hgl_operation]["network-hgl.json"])
-            report_sha256 = cast(str, self._operation_artifacts[hgl_operation]["report.md.sha256"])
-            run_reference[scenario_id] = {
-                "selected_operation_action_id": selected[detention_operation],
-                "canonical_detention_action_id": _canonical_action_id(detention_action),
-                "hydraulic_run_id": str(detention["hydraulic_run_id"]),
-                "run_manifest_sha256": str(detention["hydraulic_run_manifest_sha256"]),
-            }
-            report_reference[scenario_id] = {
-                "selected_operation_action_id": selected[hgl_operation],
-                "canonical_hgl_action_id": _canonical_action_id(hgl_action),
-                "hydraulic_run_id": str(hgl["hydraulic_run_id"]),
-                "report_sha256": report_sha256,
-            }
-        visible_source_sha256 = str(revision["visible_source_state_sha256"])
-        supersession = cast(list[dict[str, str]], revision["supersession_lineage"])
-        readiness = str(revision["readiness_decision"])
-        memo = {
-            "visible_source_state_sha256": visible_source_sha256,
-            "run_reference": run_reference,
-            "report_reference": report_reference,
-            "decision_ids": {str(item["scenario_id"]): str(item["decision_id"]) for item in decisions},
-            "supersession_lineage": supersession,
-            "readiness_decision": readiness,
-            "claim_boundary": claim_boundary,
-        }
-        submission = {
-            "checkpoint_id": checkpoint_id,
-            "visible_source_state_sha256": visible_source_sha256,
-            "selected_operations": selected,
-            "run_reference": run_reference,
-            "report_reference": report_reference,
-            "accepted_decisions": decisions,
-            "supersession_lineage": supersession,
-            "readiness_decision": readiness,
-            "claim_boundary": claim_boundary,
-            "memo": memo,
-        }
+        submission = {**revision, "evidence_checkpoint": "revision_analysis", "claim_boundary": claim_boundary}
+        submission.pop("checkpoint_id", None)
         completed = self._write_and_submit(checkpoint_id, submission)
         if completed.get("status") != "complete":
             raise ValueError("reference agent did not complete the lifecycle")
@@ -227,9 +169,7 @@ class _PublicToolLifecycleAdapter:
             operation_id = str(operation["operation_id"])
             result = self._call(
                 "execute_operation",
-                checkpoint_id=checkpoint_id,
                 operation_id=operation_id,
-                visible_source_state_sha256=self._visible_source_sha256(),
                 reason=f"Derive {operation_id} from the active public source and declared operation.",
             )
             if result.get("status") == "rejected":
@@ -249,7 +189,6 @@ class _PublicToolLifecycleAdapter:
         del checkpoint_id
         decisions: list[dict[str, Any]] = []
         for scenario_id in _scenario_ids(operations):
-            hydrology_id = f"hydrology.{scenario_id}"
             detention_id = f"detention-outlet.{scenario_id}.declared-outlet"
             hgl_id = f"network-hgl.{scenario_id}.declared-tailwater"
             detention = cast(dict[str, Any], self._operation_artifacts[detention_id]["detention-outlet.json"])
@@ -258,12 +197,8 @@ class _PublicToolLifecycleAdapter:
             failed = sorted(name for name, passed in criteria.items() if not passed)
             decisions.append(
                 {
-                    "decision_id": f"decision.{scenario_id}.{phase}",
                     "scenario_id": scenario_id,
-                    "hydrology_action_id": _canonical_action_id(operations[hydrology_id]),
-                    "detention_action_id": _canonical_action_id(operations[detention_id]),
-                    "hgl_action_id": _canonical_action_id(operations[hgl_id]),
-                    "hydraulic_run_id": detention["hydraulic_run_id"],
+                    "evidence_checkpoint": f"{phase}_analysis",
                     "screening_outcome": "criteria_not_met" if failed else "criteria_met",
                     "failed_criteria": failed,
                 }
@@ -291,18 +226,17 @@ class _PublicToolLifecycleAdapter:
     def _write_and_submit(self, checkpoint_id: str, submission: dict[str, Any]) -> dict[str, Any]:
         written = self._call(
             "write_checkpoint_submission",
-            checkpoint_id=checkpoint_id,
             content=json.dumps(submission, sort_keys=True),
         )
         if written.get("status") != "written":
             raise ValueError(f"checkpoint submission was rejected: {written}")
-        result = self._call("submit_checkpoint", checkpoint_id=checkpoint_id)
+        result = self._call("submit_checkpoint")
         if result.get("status") == "rejected":
             raise ValueError(f"checkpoint submission did not advance: {result}")
         return result
 
-    def _visible_source_sha256(self) -> str:
-        return str(self._read_json("operations/current-source.json")["visible_source_state_sha256"])
+    def _source_revision(self) -> str:
+        return str(self._read_json("operations/current-source.json")["revision_id"])
 
     def _read_json(self, path: str) -> dict[str, Any]:
         payload = json.loads(self._read_text(path))
@@ -352,22 +286,6 @@ def _claim_boundary(instruction: str) -> dict[str, Any]:
     if not isinstance(payload, dict):
         raise ValueError("public claim boundary is not a JSON object")
     return cast(dict[str, Any], payload)
-
-
-def _selected_operations(operations: dict[str, dict[str, Any]]) -> dict[str, str]:
-    return {operation_id: str(result["action_id"]) for operation_id, result in sorted(operations.items())}
-
-
-def _canonical_action_id(operation: dict[str, Any]) -> str:
-    return str(operation.get("retained_from_action_id") or operation["action_id"])
-
-
-def _decision_action_ids(decision: dict[str, Any]) -> tuple[str, str, str]:
-    return (
-        str(decision["hydrology_action_id"]),
-        str(decision["detention_action_id"]),
-        str(decision["hgl_action_id"]),
-    )
 
 
 def _scenario_ids(operations: dict[str, Any]) -> list[str]:

@@ -43,6 +43,7 @@ from aec_bench.lifecycles.runtime.operation_store import (
     _recover_lifecycle_operation_transactions,
     _sync_lifecycle_operation_ledger,
     _write_lifecycle_operation_catalog,
+    resolve_lifecycle_operation_current_source,
 )
 from aec_bench.lifecycles.runtime.reducer import (
     reduce_branch,
@@ -280,13 +281,13 @@ def request_checkpoint_evidence(
     run_dir: Path,
     *,
     operation_resolver: LifecycleOperationResolver | None = None,
-    checkpoint_id: str,
+    checkpoint_id: str | None = None,
     request_id: str,
     reason: str,
     session_id: str,
 ) -> dict[str, Any]:
     """Release one declared conditional evidence packet for the active attempt."""
-    if not checkpoint_id.strip() or not request_id.strip() or not reason.strip():
+    if (checkpoint_id is not None and not checkpoint_id.strip()) or not request_id.strip() or not reason.strip():
         raise EvidenceLifecycleError("evidence request checkpoint, request, and reason must not be blank")
     package = Path(package_dir)
     run = Path(run_dir)
@@ -307,7 +308,7 @@ def _request_checkpoint_evidence_locked(
     run: Path,
     *,
     operation_resolver: LifecycleOperationResolver | None,
-    checkpoint_id: str,
+    checkpoint_id: str | None,
     request_id: str,
     reason: str,
     session_id: str,
@@ -315,6 +316,10 @@ def _request_checkpoint_evidence_locked(
     spec = load_evidence_lifecycle_spec(package)
     resolutions = _load_evidence_request_resolutions(package, spec)
     state = _load_state(package, run, spec, operation_resolver=operation_resolver, lock_held=True)
+    if checkpoint_id is None:
+        checkpoint_id = state.active_checkpoint_id
+    if checkpoint_id is None:
+        raise EvidenceLifecycleError("no checkpoint is awaiting evidence requests")
     active_checkpoint_id = state.active_checkpoint_id
     if active_checkpoint_id is None:
         raise EvidenceLifecycleError("no checkpoint is active")
@@ -441,20 +446,23 @@ def execute_lifecycle_operation(
     run_dir: Path,
     *,
     operation_resolver: LifecycleOperationResolver,
-    checkpoint_id: str,
+    checkpoint_id: str | None = None,
     operation_id: str,
-    visible_source_state_sha256: str,
+    visible_source_state_sha256: str | None = None,
     reason: str,
     session_id: str,
 ) -> dict[str, Any]:
     """Execute one declared source-bound operation for the active host attempt."""
-    arguments = (checkpoint_id, operation_id, visible_source_state_sha256, reason, session_id)
+    arguments = (operation_id, reason, session_id) + tuple(
+        value for value in (checkpoint_id, visible_source_state_sha256) if value is not None
+    )
     if any(not isinstance(argument, str) or not argument.strip() for argument in arguments):
         raise EvidenceLifecycleError(
             "operation checkpoint, id, visible source hash, reason, and session must not be blank"
         )
-    if len(visible_source_state_sha256) != 64 or any(
-        character not in "0123456789abcdef" for character in visible_source_state_sha256
+    if visible_source_state_sha256 is not None and (
+        len(visible_source_state_sha256) != 64
+        or any(character not in "0123456789abcdef" for character in visible_source_state_sha256)
     ):
         raise EvidenceLifecycleError("visible source state sha256 must contain 64 lowercase hexadecimal characters")
     package = Path(package_dir)
@@ -463,6 +471,13 @@ def execute_lifecycle_operation(
         spec = load_evidence_lifecycle_spec(package)
         state = _load_state(package, run, spec, operation_resolver=operation_resolver, lock_held=True)
         _assert_prior_submissions_unchanged(run, state)
+        if checkpoint_id is None:
+            checkpoint_id = state.active_checkpoint_id
+        if checkpoint_id is None:
+            raise EvidenceLifecycleError("no checkpoint is awaiting operations")
+        if visible_source_state_sha256 is None:
+            source = resolve_lifecycle_operation_current_source(state, operation_resolver)
+            visible_source_state_sha256 = source.visible_source_state_sha256
         return _execute_lifecycle_operation_locked(
             run,
             spec,
@@ -514,8 +529,11 @@ def _submit_checkpoint_locked(
     submission_path = _workspace(run) / checkpoint.submission_path
     if not submission_path.is_file():
         raise EvidenceLifecycleError(f"checkpoint submission not found: {submission_path}")
-    submission = _read_json(submission_path)
+    candidate = _read_json(submission_path)
+    submission = {"checkpoint_id": checkpoint_id, **candidate}
     validate_evidence_checkpoint_submission(checkpoint, submission)
+    if submission != candidate:
+        _write_json(submission_path, submission)
 
     episode_dir = run / "episodes" / checkpoint_id
     episode_dir.mkdir(parents=True, exist_ok=True)

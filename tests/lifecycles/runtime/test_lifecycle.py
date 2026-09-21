@@ -2141,7 +2141,7 @@ def test_completed_lifecycle_remains_authoritative_when_deepseek_has_no_candidat
                         run_dir / "workspace" / "submissions" / f"{checkpoint_id}.json",
                         {"checkpoint_id": checkpoint_id},
                     )
-                    if json.loads(submit_checkpoint(checkpoint_id))["status"] == "complete":
+                    if json.loads(submit_checkpoint())["status"] == "complete":
                         break
                 return SimpleNamespace(
                     adapter_name="deepseek_harness",
@@ -2260,7 +2260,7 @@ def test_lifecycle_control_tool_submits_and_releases_next_checkpoint(tmp_path: P
     _write_json(Path(initial["submission_path"]), {"checkpoint_id": "initial_review"})
     tool = EvidenceLifecycleControlTool(package_dir=package, run_dir=run_dir)
 
-    response = json.loads(tool.submit_checkpoint("initial_review"))
+    response = json.loads(tool.submit_checkpoint())
 
     assert response["status"] == "awaiting_checkpoint_submission"
     assert response["checkpoint_id"] == "response_review"
@@ -2273,13 +2273,13 @@ def test_lifecycle_control_tool_rejects_wrong_checkpoint_without_advancing(tmp_p
     package = _write_package(tmp_path / "package")
     run_dir = tmp_path / "run"
     initial = release_checkpoint(package, run_dir)
-    _write_json(Path(initial["submission_path"]), {"checkpoint_id": "initial_review"})
+    _write_json(Path(initial["submission_path"]), {"checkpoint_id": "response_review"})
     tool = EvidenceLifecycleControlTool(package_dir=package, run_dir=run_dir)
 
-    response = json.loads(tool.submit_checkpoint("response_review"))
+    response = json.loads(tool.submit_checkpoint())
 
     assert response["status"] == "rejected"
-    assert "active checkpoint is 'initial_review'" in response["error"]
+    assert "checkpoint submission id must be 'initial_review'" in response["error"]
     assert read_lifecycle(package, run_dir)["active_checkpoint_id"] == "initial_review"
     assert not (run_dir / "workspace" / "inbox" / "response_review").exists()
 
@@ -2304,7 +2304,6 @@ def test_control_tool_requests_conditional_evidence_without_exposing_host_identi
 
     response = json.loads(
         tool.request_evidence(
-            "initial_review",
             "survey_revision",
             "Resolve the source revision discrepancy.",
         )
@@ -2340,7 +2339,7 @@ def test_control_tool_rejects_blank_evidence_request_without_recording_an_action
         session_id="session-001",
     )
 
-    response = json.loads(tool.request_evidence("initial_review", "survey_revision", "  "))
+    response = json.loads(tool.request_evidence("survey_revision", "  "))
 
     assert response == {
         "status": "rejected",
@@ -2386,7 +2385,6 @@ def test_lifecycle_workspace_tool_confines_reads_and_submission_writes(tmp_path:
     absolute = json.loads(tool.read_workspace_file(str(run_dir / "state.json")))
     written = json.loads(
         tool.write_checkpoint_submission(
-            "initial_review",
             json.dumps({"checkpoint_id": "initial_review"}),
         )
     )
@@ -2995,7 +2993,6 @@ class _ConditionalWritingRegistry:
                     assert request_evidence is not None
                     response = json.loads(
                         request_evidence(
-                            checkpoint_id,
                             "survey_revision",
                             "Resolve the source revision discrepancy.",
                         )
@@ -3134,7 +3131,7 @@ class _LifecycleSessionRegistry:
                         registry.run_dir / "workspace" / "submissions" / f"{checkpoint_id}.json",
                         {"checkpoint_id": checkpoint_id},
                     )
-                    response = json.loads(submit_checkpoint(checkpoint_id))
+                    response = json.loads(submit_checkpoint())
                     if response["status"] == "complete":
                         break
                 return SimpleNamespace(
@@ -3177,7 +3174,6 @@ class _ConditionalLifecycleSessionRegistry:
                     if checkpoint_id == "initial_review" and not requested:
                         response = json.loads(
                             request_evidence(
-                                checkpoint_id,
                                 "survey_revision",
                                 "Resolve the source revision discrepancy.",
                             )
@@ -3188,7 +3184,7 @@ class _ConditionalLifecycleSessionRegistry:
                         registry.run_dir / "workspace" / "submissions" / f"{checkpoint_id}.json",
                         {"checkpoint_id": checkpoint_id},
                     )
-                    response = json.loads(submit_checkpoint(checkpoint_id))
+                    response = json.loads(submit_checkpoint())
                     if response["status"] == "complete":
                         break
                 return SimpleNamespace(
@@ -3232,3 +3228,39 @@ class _FailedRegistry:
                 )
 
         return _FailedAdapter()
+
+
+def test_deepseek_evidence_choice_is_not_replaced_by_transport_identity(tmp_path: Path) -> None:
+    from datetime import UTC, datetime
+
+    from aec_bench.adapters.deepseek_harness.tool_gateway import NativeCancellation, NativeToolInvocation
+    from aec_bench.harness.lifecycle_local import _deepseek_lifecycle_tool_definitions
+
+    package = _write_conditional_package(tmp_path / "package")
+    run = tmp_path / "run"
+    release_checkpoint(package, run)
+    open_checkpoint_attempt(package, run, session_id="session-001", execution_mode="persistent_context")
+    control = EvidenceLifecycleControlTool(package_dir=package, run_dir=run, session_id="session-001")
+    workspace = EvidenceLifecycleWorkspaceTool(package_dir=package, run_dir=run)
+    definitions = _deepseek_lifecycle_tool_definitions(
+        control=control,
+        workspace=workspace,
+        supports_evidence_requests=True,
+        supports_lifecycle_operations=False,
+        include_completion_tools=True,
+    )
+    tool = next(definition for definition in definitions if definition.name == "request_evidence")
+    invocation = NativeToolInvocation(
+        request_id="transport-correlation-id",
+        deepseek_session_id="session-001",
+        deepseek_tool_call_id="call-001",
+        model_turn=1,
+        tool_name="request_evidence",
+        generation_id="generation-001",
+        admitted_at=datetime.now(UTC),
+        cancellation=NativeCancellation(),
+    )
+    response = tool.handler(invocation, {"request_id": "survey_revision", "reason": "Check the survey revision."})
+    assert isinstance(response.result, dict)
+    assert response.result["status"] == "released"
+    assert response.result["request_id"] == "survey_revision"

@@ -181,15 +181,11 @@ def test_operation_protocol_and_transactions_are_manifest_bound(tmp_path: Path) 
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "checkpoint_id": {"type": "string"},
                     "operation_id": {"type": "string"},
-                    "visible_source_state_sha256": {"type": "string"},
                     "reason": {"type": "string"},
                 },
                 "required": [
-                    "checkpoint_id",
                     "operation_id",
-                    "visible_source_state_sha256",
                     "reason",
                 ],
             },
@@ -262,10 +258,7 @@ def test_core_finalization_rejects_rehashed_malformed_operation_tool_schema(tmp_
     valid_schema = [
         {
             "name": "execute_operation",
-            "signature": (
-                "(checkpoint_id: 'str', operation_id: 'str', "
-                "visible_source_state_sha256: 'str', reason: 'str') -> 'str'"
-            ),
+            "signature": ("(operation_id: 'str', reason: 'str') -> 'str'"),
         }
     ]
     recorded = record_lifecycle_experiment(
@@ -308,10 +301,7 @@ def test_core_finalization_rejects_rehashed_operation_protocol_forgeries(
     valid_schema = [
         {
             "name": "execute_operation",
-            "signature": (
-                "(checkpoint_id: 'str', operation_id: 'str', "
-                "visible_source_state_sha256: 'str', reason: 'str') -> 'str'"
-            ),
+            "signature": ("(operation_id: 'str', reason: 'str') -> 'str'"),
         }
     ]
     recorded = record_lifecycle_experiment(
@@ -336,15 +326,11 @@ def test_core_finalization_rejects_rehashed_operation_protocol_forgeries(
                 "parameters": {
                     "type": "object",
                     "properties": {
-                        "checkpoint_id": {"type": "string"},
                         "operation_id": {"type": "string"},
-                        "visible_source_state_sha256": {"type": "string"},
                         "reason": {"type": "string", "enum": []},
                     },
                     "required": [
-                        "checkpoint_id",
                         "operation_id",
-                        "visible_source_state_sha256",
                         "reason",
                     ],
                 },
@@ -390,8 +376,7 @@ def test_completed_operation_snapshot_preserves_each_checkpoint_source_identity(
         "baseline_analysis",
         {
             "checkpoint_id": "baseline_analysis",
-            "visible_source_state_sha256": baseline_source["visible_source_state_sha256"],
-            "selected_operations": {"hydrology.design-10yr": baseline_action["action_id"]},
+            "source_revision": baseline_source["revision_id"],
             "accepted_decisions": {},
             "readiness_decision": "baseline_complete",
             "claim_boundary": {},
@@ -406,7 +391,7 @@ def test_completed_operation_snapshot_preserves_each_checkpoint_source_identity(
         session_id="revision.session-001",
         execution_mode="persistent_context",
     )
-    revision_action = execute_lifecycle_operation(
+    execute_lifecycle_operation(
         package,
         run_dir,
         operation_resolver=resolve_operation_runtime(package, run_dir),
@@ -417,7 +402,7 @@ def test_completed_operation_snapshot_preserves_each_checkpoint_source_identity(
         session_id="revision.session-001",
     )
     revision_source = _read_json(run_dir / "workspace" / "operations" / "current-source.json")
-    retained_hydrology = execute_lifecycle_operation(
+    execute_lifecycle_operation(
         package,
         run_dir,
         operation_resolver=resolve_operation_runtime(package, run_dir),
@@ -432,14 +417,9 @@ def test_completed_operation_snapshot_preserves_each_checkpoint_source_identity(
         "revision_analysis",
         {
             "checkpoint_id": "revision_analysis",
-            "revision_id": "tailwater_revision",
-            "visible_source_state_sha256": revision_source["visible_source_state_sha256"],
-            "selected_operations": {
-                "source-revision.current": revision_action["action_id"],
-                "hydrology.design-10yr": retained_hydrology["action_id"],
-            },
+            "source_revision": revision_source["revision_id"],
             "accepted_decisions": {},
-            "supersession_lineage": {},
+            "superseded_scenarios": [],
             "readiness_decision": "revision_complete",
             "claim_boundary": {},
         },
@@ -458,15 +438,12 @@ def test_completed_operation_snapshot_preserves_each_checkpoint_source_identity(
         "closeout_review",
         {
             "checkpoint_id": "closeout_review",
-            "visible_source_state_sha256": revision_source["visible_source_state_sha256"],
-            "selected_operations": {},
-            "run_reference": {},
-            "report_reference": {},
-            "memo": {},
+            "source_revision": revision_source["revision_id"],
             "accepted_decisions": {},
-            "supersession_lineage": {},
+            "superseded_scenarios": [],
             "readiness_decision": "not_screening_ready",
             "claim_boundary": {},
+            "evidence_checkpoint": "revision_analysis",
         },
     )
     submit_checkpoint(package, run_dir, operation_resolver=resolve_operation_runtime(package, run_dir))
@@ -487,8 +464,7 @@ def test_snapshotted_operation_state_rejects_current_source_from_a_different_pac
         "baseline_analysis",
         {
             "checkpoint_id": "baseline_analysis",
-            "visible_source_state_sha256": baseline_source["visible_source_state_sha256"],
-            "selected_operations": {"hydrology.design-10yr": baseline_action["action_id"]},
+            "source_revision": baseline_source["revision_id"],
             "accepted_decisions": {},
             "readiness_decision": "baseline_complete",
             "claim_boundary": {},
@@ -688,10 +664,7 @@ def _operation_tool_schema() -> list[dict[str, str]]:
     return [
         {
             "name": "execute_operation",
-            "signature": (
-                "(checkpoint_id: 'str', operation_id: 'str', "
-                "visible_source_state_sha256: 'str', reason: 'str') -> 'str'"
-            ),
+            "signature": ("(operation_id: 'str', reason: 'str') -> 'str'"),
         }
     ]
 

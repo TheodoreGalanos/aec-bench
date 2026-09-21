@@ -15,7 +15,6 @@ observation = await aec_world.observe()
 result = await aec_world.invoke(
     "inspect_asset",
     {"asset_id": "asset-1"},
-    decision_id=observation["decision_id"],
 )
 ```
 
@@ -23,31 +22,32 @@ The available interface is exactly:
 
 - `await aec_world.capabilities()`
 - `await aec_world.observe()`
-- `await aec_world.invoke(action_name, arguments, decision_id=..., request_id=...)`
+- `await aec_world.invoke(action_name, arguments)`
 
 The same operations are available as JSON commands when a shell call is more
 appropriate:
 
 - `python -m aec_world capabilities`
 - `python -m aec_world observe`
-- `python -m aec_world invoke --action <name> --decision-id <id> --arguments-json '<json>'`
+- `python -m aec_world invoke --action <name> --arguments-json '<json>'`
 
-Call `capabilities()` before choosing an unfamiliar action. Use the newest
-`decision_id` from `observe()` or an action result. After a stale-decision
-error, observe again. The `decision_id` is opaque. Do not invent, edit, or
-reuse an older value.
+Call `capabilities()` before choosing an unfamiliar action. The host binds each
+call to the current decision. The client generates request IDs. You do not need
+to copy decision IDs, generate request IDs, or maintain action counts.
 
 The root process and all child agents share one actor principal, one action
-budget, one request-ID namespace, one action order, and one terminal state.
-Choose globally unique request IDs when you supply them. Reusing the same
-`request_id` with the exact same call is an idempotent retry. Never reuse it
-for different content.
+budget, one action order, and one terminal state. The harness records action
+attempts and outcomes.
 
 An error outcome of `unknown` means that the host can have completed the
-action even though its response was lost. Do not issue the action under a new
-request ID. If you must resolve it, retry the exact same call and request ID or
-observe the current world. The client does not automatically retry actions.
-Treat all rejected actions as evidence.
+action even though its response was lost. Observe the current world before
+making another decision. Do not repeat the action as if it had failed. The
+client does not automatically retry actions. Treat rejected actions as evidence.
+
+Programmatic integrations can explicitly pin `decision_id` (CLI `--decision-id`)
+for a stale-decision check, or supply `request_id` (CLI `--request-id`) for an exact
+retry. Reuse a request ID only with the same call. These are optional transport
+controls, not task submission requirements.
 
 An ended Prime turn does not mean the world is complete. Inspect each action
 result's `terminated`, `truncated`, and `reason` fields. After a terminal result,

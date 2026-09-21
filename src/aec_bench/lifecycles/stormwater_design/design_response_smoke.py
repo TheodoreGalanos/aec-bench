@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import copy
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
 from aec_bench.lifecycles.runtime.episode import (
     InProcessLifecycleEpisodeEnvironment,
@@ -27,9 +27,7 @@ from aec_bench.lifecycles.stormwater_design.hydraulic_smoke import (
     execute_operation,
     read_json_object,
     readiness,
-    run_references,
-    selected_operations,
-    visible_source_sha256,
+    source_revision,
     write_json_object,
 )
 from aec_bench.lifecycles.stormwater_design.hydraulics.interventions import get_hydraulic_intervention
@@ -113,12 +111,7 @@ def write_hydraulic_design_response_smoke_submission(
             operation_resolver=operation_resolver,
         )
     elif checkpoint_id == "closeout_review":
-        submission = _closeout_submission(
-            package,
-            run,
-            intervention.intervention_id,
-            operation_resolver=operation_resolver,
-        )
+        submission = _closeout_submission(run)
     else:
         raise ValueError(f"unsupported hydraulic intervention smoke checkpoint: {checkpoint_id}")
     write_json_object(Path(submission_path), submission)
@@ -143,8 +136,7 @@ def _problem_submission(
     ]
     return {
         "checkpoint_id": "problem_analysis",
-        "visible_source_state_sha256": visible_source_sha256(run),
-        "selected_operations": selected_operations(actions),
+        "source_revision": source_revision(run),
         "accepted_decisions": decisions,
         "readiness_decision": readiness(decisions),
         "claim_boundary": copy.deepcopy(CLAIM_BOUNDARY),
@@ -154,7 +146,7 @@ def _problem_submission(
 def _selection_submission(run: Path, intervention_id: str) -> dict[str, Any]:
     return {
         "checkpoint_id": "intervention_selection",
-        "visible_source_state_sha256": visible_source_sha256(run),
+        "source_revision": source_revision(run),
         "selected_intervention_id": intervention_id,
         "selection_basis": (
             "Select one bounded outlet intervention before its calculated consequences are exposed, then verify "
@@ -172,9 +164,7 @@ def _intervention_submission(
     intervention_id: str,
     operation_resolver: LifecycleOperationResolver,
 ) -> dict[str, Any]:
-    problem = read_json_object(run / "episodes" / "problem_analysis" / "submission.json")
-    problem_decisions = cast(list[dict[str, Any]], problem["accepted_decisions"])
-    activation = execute_operation(
+    execute_operation(
         package,
         run,
         checkpoint_id="intervention_analysis",
@@ -193,69 +183,21 @@ def _intervention_submission(
         build_scenario_decision(run, actions, scenario_id=scenario_id, phase="intervention")
         for scenario_id in SCENARIO_IDS
     ]
-    problem_by_scenario = {str(item["scenario_id"]): item for item in problem_decisions}
-    supersession = [
-        {
-            "scenario_id": scenario_id,
-            "superseded_decision_id": str(problem_by_scenario[scenario_id]["decision_id"]),
-            "replacement_decision_id": f"decision.{scenario_id}.intervention",
-        }
-        for scenario_id in SCENARIO_IDS
-    ]
     return {
         "checkpoint_id": "intervention_analysis",
         "selected_intervention_id": intervention_id,
-        "visible_source_state_sha256": visible_source_sha256(run),
-        "selected_operations": {
-            **selected_operations(actions),
-            "source-intervention.selected": str(activation["action_id"]),
-        },
+        "source_revision": source_revision(run),
         "accepted_decisions": decisions,
-        "supersession_lineage": supersession,
+        "superseded_scenarios": list(SCENARIO_IDS),
         "readiness_decision": readiness(decisions),
         "claim_boundary": copy.deepcopy(CLAIM_BOUNDARY),
     }
 
 
-def _closeout_submission(
-    package: Path,
-    run: Path,
-    intervention_id: str,
-    *,
-    operation_resolver: LifecycleOperationResolver,
-) -> dict[str, Any]:
+def _closeout_submission(run: Path) -> dict[str, Any]:
     intervention = read_json_object(run / "episodes" / "intervention_analysis" / "submission.json")
-    selected_operations = cast(dict[str, str], intervention["selected_operations"])
-    decisions = cast(list[dict[str, Any]], intervention["accepted_decisions"])
-    supersession = cast(list[dict[str, str]], intervention["supersession_lineage"])
-    visible_source = str(intervention["visible_source_state_sha256"])
-    readiness = str(intervention["readiness_decision"])
-    run_reference, report_reference = run_references(
-        package,
-        run,
-        selected_operations,
-        operation_resolver=operation_resolver,
-    )
-    memo = {
-        "selected_intervention_id": intervention_id,
-        "visible_source_state_sha256": visible_source,
-        "run_reference": copy.deepcopy(run_reference),
-        "report_reference": copy.deepcopy(report_reference),
-        "decision_ids": {str(item["scenario_id"]): str(item["decision_id"]) for item in decisions},
-        "supersession_lineage": supersession,
-        "readiness_decision": readiness,
-        "claim_boundary": copy.deepcopy(CLAIM_BOUNDARY),
-    }
     return {
+        **intervention,
         "checkpoint_id": "closeout_review",
-        "selected_intervention_id": intervention_id,
-        "visible_source_state_sha256": visible_source,
-        "selected_operations": selected_operations,
-        "run_reference": run_reference,
-        "report_reference": report_reference,
-        "memo": memo,
-        "accepted_decisions": decisions,
-        "supersession_lineage": supersession,
-        "readiness_decision": readiness,
-        "claim_boundary": copy.deepcopy(CLAIM_BOUNDARY),
+        "evidence_checkpoint": "intervention_analysis",
     }

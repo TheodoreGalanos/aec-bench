@@ -91,6 +91,23 @@ def test_harbor_trial_orchestrates_public_bridge_then_independent_verifier(tmp_p
     run_dir = sandbox / "workspace" / "lifecycle-run"
     lifecycle = _read_json(run_dir / "state.json")
     assert lifecycle["status"] == "complete"
+    for submission_path in run_dir.glob("episodes/*/submission.json"):
+        submission_text = submission_path.read_text(encoding="utf-8")
+        for host_field in (
+            "visible_source_state_sha256",
+            "selected_operations",
+            "hydraulic_run_id",
+            "hydrology_action_id",
+            "detention_action_id",
+            "hgl_action_id",
+            "decision_id",
+            "run_reference",
+            "report_reference",
+            "supersession_lineage",
+            "memo",
+        ):
+            assert f'"{host_field}"' not in submission_text
+        assert '"source_revision"' in submission_text
     assert not list(run_dir.rglob("verification*.json"))
     assert not list(run_dir.rglob("reward*.json"))
 

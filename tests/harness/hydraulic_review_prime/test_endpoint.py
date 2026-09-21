@@ -55,10 +55,8 @@ async def test_installed_client_uses_all_six_calls_and_preserves_operation_ident
         observation = await client.observe()
         files = await client.list_files(".")
         instruction = await client.read_file("instruction.md")
-        source_hash = observation["current_source"]["visible_source_state_sha256"]
         operation = await client.execute_operation(
             "hydrology.design-10yr",
-            source_hash,
             "Calculate the declared design hydrology.",
         )
         artifact = await client.read_file(operation["artifacts"][0]["path"])
@@ -72,6 +70,7 @@ async def test_installed_client_uses_all_six_calls_and_preserves_operation_ident
             candidate,
         )
         submission = json.loads(candidate.read_text(encoding="utf-8"))
+        submission.pop("checkpoint_id")
         offer = await client.offer_submission(submission)
         retry = await client.offer_submission(submission)
 
@@ -89,7 +88,7 @@ async def test_installed_client_uses_all_six_calls_and_preserves_operation_ident
         assert operation["operation_id"] == "hydrology.design-10yr"
         assert artifact["path"] == operation["artifacts"][0]["path"]
         assert offer == retry
-        assert case.endpoint.offered_submission == submission
+        assert case.endpoint.offered_submission == {"checkpoint_id": case.request.checkpoint_id, **submission}
         assert not Path(case.request.submission_path).exists()
 
     assert not Path(environment[HYDRAULIC_REVIEW_SOCKET_ENV]).exists()
@@ -102,7 +101,6 @@ async def test_installed_client_uses_all_six_calls_and_preserves_operation_ident
     )
     assert tuple(inspect.signature(client.execute_operation).parameters) == (
         "operation_id",
-        "visible_source_state_sha256",
         "reason",
     )
 

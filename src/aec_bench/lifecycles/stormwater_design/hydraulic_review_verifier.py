@@ -6,8 +6,6 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Literal
 
-from pydantic import ValidationError
-
 from aec_bench.contracts.validators import NonEmptyStr, StrictModel
 from aec_bench.lifecycles.runtime.lifecycle import (
     load_validated_lifecycle_submissions,
@@ -36,6 +34,7 @@ from aec_bench.lifecycles.stormwater_design.hydraulic_evidence import (
     select_operation_actions,
     verification_gate,
 )
+from aec_bench.lifecycles.stormwater_design.hydraulic_submissions import bind_hydraulic_submissions
 
 SOURCE_REVISION_OPERATION_ID = "source-revision.current"
 GATE_IDS = (
@@ -53,7 +52,7 @@ GATE_IDS = (
 )
 
 
-class BaselineSubmission(StrictModel):
+class BaselineEvidence(StrictModel):
     checkpoint_id: Literal["baseline_analysis"]
     visible_source_state_sha256: NonEmptyStr
     selected_operations: dict[NonEmptyStr, NonEmptyStr]
@@ -62,7 +61,7 @@ class BaselineSubmission(StrictModel):
     claim_boundary: ClaimBoundary
 
 
-class RevisionSubmission(StrictModel):
+class RevisionEvidence(StrictModel):
     checkpoint_id: Literal["revision_analysis"]
     revision_id: NonEmptyStr
     visible_source_state_sha256: NonEmptyStr
@@ -74,7 +73,6 @@ class RevisionSubmission(StrictModel):
 
 
 class CloseoutMemo(StrictModel):
-    visible_source_state_sha256: NonEmptyStr
     run_reference: dict[NonEmptyStr, RunReference]
     report_reference: dict[NonEmptyStr, ReportReference]
     decision_ids: dict[NonEmptyStr, NonEmptyStr]
@@ -83,7 +81,7 @@ class CloseoutMemo(StrictModel):
     claim_boundary: ClaimBoundary
 
 
-class CloseoutSubmission(StrictModel):
+class CloseoutEvidence(StrictModel):
     checkpoint_id: Literal["closeout_review"]
     visible_source_state_sha256: NonEmptyStr
     selected_operations: dict[NonEmptyStr, NonEmptyStr]
@@ -109,19 +107,20 @@ def verify_hydraulic_interaction_lifecycle(
 
     operation_resolver = build_hydraulic_operation_resolver(package, run)
     raw = load_validated_lifecycle_submissions(package, run, operation_resolver=operation_resolver)
-    try:
-        baseline = BaselineSubmission.model_validate(raw["baseline_analysis"])
-        revision = RevisionSubmission.model_validate(raw["revision_analysis"])
-        closeout = CloseoutSubmission.model_validate(raw["closeout_review"])
-    except (KeyError, ValidationError) as exc:
-        return _invalid_contract_result(str(exc))
-
     state = read_lifecycle(package, run, operation_resolver=operation_resolver)
     actions = {
         action.action_id: action
         for checkpoint in state["checkpoint_runs"]
         for action in (LifecycleOperationActionRecord.model_validate(item) for item in checkpoint["operation_actions"])
     }
+    try:
+        raw = bind_hydraulic_submissions(package, run, raw, list(actions.values()), operation_resolver)
+        baseline = BaselineEvidence.model_validate(raw["baseline_analysis"])
+        revision = RevisionEvidence.model_validate(raw["revision_analysis"])
+        closeout = CloseoutEvidence.model_validate(raw["closeout_review"])
+    except (KeyError, ValueError) as exc:
+        return _invalid_contract_result(str(exc))
+
     baseline_selected, baseline_selection_failures = select_operation_actions(
         baseline.selected_operations,
         actions,
@@ -277,9 +276,9 @@ def _invalid_contract_result(message: str) -> dict[str, Any]:
 
 
 def _checkpoint_failures(
-    baseline: BaselineSubmission,
-    revision: RevisionSubmission,
-    closeout: CloseoutSubmission,
+    baseline: BaselineEvidence,
+    revision: RevisionEvidence,
+    closeout: CloseoutEvidence,
 ) -> list[str]:
     failures: list[str] = []
     if len(baseline.accepted_decisions) != len(SCENARIO_IDS) or {
@@ -305,9 +304,9 @@ def _checkpoint_failures(
 
 def _source_failures(
     package: Path,
-    baseline: BaselineSubmission,
-    revision: RevisionSubmission,
-    closeout: CloseoutSubmission,
+    baseline: BaselineEvidence,
+    revision: RevisionEvidence,
+    closeout: CloseoutEvidence,
     revision_selected: dict[str, LifecycleOperationActionRecord],
     variant_id: str,
 ) -> list[str]:
@@ -437,7 +436,7 @@ def _unaffected_decision_failures(
 
 
 def _memo_failures(
-    closeout: CloseoutSubmission,
+    closeout: CloseoutEvidence,
     runs: dict[str, RunReference],
     reports: dict[str, ReportReference],
     decisions: dict[str, ScenarioDecision],
@@ -445,7 +444,6 @@ def _memo_failures(
     readiness: ReadinessDecision,
 ) -> list[str]:
     expected = CloseoutMemo(
-        visible_source_state_sha256=closeout.visible_source_state_sha256,
         run_reference=runs,
         report_reference=reports,
         decision_ids={scenario_id: decision.decision_id for scenario_id, decision in decisions.items()},
@@ -457,9 +455,9 @@ def _memo_failures(
 
 
 def _readiness_failures(
-    baseline: BaselineSubmission,
-    revision: RevisionSubmission,
-    closeout: CloseoutSubmission,
+    baseline: BaselineEvidence,
+    revision: RevisionEvidence,
+    closeout: CloseoutEvidence,
     baseline_decisions: dict[str, ScenarioDecision],
     revision_decisions: dict[str, ScenarioDecision],
 ) -> list[str]:
@@ -475,8 +473,8 @@ def _readiness_failures(
 
 
 def _claim_failures(
-    baseline: BaselineSubmission,
-    revision: RevisionSubmission,
-    closeout: CloseoutSubmission,
+    baseline: BaselineEvidence,
+    revision: RevisionEvidence,
+    closeout: CloseoutEvidence,
 ) -> list[str]:
     return [] if baseline.claim_boundary == revision.claim_boundary == closeout.claim_boundary else ["claim_boundary"]

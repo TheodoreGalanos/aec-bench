@@ -208,6 +208,28 @@ async def test_endpoint_and_standalone_client_share_authority_semantics(
     assert "request-duplicate" in authority_evidence
 
 
+@pytest.mark.asyncio
+async def test_client_binds_decisions_and_generates_request_ids_without_actor_bookkeeping(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    workspace = tmp_path / "actor"
+    workspace.mkdir()
+    client = _load_client(workspace, monkeypatch)
+    host = _FakeHost()
+    with _endpoint(tmp_path, host) as endpoint:
+        for name, value in endpoint.connection_environment().items():
+            monkeypatch.setenv(name, value)
+        first = await client.invoke("act", {"value": 1})
+        second = await client.invoke("act", {"value": 2})
+        replay = await client.invoke("act", {"value": 1}, request_id=first["request_id"])
+        assert replay == first
+        assert second["status"] == "applied"
+        assert endpoint.world_action_count == 2
+    assert [call.decision_id for call in host.calls] == ["decision-0", "decision-1"]
+    assert host.calls[0].request_id != host.calls[1].request_id
+
+
 def test_endpoint_rejects_old_envelopes_versions_controls_and_bad_capabilities(tmp_path: Path) -> None:
     endpoint = _endpoint(tmp_path, _FakeHost())
 
@@ -419,7 +441,6 @@ def test_standalone_json_cli_runs_all_operations_without_aec_bench_on_its_python
             text=True,
             timeout=10,
         )
-        observation = json.loads(observe_call.stdout)
         invoke_call = subprocess.run(
             [
                 sys.executable,
@@ -428,8 +449,6 @@ def test_standalone_json_cli_runs_all_operations_without_aec_bench_on_its_python
                 "invoke",
                 "--action",
                 "act",
-                "--decision-id",
-                observation["decision_id"],
                 "--arguments-json",
                 json.dumps({"text": "$(not-a-shell); 'quoted'"}),
                 "--request-id",

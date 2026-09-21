@@ -105,8 +105,7 @@ def _archive_problem_analysis(package: Path, run: Path) -> dict[str, dict[str, A
         run / "workspace" / "submissions" / "problem_analysis.json",
         {
             "checkpoint_id": "problem_analysis",
-            "visible_source_state_sha256": _visible_source_sha256(run),
-            "selected_operations": {key: value["action_id"] for key, value in actions.items()},
+            "source_revision": "problem",
             "accepted_decisions": [],
             "readiness_decision": "not_screening_ready",
             "claim_boundary": {},
@@ -124,7 +123,7 @@ def _archive_selection(package: Path, run: Path, intervention_id: str) -> str:
         submission,
         {
             "checkpoint_id": "intervention_selection",
-            "visible_source_state_sha256": _visible_source_sha256(run),
+            "source_revision": "problem",
             "selected_intervention_id": intervention_id,
             "selection_basis": "Select the bounded outlet response for coupled verification.",
             "claim_boundary": {},

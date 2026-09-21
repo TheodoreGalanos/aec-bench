@@ -130,7 +130,6 @@ class HydraulicDesignResponseResolver(HydraulicOperationResolver):
         selection_basis = selection.get("selection_basis")
         if not isinstance(selection_basis, str) or not selection_basis.strip():
             raise EvidenceLifecycleError("archived intervention selection basis is blank")
-        problem = hydraulic_source_context(self._problem, revision_id="problem")
-        if selection.get("visible_source_state_sha256") != problem.visible_source_state_sha256:
+        if selection.get("source_revision") != "problem":
             raise EvidenceLifecycleError("archived intervention selection does not bind the problem source")
         return intervention_id, hashlib.sha256(selection_path.read_bytes()).hexdigest()
