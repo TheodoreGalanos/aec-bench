@@ -48,13 +48,13 @@ class HydraulicExperiment(StrictModel):
 
 
 HydraulicChallenge = Literal[
-    "none", "reordered_decisions", "stale_source", "missing_memo", "false_readiness", "false_authority"
+    "none", "reordered_decisions", "stale_source", "missing_closeout_decisions", "false_readiness", "false_authority"
 ]
 CHALLENGES: tuple[HydraulicChallenge, ...] = (
     "none",
     "reordered_decisions",
     "stale_source",
-    "missing_memo",
+    "missing_closeout_decisions",
     "false_readiness",
     "false_authority",
 )

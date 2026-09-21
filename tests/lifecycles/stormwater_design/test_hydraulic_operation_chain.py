@@ -134,8 +134,7 @@ def _operation_statuses(run: Path, checkpoint_id: str) -> dict[str, str]:
 def _advance_to_revision(package: Path, run: Path) -> None:
     submission = {
         "checkpoint_id": "baseline_analysis",
-        "visible_source_state_sha256": _visible_sha(run),
-        "selected_operations": {},
+        "source_revision": "baseline",
         "accepted_decisions": {},
         "readiness_decision": "baseline_complete",
         "claim_boundary": {},

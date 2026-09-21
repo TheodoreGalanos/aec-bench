@@ -55,10 +55,10 @@ async def invoke(
     action_name: str,
     arguments: dict[str, Any],
     *,
-    decision_id: str,
+    decision_id: str | None = None,
     request_id: str | None = None,
 ) -> dict[str, Any]:
-    """Invoke one task-owned action without automatically retrying it."""
+    """Invoke an action with host-bound decision identity unless explicitly pinned."""
     action_request_id = request_id or str(uuid.uuid4())
     return await _call(
         {

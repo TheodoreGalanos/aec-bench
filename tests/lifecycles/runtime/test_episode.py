@@ -196,7 +196,7 @@ def test_episode_catalogs_reject_coercive_budget_counts(raw_value: object) -> No
         "checkpoint_id": "initial_review",
         "operation_budget": 1,
         "remaining_budget": 0,
-        "visible_source_state_sha256": "a" * 64,
+        "source_revision": "baseline",
     }
     for field_name in ("request_budget", "remaining_budget"):
         with pytest.raises(ValidationError):
@@ -340,8 +340,7 @@ def test_current_closeout_binds_prior_operation_evidence_without_offering_operat
         run_dir / "workspace" / "submissions" / "baseline_analysis.json",
         {
             "checkpoint_id": "baseline_analysis",
-            "visible_source_state_sha256": current_source["visible_source_state_sha256"],
-            "selected_operations": {},
+            "source_revision": current_source["revision_id"],
             "accepted_decisions": {},
             "readiness_decision": "baseline_complete",
             "claim_boundary": {},
@@ -360,11 +359,9 @@ def test_current_closeout_binds_prior_operation_evidence_without_offering_operat
         run_dir / "workspace" / "submissions" / "revision_analysis.json",
         {
             "checkpoint_id": "revision_analysis",
-            "revision_id": "tailwater_revision",
-            "visible_source_state_sha256": current_source["visible_source_state_sha256"],
-            "selected_operations": {},
+            "source_revision": current_source["revision_id"],
             "accepted_decisions": {},
-            "supersession_lineage": {},
+            "superseded_scenarios": [],
             "readiness_decision": "revision_complete",
             "claim_boundary": {},
         },

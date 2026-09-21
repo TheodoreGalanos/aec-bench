@@ -6,8 +6,6 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Literal
 
-from pydantic import ValidationError
-
 from aec_bench.contracts.validators import NonEmptyStr, StrictModel
 from aec_bench.lifecycles.runtime.lifecycle import (
     load_validated_lifecycle_submissions,
@@ -37,6 +35,7 @@ from aec_bench.lifecycles.stormwater_design.hydraulic_evidence import (
     select_operation_actions,
     verification_gate,
 )
+from aec_bench.lifecycles.stormwater_design.hydraulic_submissions import bind_hydraulic_submissions
 from aec_bench.lifecycles.stormwater_design.hydraulics.interventions import (
     HydraulicInterventionId,
     list_hydraulic_intervention_ids,
@@ -58,7 +57,7 @@ GATE_IDS = (
 )
 
 
-class ProblemSubmission(StrictModel):
+class ProblemEvidence(StrictModel):
     checkpoint_id: Literal["problem_analysis"]
     visible_source_state_sha256: NonEmptyStr
     selected_operations: dict[NonEmptyStr, NonEmptyStr]
@@ -67,7 +66,7 @@ class ProblemSubmission(StrictModel):
     claim_boundary: ClaimBoundary
 
 
-class SelectionSubmission(StrictModel):
+class SelectionEvidence(StrictModel):
     checkpoint_id: Literal["intervention_selection"]
     visible_source_state_sha256: NonEmptyStr
     selected_intervention_id: HydraulicInterventionId
@@ -75,7 +74,7 @@ class SelectionSubmission(StrictModel):
     claim_boundary: ClaimBoundary
 
 
-class InterventionSubmission(StrictModel):
+class InterventionEvidence(StrictModel):
     checkpoint_id: Literal["intervention_analysis"]
     selected_intervention_id: HydraulicInterventionId
     visible_source_state_sha256: NonEmptyStr
@@ -88,7 +87,6 @@ class InterventionSubmission(StrictModel):
 
 class InterventionCloseoutMemo(StrictModel):
     selected_intervention_id: HydraulicInterventionId
-    visible_source_state_sha256: NonEmptyStr
     run_reference: dict[NonEmptyStr, RunReference]
     report_reference: dict[NonEmptyStr, ReportReference]
     decision_ids: dict[NonEmptyStr, NonEmptyStr]
@@ -97,7 +95,7 @@ class InterventionCloseoutMemo(StrictModel):
     claim_boundary: ClaimBoundary
 
 
-class InterventionCloseoutSubmission(StrictModel):
+class InterventionCloseoutEvidence(StrictModel):
     checkpoint_id: Literal["closeout_review"]
     selected_intervention_id: HydraulicInterventionId
     visible_source_state_sha256: NonEmptyStr
@@ -119,20 +117,21 @@ def verify_hydraulic_intervention_lifecycle(package_dir: Path, run_dir: Path) ->
 
     operation_resolver = build_hydraulic_design_response_resolver(package, run)
     raw = load_validated_lifecycle_submissions(package, run, operation_resolver=operation_resolver)
-    try:
-        problem = ProblemSubmission.model_validate(raw["problem_analysis"])
-        selection = SelectionSubmission.model_validate(raw["intervention_selection"])
-        intervention = InterventionSubmission.model_validate(raw["intervention_analysis"])
-        closeout = InterventionCloseoutSubmission.model_validate(raw["closeout_review"])
-    except (KeyError, ValidationError) as exc:
-        return _invalid_contract_result(str(exc))
-
     state = read_lifecycle(package, run, operation_resolver=operation_resolver)
     actions = {
         action.action_id: action
         for checkpoint in state["checkpoint_runs"]
         for action in (LifecycleOperationActionRecord.model_validate(item) for item in checkpoint["operation_actions"])
     }
+    try:
+        raw = bind_hydraulic_submissions(package, run, raw, list(actions.values()), operation_resolver)
+        problem = ProblemEvidence.model_validate(raw["problem_analysis"])
+        selection = SelectionEvidence.model_validate(raw["intervention_selection"])
+        intervention = InterventionEvidence.model_validate(raw["intervention_analysis"])
+        closeout = InterventionCloseoutEvidence.model_validate(raw["closeout_review"])
+    except (KeyError, ValueError) as exc:
+        return _invalid_contract_result(str(exc))
+
     problem_selected, problem_selection_failures = select_operation_actions(
         problem.selected_operations,
         actions,
@@ -266,10 +265,10 @@ def _reward(gates: dict[str, dict[str, Any]]) -> float:
 
 
 def _checkpoint_failures(
-    problem: ProblemSubmission,
-    selection: SelectionSubmission,
-    intervention: InterventionSubmission,
-    closeout: InterventionCloseoutSubmission,
+    problem: ProblemEvidence,
+    selection: SelectionEvidence,
+    intervention: InterventionEvidence,
+    closeout: InterventionCloseoutEvidence,
 ) -> list[str]:
     failures: list[str] = []
     for checkpoint_id, decisions in (
@@ -293,10 +292,10 @@ def _checkpoint_failures(
 def _selection_failures(
     package: Path,
     run: Path,
-    problem: ProblemSubmission,
-    selection: SelectionSubmission,
-    intervention: InterventionSubmission,
-    closeout: InterventionCloseoutSubmission,
+    problem: ProblemEvidence,
+    selection: SelectionEvidence,
+    intervention: InterventionEvidence,
+    closeout: InterventionCloseoutEvidence,
     selected_actions: dict[str, LifecycleOperationActionRecord],
 ) -> list[str]:
     failures: list[str] = []
@@ -403,8 +402,8 @@ def _expected_phase_decisions(
 
 
 def _decision_failures(
-    problem: ProblemSubmission,
-    intervention: InterventionSubmission,
+    problem: ProblemEvidence,
+    intervention: InterventionEvidence,
     expected_problem: dict[str, ScenarioDecision],
     expected_intervention: dict[str, ScenarioDecision],
     expected_lineage: tuple[DecisionSupersession, ...],
@@ -453,7 +452,7 @@ def _scenario_mapping_failures(
 
 
 def _memo_failures(
-    closeout: InterventionCloseoutSubmission,
+    closeout: InterventionCloseoutEvidence,
     runs: dict[str, RunReference],
     reports: dict[str, ReportReference],
     decisions: dict[str, ScenarioDecision],
@@ -470,7 +469,6 @@ def _memo_failures(
             failures.append(f"closeout_review.memo.{label}.scenarios")
     expected = InterventionCloseoutMemo(
         selected_intervention_id=closeout.selected_intervention_id,
-        visible_source_state_sha256=closeout.visible_source_state_sha256,
         run_reference=runs,
         report_reference=reports,
         decision_ids={scenario_id: decision.decision_id for scenario_id, decision in decisions.items()},
@@ -484,9 +482,9 @@ def _memo_failures(
 
 
 def _readiness_failures(
-    problem: ProblemSubmission,
-    intervention: InterventionSubmission,
-    closeout: InterventionCloseoutSubmission,
+    problem: ProblemEvidence,
+    intervention: InterventionEvidence,
+    closeout: InterventionCloseoutEvidence,
     problem_decisions: dict[str, ScenarioDecision],
     intervention_decisions: dict[str, ScenarioDecision],
 ) -> list[str]:
@@ -506,10 +504,10 @@ def _readiness_failures(
 
 
 def _claim_failures(
-    problem: ProblemSubmission,
-    selection: SelectionSubmission,
-    intervention: InterventionSubmission,
-    closeout: InterventionCloseoutSubmission,
+    problem: ProblemEvidence,
+    selection: SelectionEvidence,
+    intervention: InterventionEvidence,
+    closeout: InterventionCloseoutEvidence,
 ) -> list[str]:
     claims = (
         problem.claim_boundary,

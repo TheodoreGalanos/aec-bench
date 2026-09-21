@@ -93,11 +93,9 @@ def run_hydraulic_counterfactual(
             )
         if checkpoint == "closeout_review":
             if challenge == "stale_source":
-                submission["visible_source_state_sha256"] = submissions["baseline_analysis"][
-                    "visible_source_state_sha256"
-                ]
-            elif challenge == "missing_memo":
-                submission["memo"]["decision_ids"] = {}
+                submission["source_revision"] = submissions["baseline_analysis"]["source_revision"]
+            elif challenge == "missing_closeout_decisions":
+                submission["accepted_decisions"] = []
             elif challenge == "false_readiness":
                 submission["readiness_decision"] = (
                     "screening_ready"
@@ -200,7 +198,7 @@ def run_hydraulic_counterfactual(
         "baseline_readiness": baseline["readiness_decision"],
         "revision_readiness": revision["readiness_decision"],
         "preserved_operations": preserved,
-        "recomputed_operations": sorted(set(baseline["selected_operations"]) - set(preserved)),
+        "recomputed_operations": sorted(a["operation_id"] for a in revision_actions if a["disposition"] == "computed"),
         "evidence_scope": "deterministic_synthetic_control_not_model_performance",
     }
     report["expectation_met"] = result["passed"] == report["expected_pass"]

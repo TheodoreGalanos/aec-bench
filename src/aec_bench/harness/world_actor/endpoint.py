@@ -379,16 +379,25 @@ class WorldActorEndpoint:
                 invoke = envelope.request
                 assert isinstance(invoke, WorldActorInvokeRequest)
                 request_id = invoke.request_id
-                outcome = self._authority.invoke(
-                    ActorInvocationRequest(
+                if invoke.decision_id is None:
+                    outcome = self._authority.invoke_current(
                         request_id=invoke.request_id,
-                        decision_id=invoke.decision_id,
                         action_name=invoke.action_name,
                         arguments=invoke.arguments,
                         transport="world-actor-endpoint",
                         correlation=correlation,
                     )
-                )
+                else:
+                    outcome = self._authority.invoke(
+                        ActorInvocationRequest(
+                            request_id=invoke.request_id,
+                            decision_id=invoke.decision_id,
+                            action_name=invoke.action_name,
+                            arguments=invoke.arguments,
+                            transport="world-actor-endpoint",
+                            correlation=correlation,
+                        )
+                    )
                 action_sequence = outcome.action_sequence
                 result_payload = outcome.result.model_dump(mode="json")
             response = WorldActorTransportSuccess(

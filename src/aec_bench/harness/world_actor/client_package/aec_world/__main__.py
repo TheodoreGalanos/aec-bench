@@ -29,7 +29,7 @@ def _parser() -> argparse.ArgumentParser:
     commands.add_parser("observe")
     invoke_parser = commands.add_parser("invoke")
     invoke_parser.add_argument("--action", required=True)
-    invoke_parser.add_argument("--decision-id", required=True)
+    invoke_parser.add_argument("--decision-id")
     invoke_parser.add_argument("--arguments-json", required=True)
     invoke_parser.add_argument("--request-id")
     return parser

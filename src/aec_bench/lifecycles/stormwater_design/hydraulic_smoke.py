@@ -3,24 +3,14 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 from pathlib import Path
 from typing import Any, cast
 
-from aec_bench.lifecycles.runtime.lifecycle import execute_lifecycle_operation, read_lifecycle
+from aec_bench.lifecycles.runtime.lifecycle import execute_lifecycle_operation
 from aec_bench.lifecycles.runtime.operation_protocol import LifecycleOperationResolver
-from aec_bench.lifecycles.stormwater_design.hydraulic_evidence import SCENARIO_IDS, ClaimBoundary
-
-CLAIM_BOUNDARY = ClaimBoundary(
-    evidence_class="benchmark_owned_synthetic_screening",
-    solver_fidelity="not_swmm_equivalent",
-    authority_status="no_authority_approval",
-    standards_status="no_standards_compliance_claim",
-    project_evidence_status="not_project_design_evidence",
-    model_evidence_status="no_model_performance_holdout_or_transfer_result",
-    learning_status="no_post_training_or_continual_learning_result",
-).model_dump(mode="json")
+from aec_bench.lifecycles.stormwater_design.hydraulic_evidence import CLAIM_BOUNDARY as CLAIM_BOUNDARY
+from aec_bench.lifecycles.stormwater_design.hydraulic_evidence import SCENARIO_IDS
 
 
 def execute_calculation_operations(
@@ -64,7 +54,6 @@ def execute_operation(
         operation_resolver=operation_resolver,
         checkpoint_id=checkpoint_id,
         operation_id=operation_id,
-        visible_source_state_sha256=visible_source_sha256(run),
         reason=f"Smoke {operation_id} against the declared source.",
         session_id=session_id,
     )
@@ -77,7 +66,6 @@ def build_scenario_decision(
     scenario_id: str,
     phase: str,
 ) -> dict[str, Any]:
-    hydrology = _origin_action_id(actions[f"hydrology.{scenario_id}"])
     detention = _origin_action_id(actions[f"detention-outlet.{scenario_id}.declared-outlet"])
     hgl = _origin_action_id(actions[f"network-hgl.{scenario_id}.declared-tailwater"])
     detention_result = read_json_object(
@@ -87,19 +75,11 @@ def build_scenario_decision(
     criteria = dict(detention_result["criteria"]) | dict(hgl_result["criteria"])
     failed_criteria = sorted(key for key, passed in criteria.items() if not passed)
     return {
-        "decision_id": f"decision.{scenario_id}.{phase}",
         "scenario_id": scenario_id,
-        "hydrology_action_id": hydrology,
-        "detention_action_id": detention,
-        "hgl_action_id": hgl,
-        "hydraulic_run_id": detention_result["hydraulic_run_id"],
+        "evidence_checkpoint": f"{phase}_analysis",
         "screening_outcome": "criteria_not_met" if failed_criteria else "criteria_met",
         "failed_criteria": failed_criteria,
     }
-
-
-def selected_operations(actions: dict[str, dict[str, Any]]) -> dict[str, str]:
-    return {operation_id: str(action["action_id"]) for operation_id, action in sorted(actions.items())}
 
 
 def readiness(decisions: list[dict[str, Any]]) -> str:
@@ -110,54 +90,9 @@ def readiness(decisions: list[dict[str, Any]]) -> str:
     )
 
 
-def run_references(
-    package: Path,
-    run: Path,
-    selected: dict[str, str],
-    *,
-    operation_resolver: LifecycleOperationResolver,
-) -> tuple[dict[str, dict[str, str]], dict[str, dict[str, str]]]:
-    actions_by_id = {
-        str(action["action_id"]): action
-        for checkpoint in read_lifecycle(
-            package,
-            run,
-            operation_resolver=operation_resolver,
-        )["checkpoint_runs"]
-        for action in checkpoint["operation_actions"]
-    }
-    runs: dict[str, dict[str, str]] = {}
-    reports: dict[str, dict[str, str]] = {}
-    for scenario_id in SCENARIO_IDS:
-        detention_operation = f"detention-outlet.{scenario_id}.declared-outlet"
-        hgl_operation = f"network-hgl.{scenario_id}.declared-tailwater"
-        selected_detention = actions_by_id[selected[detention_operation]]
-        selected_hgl = actions_by_id[selected[hgl_operation]]
-        detention = _origin_action_id(selected_detention)
-        hgl = _origin_action_id(selected_hgl)
-        detention_result = read_json_object(
-            run / "lifecycle_operations" / detention / "artifacts" / "detention-outlet.json"
-        )
-        hgl_result = read_json_object(run / "lifecycle_operations" / hgl / "artifacts" / "network-hgl.json")
-        report = run / "lifecycle_operations" / hgl / "artifacts" / "report.md"
-        runs[scenario_id] = {
-            "selected_operation_action_id": str(selected_detention["action_id"]),
-            "canonical_detention_action_id": detention,
-            "hydraulic_run_id": str(detention_result["hydraulic_run_id"]),
-            "run_manifest_sha256": str(detention_result["hydraulic_run_manifest_sha256"]),
-        }
-        reports[scenario_id] = {
-            "selected_operation_action_id": str(selected_hgl["action_id"]),
-            "canonical_hgl_action_id": hgl,
-            "hydraulic_run_id": str(hgl_result["hydraulic_run_id"]),
-            "report_sha256": hashlib.sha256(report.read_bytes()).hexdigest(),
-        }
-    return runs, reports
-
-
-def visible_source_sha256(run: Path) -> str:
+def source_revision(run: Path) -> str:
     source = read_json_object(run / "workspace" / "operations" / "current-source.json")
-    return str(source["visible_source_state_sha256"])
+    return str(source["revision_id"])
 
 
 def read_json_object(path: Path) -> dict[str, Any]:

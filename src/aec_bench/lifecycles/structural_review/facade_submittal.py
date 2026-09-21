@@ -568,9 +568,8 @@ def _instruction(checkpoint_id: str, purpose: str) -> str:
 Use only evidence currently visible in the lifecycle workspace and immutable prior submissions. Keep prior open
 findings unless later evidence closes them. Calculate only metrics supported by released evidence.
 
-Write `submissions/{checkpoint_id}.json` with exactly these fields:
+Write `submissions/{checkpoint_id}.json` with these fields. The host supplies `checkpoint_id`:
 
-- `checkpoint_id`
 - cumulative `evidence_refs`
 - cumulative `metrics`
 - cumulative `findings` with stable IDs

@@ -179,14 +179,14 @@ def test_non_operation_state_cannot_smuggle_operation_state() -> None:
         )
 
 
-def test_protocol_identity_binds_one_four_argument_non_authoritative_tool() -> None:
+def test_protocol_identity_binds_one_choice_and_reason_tool() -> None:
     identity = lifecycle_operation_protocol_identity()
 
     assert identity["schema_version"] == "1"
     assert len(identity["sha256"]) == 64
     assert identity["tool"] == {
         "name": "execute_operation",
-        "arguments": ["checkpoint_id", "operation_id", "visible_source_state_sha256", "reason"],
+        "arguments": ["operation_id", "reason"],
     }
     encoded = str(identity).lower()
     for forbidden in ("session_id", "attempt_id", "reward", "verifier", "expected_answer", "source_path"):
@@ -198,10 +198,7 @@ def test_protocol_identity_binds_one_four_argument_non_authoritative_tool() -> N
     [
         {
             "name": "execute_operation",
-            "signature": (
-                "(checkpoint_id: 'str', operation_id: 'str', "
-                "visible_source_state_sha256: 'str', reason: 'str') -> 'str'"
-            ),
+            "signature": ("(operation_id: 'str', reason: 'str') -> 'str'"),
             "description": "Execute one declared operation.",
         },
         {
@@ -210,15 +207,11 @@ def test_protocol_identity_binds_one_four_argument_non_authoritative_tool() -> N
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "checkpoint_id": {"type": "string"},
                     "operation_id": {"type": "string"},
-                    "visible_source_state_sha256": {"type": "string"},
                     "reason": {"type": "string"},
                 },
                 "required": [
-                    "checkpoint_id",
                     "operation_id",
-                    "visible_source_state_sha256",
                     "reason",
                 ],
                 "additionalProperties": False,
@@ -229,15 +222,11 @@ def test_protocol_identity_binds_one_four_argument_non_authoritative_tool() -> N
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "checkpoint_id": {"type": "string"},
                     "operation_id": {"type": "string"},
                     "reason": {"type": "string"},
-                    "visible_source_state_sha256": {"type": "string"},
                 },
                 "required": [
-                    "checkpoint_id",
                     "operation_id",
-                    "visible_source_state_sha256",
                     "reason",
                 ],
             },
@@ -249,18 +238,11 @@ def test_protocol_identity_binds_one_four_argument_non_authoritative_tool() -> N
                 "type": "object",
                 "title": "execute_operation_args",
                 "properties": {
-                    "checkpoint_id": {"title": "Checkpoint Id", "type": "string"},
                     "operation_id": {"title": "Operation Id", "type": "string"},
                     "reason": {"title": "Reason", "type": "string"},
-                    "visible_source_state_sha256": {
-                        "title": "Visible Source State Sha256",
-                        "type": "string",
-                    },
                 },
                 "required": [
-                    "checkpoint_id",
                     "operation_id",
-                    "visible_source_state_sha256",
                     "reason",
                 ],
                 "additionalProperties": False,
@@ -314,9 +296,7 @@ def test_operation_tool_schema_accepts_local_signature_and_structured_parameters
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "checkpoint_id": {"type": "string"},
                     "operation_id": {"type": "string"},
-                    "visible_source_state_sha256": {"type": "string"},
                 },
                 "required": ["checkpoint_id", "operation_id", "visible_source_state_sha256"],
             },
@@ -327,16 +307,9 @@ def test_operation_tool_schema_accepts_local_signature_and_structured_parameters
                 "type": "object",
                 "properties": {
                     "operation_id": {"type": "string"},
-                    "checkpoint_id": {"type": "string"},
-                    "visible_source_state_sha256": {"type": "string"},
                     "reason": {"type": "string"},
                 },
-                "required": [
-                    "operation_id",
-                    "checkpoint_id",
-                    "visible_source_state_sha256",
-                    "reason",
-                ],
+                "required": ["reason", "operation_id"],
             },
         },
         {
@@ -344,15 +317,11 @@ def test_operation_tool_schema_accepts_local_signature_and_structured_parameters
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "checkpoint_id": {"type": "string"},
                     "operation_id": {"type": "string"},
-                    "visible_source_state_sha256": {"type": "string"},
                     "reason": {"type": "integer"},
                 },
                 "required": [
-                    "checkpoint_id",
                     "operation_id",
-                    "visible_source_state_sha256",
                     "reason",
                 ],
             },
@@ -362,16 +331,12 @@ def test_operation_tool_schema_accepts_local_signature_and_structured_parameters
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "checkpoint_id": {"type": "string"},
                     "operation_id": {"type": "string"},
-                    "visible_source_state_sha256": {"type": "string"},
                     "reason": {"type": "string"},
                     "session_id": {"type": "string"},
                 },
                 "required": [
-                    "checkpoint_id",
                     "operation_id",
-                    "visible_source_state_sha256",
                     "reason",
                     "session_id",
                 ],
@@ -387,9 +352,9 @@ def test_operation_tool_schema_rejects_argument_contract_drift(tool: dict[str, o
 @pytest.mark.parametrize(
     ("scope", "argument", "constraint"),
     [
-        ("property", "checkpoint_id", {"enum": []}),
+        ("property", "operation_id", {"enum": []}),
         ("property", "operation_id", {"maxLength": 0}),
-        ("property", "visible_source_state_sha256", {"pattern": "^$"}),
+        ("property", "reason", {"pattern": "^$"}),
         ("property", "reason", {"const": ""}),
         ("object", None, {"maxProperties": 0}),
     ],
@@ -399,16 +364,12 @@ def test_operation_tool_schema_rejects_semantic_argument_constraints(
     argument: str | None,
     constraint: dict[str, object],
 ) -> None:
-    properties: dict[str, dict[str, object]] = {
-        name: {"type": "string"} for name in ("checkpoint_id", "operation_id", "visible_source_state_sha256", "reason")
-    }
+    properties: dict[str, dict[str, object]] = {name: {"type": "string"} for name in ("operation_id", "reason")}
     parameters: dict[str, object] = {
         "type": "object",
         "properties": properties,
         "required": [
-            "checkpoint_id",
             "operation_id",
-            "visible_source_state_sha256",
             "reason",
         ],
     }

@@ -116,48 +116,41 @@ def read_workspace_file(path: str, state: dict[str, Any] | None = None) -> str:
 
 
 def write_checkpoint_submission(
-    checkpoint_id: str,
     content: str,
     state: dict[str, Any] | None = None,
 ) -> str:
     """Write the active checkpoint JSON through the host-confined workspace tool."""
-    return _workspace_tool(state).write_checkpoint_submission(checkpoint_id, content)
+    return _workspace_tool(state).write_checkpoint_submission(content)
 
 
 def request_evidence(
-    checkpoint_id: str,
     request_id: str,
     reason: str,
     state: dict[str, Any] | None = None,
 ) -> str:
     """Request one declared evidence packet through the session-bound host tool."""
     return _control_tool(_required_state(state)).request_evidence(
-        checkpoint_id,
         request_id,
         reason,
     )
 
 
 def execute_operation(
-    checkpoint_id: str,
     operation_id: str,
-    visible_source_state_sha256: str,
     reason: str,
     state: dict[str, Any] | None = None,
 ) -> str:
     """Execute one declared lifecycle operation through the session-bound host tool."""
     return _control_tool(_required_state(state)).execute_operation(
-        checkpoint_id,
         operation_id,
-        visible_source_state_sha256,
         reason,
     )
 
 
-def submit_checkpoint(checkpoint_id: str, state: dict[str, Any] | None = None) -> str:
+def submit_checkpoint(state: dict[str, Any] | None = None) -> str:
     """Archive one checkpoint and end the rollout only after terminal lifecycle completion."""
     resolved_state = _required_state(state)
-    result = _control_tool(resolved_state).submit_checkpoint(checkpoint_id)
+    result = _control_tool(resolved_state).submit_checkpoint()
     payload = _json_object(result)
     resolved_state["lifecycle_status"] = payload.get("status")
     if payload.get("status") == "complete":

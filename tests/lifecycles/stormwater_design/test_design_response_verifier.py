@@ -3,7 +3,6 @@
 
 from __future__ import annotations
 
-import copy
 import json
 import shutil
 from pathlib import Path
@@ -24,7 +23,6 @@ from aec_bench.lifecycles.stormwater_design.design_response_smoke import (
 from aec_bench.lifecycles.stormwater_design.design_response_verifier import (
     _invalid_contract_result,
 )
-from aec_bench.lifecycles.stormwater_design.hydraulic_smoke import run_references
 from tests.support.lifecycle_episode import deterministic_episode_environment
 from tests.support.lifecycle_operations import resolve_operation_runtime
 
@@ -194,71 +192,25 @@ def test_undeclared_duplicate_package_cannot_hijack_verifier_lookup(tmp_path: Pa
 def test_omitting_the_failing_major_chain_cannot_bypass_the_reward_cap(tmp_path: Path) -> None:
     package = materialize_lifecycle(TEMPLATE_ID, tmp_path / "package")
     run = tmp_path / "run"
-    full_selected: dict[str, str] = {}
 
     def execute(context: dict[str, Any]) -> dict[str, str]:
         checkpoint_id = str(context["checkpoint_id"])
-        submission_path = Path(str(context["submission_path"]))
-        if checkpoint_id != "closeout_review":
-            write_hydraulic_design_response_smoke_submission(
-                package,
-                run,
-                checkpoint_id,
-                str(context["session_id"]),
-                submission_path,
-                selected_intervention_id="emergency_weir_enlargement",
-            )
-            if checkpoint_id == "intervention_analysis":
-                submission = _read_json(submission_path)
-                selected = cast(dict[str, str], submission["selected_operations"])
-                full_selected.update(selected)
-                submission["selected_operations"] = {
-                    key: value for key, value in selected.items() if "major-100yr" not in key
-                }
-                submission["readiness_decision"] = "screening_ready"
-                _write_json(submission_path, submission)
-            return {"status": "completed"}
-
-        intervention = _read_json(run / "episodes" / "intervention_analysis" / "submission.json")
-        run_reference, report_reference = run_references(
+        path = Path(str(context["submission_path"]))
+        write_hydraulic_design_response_smoke_submission(
             package,
             run,
-            full_selected,
-            operation_resolver=resolve_operation_runtime(package, run),
+            checkpoint_id,
+            str(context["session_id"]),
+            path,
+            selected_intervention_id="emergency_weir_enlargement",
         )
-        run_reference = {"design-10yr": run_reference["design-10yr"]}
-        report_reference = {"design-10yr": report_reference["design-10yr"]}
-        selected_operations = cast(dict[str, str], intervention["selected_operations"])
-        decisions = cast(list[dict[str, Any]], intervention["accepted_decisions"])
-        lineage = cast(list[dict[str, str]], intervention["supersession_lineage"])
-        claim = cast(dict[str, str], intervention["claim_boundary"])
-        visible_source = str(intervention["visible_source_state_sha256"])
-        memo = {
-            "selected_intervention_id": "emergency_weir_enlargement",
-            "visible_source_state_sha256": visible_source,
-            "run_reference": copy.deepcopy(run_reference),
-            "report_reference": copy.deepcopy(report_reference),
-            "decision_ids": {"design-10yr": "decision.design-10yr.intervention"},
-            "supersession_lineage": copy.deepcopy(lineage),
-            "readiness_decision": "screening_ready",
-            "claim_boundary": copy.deepcopy(claim),
-        }
-        _write_json(
-            submission_path,
-            {
-                "checkpoint_id": "closeout_review",
-                "selected_intervention_id": "emergency_weir_enlargement",
-                "visible_source_state_sha256": visible_source,
-                "selected_operations": selected_operations,
-                "run_reference": run_reference,
-                "report_reference": report_reference,
-                "memo": memo,
-                "accepted_decisions": decisions,
-                "supersession_lineage": lineage,
-                "readiness_decision": "screening_ready",
-                "claim_boundary": claim,
-            },
-        )
+        if checkpoint_id in {"intervention_analysis", "closeout_review"}:
+            submission = _read_json(path)
+            submission["accepted_decisions"] = [
+                item for item in submission["accepted_decisions"] if item["scenario_id"] != "major-100yr"
+            ]
+            submission["readiness_decision"] = "screening_ready"
+            _write_json(path, submission)
         return {"status": "completed"}
 
     run_lifecycle(
@@ -270,17 +222,7 @@ def test_omitting_the_failing_major_chain_cannot_bypass_the_reward_cap(tmp_path:
     result = verify_lifecycle(package, run)
 
     assert result["reward"] <= 0.5
-    for gate_id in (
-        "operation_evidence_integrity",
-        "selective_recomputation",
-        "decision_update",
-        "intervention_effectiveness",
-        "run_propagation",
-        "report_propagation",
-        "memo_propagation",
-        "final_readiness",
-    ):
-        assert result["gates"][gate_id]["passed"] is False
-    assert result["gates"]["intervention_effectiveness"]["failures"] == [
-        "emergency_weir_enlargement.major-100yr.evidence_missing"
-    ]
+    assert result["passed"] is False
+    assert result["gates"]["decision_update"]["passed"] is False
+    assert result["gates"]["final_readiness"]["passed"] is False
+    assert result["gates"]["intervention_effectiveness"]["passed"] is False

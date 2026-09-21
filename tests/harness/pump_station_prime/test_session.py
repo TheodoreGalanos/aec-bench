@@ -188,17 +188,14 @@ async def test_world_actor_authority_preserves_pump_semantics_and_redacts_eviden
                 decision_id=observation["decision_id"],
                 request_id="prime-action-unknown",
             )
-        request_id = "prime-action-1"
         first = await client.invoke(
             "continue_operation",
             {"reason": "Advance the current world once."},
-            decision_id=observation["decision_id"],
-            request_id=request_id,
         )
+        request_id = first["request_id"]
         retry = await client.invoke(
             "continue_operation",
             {"reason": "Advance the current world once."},
-            decision_id=observation["decision_id"],
             request_id=request_id,
         )
 
@@ -407,7 +404,9 @@ def test_packaged_pump_guidance_is_markdown_only_and_contains_no_instance_plan(t
     assert "NO_ACCESSIBLE_RESULT" in text
     assert "after a `planned-outage-capacity` rejection" in text
     assert "Run eligibility alone is" in text
-    assert "exact ledger" in text
+    assert "The harness records action attempts" in text
+    assert "decision_id" not in text
+    assert "action_ledger.append" not in text
     assert "one IPython cell for each `invoke` attempt" in text
     assert "not an action-selection rule" in text
     assert "remaining action budget" not in text

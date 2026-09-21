@@ -27,9 +27,7 @@ from aec_bench.lifecycles.stormwater_design.hydraulic_smoke import (
     execute_operation,
     read_json_object,
     readiness,
-    run_references,
-    selected_operations,
-    visible_source_sha256,
+    source_revision,
     write_json_object,
 )
 
@@ -99,7 +97,7 @@ def write_hydraulic_review_smoke_submission(
             operation_resolver=operation_resolver,
         )
     elif checkpoint_id == "closeout_review":
-        submission = _closeout_submission(package, run, operation_resolver=operation_resolver)
+        submission = _closeout_submission(run)
     else:
         raise ValueError(f"unsupported hydraulic smoke checkpoint: {checkpoint_id}")
     write_json_object(Path(submission_path), submission)
@@ -124,8 +122,7 @@ def _baseline_submission(
     ]
     return {
         "checkpoint_id": "baseline_analysis",
-        "visible_source_state_sha256": visible_source_sha256(run),
-        "selected_operations": selected_operations(actions),
+        "source_revision": source_revision(run),
         "accepted_decisions": decisions,
         "readiness_decision": readiness(decisions),
         "claim_boundary": copy.deepcopy(CLAIM_BOUNDARY),
@@ -142,7 +139,7 @@ def _revision_submission(
 ) -> dict[str, Any]:
     baseline = read_json_object(run / "episodes" / "baseline_analysis" / "submission.json")
     baseline_decisions = cast(list[dict[str, Any]], baseline["accepted_decisions"])
-    revision_action = execute_operation(
+    execute_operation(
         package,
         run,
         checkpoint_id="revision_analysis",
@@ -159,78 +156,31 @@ def _revision_submission(
     )
     baseline_by_scenario = {str(decision["scenario_id"]): decision for decision in baseline_decisions}
     decisions: list[dict[str, Any]] = []
-    supersession_lineage: list[dict[str, str]] = []
+    superseded_scenarios: list[str] = []
     for scenario_id in SCENARIO_IDS:
         replacement = build_scenario_decision(run, actions, scenario_id=scenario_id, phase="revision")
-        baseline_decision = baseline_by_scenario[scenario_id]
-        changed = _decision_action_ids(replacement) != _decision_action_ids(baseline_decision)
-        decisions.append(replacement if changed else baseline_decision)
+        changed = any(
+            action["outcome"] != "already_current"
+            for operation_id, action in actions.items()
+            if scenario_id in operation_id
+        )
+        decisions.append(replacement if changed else baseline_by_scenario[scenario_id])
         if changed:
-            supersession_lineage.append(
-                {
-                    "scenario_id": scenario_id,
-                    "superseded_decision_id": str(baseline_decision["decision_id"]),
-                    "replacement_decision_id": str(replacement["decision_id"]),
-                }
-            )
+            superseded_scenarios.append(scenario_id)
     return {
         "checkpoint_id": "revision_analysis",
-        "revision_id": variant_id,
-        "visible_source_state_sha256": visible_source_sha256(run),
-        "selected_operations": {
-            **selected_operations(actions),
-            "source-revision.current": str(revision_action["action_id"]),
-        },
+        "source_revision": variant_id,
         "accepted_decisions": decisions,
-        "supersession_lineage": supersession_lineage,
+        "superseded_scenarios": superseded_scenarios,
         "readiness_decision": readiness(decisions),
         "claim_boundary": copy.deepcopy(CLAIM_BOUNDARY),
     }
 
 
-def _closeout_submission(
-    package: Path,
-    run: Path,
-    *,
-    operation_resolver: LifecycleOperationResolver,
-) -> dict[str, Any]:
+def _closeout_submission(run: Path) -> dict[str, Any]:
     revision = read_json_object(run / "episodes" / "revision_analysis" / "submission.json")
-    selected_operations = cast(dict[str, str], revision["selected_operations"])
-    decisions = cast(list[dict[str, Any]], revision["accepted_decisions"])
-    supersession_lineage = cast(list[dict[str, str]], revision["supersession_lineage"])
-    visible_source_state_sha256 = str(revision["visible_source_state_sha256"])
-    readiness = str(revision["readiness_decision"])
-    run_reference, report_reference = run_references(
-        package,
-        run,
-        selected_operations,
-        operation_resolver=operation_resolver,
-    )
     return {
+        **revision,
         "checkpoint_id": "closeout_review",
-        "visible_source_state_sha256": visible_source_state_sha256,
-        "selected_operations": selected_operations,
-        "run_reference": run_reference,
-        "report_reference": report_reference,
-        "accepted_decisions": decisions,
-        "supersession_lineage": supersession_lineage,
-        "readiness_decision": readiness,
-        "claim_boundary": copy.deepcopy(CLAIM_BOUNDARY),
-        "memo": {
-            "visible_source_state_sha256": visible_source_state_sha256,
-            "run_reference": copy.deepcopy(run_reference),
-            "report_reference": copy.deepcopy(report_reference),
-            "decision_ids": {str(decision["scenario_id"]): str(decision["decision_id"]) for decision in decisions},
-            "supersession_lineage": supersession_lineage,
-            "readiness_decision": readiness,
-            "claim_boundary": copy.deepcopy(CLAIM_BOUNDARY),
-        },
+        "evidence_checkpoint": "revision_analysis",
     }
-
-
-def _decision_action_ids(decision: dict[str, Any]) -> tuple[str, str, str]:
-    return (
-        str(decision["hydrology_action_id"]),
-        str(decision["detention_action_id"]),
-        str(decision["hgl_action_id"]),
-    )

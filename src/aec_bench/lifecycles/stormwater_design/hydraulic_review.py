@@ -29,6 +29,7 @@ from aec_bench.lifecycles.stormwater_design.hydraulic_review_variants import (
     HydraulicReviewVariantSpec,
     get_hydraulic_review_variant,
 )
+from aec_bench.lifecycles.stormwater_design.hydraulic_submissions import hydraulic_submission_contract
 from aec_bench.lifecycles.stormwater_design.hydraulics.lineages import HydraulicLineage
 from aec_bench.lifecycles.stormwater_design.hydraulics.models import HydraulicSourceState
 from aec_bench.lifecycles.stormwater_design.hydraulics.package import (
@@ -115,8 +116,7 @@ LIFECYCLE = EvidenceLifecycleSpec(
             submission_path="submissions/baseline_analysis.json",
             required_submission_fields=[
                 "checkpoint_id",
-                "visible_source_state_sha256",
-                "selected_operations",
+                "source_revision",
                 "accepted_decisions",
                 "readiness_decision",
                 "claim_boundary",
@@ -133,11 +133,9 @@ LIFECYCLE = EvidenceLifecycleSpec(
             depends_on=["baseline_analysis"],
             required_submission_fields=[
                 "checkpoint_id",
-                "revision_id",
-                "visible_source_state_sha256",
-                "selected_operations",
+                "source_revision",
                 "accepted_decisions",
-                "supersession_lineage",
+                "superseded_scenarios",
                 "readiness_decision",
                 "claim_boundary",
             ],
@@ -153,13 +151,10 @@ LIFECYCLE = EvidenceLifecycleSpec(
             depends_on=["revision_analysis"],
             required_submission_fields=[
                 "checkpoint_id",
-                "visible_source_state_sha256",
-                "selected_operations",
-                "run_reference",
-                "report_reference",
-                "memo",
+                "source_revision",
+                "evidence_checkpoint",
                 "accepted_decisions",
-                "supersession_lineage",
+                "superseded_scenarios",
                 "readiness_decision",
                 "claim_boundary",
             ],
@@ -338,85 +333,7 @@ def _instructions() -> dict[str, str]:
 
 
 def _submission_contract(checkpoint: EvidenceCheckpointSpec) -> str:
-    top_level_fields = "\n".join(f"- `{field}`" for field in checkpoint.required_submission_fields)
-    selected_operations = {
-        "baseline_analysis": """Use `visible_source_state_sha256` from
-`workspace/operations/current-source.json`. `selected_operations` is the exact map from every required baseline
-operation ID to the action ID returned for this checkpoint.
-""",
-        "revision_analysis": """Use `visible_source_state_sha256` from
-`workspace/operations/current-source.json`. `selected_operations` includes the source-revision action and every
-required revision operation. Use each current-checkpoint action ID even when its outcome is `already_current`.
-""",
-        "closeout_review": """Use `visible_source_state_sha256` from
-`workspace/operations/current-source.json`. Execute no new operation at closeout. Preserve the revision checkpoint's
-`selected_operations` map exactly.
-""",
-    }
-    decisions = """`accepted_decisions` contains exactly one record for `design-10yr` and one for `major-100yr`.
-Each record contains exactly `decision_id`, `scenario_id`, `hydrology_action_id`, `detention_action_id`,
-`hgl_action_id`, `hydraulic_run_id`, `screening_outcome`, and `failed_criteria`. Use canonical computation action IDs
-rather than an `already_current` wrapper. Use `criteria_met` or `criteria_not_met` for `screening_outcome`, and sort
-`failed_criteria`.
-"""
-    checkpoint_contracts = {
-        "baseline_analysis": (
-            "Use `decision.<scenario>.baseline` decision IDs. No revision, supersession, run/report reference, or "
-            "memo fields belong in this checkpoint.\n"
-        ),
-        "revision_analysis": (
-            "Set `revision_id` to the activated public revision. Retain an unaffected decision byte-for-byte. For "
-            "each affected scenario, use `decision.<scenario>.revision` for the replacement and add exactly one "
-            "`supersession_lineage` record containing `scenario_id`, `superseded_decision_id`, and "
-            "`replacement_decision_id`.\n"
-        ),
-        "closeout_review": """Preserve revision `selected_operations`, `accepted_decisions`, and
-`supersession_lineage` exactly. `run_reference` and `report_reference` are two-entry maps keyed by scenario. Each run
-entry contains exactly `selected_operation_action_id`, `canonical_detention_action_id`, `hydraulic_run_id`, and
-`run_manifest_sha256`. Each report entry contains exactly `selected_operation_action_id`, `canonical_hgl_action_id`,
-`hydraulic_run_id`, and `report_sha256`.
-
-`memo` contains exactly these keys and no others:
-
-- `visible_source_state_sha256`
-- `run_reference`
-- `report_reference`
-- `decision_ids`
-- `supersession_lineage`
-- `readiness_decision`
-- `claim_boundary`
-
-`decision_ids` is the two-entry scenario-to-current-decision-ID map. The memo repeats the top-level reference maps,
-supersession lineage, readiness decision, and claim boundary exactly.
-""",
-    }
-    return f"""## Structured submission contract
-
-Use exactly these top-level keys and no others:
-
-{top_level_fields}
-
-{selected_operations[checkpoint.checkpoint_id]}
-
-{decisions}
-
-{checkpoint_contracts[checkpoint.checkpoint_id]}
-
-Use `screening_ready` only when every current scenario criterion passes; otherwise use `not_screening_ready`.
-At every checkpoint, use this exact `claim_boundary` object:
-
-```json
-{{
-  "evidence_class": "benchmark_owned_synthetic_screening",
-  "solver_fidelity": "not_swmm_equivalent",
-  "authority_status": "no_authority_approval",
-  "standards_status": "no_standards_compliance_claim",
-  "project_evidence_status": "not_project_design_evidence",
-  "model_evidence_status": "no_model_performance_holdout_or_transfer_result",
-  "learning_status": "no_post_training_or_continual_learning_result"
-}}
-```
-"""
+    return hydraulic_submission_contract(checkpoint.required_submission_fields)
 
 
 def _releases(variant: HydraulicReviewVariantSpec) -> dict[str, str]:
@@ -472,6 +389,7 @@ LIFECYCLE_DESCRIPTOR = LifecycleOwnerDescriptor(
             Path(__file__).resolve().parent / "hydraulic_review_smoke.py",
             Path(__file__).resolve().parent / "hydraulic_smoke.py",
             Path(__file__).resolve().parent / "hydraulic_evidence.py",
+            Path(__file__).resolve().parent / "hydraulic_submissions.py",
             Path(__file__).resolve().parent / "hydraulic_operations.py",
             Path(__file__).resolve().parent / "hydraulic_review_verifier.py",
             Path(__file__).resolve().parent / "hydraulics",

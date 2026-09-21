@@ -24,7 +24,7 @@ For the highest-priority actor-addressable work, check:
 
 Record the expected observable change. Make one action. Compare the returned next observation with the prediction before choosing another action.
 
-An applied result advances the causal state. A rejected result normally leaves the state unchanged and supplies a reason. A failed call can indicate an action argument, decision, or transport problem. Keep these outcomes separate in the ledger.
+An applied result advances the causal state. A rejected result normally leaves the state unchanged and supplies a reason. A failed call can indicate an action argument, decision, or transport problem. Use the returned outcome when you choose the next action. The harness records the action history.
 
 ## 4. Use rejection codes
 

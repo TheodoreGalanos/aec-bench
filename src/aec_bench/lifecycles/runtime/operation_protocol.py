@@ -30,7 +30,7 @@ _LIFECYCLE_OPERATION_PROTOCOL: dict[str, Any] = {
     "schema_version": "1",
     "tool": {
         "name": "execute_operation",
-        "arguments": ["checkpoint_id", "operation_id", "visible_source_state_sha256", "reason"],
+        "arguments": ["operation_id", "reason"],
     },
     "catalog_path": "workspace/checkpoints/<checkpoint_id>/operations.json",
     "canonical_transaction_path": "lifecycle_operations/<action_id>",
@@ -45,9 +45,7 @@ _LIFECYCLE_OPERATION_PROTOCOL: dict[str, Any] = {
 CURRENT_SOURCE_WORKSPACE_PATH = PurePosixPath("operations/current-source.json")
 CURRENT_SOURCE_RUN_PATH = PurePosixPath("workspace") / CURRENT_SOURCE_WORKSPACE_PATH
 _LIFECYCLE_OPERATION_ARGUMENTS = (
-    "checkpoint_id",
     "operation_id",
-    "visible_source_state_sha256",
     "reason",
 )
 _SIGNATURE_TOOL_SCHEMA_KEYS = frozenset({"name", "signature", "description"})
@@ -154,7 +152,7 @@ def _validate_lifecycle_operation_signature(raw_signature: object) -> None:
     )
     if not valid_shape:
         raise EvidenceLifecycleError(
-            "execute_operation tool schema must declare exactly four ordered required string arguments"
+            "execute_operation tool schema must declare exactly two ordered required string arguments"
         )
 
 
@@ -178,7 +176,7 @@ def _validate_lifecycle_operation_parameters(raw_parameters: object) -> None:
     )
     if not valid_shape:
         raise EvidenceLifecycleError(
-            "execute_operation tool schema must declare exactly four required string properties in public order"
+            "execute_operation tool schema must declare exactly two required string properties in public order"
         )
 
 

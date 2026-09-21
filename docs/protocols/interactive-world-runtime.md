@@ -57,8 +57,8 @@ response plus newline. The outer request contains the required protocol,
 transport request ID, capability, and one strict operation:
 
 - `capabilities` and `observe` carry no action;
-- `invoke` carries a logical request ID, opaque decision ID, task-owned action
-  name, and strict arguments; and
+- `invoke` carries a client-generated logical request ID, task-owned action
+  name, strict arguments, and an optional explicitly pinned decision ID; and
 - session, definition, profile, actor-binding, host-control, verification, and
   evaluation fields are not actor input.
 
@@ -84,7 +84,11 @@ transport evidence, and close result. It delegates all action semantics to the
 authority. The standalone staged `aec_world` package supplies the async Python
 API and JSON command interface. It has no AECBench runtime dependency. It
 creates a logical request ID before connection and does not automatically retry
-an action. If an invoke response can have been lost after dispatch, it reports
+an action. When the client omits the decision ID, the authority binds the current
+decision under its admission lock and retains that decision for exact retries.
+Models supply the action and engineering arguments. They do not maintain
+transport IDs, content hashes, or action counts. Programmatic callers can pin
+a decision ID when they need an explicit stale-decision check. If an invoke response can have been lost after dispatch, it reports
 an `unknown` outcome and retains that request ID.
 
 The DeepSeek native-tool facade does not expose the installed request ID as a

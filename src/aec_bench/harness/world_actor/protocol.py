@@ -35,7 +35,7 @@ class WorldActorInvokeRequest(FrozenStrictModel):
 
     operation: Literal["invoke"]
     request_id: NonEmptyStr
-    decision_id: NonEmptyStr
+    decision_id: NonEmptyStr | None = None
     action_name: NonEmptyStr
     arguments: dict[str, JsonValue]
 

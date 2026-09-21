@@ -435,6 +435,19 @@ stage once, but it does not let the actor activate the next stage. Completion
 occurs only after the host accepts the terminal result and records lifecycle
 completion.
 
+Actor tools take the engineering choice and its reason. The host binds the active
+checkpoint, session, source hash, and operation record. Actor submissions can omit
+`checkpoint_id`; the host supplies it before acceptance and rejects a supplied
+conflicting ID. Source hashes, action IDs, run IDs, artifact hashes, and duplicate
+reference maps are not required actor input.
+
+Hydraulic submissions use `source_revision` and per-scenario `evidence_checkpoint`
+choices. The task resolves these names against recorded operations during
+verification. It does not select evidence, infer conclusions, or repair stale
+choices for the actor. Accepted actor conclusions and host operation evidence
+remain separate authorities. The current hydraulic submission format replaces
+the former copied-reference format; disposable packages must be regenerated.
+
 Task calculations, evidence fields, submission shapes, and verifier rules stay
 with the task owner. Conditional evidence, calculation operations, source
 revisions, variants, provider sessions, and deterministic smoke actors are
@@ -1214,6 +1227,12 @@ boolean `additionalProperties`, scalar and array types, item schemas, enums,
 bounds, descriptions, and one nullable `anyOf` union. Other schema keywords
 fail before model execution; the compiler does not widen them.
 
+Actor action and task submission contracts must not require host bookkeeping:
+content hashes, transport or session IDs, decision tokens, action counts, or
+duplicate provenance maps. The harness derives these values from canonical
+evidence. Engineering choices remain actor input, including the selected
+asset, revision, work order, and supporting evidence.
+
 The native world action schema cannot contain `request_id` or `decision_id`.
 The endpoint validates task arguments and gives the handler a hidden
 `NativeToolInvocation` with the DeepSeek session, tool-call, turn, generation,
@@ -1246,7 +1265,11 @@ protocol version is invalid.
 
 The standalone `aec_world` client uses only the Python standard library. It
 creates a logical action request ID before it opens the socket and does not
-automatically retry actions. A transport failure after an invoke can have an
+automatically retry actions. Its Python and CLI calls bind the current decision
+in the host by default. An explicit decision ID remains available to programmatic
+callers for concurrency checks. The authority retains the bound decision for
+exact retries. Model guidance does not require a copied decision token or a
+manual action ledger. A transport failure after an invoke can have an
 `unknown` outcome. Resolution must retain the same logical request ID. Client
 installation is content-addressed and rejects symbolic links or different
 existing content. Prime skill instructions are separate from this client

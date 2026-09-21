@@ -4811,6 +4811,49 @@ compatibility_behavior = "reject unsupported drainage phase-evidence schemas"
 compatibility_kind = "external_schema"
 
 [[field]]
+symbol = "aec_bench.lifecycles.stormwater_design.hydraulic_review_verifier.BaselineEvidence.visible_source_state_sha256"
+aliases = ["aec_bench.lifecycles.stormwater_design.design_response_verifier.InterventionCloseoutEvidence.visible_source_state_sha256", "aec_bench.lifecycles.stormwater_design.design_response_verifier.InterventionEvidence.visible_source_state_sha256", "aec_bench.lifecycles.stormwater_design.design_response_verifier.ProblemEvidence.visible_source_state_sha256", "aec_bench.lifecycles.stormwater_design.design_response_verifier.SelectionEvidence.visible_source_state_sha256", "aec_bench.lifecycles.stormwater_design.hydraulic_review_verifier.CloseoutEvidence.visible_source_state_sha256", "aec_bench.lifecycles.stormwater_design.hydraulic_review_verifier.RevisionEvidence.visible_source_state_sha256"]
+wire_name = "visible_source_state_sha256"
+category = "semantic_commitment"
+authority = "hydraulic_operation_resolver"
+authoritative = false
+payload_contract = "Existing visible hydraulic source identity: physical source digest and declared revision."
+canonicalization = "Resolve the chosen readable revision from canonical lifecycle operation history; reuse its existing digest."
+consumer = "Hydraulic lifecycle source-grounding verifier"
+validation_behavior = "Compare the resolved digest with independently validated source-activation records; validate retained operation artifacts."
+mismatch_behavior = "Fail source grounding or reject modified host evidence."
+rationale = "Connect an actor source choice to recorded calculations without asking the actor to copy a digest."
+duplication = "host-derived reference to the operation resolver source identity"
+algorithm = "sha256"
+canonicalizer = "aec_bench.lifecycles.stormwater_design.hydraulics.identity.canonical_json_sha256"
+fail_closed = true
+surface = "pydantic_model"
+domain_owner = "stormwater_design"
+exposure = "task_verification"
+status = "current"
+retention = "lifecycle_run_evidence_lifetime"
+
+[[field]]
+symbol = "aec_bench.lifecycles.stormwater_design.hydraulic_submissions.HydraulicAssessment.source_revision"
+aliases = ["aec_bench.lifecycles.stormwater_design.hydraulic_review_verifier.RevisionEvidence.revision_id", "mapping:aec_bench.lifecycles.stormwater_design.design_response_smoke._intervention_submission.source_revision", "mapping:aec_bench.lifecycles.stormwater_design.design_response_smoke._problem_submission.source_revision", "mapping:aec_bench.lifecycles.stormwater_design.design_response_smoke._selection_submission.source_revision", "mapping:aec_bench.lifecycles.stormwater_design.hydraulic_review_smoke._baseline_submission.source_revision", "mapping:aec_bench.lifecycles.stormwater_design.hydraulic_review_smoke._revision_submission.source_revision"]
+wire_name = "source_revision"
+category = "domain_identity"
+authority = "hydraulic_task_source_catalogue"
+authoritative = false
+payload_contract = "Actor selection of a readable released hydraulic source revision."
+canonicalization = "Preserve the revision name supplied by the actor; do not infer or correct its choice."
+consumer = "bind_hydraulic_submissions and hydraulic lifecycle source-grounding verifiers"
+validation_behavior = "Resolve the name against host operation history and compare the selected source to the required checkpoint source."
+mismatch_behavior = "Unknown names fail the contract; stale choices fail source grounding."
+rationale = "The model chooses the design revision while the host owns its integrity and operation references."
+duplication = "actor choice and derived verifier projection of the same task revision"
+surface = "pydantic_model"
+domain_owner = "stormwater_design"
+exposure = "task_verification"
+status = "current"
+retention = "lifecycle_run_evidence_lifetime"
+
+[[field]]
 symbol = "aec_bench.lifecycles.structural_review.facade_submittal.FacadeLearningEvidence.evidence_schema"
 surface = "pydantic_model"
 wire_name = "evidence_schema"

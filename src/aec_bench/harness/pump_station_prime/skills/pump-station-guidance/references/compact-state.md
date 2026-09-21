@@ -1,4 +1,4 @@
-# Compact state and action ledger
+# Compact engineering state
 
 Keep rich results in the kernel and expose only the fields required for the next decision.
 
@@ -9,7 +9,6 @@ Use one mapping with these concepts:
 ```python
 compact_state = {
     "time": None,
-    "decision_id": None,
     "required_service": None,
     "running_pumps": [],
     "assurance": {},
@@ -31,23 +30,7 @@ print({
 })
 ```
 
-## Ledger shape
-
-Append one entry for every `invoke` attempt:
-
-```python
-action_ledger.append({
-    "request_id": request_id,
-    "decision_id": decision_id,
-    "action": action_name,
-    "expected_result": expected_result,
-    "status": result_status,
-    "reason_code": reason_code,
-    "next_decision_id": next_decision_id,
-})
-```
-
-Include rejected and failed attempts. Use this ledger for the final action count and outcome account.
+The harness records action attempts and counts. Keep only engineering notes needed for your next decision.
 
 ## One-cell action pattern
 
@@ -56,24 +39,15 @@ justified by the current actor-visible evidence. It is not a task solution or a 
 
 ```python
 expected_result = ...
-result = await aec_world.invoke(action_name, arguments, decision_id=decision_id)
-action_ledger.append({
-    "action": action_name,
-    "expected_result": expected_result,
-    "status": result["status"],
-    "next_decision_id": result["next_observation"]["decision_id"],
-})
-compact_state.update({
-    "decision_id": result["next_observation"]["decision_id"],
-    # Add only state fields needed for the next decision.
-})
+result = await aec_world.invoke(action_name, arguments)
+# Update only engineering fields needed for the next decision.
 print({
     "status": result["status"],
     # Add only changed fields needed for the next decision.
 })
 ```
 
-Handle an actor error in the same action cell when practical and record its code in the ledger. Do not fabricate a next
+Handle an actor error in the same action cell when practical. Do not fabricate a next
 observation when the actor did not return one.
 
 ## Output discipline
